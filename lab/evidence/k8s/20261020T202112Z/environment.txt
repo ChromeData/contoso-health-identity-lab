@@ -1,0 +1,13 @@
+## docker ps (running containers) before the run, 2026-10-20T20:21:20Z
+(end)
+## kind clusters before: No kind clusters found. 
+
+## after the run, 2026-10-20T20:23:35Z
+kind clusters after: No kind clusters found. 
+contoso-k8s containers after (docker ps -a): 0
+terraform state files left in lab/terraform/k8s: 0
+lab/k8s/ci/.state present: no
+kind node image in the local image store (kept as a cache after teardown):
+  id=sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed repoDigests=["kindest/node@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed"] arch=arm64
+## docker ps (running containers) after the run
+(end)

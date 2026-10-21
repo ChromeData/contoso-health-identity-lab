@@ -1,0 +1,83 @@
+{
+  "accessCertificationDefinition" : {
+    "@metadata" : {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "storage" : {
+        "modifyTimestamp" : "2026-10-20T15:26:25.750Z",
+        "modifierRef" : {
+          "oid" : "00000000-0000-0000-0000-000000000002",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "modifyChannel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+      },
+      "@id" : 22
+    },
+    "oid" : "c0471e00-0000-4000-8000-000000000401",
+    "version" : "50",
+    "name" : "Contoso T2 requestable-access review",
+    "description" : "ADR 0012 tier T2: requestable business roles, manager review, unanswered = removed. Managed by run-campaign.sh.",
+    "iteration" : 0,
+    "iterationToken" : "",
+    "handlerUri" : "http://midpoint.evolveum.com/xml/ns/public/certification/handlers-3#direct-assignment",
+    "scopeDefinition" : {
+      "@type" : "c:AccessCertificationAssignmentReviewScopeType",
+      "name" : "Requestable business roles of enabled users",
+      "objectType" : "c:UserType",
+      "searchFilter" : {
+        "text" : "activation/effectiveStatus = \"enabled\""
+      },
+      "itemSelectionExpression" : {
+        "script" : [ {
+          "code" : "\n                    // Only requestable business roles (ADR 0012 T2). Birthright roles (T3)\n                    // and midPoint's built-in system roles stay out of the campaign.\n                    def ref = assignment?.targetRef\n                    if (ref == null || ref.oid == null) {\n                        return false\n                    }\n                    def role = midpoint.getObject(com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType.class, ref.oid)\n                    def businessRole = role.getArchetypeRef().any { it.oid == '00000000-0000-0000-0000-000000000321' }\n                    return businessRole && Boolean.TRUE.equals(role.isRequestable())\n                "
+        } ]
+      },
+      "includeAssignments" : true,
+      "includeInducements" : false,
+      "includeRoles" : true,
+      "includeOrgs" : false,
+      "includeResources" : false,
+      "includeServices" : false,
+      "includeUsers" : false,
+      "includePolicies" : false,
+      "enabledItemsOnly" : true
+    },
+    "ownerRef" : {
+      "oid" : "c0471e00-0000-4000-8000-000000000308",
+      "relation" : "org:default",
+      "type" : "c:UserType"
+    },
+    "remediationDefinition" : {
+      "style" : "automated",
+      "revokeOn" : [ "revoke", "noResponse" ]
+    },
+    "stageDefinition" : {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "@id" : 21,
+      "number" : 1,
+      "name" : "Manager review",
+      "description" : "Can this person still justify this access? If you are unsure, revoke: they can request it again.",
+      "duration" : "P14D",
+      "notifyBeforeDeadline" : "P7D",
+      "notifyOnlyWhenNoDecision" : true,
+      "reviewerSpecification" : {
+        "name" : "Holder's manager, fallback: access governance lead",
+        "useObjectManager" : {
+          "allowSelf" : false
+        },
+        "defaultReviewerRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000308",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        }
+      },
+      "outcomeIfNoReviewers" : "revoke"
+    },
+    "reviewStrategy" : {
+      "outcomeStrategy" : "oneDenyDenies"
+    },
+    "lastCampaignIdUsed" : 9,
+    "lastCampaignStartedTimestamp" : "2026-10-20T15:26:26.019Z",
+    "lastCampaignClosedTimestamp" : "2026-10-20T15:26:31.084Z"
+  }
+}

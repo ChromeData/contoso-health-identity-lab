@@ -1,0 +1,877 @@
+{
+  "$comment": [
+    "SYNTHETIC TEST FIXTURE - not tenant output. No tenant exists for this lab; no access review has run.",
+    "Input for 10-Review-KPIs.ps1 -InputPath and tests/10-Review-KPIs.Tests.ps1. Shapes follow Graph v1.0 (accessReviewScheduleDefinition / instance / accessReviewInstanceDecisionItem; assignment policies reduced to id + package + automatic).",
+    "Built to hit every ADR 0012 KPI: a 2-second bulk approver (rubber stamp), approvals against a Deny recommendation with and without justification, unanswered items, a system-applied default, a review of BIRTHRIGHT access (T3) that locks out two nurses, a mover whose denial is NOT a lockout, an expiry lockout, an out-of-lookback instance and an unclassified review.",
+    "Expected: T1 completion 100.0, T2 88.2 (target 95 missed), rubber-stamp 50.0 % (1 of 2 eligible reviewers), clinical lockouts 2 (review 1, expiry 1) -> exit 2.",
+    "Lockouts by review: Grace (T3 review of the legacy Nurse request policy, system-applied Deny). NOT lockouts: u-float03 - a float nurse since hired into ICU (HR: ICU / Registered Nurse) whose 'ICU - Float Access' assignment a T2 review denied. Since the ICU split that removes only the float package; her ICU birthright package comes from the automatic policy and no review can touch it (before the split the same Deny removed the ICU package itself - the transition lockout ADR 0012 warns about). Dana's T3 Deny: she still holds the package through a Delivered assignment. u-float04 (default-applied Deny, attributes unknown): outside T3 only people KNOWN to be in birthright scope count.",
+    "The two T2 reviews stand for the T2 packages ADR 0012 still reviews (an extendable or longer-than-180-day variant); a plain 180-day T2 package is certified by its expiry and gets no campaign."
+  ],
+  "asOf": "2026-10-20T12:00:00Z",
+  "accessPackages": [
+    {
+      "id": "ap-nurse",
+      "displayName": "Nurse - Clinical Apps"
+    },
+    {
+      "id": "ap-icu",
+      "displayName": "ICU - Critical Care Apps"
+    },
+    {
+      "id": "ap-icu-float",
+      "displayName": "ICU - Float Access"
+    },
+    {
+      "id": "ap-pharm",
+      "displayName": "Pharmacy - Controlled Substances Apps"
+    }
+  ],
+  "assignmentPolicies": [
+    {
+      "id": "pol-nurse-req",
+      "accessPackageId": "ap-nurse",
+      "displayName": "Nurse - Clinical Apps - 180 day",
+      "automatic": false
+    },
+    {
+      "id": "pol-nurse-auto",
+      "accessPackageId": "ap-nurse",
+      "displayName": "Nurse - Clinical Apps - birthright (HR attributes)",
+      "automatic": true
+    },
+    {
+      "id": "pol-icufloat-req",
+      "accessPackageId": "ap-icu-float",
+      "displayName": "ICU - Float Access - 180 day",
+      "automatic": false
+    },
+    {
+      "id": "pol-icu-auto",
+      "accessPackageId": "ap-icu",
+      "displayName": "ICU - Critical Care Apps - birthright (HR attributes)",
+      "automatic": true
+    },
+    {
+      "id": "pol-pharm-req",
+      "accessPackageId": "ap-pharm",
+      "displayName": "Pharmacy - Controlled Substances Apps - 180 day",
+      "automatic": false
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-iam",
+      "displayName": "Privileged-IAM-Admins"
+    },
+    {
+      "id": "g-okta",
+      "displayName": "App-Okta-Federation-Users"
+    }
+  ],
+  "users": [
+    {
+      "id": "u-dana",
+      "accountEnabled": true,
+      "department": "Nursing",
+      "jobTitle": "Registered Nurse"
+    },
+    {
+      "id": "u-sofia",
+      "accountEnabled": true,
+      "department": "Nursing",
+      "jobTitle": "Registered Nurse"
+    },
+    {
+      "id": "u-grace",
+      "accountEnabled": true,
+      "department": "Nursing",
+      "jobTitle": "Nurse Manager"
+    },
+    {
+      "id": "u-marcus",
+      "accountEnabled": true,
+      "department": "ICU",
+      "jobTitle": "Registered Nurse"
+    },
+    {
+      "id": "u-lena",
+      "accountEnabled": true,
+      "department": "Nursing",
+      "jobTitle": "Registered Nurse"
+    },
+    {
+      "id": "u-float03",
+      "accountEnabled": true,
+      "department": "ICU",
+      "jobTitle": "Registered Nurse"
+    },
+    {
+      "id": "u-priya",
+      "accountEnabled": false,
+      "department": "Billing",
+      "jobTitle": "Billing Specialist"
+    }
+  ],
+  "definitions": [
+    {
+      "id": "def-t1-iam",
+      "displayName": "Privileged access review: Privileged-IAM-Admins",
+      "scope": {
+        "@odata.type": "#microsoft.graph.accessReviewQueryScope",
+        "queryType": "MicrosoftGraph",
+        "query": "/groups/g-iam/transitiveMembers"
+      },
+      "instances": [
+        {
+          "id": "i-t1-q3",
+          "status": "Completed",
+          "startDateTime": "2026-09-01T08:00:00Z",
+          "endDateTime": "2026-09-15T08:00:00Z",
+          "decisions": [
+            {
+              "id": "d1-01",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-02T09:00:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Still on the IAM on-call rota.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-admin01"
+              }
+            },
+            {
+              "id": "d1-02",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-02T09:01:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Still on the IAM on-call rota.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-admin02"
+              }
+            },
+            {
+              "id": "d1-03",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-02T09:02:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Still on the IAM on-call rota.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-admin03"
+              }
+            },
+            {
+              "id": "d1-04",
+              "decision": "Approve",
+              "recommendation": "Deny",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-02T09:03:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "On parental leave; returns next week - keep eligibility.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-admin04"
+              }
+            },
+            {
+              "id": "d1-05",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-02T09:04:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Still on the IAM on-call rota.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-admin05"
+              }
+            },
+            {
+              "id": "d1-06",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-02T09:05:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Still on the IAM on-call rota.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-admin06"
+              }
+            },
+            {
+              "id": "d1-07",
+              "decision": "Deny",
+              "recommendation": "Deny",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-02T09:06:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Moved to finance systems team.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-admin07"
+              }
+            },
+            {
+              "id": "d1-08",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-02T09:07:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Still on the IAM on-call rota.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-admin08"
+              }
+            },
+            {
+              "id": "d1-09",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-02T09:08:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Still on the IAM on-call rota.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-admin09"
+              }
+            },
+            {
+              "id": "d1-10",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-02T09:09:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Still on the IAM on-call rota.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-admin10"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "def-t2-pharm",
+      "displayName": "Pharmacy - Controlled Substances Apps - 180 day",
+      "scope": {
+        "@odata.type": "#microsoft.graph.accessReviewQueryScope",
+        "queryType": "MicrosoftGraph",
+        "query": "/identityGovernance/entitlementManagement/accessPackageAssignments?$filter=(accessPackageId eq 'ap-pharm' and assignmentPolicyId eq 'pol-pharm-req')"
+      },
+      "instances": [
+        {
+          "id": "i-pharm-h2",
+          "status": "Completed",
+          "startDateTime": "2026-08-01T08:00:00Z",
+          "endDateTime": "2026-08-15T08:00:00Z",
+          "decisions": [
+            {
+              "id": "d2-01",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm01"
+              }
+            },
+            {
+              "id": "d2-02",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:02Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm02"
+              }
+            },
+            {
+              "id": "d2-03",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:04Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm03"
+              }
+            },
+            {
+              "id": "d2-04",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:06Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm04"
+              }
+            },
+            {
+              "id": "d2-05",
+              "decision": "Approve",
+              "recommendation": "Deny",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:08Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm05"
+              }
+            },
+            {
+              "id": "d2-06",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:10Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm06"
+              }
+            },
+            {
+              "id": "d2-07",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:12Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm07"
+              }
+            },
+            {
+              "id": "d2-08",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:14Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm08"
+              }
+            },
+            {
+              "id": "d2-09",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:16Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm09"
+              }
+            },
+            {
+              "id": "d2-10",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:18Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm10"
+              }
+            },
+            {
+              "id": "d2-11",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:20Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm11"
+              }
+            },
+            {
+              "id": "d2-12",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-pharmdir",
+                "displayName": "Pharmacy Director",
+                "userPrincipalName": "pharmacy.director@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-03T10:00:22Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-pharm12"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "def-t2-icufloat",
+      "displayName": "ICU - Float Access - 180 day",
+      "scope": {
+        "@odata.type": "#microsoft.graph.accessReviewQueryScope",
+        "queryType": "MicrosoftGraph",
+        "query": "/identityGovernance/entitlementManagement/accessPackageAssignments?$filter=(accessPackageId eq 'ap-icu-float' and assignmentPolicyId eq 'pol-icufloat-req')"
+      },
+      "instances": [
+        {
+          "id": "i-icufloat-h2",
+          "status": "Completed",
+          "startDateTime": "2026-08-01T08:00:00Z",
+          "endDateTime": "2026-08-15T08:00:00Z",
+          "decisions": [
+            {
+              "id": "d3-01",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-icumgr",
+                "displayName": "ICU Nurse Manager",
+                "userPrincipalName": "icu.manager@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-05T08:00:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Float pool, ICU shifts this quarter.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-float01"
+              }
+            },
+            {
+              "id": "d3-02",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-icumgr",
+                "displayName": "ICU Nurse Manager",
+                "userPrincipalName": "icu.manager@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-05T08:03:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Agency nurse, contract to December.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-float02"
+              }
+            },
+            {
+              "id": "d3-03",
+              "decision": "Deny",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-icumgr",
+                "displayName": "ICU Nurse Manager",
+                "userPrincipalName": "icu.manager@contoso.test"
+              },
+              "reviewedDateTime": "2026-08-05T08:10:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "No ICU shifts since spring.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-float03"
+              }
+            },
+            {
+              "id": "d3-04",
+              "decision": "NotReviewed",
+              "recommendation": "NoInfoAvailable",
+              "reviewedBy": {
+                "id": "00000000-0000-0000-0000-000000000000",
+                "displayName": "",
+                "userPrincipalName": ""
+              },
+              "reviewedDateTime": null,
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-float04"
+              }
+            },
+            {
+              "id": "d3-05",
+              "decision": "NotReviewed",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "00000000-0000-0000-0000-000000000000",
+                "displayName": "",
+                "userPrincipalName": ""
+              },
+              "reviewedDateTime": null,
+              "applyResult": "New",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-float05"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "def-t3-nurse",
+      "displayName": "Nurse - Clinical Apps - 180 day",
+      "scope": {
+        "@odata.type": "#microsoft.graph.accessReviewQueryScope",
+        "queryType": "MicrosoftGraph",
+        "query": "/identityGovernance/entitlementManagement/accessPackageAssignments?$filter=(accessPackageId eq 'ap-nurse' and assignmentPolicyId eq 'pol-nurse-req')"
+      },
+      "instances": [
+        {
+          "id": "i-nurse-q3",
+          "status": "Completed",
+          "startDateTime": "2026-09-01T08:00:00Z",
+          "endDateTime": "2026-09-15T08:00:00Z",
+          "decisions": [
+            {
+              "id": "d4-01",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-grace",
+                "displayName": "Grace Mwangi",
+                "userPrincipalName": "grace.mwangi@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-03T14:00:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Works on my unit.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-lena"
+              }
+            },
+            {
+              "id": "d4-02",
+              "decision": "Deny",
+              "recommendation": "Deny",
+              "reviewedBy": {
+                "id": "u-grace",
+                "displayName": "Grace Mwangi",
+                "userPrincipalName": "grace.mwangi@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-03T14:02:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Recommendation said deny.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-dana"
+              }
+            },
+            {
+              "id": "d4-03",
+              "decision": "Deny",
+              "recommendation": "Deny",
+              "reviewedBy": {
+                "id": "",
+                "displayName": "AAD Access Reviews",
+                "userPrincipalName": ""
+              },
+              "reviewedDateTime": "2026-09-15T14:00:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-grace"
+              }
+            },
+            {
+              "id": "d4-04",
+              "decision": "Deny",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-grace",
+                "displayName": "Grace Mwangi",
+                "userPrincipalName": "grace.mwangi@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-03T14:04:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Moved to ICU.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-marcus"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "def-hyg-okta",
+      "displayName": "Inactive users review: App-Okta-Federation-Users",
+      "scope": {
+        "@odata.type": "#microsoft.graph.accessReviewQueryScope",
+        "queryType": "MicrosoftGraph",
+        "query": "/groups/g-okta/transitiveMembers"
+      },
+      "instances": [
+        {
+          "id": "i-okta-q3",
+          "status": "Completed",
+          "startDateTime": "2026-09-18T08:00:00Z",
+          "endDateTime": "2026-10-02T08:00:00Z",
+          "decisions": [
+            {
+              "id": "d5-01",
+              "decision": "Deny",
+              "recommendation": "Deny",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-20T10:00:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "No sign-in for 120 days.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-okta01"
+              }
+            },
+            {
+              "id": "d5-02",
+              "decision": "NotReviewed",
+              "recommendation": "Deny",
+              "reviewedBy": {
+                "id": "00000000-0000-0000-0000-000000000000",
+                "displayName": "",
+                "userPrincipalName": ""
+              },
+              "reviewedDateTime": null,
+              "applyResult": "New",
+              "justification": "",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-okta02"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "def-adhoc",
+      "displayName": "Ad hoc review: finance share",
+      "scope": {
+        "@odata.type": "#microsoft.graph.accessReviewQueryScope",
+        "queryType": "MicrosoftGraph",
+        "query": "/groups/g-finance/transitiveMembers"
+      },
+      "instances": [
+        {
+          "id": "i-adhoc",
+          "status": "Completed",
+          "startDateTime": "2026-09-08T08:00:00Z",
+          "endDateTime": "2026-09-22T08:00:00Z",
+          "decisions": [
+            {
+              "id": "d6-01",
+              "decision": "Approve",
+              "recommendation": "Approve",
+              "reviewedBy": {
+                "id": "u-daniel",
+                "displayName": "Daniel Osei",
+                "userPrincipalName": "daniel.osei@contoso.test"
+              },
+              "reviewedDateTime": "2026-09-10T11:00:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Month-end close.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-fin01"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "def-t1-old",
+      "displayName": "Privileged access review: PIM-Tier0-CA-Admins",
+      "scope": {
+        "@odata.type": "#microsoft.graph.accessReviewQueryScope",
+        "queryType": "MicrosoftGraph",
+        "query": "/groups/g-ca/transitiveMembers"
+      },
+      "instances": [
+        {
+          "id": "i-ca-q1",
+          "status": "Completed",
+          "startDateTime": "2026-01-05T08:00:00Z",
+          "endDateTime": "2026-01-19T08:00:00Z",
+          "decisions": [
+            {
+              "id": "d7-01",
+              "decision": "Deny",
+              "recommendation": "Deny",
+              "reviewedBy": {
+                "id": "u-govlead",
+                "displayName": "Access Governance Lead",
+                "userPrincipalName": "gov.lead@contoso.test"
+              },
+              "reviewedDateTime": "2026-01-10T09:00:00Z",
+              "applyResult": "AppliedSuccessfully",
+              "justification": "Left the team.",
+              "principal": {
+                "@odata.type": "#microsoft.graph.userIdentity",
+                "id": "u-old01"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "assignments": [
+    {
+      "targetId": "u-sofia",
+      "accessPackageId": "ap-nurse",
+      "state": "Expired",
+      "expiredDateTime": "2026-10-01T00:00:00Z"
+    },
+    {
+      "targetId": "u-marcus",
+      "accessPackageId": "ap-nurse",
+      "state": "Expired",
+      "expiredDateTime": "2026-10-05T00:00:00Z"
+    },
+    {
+      "targetId": "u-dana",
+      "accessPackageId": "ap-nurse",
+      "state": "Expired",
+      "expiredDateTime": "2026-06-01T00:00:00Z"
+    },
+    {
+      "targetId": "u-dana",
+      "accessPackageId": "ap-nurse",
+      "state": "Delivered",
+      "expiredDateTime": null
+    },
+    {
+      "targetId": "u-lena",
+      "accessPackageId": "ap-nurse",
+      "state": "Expired",
+      "expiredDateTime": "2025-12-01T00:00:00Z"
+    }
+  ]
+}

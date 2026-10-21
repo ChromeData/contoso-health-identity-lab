@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Contoso Health (fictional) - root of the lab org tree. Its manager
+     (helen.carter) is the reviewer for the department managers. -->
+<org xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+     xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+     oid="c0471e00-0000-4000-8000-000000000101">
+    <name>contoso-health</name>
+    <displayName>Contoso Health</displayName>
+    <description>Lab org tree root (fictional hospital network). Managed by run-campaign.sh.</description>
+</org>

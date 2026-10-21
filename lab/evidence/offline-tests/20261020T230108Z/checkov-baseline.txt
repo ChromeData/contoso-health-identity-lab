@@ -1,0 +1,17 @@
+Checkov 3.3.20 failed checks, this run vs two baselines (derived from `checkov ... --quiet -o json`, run in the same session)
+
+this run (working tree):       passed 45, failed 8, skipped 3
+committed HEAD (git archive HEAD lab/terraform): passed 36, failed 8, skipped 1
+
+failed in this run:
+  CKV_AZURE_151  module.dc_vm.azurerm_windows_virtual_machine.dc
+  CKV_AZURE_151  module.intune_vm.azurerm_windows_virtual_machine.vm
+  CKV_AZURE_249  module.pipeline_identity.azuread_application_federated_identity_credential.apply_prod
+  CKV_AZURE_249  module.pipeline_identity.azuread_application_federated_identity_credential.plan_pr
+  CKV_AZURE_251  module.dc_vm.azurerm_managed_disk.ntds
+  CKV_AZURE_50  module.dc_vm.azurerm_windows_virtual_machine.dc
+  CKV_AZURE_50  module.intune_vm.azurerm_windows_virtual_machine.vm
+  CKV_AZURE_93  module.dc_vm.azurerm_managed_disk.ntds
+
+new vs committed HEAD: 0
+new vs the documented baseline (lab/terraform/README.md, 8 findings): 0

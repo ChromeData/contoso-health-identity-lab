@@ -1,0 +1,52 @@
+index=entra sourcetype="azure:loganalytics:securityevent" EventID=4662 earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): DCSync - replication requested by a non-DC account        ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/dcsync-replication-request.kql                    ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over SecurityEvent REPLAYED from  ```
+``` Log Analytics (ingest-from-loganalytics.sh -T SecurityEvent).              ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                            ```
+```   4662 on DC01, AccessMask 0x100, Properties naming a directory            ```
+```   replication right (Get-Changes / -All / -In-Filtered-Set GUIDs), by an   ```
+```   account that is not a DC machine account (NAME$). Always High.           ```
+``` MITRE ATT&CK: T1003.006 DCSync.                                            ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                     ```
+```   Properties has_any (GUIDs)           -> match() with an alternation      ```
+```   extract_all(guid regex)              -> rex max_match=0                  ```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT1H, severity High, throttled 1 h per Account.           ```
+``` ========================================================================== ```
+``` @stanza Contoso - DCSync replication request by a non-DC account ```
+``` @conf description = Directory replication rights (DS-Replication-Get-Changes*) used on DC01 by an account that is not a domain controller: DCSync. KQL twin: lab/kql/dcsync-replication-request.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Account,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where EventID==4662
+| eval Host=upper(mvindex(split(coalesce(Computer, ""), "."), 0))
+| where in(Host, "DC01") AND lower(coalesce(AccessMask, ""))=="0x100"
+| where match(coalesce(Properties, ""), "(?i)1131f6aa-9c07-11d1-f79f-00c04fc2dcd2|1131f6ad-9c07-11d1-f79f-00c04fc2dcd2|89e95b76-444d-4c62-991a-0facbeda640c")
+| eval Account=lower(SubjectUserName), AccountDomain=SubjectDomainName, AccountSid=SubjectUserSid
+| where NOT match(coalesce(Account, ""), "[$]$")
+| rex field=Properties max_match=0 "(?<RightsUsed>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+| stats max(_time) AS LastEpoch, min(_time) AS FirstEpoch, count AS Requests, values(RightsUsed) AS RightsUsed BY Account AccountDomain AccountSid Host Computer
+| eval Severity="High"
+| eval _time=LastEpoch, TimeGenerated=strftime(LastEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z"), FirstSeen=strftime(FirstEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z")
+| sort 0 - _time
+| table TimeGenerated, Severity, Account, AccountDomain, AccountSid, Host, Computer, Requests, RightsUsed, FirstSeen

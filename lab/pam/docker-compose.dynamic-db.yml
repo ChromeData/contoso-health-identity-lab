@@ -1,0 +1,109 @@
+# =============================================================================
+# lab/pam/docker-compose.dynamic-db.yml - dynamic database credentials
+# (LOCAL ONLY, $0). A SEPARATE compose project: it never touches the shared
+# contoso-pam stack (docker-compose.yml) or its volumes.
+#
+#   docker compose -p contoso-dyndb -f docker-compose.dynamic-db.yml ...
+#   (dynamic-db/setup.sh does this for you)
+#
+#   vault        HashiCorp Vault Community, database secrets engine
+#                -> CyberArk zero-standing-privilege database access
+#                   (Secure Infrastructure Access) / Secrets Manager dynamic
+#                   secrets. Its own instance, so the AD-backed vault in the
+#                   shared stack is never reconfigured by this segment and the
+#                   main harness can restart that stack at any time.
+#   clinical-db  PostgreSQL 16 -> the clinical database (synthetic data only)
+#   clinical-app psql client on the same private network -> the analyst
+#                workstation / reporting app that logs in with the
+#                short-lived credential
+#
+# SECURITY
+#   * clinical-db and clinical-app sit ONLY on `dbnet`, an internal network:
+#     no published port, no route out. Vault is on dbnet (to manage roles)
+#     and on `default` (for its loopback-only API port).
+#   * Every published port binds to 127.0.0.1.
+#   * The bootstrap superuser password is a file secret (not an environment
+#     value, so `docker inspect` never shows it). dynamic-db/setup.sh removes
+#     that password from the database once Vault holds its own admin role, and
+#     Vault rotates that role's password immediately (rotate-root).
+#   * Local and loopback logins need a password too (--auth-local/--auth-host
+#     scram-sha-256): the image's default "trust" for local connections would
+#     let anyone inside the container in without one.
+#   * Images pinned by exact version AND digest (the multi-arch index digest).
+# =============================================================================
+
+name: contoso-dyndb
+
+services:
+  vault:
+    image: hashicorp/vault:2.1.1@sha256:47f14a6acb98f48d798a07df7c83f23a6e636e1cf724c5f8ff165cb32667a1e2
+    command: server
+    cap_add: [IPC_LOCK]
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+    ports: ["127.0.0.1:8220:8200"]     # 8200 = shared stack, 8210-8212 = HA cluster
+    volumes:
+      - ./dynamic-db/vault.hcl:/vault/config/vault.hcl:ro
+      - vault-data:/vault/file
+      - vault-logs:/vault/logs
+    networks: [default, dbnet]
+    restart: unless-stopped
+
+  clinical-db:
+    image: postgres:16.15@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+    environment:
+      POSTGRES_DB: clinical
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/clinical_db_bootstrap
+      POSTGRES_INITDB_ARGS: --auth-local=scram-sha-256 --auth-host=scram-sha-256
+    # Connection logging names the (person-bearing) dynamic login on every
+    # connect/disconnect, and the line prefix carries the user on every line,
+    # so the statement audit (log_statement = all on database clinical, set in
+    # initdb) is attributable too: the database-side half of the audit trail.
+    command: ["postgres", "-c", "password_encryption=scram-sha-256",
+              "-c", "log_connections=on", "-c", "log_disconnections=on",
+              "-c", "log_line_prefix=%m [%p] user=%u db=%d "]
+    secrets: [clinical_db_bootstrap]
+    volumes:
+      - clinical-db:/var/lib/postgresql/data
+      - ./dynamic-db/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # pg_isready does not authenticate; it only asks "accepting connections?"
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-d", "clinical"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [dbnet]
+    restart: unless-stopped
+
+  clinical-app:
+    image: postgres:16.15@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+    entrypoint: ["sleep", "infinity"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      PGHOST: clinical-db
+      PGDATABASE: clinical
+      PGCONNECT_TIMEOUT: "5"
+      # Lab: plaintext on an internal-only network. Production: sslmode=verify-full.
+      PGSSLMODE: disable
+    networks: [dbnet]
+    restart: unless-stopped
+
+secrets:
+  clinical_db_bootstrap:
+    file: ./dynamic-db/.secrets/clinical-db-bootstrap
+
+networks:
+  dbnet:
+    internal: true
+
+volumes:
+  vault-data:
+  vault-logs:
+  clinical-db:

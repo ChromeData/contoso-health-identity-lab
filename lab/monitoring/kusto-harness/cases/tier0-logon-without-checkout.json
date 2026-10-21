@@ -1,0 +1,133 @@
+{
+  "rule": "tier0-logon-without-checkout",
+  "about": "Raw-event versions of the itdr-cases.json rows that set derived lets (Sessions joinRows, FeedLastSeen) or aggregated stage rows, which the import skips: the check-out / check-in / heartbeat rows go into VaultCheckout_CL and the rule derives Sessions and FeedLastSeen itself. Logons sit 30 min back, inside the judged window [now-75m, now-15m]. Each RDP logon writes a 4624 and a 4672.",
+  "defaults": {
+    "SecurityEvent": {
+      "Computer": "DC01.corp.test.local", "TargetDomainName": "CORP", "SubjectDomainName": "CORP",
+      "IpAddress": "10.0.1.50", "WorkstationName": "PAW01", "TimeGenerated": "ago:30m"
+    },
+    "VaultCheckout_CL": {
+      "Library": "tier0-admins", "RemoteAddress": "172.22.0.1", "VaultActor": "token-psm-broker", "TokenPolicies": "tier0-checkout",
+      "SourceHost": "pam-host", "Ticket": "CHG0031001", "Operator": "ops-alice", "ErrorText": ""
+    }
+  },
+  "cases": [
+    {
+      "id": "covered-by-checkout",
+      "kind": "negative",
+      "label": "tier0-admin-01 RDP inside its check-out window (out 40 min ago, in 10 min ago)",
+      "tables": {
+        "SecurityEvent": [
+          {"EventID": 4624, "LogonType": 10, "TargetUserName": "tier0-admin-01", "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201"},
+          {"EventID": 4672, "SubjectUserName": "tier0-admin-01", "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201", "IpAddress": "-"}],
+        "VaultCheckout_CL": [
+          {"Operation": "check-out", "Account": "tier0-admin-01", "VaultPath": "ldap/library/tier0-admins/check-out", "RequestId": "r-out-1", "TimeGenerated": "ago:40m"},
+          {"Operation": "check-in", "Account": "tier0-admin-01", "VaultPath": "ldap/library/tier0-admins/check-in", "RequestId": "r-in-1", "TimeGenerated": "ago:10m"},
+          {"Operation": "heartbeat", "Account": "", "Library": "", "VaultPath": "", "RequestId": "", "TimeGenerated": "ago:2m"}]
+      }
+    },
+    {
+      "id": "open-checkout-covers",
+      "kind": "negative",
+      "label": "A check-out 50 min ago with no check-in yet still covers the logon (the 1 h TTL has not run out)",
+      "tables": {
+        "SecurityEvent": [
+          {"EventID": 4624, "LogonType": 10, "TargetUserName": "tier0-admin-01", "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201"}],
+        "VaultCheckout_CL": [
+          {"Operation": "check-out", "Account": "tier0-admin-01", "VaultPath": "ldap/library/tier0-admins/check-out", "RequestId": "r-out-2", "TimeGenerated": "ago:50m"},
+          {"Operation": "heartbeat", "Account": "", "Library": "", "VaultPath": "", "RequestId": "", "TimeGenerated": "ago:2m"}]
+      }
+    },
+    {
+      "id": "logon-after-checkin-feed-healthy",
+      "kind": "positive",
+      "label": "tier0-admin-01 RDP 15 min after the check-in (out 100 min ago, in 45 min ago), feed healthy: used outside PAM",
+      "tables": {
+        "SecurityEvent": [
+          {"EventID": 4624, "LogonType": 10, "TargetUserName": "tier0-admin-01", "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201"},
+          {"EventID": 4672, "SubjectUserName": "tier0-admin-01", "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201", "IpAddress": "-"}],
+        "VaultCheckout_CL": [
+          {"Operation": "check-out", "Account": "tier0-admin-01", "VaultPath": "ldap/library/tier0-admins/check-out", "RequestId": "r-out-3", "TimeGenerated": "ago:100m"},
+          {"Operation": "check-in", "Account": "tier0-admin-01", "VaultPath": "ldap/library/tier0-admins/check-in", "RequestId": "r-in-3", "TimeGenerated": "ago:45m"},
+          {"Operation": "heartbeat", "Account": "", "Library": "", "VaultPath": "", "RequestId": "", "TimeGenerated": "ago:2m"}]
+      },
+      "expect": [{"Class": "Vaulted", "Account": "tier0-admin-01", "Severity": "High", "VaultFeedHealthy": true,
+                  "Verdict": "No Vault check-out covers this Tier-0 logon - credential used outside PAM",
+                  "UncoveredEvents": 2, "EventIds": [4624, 4672], "SourceIp": "10.0.1.50", "SourceIps": ["10.0.1.50"]}],
+      "expectRows": 1
+    },
+    {
+      "id": "checkout-of-another-account",
+      "kind": "positive",
+      "label": "The check-out was for tier0-admin-02; tier0-admin-01 logged on",
+      "tables": {
+        "SecurityEvent": [
+          {"EventID": 4624, "LogonType": 10, "TargetUserName": "tier0-admin-01", "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201"}],
+        "VaultCheckout_CL": [
+          {"Operation": "check-out", "Account": "tier0-admin-02", "VaultPath": "ldap/library/tier0-admins/check-out", "RequestId": "r-out-4", "TimeGenerated": "ago:40m"},
+          {"Operation": "heartbeat", "Account": "", "Library": "", "VaultPath": "", "RequestId": "", "TimeGenerated": "ago:2m"}]
+      },
+      "expect": [{"Class": "Vaulted", "Account": "tier0-admin-01", "VaultFeedHealthy": true}]
+    },
+    {
+      "id": "feed-stale-two-hours",
+      "kind": "positive",
+      "label": "No check-out and the last Vault row is 2 h old: says check the feed first",
+      "tables": {
+        "SecurityEvent": [
+          {"EventID": 4624, "LogonType": 10, "TargetUserName": "tier0-admin-01", "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201"}],
+        "VaultCheckout_CL": [
+          {"Operation": "heartbeat", "Account": "", "Library": "", "VaultPath": "", "RequestId": "", "TimeGenerated": "ago:2h"}]
+      },
+      "expect": [{"VaultFeedHealthy": false,
+                  "Verdict": "No check-out found AND the Vault feed is stale - check ingest-vault-audit.sh before assuming misuse"}]
+    },
+    {
+      "id": "feed-never-seen",
+      "kind": "positive",
+      "label": "No Vault rows at all",
+      "tables": {
+        "SecurityEvent": [
+          {"EventID": 4624, "LogonType": 10, "TargetUserName": "tier0-admin-01", "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201"}]
+      },
+      "expect": [{"VaultFeedHealthy": false,
+                  "Verdict": "No check-out found AND the Vault feed is stale - check ingest-vault-audit.sh before assuming misuse"}]
+    },
+    {
+      "id": "unvaulted-domain-admin",
+      "kind": "positive",
+      "label": "mallory gets special privileges (4672) on DC01 and the vault does not manage mallory",
+      "tables": {
+        "SecurityEvent": [
+          {"EventID": 4672, "SubjectUserName": "mallory", "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1107", "IpAddress": "-"}],
+        "VaultCheckout_CL": [
+          {"Operation": "heartbeat", "Account": "", "Library": "", "VaultPath": "", "RequestId": "", "TimeGenerated": "ago:2m"}]
+      },
+      "expect": [{"Class": "Unvaulted", "Account": "mallory", "SourceIp": "", "SourceIps": [],
+                  "Verdict": "Account with Tier-0 privileges (4672) on a DC that the PAM vault does not manage - a new Domain Admin or an unvaulted admin"}]
+    },
+    {
+      "id": "rid500-not-covered-by-same-name-checkout",
+      "kind": "positive",
+      "label": "The renamed RID-500 Administrator (corp-root) logs on; a check-out under the same name does not cover it",
+      "tables": {
+        "SecurityEvent": [
+          {"EventID": 4624, "LogonType": 10, "TargetUserName": "corp-root", "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-500"}],
+        "VaultCheckout_CL": [
+          {"Operation": "check-out", "Account": "corp-root", "VaultPath": "ldap/library/tier0-admins/check-out", "RequestId": "r-out-5", "TimeGenerated": "ago:40m"},
+          {"Operation": "heartbeat", "Account": "", "Library": "", "VaultPath": "", "RequestId": "", "TimeGenerated": "ago:2m"}]
+      },
+      "expect": [{"Class": "BreakGlassAd", "Account": "corp-root", "Severity": "High", "SourceIp": "10.0.1.50",
+                  "Verdict": "RID-500 (AD break-glass) logon on a DC - always reviewed under the AD break-glass procedure"}]
+    },
+    {
+      "id": "logon-inside-ingest-delay",
+      "kind": "negative",
+      "label": "An uncovered logon 5 min ago is not judged yet (window ends at now - 15 min)",
+      "tables": {
+        "SecurityEvent": [
+          {"EventID": 4624, "LogonType": 10, "TargetUserName": "tier0-admin-01", "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201", "TimeGenerated": "ago:5m"}]
+      }
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+index=entra ((sourcetype="azure:loganalytics:auditlogs" Category="UserManagement") OR (sourcetype="azure:loganalytics:signinlogs" ResultType="0") OR (sourcetype="azure:loganalytics:aadnoninteractiveusersigninlogs" ResultType="0")) earliest=-14d latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Security info registered from an unfamiliar/risky context ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/security-info-registered-risky.kql (same logic)   ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over Entra logs REPLAYED from      ```
+``` Log Analytics by lab/splunk/ingest-from-loganalytics.sh.                   ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   Self-service User registered (all required) security info whose context ```
+```   sign-in (same user, interactive OR non-interactive - a replayed token   ```
+```   logs only in the non-interactive table - the hour before, same IP      ```
+```   preferred) was risky, from                                              ```
+```   a country not seen in the user's last 14 days, or from an unmanaged     ```
+```   device. Severity column: High = privileged / PIM-eligible user, high    ```
+```   sign-in risk, or two of the three signals; Medium = one of RiskySignIn ```
+```   or NewCountry, or NoContext (no sign-in in either table explains the   ```
+```   registration). UnmanagedDevice alone never alerts.                      ```
+``` MITRE ATT&CK: T1098.005 Device Registration; T1556.006 MFA.               ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   Registrations / SignIns / baseline lets  -> one search over the three    ```
+```                                               sourcetypes, Kind = reg or   ```
+```                                               signin (baseline from the    ```
+```                                               interactive sourcetype only, ```
+```                                               as in the KQL)               ```
+```   baseline make_set(Country) 14d..2h       -> eventstats values() BY user  ```
+```                                               over sign-ins older than 2 h ```
+```   join + arg_max(Score) (same IP first,    -> two forward passes: sign-ins ```
+```   then latest, window -1h..+5m)               shifted 5 min earlier, then  ```
+```                                               streamstats last(pack) BY    ```
+```                                               user + IP and BY user; the   ```
+```                                               same-IP pack wins when it is ```
+```                                               inside the window            ```
+```   UserId in (PrivilegedUserIds)            -> lookup contoso_privileged_   ```
+```                                               identities.csv (object_id)   ```
+```   has_any (risk event types)               -> match() with (?i) alternation ```
+```   HONEST DIFFERENCE: the context fields travel as one pipe-joined string  ```
+```   (pack) so streamstats cannot mix fields from two different sign-ins.    ```
+```   values() is uncapped where KQL make_set caps the country set at 50.     ```
+```                                                                            ```
+``` SCHEDULE: PT1H / P14D (the country baseline), base severity Medium,       ```
+``` throttled 1 h per user + Severity.                                          ```
+``` ========================================================================== ```
+``` @stanza Contoso - Security info registered from a risky or unfamiliar context ```
+``` @conf description = A user registered an MFA or passwordless method while their sign-in was risky, from a new country or an unmanaged device; every privileged registration is High. KQL twin: lab/kql/security-info-registered-risky.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = 7 * * * * ```
+``` @conf dispatch.earliest_time = -14d ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 4 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = UserPrincipalName,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| eval Kind=if(sourcetype=="azure:loganalytics:auditlogs", "reg", "signin")
+| where Kind=="signin" OR (lower(Result)=="success" AND match(OperationName, "(?i)^User registered (all required )?security info(rmation)?[.]?$") AND _time>=relative_time(now(), "-1h"))
+| spath path=InitiatedBy.user.id output=ActorId
+| spath path=InitiatedBy.user.userPrincipalName output=ActorUpn
+| spath path=InitiatedBy.user.ipAddress output=RegIp
+| spath path=TargetResources{} output=TR
+| eval TRUser=mvindex(mvfilter(match(spath(TR, "type"), "(?i)^User$")), 0)
+| eval TargetId=spath(TRUser, "id"), TargetUpn=spath(TRUser, "userPrincipalName")
+| eval UserKey=if(Kind=="reg", if(isnotnull(ActorId) AND ActorId!="", ActorId, TargetId), UserId)
+| eval RegUpn=lower(if(isnotnull(ActorUpn) AND ActorUpn!="", ActorUpn, TargetUpn))
+| eval RegIp=coalesce(RegIp, "")
+| spath path=LocationDetails.countryOrRegion output=Country
+| spath path=DeviceDetail.isCompliant output=DevCompliant
+| spath path=DeviceDetail.isManaged output=DevManaged
+| spath path=RiskEventTypes_V2{} output=RiskEventsMv
+| eval Managed=if(lower(coalesce(DevCompliant, ""))=="true" OR lower(coalesce(DevManaged, ""))=="true", "true", "false")
+| eval ViaTap=if(match(coalesce(AuthenticationDetails, ""), "(?i)temporary access pass"), "true", "false")
+| eval SignInType=case(sourcetype=="azure:loganalytics:signinlogs", "interactive", sourcetype=="azure:loganalytics:aadnoninteractiveusersigninlogs", "non-interactive", true(), "")
+| eval IsBaseline=if(SignInType=="interactive" AND _time<=relative_time(now(), "-2h"), 1, 0)
+| eval BaselineCountry=if(IsBaseline==1, Country, null())
+| eventstats sum(IsBaseline) AS BaselineSignIns, values(BaselineCountry) AS KnownCountries BY UserKey
+| eval SigPack=if(Kind=="signin" AND _time>=relative_time(now(), "-2h"), _time . "|" . coalesce(IPAddress, "") . "|" . coalesce(Country, "") . "|" . coalesce(RiskLevelDuringSignIn, "") . "|" . coalesce(mvjoin(RiskEventsMv, ","), "") . "|" . Managed . "|" . ViaTap . "|" . coalesce(AppDisplayName, "") . "|" . SignInType, null())
+| eval SortTime=if(Kind=="signin", _time - 300, _time)
+| eval IpKey=if(Kind=="reg", RegIp, coalesce(IPAddress, ""))
+| eval IpKey=if(IpKey=="", "(none)", IpKey)
+| sort 0 UserKey SortTime
+| streamstats last(SigPack) AS CtxSameIp BY UserKey IpKey
+| streamstats last(SigPack) AS CtxAny BY UserKey
+| where Kind=="reg"
+| eval SameIpTime=tonumber(mvindex(split(CtxSameIp, "|"), 0)), AnyTime=tonumber(mvindex(split(CtxAny, "|"), 0))
+| eval Ctx=case(RegIp!="" AND isnotnull(SameIpTime) AND SameIpTime>=_time - 3600, CtxSameIp, isnotnull(AnyTime) AND AnyTime>=_time - 3600, CtxAny, true(), null())
+| eval CtxParts=split(Ctx, "|")
+| eval SignInTimeEpoch=tonumber(mvindex(CtxParts, 0)), SignInIp=mvindex(CtxParts, 1), CtxCountry=mvindex(CtxParts, 2), SignInRisk=mvindex(CtxParts, 3), RiskEvents=mvindex(CtxParts, 4), CtxManaged=mvindex(CtxParts, 5), ViaTap=mvindex(CtxParts, 6), SignInApp=mvindex(CtxParts, 7), ContextSignInType=mvindex(CtxParts, 8)
+| eval NoContext=if(isnull(Ctx), "true", "false")
+| eval NoBaseline=if(coalesce(BaselineSignIns, 0)==0, "true", "false")
+| eval RiskySignIn=if(in(lower(coalesce(SignInRisk, "")), "medium", "high") OR match(coalesce(RiskEvents, ""), "(?i)anonymizedIPAddress|maliciousIPAddress|suspiciousIPAddress|unfamiliarFeatures"), "true", "false")
+| eval NewCountry=if(NoBaseline=="false" AND coalesce(CtxCountry, "")!="" AND isnull(mvfind(KnownCountries, "^" . CtxCountry . "$")), "true", "false")
+| eval UnmanagedDevice=if(NoContext=="false" AND CtxManaged!="true", "true", "false")
+| lookup contoso_privileged_identities.csv object_id AS UserKey OUTPUT object_id AS PrivIdHit
+| eval PrivilegedById=if(isnotnull(PrivIdHit), "true", "false")
+| eval PrivilegedTarget=if(PrivilegedById=="true" OR match(coalesce(RegUpn, ""), "(?i)^(bg-admin-[0-9]{2}|tier0-admin-[0-9]{2})@"), "true", "false")
+| eval Signals=if(RiskySignIn=="true", 1, 0) + if(NewCountry=="true", 1, 0) + if(UnmanagedDevice=="true", 1, 0)
+| where PrivilegedTarget=="true" OR RiskySignIn=="true" OR NewCountry=="true" OR NoContext=="true"
+| eval Severity=case(PrivilegedTarget=="true", "High", lower(coalesce(SignInRisk, ""))=="high", "High", Signals >= 2, "High", true(), "Medium")
+| rex field=ResultReason "(?i)registered (?<Method>.+?) (?:authentication )?method"
+| eval UserPrincipalName=RegUpn, UserId=UserKey, Country=CtxCountry
+| eval IPAddress=if(coalesce(SignInIp, "")!="", SignInIp, RegIp)
+| eval TimeGenerated=strftime(_time, "%Y-%m-%dT%H:%M:%S.%3N%z"), SignInTime=strftime(SignInTimeEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z")
+| sort 0 - _time
+| table TimeGenerated, Severity, UserPrincipalName, UserId, PrivilegedTarget, PrivilegedById, OperationName, Method, ResultReason, RiskySignIn, SignInRisk, RiskEvents, NewCountry, Country, KnownCountries, UnmanagedDevice, ViaTap, NoContext, NoBaseline, Signals, ContextSignInType, IPAddress, RegIp, SignInIp, SignInTime, SignInApp, CorrelationId

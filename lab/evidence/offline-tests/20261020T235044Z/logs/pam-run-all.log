@@ -1,0 +1,33 @@
+[00:00:19Z] PAM test run 20261021T000019Z (logs: out/test-runs/20261021T000019Z/)
+[00:00:19Z] == shared stack: ./pam-up.sh
+[00:00:39Z] == dependency-scan: pester_suite
+[00:00:41Z]    PASS  dependency-scan: 8 passed, 0 failed, 0 skipped (exit 0, 2s) - log: out/test-runs/20261021T000019Z/dependency-scan.log
+[00:00:41Z] == ingest: bash ../scripts/monitoring/tests/ingest-vault-audit.test.sh
+[00:00:43Z]    PASS  ingest: 30 passed, 0 failed, 0 skipped (exit 0, 2s) - log: out/test-runs/20261021T000019Z/ingest.log
+[00:00:43Z] == itsm-dual-control: ./test/itsm-dual-control.test.sh
+[00:00:48Z]    PASS  itsm-dual-control: 45 passed, 0 failed, 0 skipped (exit 0, 5s) - log: out/test-runs/20261021T000019Z/itsm-dual-control.log
+[00:00:48Z] == recording-format: python3 -I test/guac_recording.test.py
+[00:00:50Z]    PASS  recording-format: 29 passed, 0 failed, 0 skipped (exit 0, 1s) - log: out/test-runs/20261021T000019Z/recording-format.log
+[00:00:50Z] == e2e: e2e_suite
+[00:05:14Z]    PASS  e2e: 284 passed, 0 failed, 0 skipped (exit 0, 264s) - log: out/test-runs/20261021T000019Z/e2e.log
+[00:05:14Z] == midpoint: ./test/e2e-midpoint.sh
+[00:05:49Z]    PASS  midpoint: 91 passed, 0 failed, 0 skipped (exit 0, 35s) - log: out/test-runs/20261021T000019Z/midpoint.log
+[00:05:49Z] == dynamic-db: ./test/e2e-dynamic-db.sh
+[00:06:06Z]    PASS  dynamic-db: 60 passed, 0 failed, 0 skipped (exit 0, 17s) - log: out/test-runs/20261021T000019Z/dynamic-db.log
+[00:06:06Z] == vault-anomaly: ./test/e2e-vault-anomaly.sh
+[00:06:33Z]    PASS  vault-anomaly: 63 passed, 0 failed, 1 skipped (exit 0, 27s) - log: out/test-runs/20261021T000019Z/vault-anomaly.log
+[00:06:33Z]    NOT RUN  scale: optional, slow: add --scale
+
+SUITE                VERDICT   PASSED  FAILED SKIPPED   EXIT SECONDS
+dependency-scan      PASS           8       0       0      0       2
+ingest               PASS          30       0       0      0       2
+itsm-dual-control    PASS          45       0       0      0       5
+recording-format     PASS          29       0       0      0       1
+e2e                  PASS         284       0       0      0     264
+midpoint             PASS          91       0       0      0      35
+dynamic-db           PASS          60       0       0      0      17
+vault-anomaly        PASS          63       0       1      0      27
+scale                NOT-RUN        0       0       0      -       0
+TOTAL (assertions)   610 passed, 0 failed, 1 skipped; suites: 8 passed, 0 failed, 1 not run
+
+[00:06:33Z] PAM TESTS PASSED (summary: out/test-runs/20261021T000019Z/summary.json)

@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "Who may do what through the PAM stand-in (CyberArk: Safe membership). Lab personas, not real people.",
+    "libraries: Vault library sets the person may check out from (psm-session.sh).",
+    "ssh_roles: Vault SSH CA roles the person may get a certificate from (psm-ssh.sh).",
+    "approves: Safes (library sets / SSH roles) for which this person's approval of a change counts toward",
+    "dual control (CyberArk: the Safe permission to authorise account requests). lib.sh itsm_validate counts",
+    "distinct approvers from ServiceNow's sysapproval_approver records, never the requester, only names listed",
+    "here; pam-policy.json approvals_required says how many (tier0 2, tier1 1).",
+    "Each person gets their own Guacamole user (no shared t0-operator). Lab: local password in",
+    ".secrets/operators/<name>-password. Tenant time (OIDC mode: OIDC_CLIENT_ID in .env): the key is the",
+    "Entra UPN, the user record comes from the person's first Entra sign-in, and lib.sh destroys any",
+    "local password on it and deletes the file (README, 'Per-person sign-in'). An approver who never checks",
+    "anything out (ops-dana) never gets a Guacamole user."
+  ],
+  "operators": {
+    "ops-alice": {
+      "display_name": "Alice - Tier-0 identity engineer (lab persona)",
+      "libraries": ["tier0-admins"],
+      "ssh_roles": ["linux-admin"],
+      "approves": ["tier0-admins"]
+    },
+    "ops-bob": {
+      "display_name": "Bob - Tier-1 server engineer (lab persona)",
+      "libraries": ["tier1-admins"],
+      "ssh_roles": ["linux-admin"],
+      "approves": ["tier1-admins", "linux-admin"]
+    },
+    "ops-carol": {
+      "display_name": "Carol - Tier-0 on-call (lab persona)",
+      "libraries": ["tier0-admins"],
+      "ssh_roles": [],
+      "approves": ["tier0-admins"]
+    },
+    "ops-dana": {
+      "display_name": "Dana - identity security lead, approver only (lab persona)",
+      "libraries": [],
+      "ssh_roles": [],
+      "approves": ["tier0-admins", "linux-admin"]
+    }
+  }
+}

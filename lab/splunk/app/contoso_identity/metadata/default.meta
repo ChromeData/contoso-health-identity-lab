@@ -1,0 +1,13 @@
+# =============================================================================
+# contoso_identity :: metadata/default.meta
+# -----------------------------------------------------------------------------
+# Search-time knowledge (props.conf KV_MODE, the saved searches) is scoped to
+# its app unless exported. Exporting system-wide lets an analyst run the
+# detections - and get JSON field extraction - from the ordinary Search &
+# Reporting app, which is what the screen recording uses.
+# Read for everyone, write for admin only (detections change through git).
+# =============================================================================
+
+[]
+access = read : [ * ], write : [ admin ]
+export = system

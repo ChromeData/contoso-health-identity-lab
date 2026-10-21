@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Mock HR 100492 (joiner 2026-10-19). Her ICU item is deliberately LEFT UNANSWERED: under the T2 rule an unanswered item means removed (ADR 0012). -->
+<user xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000305">
+    <name>dana.okafor</name>
+    <description>Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).</description>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000102" type="OrgType"/>
+    </assignment>
+    <assignment>
+        <description>Birthright: Nursing department.</description>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000201" type="RoleType"/>
+    </assignment>
+    <assignment>
+        <description>Requested 2026-10: ICU float shifts.</description>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000202" type="RoleType"/>
+    </assignment>
+    <activation>
+        <administrativeStatus>enabled</administrativeStatus>
+    </activation>
+    <fullName>Dana Okafor</fullName>
+    <givenName>Dana</givenName>
+    <familyName>Okafor</familyName>
+    <employeeNumber>100492</employeeNumber>
+    <organizationalUnit>Nursing</organizationalUnit>
+    <title>Registered Nurse</title>
+</user>

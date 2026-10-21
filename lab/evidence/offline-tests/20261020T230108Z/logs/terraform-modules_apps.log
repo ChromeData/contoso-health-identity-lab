@@ -1,0 +1,52 @@
+$ terraform -chdir=lab/terraform/modules/apps init -backend=false -input=false -no-color 
+Initializing provider plugins...
+- Reusing previous version of hashicorp/azuread from the dependency lock file
+- Using previously-installed hashicorp/azuread v3.10.0
+
+Terraform has been successfully initialized!
+exit=0
+$ terraform -chdir=lab/terraform/modules/apps validate -no-color
+Success! The configuration is valid.
+
+exit=0
+$ terraform -chdir=lab/terraform/modules/apps test -no-color 
+tests/apps.tftest.hcl... in progress
+  run "saml_app_assigned_only_to_the_app_group"... pass
+  run "saml_basic_configuration_and_claims"... pass
+  run "wildcard_reply_url_is_rejected"... pass
+  run "wrong_gallery_template_is_refused"... pass
+  run "claims_policy_can_be_turned_off"... pass
+  run "oidc_app_defines_the_three_roles"... pass
+  run "group_grants_map_to_the_fixed_role_ids"... pass
+  run "unknown_role_is_rejected"... pass
+  run "scim_absent_by_default"... pass
+  run "scim_on_creates_a_stopped_job_and_its_credential"... pass
+  run "scim_needs_a_template_id"... pass
+  run "gated_apply_refuses_an_empty_scim_credential"... pass
+  run "pr_plan_without_the_token_only_warns"... pass
+  run "malformed_scim_endpoint_is_rejected"... pass
+  run "guacamole_psm_absent_by_default"... pass
+  run "guacamole_psm_is_id_token_only_and_operator_only"... pass
+  run "guacamole_wildcard_or_plain_http_redirect_is_rejected"... pass
+  run "everything_on_mocked_apply"... pass
+tests/apps.tftest.hcl... tearing down
+tests/apps.tftest.hcl... pass
+tests/servicenow.tftest.hcl... in progress
+  run "servicenow_absent_by_default"... pass
+  run "servicenow_on_plans_app_sp_assignment_and_cert"... pass
+  run "sign_on_url_uses_the_idp_sys_id"... pass
+  run "claims_policy_can_be_turned_off"... pass
+  run "flag_without_instance_url_fails_the_plan"... pass
+  run "flag_without_group_fails_the_plan"... pass
+  run "wildcard_instance_url_is_rejected"... pass
+  run "trailing_slash_is_rejected"... pass
+  run "path_or_reply_url_as_instance_is_rejected"... pass
+  run "non_servicenow_or_http_host_is_rejected"... pass
+  run "malformed_sys_id_is_rejected"... pass
+  run "servicenow_on_mocked_apply"... pass
+  run "servicenow_prefers_the_user_role"... pass
+tests/servicenow.tftest.hcl... tearing down
+tests/servicenow.tftest.hcl... pass
+
+Success! 31 passed, 0 failed.
+exit=0

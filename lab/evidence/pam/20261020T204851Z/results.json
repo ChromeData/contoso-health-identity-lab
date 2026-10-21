@@ -1,0 +1,982 @@
+{
+  "schema": "contoso-pam/e2e/v2",
+  "run_utc": "20261020T204904Z",
+  "tenant": "none: local Docker only (contoso-pam stack + Samba AD DC corp.test.local, synthetic accounts)",
+  "ha_dr_segment": true,
+  "result": "PASS",
+  "aborted": null,
+  "pass": 241,
+  "fail": 0,
+  "code": {
+    "scope": "lab/pam: every file git tracks there except *.md, hashed when the run started",
+    "list": "code.sha256sums",
+    "sha256": "e4242ffde9d477a9d00d376a77dc51cfcba3140f6bcc77e20fbc9cc8998cddc8",
+    "files": 81
+  },
+  "checks": [
+    {
+      "status": "PASS",
+      "name": "samba-dc healthy (LDAPS up, cert valid for dc01.corp.test.local)"
+    },
+    {
+      "status": "PASS",
+      "name": "control: guacd (no extra_hosts mapping) cannot resolve dc01.corp.test.local - no DNS alias helps Vault"
+    },
+    {
+      "status": "PASS",
+      "name": "pre-onboarding: svc-backup's test password binds"
+    },
+    {
+      "status": "PASS",
+      "name": "vault-onboard-ad.sh first run"
+    },
+    {
+      "status": "PASS",
+      "name": "first run read the bind password from Key Vault (stub), piped"
+    },
+    {
+      "status": "PASS",
+      "name": "AD root CA installed: parses, CRLF stripped, same certificate as the DC's"
+    },
+    {
+      "status": "PASS",
+      "name": ".env: DC_FQDN=dc01.corp.test.local DC_PUBLIC_IP=172.18.0.12"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault resolves dc01.corp.test.local -> 172.18.0.12 through extra_hosts"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault unsealed after recreate"
+    },
+    {
+      "status": "PASS",
+      "name": "ldap/config: schema=ad, userattr=sAMAccountName, binddn=svc-vault-rotator, url=ldaps://dc01.corp.test.local, TLS verified"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-backup pwdLastSet changed on onboarding (134370029488026623 -> 134370029581473397)"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-backup's pre-onboarding password is rejected (LDAP 49)"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-backup binds with the Vault-held password (ldap/static-cred)"
+    },
+    {
+      "status": "PASS",
+      "name": "library tier0-admins: tier0-admin-01 available"
+    },
+    {
+      "status": "PASS",
+      "name": "library tier0-admins: tier0-admin-02 available"
+    },
+    {
+      "status": "PASS",
+      "name": "a second directory (-d other.test.local) is refused while ldap/ manages dc01.corp.test.local"
+    },
+    {
+      "status": "PASS",
+      "name": "... before touching anything (.env and ldap/config unchanged)"
+    },
+    {
+      "status": "PASS",
+      "name": "... ldap/config still points at ldaps://dc01.corp.test.local"
+    },
+    {
+      "status": "PASS",
+      "name": "--reset-bindpass with a FAILED Key Vault read stops (no empty bind password)"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault still binds after the refused runs (on-demand rotation of svc-backup)"
+    },
+    {
+      "status": "PASS",
+      "name": "vault-onboard-ad.sh --rotate-root (re-run)"
+    },
+    {
+      "status": "PASS",
+      "name": "the re-run kept Vault's bind password (Key Vault not read)"
+    },
+    {
+      "status": "PASS",
+      "name": "Key Vault's svc-vault-rotator password is rejected now (LDAP 49) - only Vault knows it"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault binds with its self-rotated password (on-demand rotation of svc-backup)"
+    },
+    {
+      "status": "PASS",
+      "name": "vault-onboard-ad.sh re-run after --rotate-root"
+    },
+    {
+      "status": "PASS",
+      "name": "the re-run did not write the stale Key Vault password back"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault still binds after the re-run (on-demand rotation of svc-backup)"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-backup binds with the newly rotated Vault password"
+    },
+    {
+      "status": "PASS",
+      "name": "ITSM mock (ServiceNow Table API v2 stand-in) answers"
+    },
+    {
+      "status": "PASS",
+      "name": "the shared t0-operator Guacamole user no longer exists (retired by pam-up.sh)"
+    },
+    {
+      "status": "PASS",
+      "name": "no --operator: refused (every session belongs to one person)"
+    },
+    {
+      "status": "PASS",
+      "name": "an operator not in operators.json: refused"
+    },
+    {
+      "status": "PASS",
+      "name": "ops-bob (Safe tier1-admins only) asking for Tier 0: refused"
+    },
+    {
+      "status": "PASS",
+      "name": "no --ticket: refused (pam-policy.json tier0 require_ticket)"
+    },
+    {
+      "status": "PASS",
+      "name": "a ticket awaiting approval: refused"
+    },
+    {
+      "status": "PASS",
+      "name": "an expired ticket (window ended 8 h ago): refused"
+    },
+    {
+      "status": "PASS",
+      "name": "an approved change still in Scheduled (not Implement): refused"
+    },
+    {
+      "status": "PASS",
+      "name": "someone else's ticket (alice's, used by carol): refused"
+    },
+    {
+      "status": "PASS",
+      "name": "a ticket ITSM does not know: refused"
+    },
+    {
+      "status": "PASS",
+      "name": "not a change number: refused"
+    },
+    {
+      "status": "PASS",
+      "name": "pam-policy.json WITHOUT tier0.require_ticket: refused, not 'no ticket needed' (fail closed)"
+    },
+    {
+      "status": "PASS",
+      "name": "an unparsable pam-policy.json: refused (fail closed)"
+    },
+    {
+      "status": "PASS",
+      "name": "... and none of the refused attempts checked anything out (both Tier-0 accounts available)"
+    },
+    {
+      "status": "PASS",
+      "name": "psm-session.sh checkout #1 --operator ops-alice --ticket CHG0040001"
+    },
+    {
+      "status": "PASS",
+      "name": "checkout #1 recorded a newly checked-out account (tier0-admin-01) for ops-alice"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault: tier0-admin-01 is checked out (available=false)"
+    },
+    {
+      "status": "PASS",
+      "name": "Guacamole connection 'DC01 - tier0-admin-01 (recorded)' exists"
+    },
+    {
+      "status": "PASS",
+      "name": "connection targets tier0-admin-01@172.18.0.12 (username/hostname)"
+    },
+    {
+      "status": "PASS",
+      "name": "injected password (read back from Guacamole) binds as tier0-admin-01 over LDAPS"
+    },
+    {
+      "status": "PASS",
+      "name": "ops-alice lists 'DC01 - tier0-admin-01 (recorded)' (READ granted)"
+    },
+    {
+      "status": "PASS",
+      "name": "ops-alice gets 403 on that connection's parameters (cannot read the password)"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault's audit log: check-out by token display name token-psm-ops-alice with ticket CHG0040001"
+    },
+    {
+      "status": "PASS",
+      "name": "PAM audit line: checkout operator=ops-alice account=tier0-admin-01 ticket=CHG0040001"
+    },
+    {
+      "status": "PASS",
+      "name": "a per-check-out Vault token is held for the check-in (.secrets/psm-tokens/tier0-admin-01)"
+    },
+    {
+      "status": "PASS",
+      "name": "psm-session.sh checkout #2 --operator ops-carol --ticket CHG0040003"
+    },
+    {
+      "status": "PASS",
+      "name": "checkout #2 recorded a newly checked-out account (tier0-admin-02) for ops-carol"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault: tier0-admin-02 is checked out (available=false)"
+    },
+    {
+      "status": "PASS",
+      "name": "Guacamole connection 'DC01 - tier0-admin-02 (recorded)' exists"
+    },
+    {
+      "status": "PASS",
+      "name": "connection targets tier0-admin-02@172.18.0.12 (username/hostname)"
+    },
+    {
+      "status": "PASS",
+      "name": "injected password (read back from Guacamole) binds as tier0-admin-02 over LDAPS"
+    },
+    {
+      "status": "PASS",
+      "name": "ops-carol lists 'DC01 - tier0-admin-02 (recorded)' (READ granted)"
+    },
+    {
+      "status": "PASS",
+      "name": "ops-carol gets 403 on that connection's parameters (cannot read the password)"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault's audit log: check-out by token display name token-psm-ops-carol with ticket CHG0040003"
+    },
+    {
+      "status": "PASS",
+      "name": "PAM audit line: checkout operator=ops-carol account=tier0-admin-02 ticket=CHG0040003"
+    },
+    {
+      "status": "PASS",
+      "name": "a per-check-out Vault token is held for the check-in (.secrets/psm-tokens/tier0-admin-02)"
+    },
+    {
+      "status": "PASS",
+      "name": "2nd check-out got the other account (tier0-admin-01 vs tier0-admin-02)"
+    },
+    {
+      "status": "PASS",
+      "name": "isolation: ops-carol does NOT see ops-alice's connection (tier0-admin-01)"
+    },
+    {
+      "status": "PASS",
+      "name": "isolation: ops-alice does NOT see ops-carol's connection (tier0-admin-02)"
+    },
+    {
+      "status": "PASS",
+      "name": "3rd check-out (valid ticket) refused because Vault reports the pool exhausted"
+    },
+    {
+      "status": "PASS",
+      "name": "... both accounts still checked out in Vault"
+    },
+    {
+      "status": "PASS",
+      "name": "... the broker's check-out state unchanged (tier0-admin-01,tier0-admin-02)"
+    },
+    {
+      "status": "PASS",
+      "name": "... the refused attempt's token was revoked and not left behind"
+    },
+    {
+      "status": "PASS",
+      "name": "... and audited as checkout-refused (pool exhausted)"
+    },
+    {
+      "status": "PASS",
+      "name": "bare 'checkin' with two open check-outs asks which account"
+    },
+    {
+      "status": "PASS",
+      "name": "... and checked nothing in (both still out in Vault)"
+    },
+    {
+      "status": "PASS",
+      "name": "checkin of ops-alice's account claimed by ops-carol: refused"
+    },
+    {
+      "status": "PASS",
+      "name": "... still checked out"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-01: injected password read back before check-in"
+    },
+    {
+      "status": "PASS",
+      "name": "psm-session.sh checkin tier0-admin-01 --operator ops-alice (tier0-admin-01)"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-01: the checked-out password is rejected now (LDAP 49 - rotated on check-in)"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-01: pwdLastSet changed on check-in"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-01: Guacamole connection password wiped"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-01: ops-alice no longer lists the connection (READ removed)"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-01: back in the library (available=true)"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-01: the check-out token is revoked (Vault rejects it)"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-01: PAM audit line checkin operator=ops-alice"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-02: injected password read back before check-in"
+    },
+    {
+      "status": "PASS",
+      "name": "psm-session.sh checkin (tier0-admin-02)"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-02: the checked-out password is rejected now (LDAP 49 - rotated on check-in)"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-02: pwdLastSet changed on check-in"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-02: Guacamole connection password wiped"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-02: ops-carol no longer lists the connection (READ removed)"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-02: back in the library (available=true)"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-02: the check-out token is revoked (Vault rejects it)"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-02: PAM audit line checkin operator=ops-carol"
+    },
+    {
+      "status": "PASS",
+      "name": "no check-outs left in .secrets/psm-checkout.json"
+    },
+    {
+      "status": "PASS",
+      "name": "control: ops-carol's lab password gets a token from /api/tokens (HTTP 200)"
+    },
+    {
+      "status": "PASS",
+      "name": "an admin-set attribute on ops-carol (guac-organization=e2e-oidc-marker)"
+    },
+    {
+      "status": "PASS",
+      "name": "OIDC mode: ensure_guac_operator ops-carol (record exists)"
+    },
+    {
+      "status": "PASS",
+      "name": "... the old local password is refused by /api/tokens now (HTTP 401/403)"
+    },
+    {
+      "status": "PASS",
+      "name": "... the lab password file is deleted (nothing on the broker host)"
+    },
+    {
+      "status": "PASS",
+      "name": "... the user record still exists (grants can attach to it)"
+    },
+    {
+      "status": "PASS",
+      "name": "... the admin-set attribute survived the password overwrite"
+    },
+    {
+      "status": "PASS",
+      "name": "OIDC mode: someone who never signed in through Entra gets NO local user"
+    },
+    {
+      "status": "PASS",
+      "name": "... Guacamole has no ops-oidc-never user"
+    },
+    {
+      "status": "PASS",
+      "name": "... and no password file was written"
+    },
+    {
+      "status": "PASS",
+      "name": "back to lab mode: ops-carol gets a fresh local password (PUT keeps attributes)"
+    },
+    {
+      "status": "PASS",
+      "name": "... the attribute survived the lab-mode reset too"
+    },
+    {
+      "status": "PASS",
+      "name": "... the new lab password works and the old one still does not"
+    },
+    {
+      "status": "PASS",
+      "name": "... (old one: refused)"
+    },
+    {
+      "status": "PASS",
+      "name": "recordings dir is guacd:guacamole 2750 (1000:1001 2750)"
+    },
+    {
+      "status": "PASS",
+      "name": "guacd can write a recording there and the web app can read it back"
+    },
+    {
+      "status": "PASS",
+      "name": "conjur-demo.sh: nightly-report fetched, unapproved-job denied (403)"
+    },
+    {
+      "status": "PASS",
+      "name": "GET /midpoint/ws/rest/self as administrator -> 200 (got 200)"
+    },
+    {
+      "status": "PASS",
+      "name": "... and with a wrong password -> 401 (auth really enforced)"
+    },
+    {
+      "status": "PASS",
+      "name": "GET /midpoint/ws/rest/connectors lists 7 connectors"
+    },
+    {
+      "status": "PASS",
+      "name": "a wrong discovery password is refused by the DC (invalidCredentials), no report written"
+    },
+    {
+      "status": "PASS",
+      "name": "... and no discovery report exists yet"
+    },
+    {
+      "status": "PASS",
+      "name": "discover.sh (bind password on stdin)"
+    },
+    {
+      "status": "PASS",
+      "name": "report written: out/e2e/discovery-latest.{json,csv}, one CSV row per account"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-iis-app (SPN HTTP/...) -> static role svc/svc-iis-app"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-sql01 (SPN MSSQLSvc/...) -> static role svc/svc-sql01"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-backup (service OU) -> static role svc/svc-backup"
+    },
+    {
+      "status": "PASS",
+      "name": "t1-srvadmin-01 (Tier1-Server-Admins) -> library tier1-admins"
+    },
+    {
+      "status": "PASS",
+      "name": "t1-srvadmin-02 (Tier1-Server-Admins) -> library tier1-admins"
+    },
+    {
+      "status": "PASS",
+      "name": "tier0-admin-01 (Domain Admins) -> library tier0-admins"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-legacy-da (SPN + Domain Admins) -> exception: Kerberoastable Tier 0"
+    },
+    {
+      "status": "PASS",
+      "name": "t0-stale-admin -> exception: stale privileged (last logon 400 days ago)"
+    },
+    {
+      "status": "PASS",
+      "name": "t0-never-admin -> exception: never logged on, created 200 days ago"
+    },
+    {
+      "status": "PASS",
+      "name": "t0-never-admin found through NESTED membership (Tier0-Nested-Ops -> Administrators)"
+    },
+    {
+      "status": "PASS",
+      "name": "former-admin-01 -> exception: orphaned adminCount"
+    },
+    {
+      "status": "PASS",
+      "name": "Administrator found via primaryGroupID/membership and excluded by policy (break-glass)"
+    },
+    {
+      "status": "PASS",
+      "name": "krbtgt excluded by policy (KDC account)"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-vault-rotator excluded by policy (Vault's own bind account)"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-pam-discovery excluded by policy (the discovery account itself)"
+    },
+    {
+      "status": "PASS",
+      "name": "Guest (not privileged, no SPN, not in a PAM OU) is not a candidate"
+    },
+    {
+      "status": "PASS",
+      "name": "onboard.sh --dry-run"
+    },
+    {
+      "status": "PASS",
+      "name": "dry run: svc-sql01 shown as HELD (unresolved dependencies)"
+    },
+    {
+      "status": "PASS",
+      "name": "onboard.sh --dry-run with a scheduled task running as t1-srvadmin-01"
+    },
+    {
+      "status": "PASS",
+      "name": "dry run: library candidate t1-srvadmin-01 HELD too (tier1 dependency_check)"
+    },
+    {
+      "status": "PASS",
+      "name": "onboard.sh --dry-run with NO dependency record for t1-srvadmin-02"
+    },
+    {
+      "status": "PASS",
+      "name": "dry run: t1-srvadmin-02 HELD (unknown is not 'none')"
+    },
+    {
+      "status": "PASS",
+      "name": "dry run changed nothing (no static role svc/svc-iis-app)"
+    },
+    {
+      "status": "PASS",
+      "name": "--force without --only is refused (one account per override)"
+    },
+    {
+      "status": "PASS",
+      "name": "--force without a justification is refused"
+    },
+    {
+      "status": "PASS",
+      "name": "a justification without a change number is refused"
+    },
+    {
+      "status": "PASS",
+      "name": "onboard.sh (bulk)"
+    },
+    {
+      "status": "PASS",
+      "name": "static role svc/svc-iis-app created"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-iis-app rotated on onboarding (pwdLastSet changed)"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-iis-app binds with the Vault-held password"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-sql01 HELD: no static role"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-sql01 HELD: password untouched (pwdLastSet unchanged)"
+    },
+    {
+      "status": "PASS",
+      "name": "library tier1-admins holds t1-srvadmin-01"
+    },
+    {
+      "status": "PASS",
+      "name": "library tier1-admins holds t1-srvadmin-02"
+    },
+    {
+      "status": "PASS",
+      "name": "t1-srvadmin-01 got a new password on onboarding"
+    },
+    {
+      "status": "PASS",
+      "name": "t1-srvadmin-02 got a new password on onboarding"
+    },
+    {
+      "status": "PASS",
+      "name": "exception t0-stale-admin untouched (pwdLastSet unchanged)"
+    },
+    {
+      "status": "PASS",
+      "name": "existing svc-backup (flat static role) recognised as already vaulted"
+    },
+    {
+      "status": "PASS",
+      "name": "Safe policy tier0-checkout exists"
+    },
+    {
+      "status": "PASS",
+      "name": "Safe policy tier1-checkout exists"
+    },
+    {
+      "status": "PASS",
+      "name": "Safe policy tier0-static-read exists"
+    },
+    {
+      "status": "PASS",
+      "name": "Safe policy tier1-static-read exists"
+    },
+    {
+      "status": "PASS",
+      "name": "Safe policy svc-static-read exists"
+    },
+    {
+      "status": "PASS",
+      "name": "Safe policy pam-reconcile exists"
+    },
+    {
+      "status": "PASS",
+      "name": "Safe svc: a svc-static-read token reads svc/svc-iis-app"
+    },
+    {
+      "status": "PASS",
+      "name": "Safe svc: the same token cannot read svc-backup (outside svc/*)"
+    },
+    {
+      "status": "PASS",
+      "name": "Safe tier1: a tier1-checkout token can check out of tier1-admins (and back in)"
+    },
+    {
+      "status": "PASS",
+      "name": "Safe tier1: the same token cannot check out of tier0-admins"
+    },
+    {
+      "status": "PASS",
+      "name": "onboard.sh re-run (idempotent)"
+    },
+    {
+      "status": "PASS",
+      "name": "re-run: svc-iis-app and the tier1 library reported as already vaulted"
+    },
+    {
+      "status": "PASS",
+      "name": "rotate.sh svc-iis-app (its one consumer reads from Vault)"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-iis-app rotated (pwdLastSet changed)"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-iis-app binds with the new Vault password"
+    },
+    {
+      "status": "PASS",
+      "name": "a new UNRESOLVED consumer (scheduled task) -> rotation refused"
+    },
+    {
+      "status": "PASS",
+      "name": "... and the refusal names it"
+    },
+    {
+      "status": "PASS",
+      "name": "... password untouched (pwdLastSet unchanged)"
+    },
+    {
+      "status": "PASS",
+      "name": "... audited as rotate-refused"
+    },
+    {
+      "status": "PASS",
+      "name": "NO dependency record (unknown is not 'none') -> rotation refused"
+    },
+    {
+      "status": "PASS",
+      "name": "a library (check-out) account is not rotated here"
+    },
+    {
+      "status": "PASS",
+      "name": "dependency-scan/Get-AccountDependencies.ps1: Pester (run-as matching, map contract) passes"
+    },
+    {
+      "status": "PASS",
+      "name": "reconcile.sh --verify --strict (GAP 0, ORPHAN 0, all rotated in policy, all verified)"
+    },
+    {
+      "status": "PASS",
+      "name": "report KPIs: GAP 0"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-iis-app: VAULTED, rotated within policy, verified"
+    },
+    {
+      "status": "PASS",
+      "name": "... verified=yes (its vaulted password binds)"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-sql01: HELD with its unresolved dependencies"
+    },
+    {
+      "status": "PASS",
+      "name": "t1-srvadmin-01: VAULTED in library tier1-admins"
+    },
+    {
+      "status": "PASS",
+      "name": "t0-stale-admin: EXCEPTION (documented reason)"
+    },
+    {
+      "status": "PASS",
+      "name": "after an out-of-band reset of svc-iis-app in AD, --verify --strict fails (CPM verify)"
+    },
+    {
+      "status": "PASS",
+      "name": "... svc-iis-app verified=no"
+    },
+    {
+      "status": "PASS",
+      "name": "rotate.sh svc-iis-app repairs it (Vault resets it with the reconcile account)"
+    },
+    {
+      "status": "PASS",
+      "name": "reconcile.sh --verify --strict passes again"
+    },
+    {
+      "status": "PASS",
+      "name": "onboard.sh --only svc-sql01 --force with a change-referenced justification"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-sql01 now a static role, rotated (pwdLastSet changed)"
+    },
+    {
+      "status": "PASS",
+      "name": "the override is in Vault's exception register (pam-meta/exceptions/svc-sql01)"
+    },
+    {
+      "status": "PASS",
+      "name": "... and audited as override by ops-alice"
+    },
+    {
+      "status": "PASS",
+      "name": "reconcile.sh after the override"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-sql01: VAULTED, the forced override shown on the row"
+    },
+    {
+      "status": "PASS",
+      "name": "discover.sh after svc-iis-app was deleted in AD"
+    },
+    {
+      "status": "PASS",
+      "name": "reconcile --strict: the deleted account is an ORPHAN in Vault"
+    },
+    {
+      "status": "PASS",
+      "name": "svc-iis-app row: ORPHAN, static:svc/svc-iis-app"
+    },
+    {
+      "status": "PASS",
+      "name": "reconcile --strict after removing the orphaned static role"
+    },
+    {
+      "status": "PASS",
+      "name": "psm-ssh.sh setup"
+    },
+    {
+      "status": "PASS",
+      "name": "ssh-target trusts exactly Vault's SSH CA public key"
+    },
+    {
+      "status": "PASS",
+      "name": "a plain key without a certificate is refused by sshd"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault refuses to sign principal root (allowed_users = linux-admin)"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault signs a 5-minute certificate for principal linux-admin"
+    },
+    {
+      "status": "PASS",
+      "name": "... and it logs in to ssh-target as labadmin (plain OpenSSH client, no Guacamole)"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault signs a 3-second certificate"
+    },
+    {
+      "status": "PASS",
+      "name": "... which sshd refuses once expired (used after 8 s)"
+    },
+    {
+      "status": "PASS",
+      "name": "ops-carol (no SSH role in operators.json) is refused"
+    },
+    {
+      "status": "PASS",
+      "name": "no ticket is refused (tier1 require_ticket)"
+    },
+    {
+      "status": "PASS",
+      "name": "an expired ticket is refused for SSH too (validation failure stops the check-out)"
+    },
+    {
+      "status": "PASS",
+      "name": "... and nothing was checked out (no SSH state file)"
+    },
+    {
+      "status": "PASS",
+      "name": "psm-ssh.sh checkout --operator ops-alice --ticket CHG0040007"
+    },
+    {
+      "status": "PASS",
+      "name": "certificate key ID carries the operator (token-psm-ops-alice-linux-admin)"
+    },
+    {
+      "status": "PASS",
+      "name": "ops-alice lists 'LINUX - ssh-target (recorded)' (READ)"
+    },
+    {
+      "status": "PASS",
+      "name": "ops-alice gets 403 on its parameters (cannot read key or certificate)"
+    },
+    {
+      "status": "PASS",
+      "name": "ops-carol does not see the SSH connection"
+    },
+    {
+      "status": "PASS",
+      "name": "a real SSH session through Guacamole as ops-alice (HTTP tunnel, keys typed, session ended)"
+    },
+    {
+      "status": "PASS",
+      "name": "Guacamole history: the session belongs to ops-alice (ops-alice)"
+    },
+    {
+      "status": "PASS",
+      "name": "typescript (text recording) shows the command output: uid=1000(labadmin)"
+    },
+    {
+      "status": "PASS",
+      "name": "typescript shows the target's hostname (ssh-target)"
+    },
+    {
+      "status": "PASS",
+      "name": "graphical recording written for the same session (> 1 KB)"
+    },
+    {
+      "status": "PASS",
+      "name": "sshd on the target logged the login with ID token-psm-ops-alice-linux-admin (serial 1944871163592790079)"
+    },
+    {
+      "status": "PASS",
+      "name": "PAM audit line: ssh-checkout operator=ops-alice cert_serial=1944871163592790079"
+    },
+    {
+      "status": "PASS",
+      "name": "psm-ssh.sh checkin --operator ops-alice"
+    },
+    {
+      "status": "PASS",
+      "name": "connection private key wiped"
+    },
+    {
+      "status": "PASS",
+      "name": "connection certificate wiped"
+    },
+    {
+      "status": "PASS",
+      "name": "ops-alice no longer sees the SSH connection"
+    },
+    {
+      "status": "PASS",
+      "name": "vault-ha.sh up"
+    },
+    {
+      "status": "PASS",
+      "name": "3 voters, autopilot healthy, failure tolerance 1"
+    },
+    {
+      "status": "PASS",
+      "name": "vault-ha.sh failover (SIGKILL the leader)"
+    },
+    {
+      "status": "PASS",
+      "name": "a new leader accepted a write"
+    },
+    {
+      "status": "PASS",
+      "name": "the killed node auto-unsealed and rejoined as a healthy voter"
+    },
+    {
+      "status": "PASS",
+      "name": "new leader differs from the killed one"
+    },
+    {
+      "status": "PASS",
+      "name": "dr-drill.sh (snapshot -> destroy all nodes + disks -> restore), run record -> ../evidence/pam-dr/20261020T204851Z"
+    },
+    {
+      "status": "PASS",
+      "name": "DR: marker restored, policy restored, post-snapshot write lost (RPO shown), RTO within target"
+    },
+    {
+      "status": "PASS",
+      "name": "DR report written with a numeric RTO (32.5s)"
+    },
+    {
+      "status": "PASS",
+      "name": "vault-ha.sh upgrade (rolling rehearsal: followers, then step-down + leader)"
+    },
+    {
+      "status": "PASS",
+      "name": "cluster healthy after the rolling upgrade"
+    },
+    {
+      "status": "PASS",
+      "name": "vault-ha.sh down --volumes (the harness made it)"
+    }
+  ]
+}

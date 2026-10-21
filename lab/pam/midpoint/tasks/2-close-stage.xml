@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Closes the current review stage. An item nobody answered gets the case outcome noResponse. Activity "certificationCloseCurrentStage" (midPoint 4.9+ schema, common-tasks-3.xsd);
+     archetype = midPoint's built-in archetype for this kind of task.
+     __CAMPAIGN_OID__ is filled in by run-campaign.sh. -->
+<task xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      oid="c0471e00-0000-4000-8000-000000000502">
+    <name>Contoso: close review stage 1</name>
+    <assignment>
+        <targetRef oid="00000000-0000-0000-0000-000000000537" type="ArchetypeType"/>
+    </assignment>
+    <ownerRef oid="00000000-0000-0000-0000-000000000002" type="UserType"/>
+    <executionState>runnable</executionState>
+    <activity>
+        <work>
+            <certificationCloseCurrentStage>
+                <certificationCampaignRef oid="__CAMPAIGN_OID__" type="AccessCertificationCampaignType"/>
+            </certificationCloseCurrentStage>
+        </work>
+    </activity>
+</task>

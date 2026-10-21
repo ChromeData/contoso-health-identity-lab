@@ -1,0 +1,322 @@
+
+[22:00:48Z] == (a) Samba AD DC dc01.corp.test.local - fresh build + provision
+PASS  samba-dc healthy (LDAPS up, cert valid for dc01.corp.test.local)
+PASS  control: guacd (no extra_hosts mapping) cannot resolve dc01.corp.test.local - no DNS alias helps Vault
+
+[22:01:00Z] == (b) ./vault-onboard-ad.sh (az stubbed) - first onboarding
+PASS  pre-onboarding: svc-backup's test password binds
+PASS  vault-onboard-ad.sh first run
+PASS  first run read the bind password from Key Vault (stub), piped
+PASS  AD root CA installed: parses, CRLF stripped, same certificate as the DC's
+PASS  .env: DC_FQDN=dc01.corp.test.local DC_PUBLIC_IP=172.18.0.12
+PASS  Vault resolves dc01.corp.test.local -> 172.18.0.12 through extra_hosts
+PASS  Vault unsealed after recreate
+PASS  ldap/config: schema=ad, userattr=sAMAccountName, binddn=svc-vault-rotator, url=ldaps://dc01.corp.test.local, TLS verified
+
+[22:01:04Z] == (c) Onboarding rotated svc-backup (CPM moment); library ready
+PASS  svc-backup pwdLastSet changed on onboarding (134370072539169394 -> 134370072633602621)
+PASS  svc-backup's pre-onboarding password is rejected (LDAP 49)
+PASS  svc-backup binds with the Vault-held password (ldap/static-cred)
+PASS  library tier0-admins: tier0-admin-01 available
+PASS  library tier0-admins: tier0-admin-02 available
+
+[22:01:05Z] == (d) vault-onboard-ad.sh guardrails
+PASS  a second directory (-d other.test.local) is refused while ldap/ manages dc01.corp.test.local
+PASS  ... before touching anything (.env and ldap/config unchanged)
+PASS  ... ldap/config still points at ldaps://dc01.corp.test.local
+PASS  --reset-bindpass with a FAILED Key Vault read stops (no empty bind password)
+PASS  Vault still binds after the refused runs (on-demand rotation of svc-backup)
+
+[22:01:08Z] == (e) ./vault-onboard-ad.sh --rotate-root (re-run), then a plain re-run
+PASS  vault-onboard-ad.sh --rotate-root (re-run)
+PASS  the re-run kept Vault's bind password (Key Vault not read)
+PASS  Key Vault's svc-vault-rotator password is rejected now (LDAP 49) - only Vault knows it
+PASS  Vault binds with its self-rotated password (on-demand rotation of svc-backup)
+PASS  vault-onboard-ad.sh re-run after --rotate-root
+PASS  the re-run did not write the stale Key Vault password back
+PASS  Vault still binds after the re-run (on-demand rotation of svc-backup)
+PASS  svc-backup binds with the newly rotated Vault password
+
+[22:01:16Z] == (f0) Check-out gates: a named operator in the Safe + an approved, current ticket assigned to them
+PASS  ITSM mock (ServiceNow Table API v2 stand-in) answers
+PASS  the shared t0-operator Guacamole user no longer exists (retired by pam-up.sh)
+PASS  no --operator: refused (every session belongs to one person)
+PASS  an operator not in operators.json: refused
+PASS  ops-bob (Safe tier1-admins only) asking for Tier 0: refused
+PASS  no --ticket: refused (pam-policy.json tier0 require_ticket)
+PASS  a ticket awaiting approval: refused
+PASS  an expired ticket (window ended 8 h ago): refused
+PASS  an approved change still in Scheduled (not Implement): refused
+PASS  someone else's ticket (alice's, used by carol): refused
+PASS  a ticket ITSM does not know: refused
+PASS  not a change number: refused
+PASS  dual control: a SELF-APPROVED Tier-0 change (alice approves her own, + carol) is refused
+PASS  ... because only one approval counts (1 of 2 required)
+PASS  dual control: a SINGLE approver on a Tier-0 change is refused (1 of 2)
+PASS  dual control: an approver without the Safe right (ops-bob, tier1 only) does not count
+PASS  pam-policy.json WITHOUT tier0.require_ticket: refused, not 'no ticket needed' (fail closed)
+PASS  an unparsable pam-policy.json: refused (fail closed)
+PASS  pam-policy.json WITHOUT tier0.approvals_required: a dual-approved ticket is still refused (fail closed)
+PASS  ... and none of the refused attempts checked anything out (both Tier-0 accounts available)
+
+[22:01:24Z] == (f) ./psm-session.sh checkout --operator --ticket - inject into Guacamole, exclusive, per person
+PASS  psm-session.sh checkout #1 --operator ops-alice --ticket CHG0040041 (dual control: approved by ops-carol + ops-dana)
+PASS  dual control: two distinct approvers, neither the requester, accepted (ops-carol + ops-dana, 2 of 2)
+PASS  checkout #1 recorded a newly checked-out account (tier0-admin-01) for ops-alice
+PASS  Vault: tier0-admin-01 is checked out (available=false)
+PASS  Guacamole connection 'DC01 - tier0-admin-01 (recorded)' exists
+PASS  connection targets tier0-admin-01@172.18.0.12 (username/hostname)
+PASS  injected password (read back from Guacamole) binds as tier0-admin-01 over LDAPS
+PASS  ops-alice lists 'DC01 - tier0-admin-01 (recorded)' (READ granted)
+PASS  ops-alice gets 403 on that connection's parameters (cannot read the password)
+PASS  Vault's audit log: check-out by token display name token-psm-ops-alice with ticket CHG0040041
+PASS  PAM audit line: checkout operator=ops-alice account=tier0-admin-01 ticket=CHG0040041 approvers=ops-carol,ops-dana
+PASS  Vault's audit log: the check-out token carries the approvers (ops-carol,ops-dana) in its metadata
+PASS  a per-check-out Vault token is held for the check-in (.secrets/psm-tokens/tier0-admin-01)
+PASS  psm-session.sh checkout #2 --operator ops-carol --ticket CHG0040043 (dual control: approved by ops-alice + ops-dana)
+PASS  dual control: two distinct approvers, neither the requester, accepted (ops-alice + ops-dana, 2 of 2)
+PASS  checkout #2 recorded a newly checked-out account (tier0-admin-02) for ops-carol
+PASS  Vault: tier0-admin-02 is checked out (available=false)
+PASS  Guacamole connection 'DC01 - tier0-admin-02 (recorded)' exists
+PASS  connection targets tier0-admin-02@172.18.0.12 (username/hostname)
+PASS  injected password (read back from Guacamole) binds as tier0-admin-02 over LDAPS
+PASS  ops-carol lists 'DC01 - tier0-admin-02 (recorded)' (READ granted)
+PASS  ops-carol gets 403 on that connection's parameters (cannot read the password)
+PASS  Vault's audit log: check-out by token display name token-psm-ops-carol with ticket CHG0040043
+PASS  PAM audit line: checkout operator=ops-carol account=tier0-admin-02 ticket=CHG0040043 approvers=ops-alice,ops-dana
+PASS  Vault's audit log: the check-out token carries the approvers (ops-alice,ops-dana) in its metadata
+PASS  a per-check-out Vault token is held for the check-in (.secrets/psm-tokens/tier0-admin-02)
+PASS  2nd check-out got the other account (tier0-admin-01 vs tier0-admin-02)
+PASS  isolation: ops-carol does NOT see ops-alice's connection (tier0-admin-01)
+PASS  isolation: ops-alice does NOT see ops-carol's connection (tier0-admin-02)
+PASS  3rd check-out (valid ticket) refused because Vault reports the pool exhausted
+PASS  ... both accounts still checked out in Vault
+PASS  ... the broker's check-out state unchanged (tier0-admin-01,tier0-admin-02)
+PASS  ... the refused attempt's token was revoked and not left behind
+PASS  ... and audited as checkout-refused (pool exhausted)
+
+[22:01:30Z] == (g) ./psm-session.sh checkin - rotate on check-in, wipe the connection, revoke access
+PASS  bare 'checkin' with two open check-outs asks which account
+PASS  ... and checked nothing in (both still out in Vault)
+PASS  checkin of ops-alice's account claimed by ops-carol: refused
+PASS  ... still checked out
+PASS  tier0-admin-01: injected password read back before check-in
+PASS  psm-session.sh checkin tier0-admin-01 --operator ops-alice (tier0-admin-01)
+PASS  tier0-admin-01: the checked-out password is rejected now (LDAP 49 - rotated on check-in)
+PASS  tier0-admin-01: pwdLastSet changed on check-in
+PASS  tier0-admin-01: Guacamole connection password wiped
+PASS  tier0-admin-01: ops-alice no longer lists the connection (READ removed)
+PASS  tier0-admin-01: back in the library (available=true)
+PASS  tier0-admin-01: the check-out token is revoked (Vault rejects it)
+PASS  tier0-admin-01: PAM audit line checkin operator=ops-alice
+PASS  tier0-admin-02: injected password read back before check-in
+PASS  psm-session.sh checkin (tier0-admin-02)
+PASS  tier0-admin-02: the checked-out password is rejected now (LDAP 49 - rotated on check-in)
+PASS  tier0-admin-02: pwdLastSet changed on check-in
+PASS  tier0-admin-02: Guacamole connection password wiped
+PASS  tier0-admin-02: ops-carol no longer lists the connection (READ removed)
+PASS  tier0-admin-02: back in the library (available=true)
+PASS  tier0-admin-02: the check-out token is revoked (Vault rejects it)
+PASS  tier0-admin-02: PAM audit line checkin operator=ops-carol
+PASS  no check-outs left in .secrets/psm-checkout.json
+
+[22:01:35Z] == (g3) OIDC mode (PAM_OIDC=1): no operator keeps a working local Guacamole password
+PASS  control: ops-carol's lab password gets a token from /api/tokens (HTTP 200)
+PASS  an admin-set attribute on ops-carol (guac-organization=e2e-oidc-marker)
+PASS  OIDC mode: ensure_guac_operator ops-carol (record exists)
+PASS  ... the old local password is refused by /api/tokens now (HTTP 401/403)
+PASS  ... the lab password file is deleted (nothing on the broker host)
+PASS  ... the user record still exists (grants can attach to it)
+PASS  ... the admin-set attribute survived the password overwrite
+PASS  OIDC mode: someone who never signed in through Entra gets NO local user
+PASS  ... Guacamole has no ops-oidc-never user
+PASS  ... and no password file was written
+PASS  back to lab mode: ops-carol gets a fresh local password (PUT keeps attributes)
+PASS  ... the attribute survived the lab-mode reset too
+PASS  ... the new lab password works and the old one still does not
+PASS  ... (old one: refused)
+
+[22:01:36Z] == (g2) Guacamole recordings volume
+PASS  recordings dir is guacd:guacamole 2750 (1000:1001 2750)
+PASS  guacd can write a recording there and the web app can read it back
+
+[22:01:36Z] == (g4) RDP without DC01: brokered, recorded RDP session to rdp-target (Linux xrdp stand-in for DC01)
+PASS  rdp-target builds and starts (Debian xrdp + xorgxrdp; AD logon by Kerberos to dc01.corp.test.local)
+PASS  rdp-target resolves dc01.corp.test.local -> 172.18.0.12 only through the .env mapping (as Vault does)
+PASS  rdp-target: no local password opens a session (shadow '*', PAM auth = pam_krb5 only)
+PASS  control: the KDC refuses a wrong password for tier0-admin-01 ('Password incorrect', not unreachable)
+PASS  psm-session.sh checkout --operator ops-alice --ticket CHG0040050 --target rdp-target (dual control: ops-carol + ops-dana)
+PASS  checked out tier0-admin-01 for ops-alice -> 'RDP-TARGET (Linux xrdp stand-in for DC01) - tier0-admin-01 (recorded)'
+PASS  the connection targets rdp-target:3389 as tier0-admin-01 over TLS (xrdp has no NLA), no domain, recorded where History looks
+PASS  ops-alice lists 'RDP-TARGET (Linux xrdp stand-in for DC01) - tier0-admin-01 (recorded)' (READ)
+PASS  ops-alice gets 403 on its parameters (never sees the password)
+PASS  ops-carol does not see it
+PASS  PAM audit line: checkout target=rdp-target account=tier0-admin-01 approvers=ops-carol,ops-dana
+PASS  the injected Vault password gets a Kerberos TGT for tier0-admin-01 from the DC (kinit on rdp-target)
+PASS  a real RDP session through Guacamole as ops-alice (HTTP tunnel, xrdp autologon with the injected credential, keys typed)
+PASS  ... and the server ended it when the typed 'exit' closed the session
+PASS  Guacamole history: the session belongs to ops-alice (ops-alice)
+PASS  inside the session the typed 'id' ran AS THE AD ACCOUNT (tier0-admin-01) on rdp-target
+PASS  ... and 'hostname' printed rdp-target
+PASS  xrdp-sesman: the Kerberos logon was accepted for tier0-admin-01
+PASS  xrdp-sesman: the session ended when its window manager (the xterm) exited
+PASS  graphical recording written for the session (> 10 KB)
+PASS  the recording PLAYS BACK: guacamole-recording format check (framing, 1024x768 screen, decodable images, timed frames, screen painted)
+PASS  the web app's History lists it for the session (type GUACAMOLE_SESSION_RECORDING)
+PASS  ... and serves its player the SAME bytes guacd wrote (History API, sha256 cef7f3e4bbfef27e...)
+PASS  ... while ops-alice cannot fetch the recording of her own session (403/404: playback is for reviewers)
+PASS  psm-session.sh checkin tier0-admin-01 --operator ops-alice (rotate on check-in)
+PASS  after check-in the KDC refuses the password used in the session ('Password incorrect': rotated)
+PASS  'RDP-TARGET (Linux xrdp stand-in for DC01) - tier0-admin-01 (recorded)' password wiped
+PASS  ops-alice no longer lists it (READ removed)
+PASS  tier0-admin-01 back in the library (available=true)
+PASS  PAM audit line: checkin target=rdp-target account=tier0-admin-01
+
+[22:02:04Z] == (h) ./conjur-demo.sh
+PASS  conjur-demo.sh: nightly-report fetched, unapproved-job denied (403)
+
+[22:02:07Z] == (i) midPoint REST (administrator / MIDPOINT_ADMIN_PASSWORD)
+PASS  GET /midpoint/ws/rest/self as administrator -> 200 (got 200)
+PASS  ... and with a wrong password -> 401 (auth really enforced)
+PASS  GET /midpoint/ws/rest/connectors lists 7 connectors
+
+[22:02:07Z] == (j) ./discover.sh - privileged-account discovery (read-only bind as svc-pam-discovery)
+PASS  a wrong discovery password is refused by the DC (invalidCredentials), no report written
+PASS  ... and no discovery report exists yet
+PASS  discover.sh (bind password on stdin)
+PASS  report written: out/e2e/discovery-latest.{json,csv}, one CSV row per account
+PASS  svc-iis-app (SPN HTTP/...) -> static role svc/svc-iis-app
+PASS  svc-sql01 (SPN MSSQLSvc/...) -> static role svc/svc-sql01
+PASS  svc-backup (service OU) -> static role svc/svc-backup
+PASS  t1-srvadmin-01 (Tier1-Server-Admins) -> library tier1-admins
+PASS  t1-srvadmin-02 (Tier1-Server-Admins) -> library tier1-admins
+PASS  tier0-admin-01 (Domain Admins) -> library tier0-admins
+PASS  svc-legacy-da (SPN + Domain Admins) -> exception: Kerberoastable Tier 0
+PASS  t0-stale-admin -> exception: stale privileged (last logon 400 days ago)
+PASS  t0-never-admin -> exception: never logged on, created 200 days ago
+PASS  t0-never-admin found through NESTED membership (Tier0-Nested-Ops -> Administrators)
+PASS  former-admin-01 -> exception: orphaned adminCount
+PASS  Administrator found via primaryGroupID/membership and excluded by policy (break-glass)
+PASS  krbtgt excluded by policy (KDC account)
+PASS  svc-vault-rotator excluded by policy (Vault's own bind account)
+PASS  svc-pam-discovery excluded by policy (the discovery account itself)
+PASS  Guest (not privileged, no SPN, not in a PAM OU) is not a candidate
+
+[22:02:08Z] == (k) ./onboard.sh - bulk onboarding via the Vault API, a Safe (policy) per tier
+PASS  onboard.sh --dry-run
+PASS  dry run: svc-sql01 shown as HELD (unresolved dependencies)
+PASS  onboard.sh --dry-run with a scheduled task running as t1-srvadmin-01
+PASS  dry run: library candidate t1-srvadmin-01 HELD too (tier1 dependency_check)
+PASS  onboard.sh --dry-run with NO dependency record for t1-srvadmin-02
+PASS  dry run: t1-srvadmin-02 HELD (unknown is not 'none')
+PASS  dry run changed nothing (no static role svc/svc-iis-app)
+PASS  --force without --only is refused (one account per override)
+PASS  --force without a justification is refused
+PASS  a justification without a change number is refused
+PASS  onboard.sh (bulk)
+PASS  static role svc/svc-iis-app created
+PASS  svc-iis-app rotated on onboarding (pwdLastSet changed)
+PASS  svc-iis-app binds with the Vault-held password
+PASS  svc-sql01 HELD: no static role
+PASS  svc-sql01 HELD: password untouched (pwdLastSet unchanged)
+PASS  library tier1-admins holds t1-srvadmin-01
+PASS  library tier1-admins holds t1-srvadmin-02
+PASS  t1-srvadmin-01 got a new password on onboarding
+PASS  t1-srvadmin-02 got a new password on onboarding
+PASS  exception t0-stale-admin untouched (pwdLastSet unchanged)
+PASS  existing svc-backup (flat static role) recognised as already vaulted
+PASS  Safe policy tier0-checkout exists
+PASS  Safe policy tier1-checkout exists
+PASS  Safe policy tier0-static-read exists
+PASS  Safe policy tier1-static-read exists
+PASS  Safe policy svc-static-read exists
+PASS  Safe policy pam-reconcile exists
+PASS  Safe svc: a svc-static-read token reads svc/svc-iis-app
+PASS  Safe svc: the same token cannot read svc-backup (outside svc/*)
+PASS  Safe tier1: a tier1-checkout token can check out of tier1-admins (and back in)
+PASS  Safe tier1: the same token cannot check out of tier0-admins
+PASS  onboard.sh re-run (idempotent)
+PASS  re-run: svc-iis-app and the tier1 library reported as already vaulted
+
+[22:02:18Z] == (l) ./rotate.sh - rotation gated on dependencies
+PASS  rotate.sh svc-iis-app (its one consumer reads from Vault)
+PASS  svc-iis-app rotated (pwdLastSet changed)
+PASS  svc-iis-app binds with the new Vault password
+PASS  a new UNRESOLVED consumer (scheduled task) -> rotation refused
+PASS  ... and the refusal names it
+PASS  ... password untouched (pwdLastSet unchanged)
+PASS  ... audited as rotate-refused
+PASS  NO dependency record (unknown is not 'none') -> rotation refused
+PASS  a library (check-out) account is not rotated here
+PASS  dependency-scan/Get-AccountDependencies.ps1: Pester (run-as matching, map contract) passes
+
+[22:02:23Z] == (m) ./reconcile.sh - discovered vs vaulted vs rotated vs exception (+ CPM verify)
+PASS  reconcile.sh --verify --strict (GAP 0, ORPHAN 0, all rotated in policy, all verified)
+PASS  report KPIs: GAP 0
+PASS  svc-iis-app: VAULTED, rotated within policy, verified
+PASS  ... verified=yes (its vaulted password binds)
+PASS  svc-sql01: HELD with its unresolved dependencies
+PASS  t1-srvadmin-01: VAULTED in library tier1-admins
+PASS  t0-stale-admin: EXCEPTION (documented reason)
+PASS  after an out-of-band reset of svc-iis-app in AD, --verify --strict fails (CPM verify)
+PASS  ... svc-iis-app verified=no
+PASS  rotate.sh svc-iis-app repairs it (Vault resets it with the reconcile account)
+PASS  reconcile.sh --verify --strict passes again
+PASS  onboard.sh --only svc-sql01 --force with a change-referenced justification
+PASS  svc-sql01 now a static role, rotated (pwdLastSet changed)
+PASS  the override is in Vault's exception register (pam-meta/exceptions/svc-sql01)
+PASS  ... and audited as override by ops-alice
+PASS  reconcile.sh after the override
+PASS  svc-sql01: VAULTED, the forced override shown on the row
+PASS  discover.sh after svc-iis-app was deleted in AD
+PASS  reconcile --strict: the deleted account is an ORPHAN in Vault
+PASS  svc-iis-app row: ORPHAN, static:svc/svc-iis-app
+PASS  reconcile --strict after removing the orphaned static role
+
+[22:02:40Z] == (n) ./psm-ssh.sh - Vault SSH CA, ephemeral certificate, recorded SSH through Guacamole
+PASS  psm-ssh.sh setup
+PASS  ssh-target trusts exactly Vault's SSH CA public key
+PASS  a plain key without a certificate is refused by sshd
+PASS  Vault refuses to sign principal root (allowed_users = linux-admin)
+PASS  Vault signs a 5-minute certificate for principal linux-admin
+PASS  ... and it logs in to ssh-target as labadmin (plain OpenSSH client, no Guacamole)
+PASS  Vault signs a 3-second certificate
+PASS  ... which sshd refuses once expired (used after 8 s)
+PASS  ops-carol (no SSH role in operators.json) is refused
+PASS  Tier 1: a change with NO approver is refused (0 of 1)
+PASS  Tier 1: a SELF-APPROVED change (bob approves his own) is refused
+PASS  no ticket is refused (tier1 require_ticket)
+PASS  an expired ticket is refused for SSH too (validation failure stops the check-out)
+PASS  ... and nothing was checked out (no SSH state file)
+PASS  psm-ssh.sh checkout --operator ops-alice --ticket CHG0040051 (Tier 1: one approver, ops-bob)
+PASS  Tier 1: a single authorised approver is accepted (ops-bob, 1 of 1)
+PASS  certificate key ID carries the operator (token-psm-ops-alice-linux-admin)
+PASS  ops-alice lists 'LINUX - ssh-target (recorded)' (READ)
+PASS  ops-alice gets 403 on its parameters (cannot read key or certificate)
+PASS  ops-carol does not see the SSH connection
+PASS  a real SSH session through Guacamole as ops-alice (HTTP tunnel, keys typed, session ended)
+PASS  Guacamole history: the session belongs to ops-alice (ops-alice)
+PASS  typescript (text recording) shows the command output: uid=1000(labadmin)
+PASS  typescript shows the target's hostname (ssh-target)
+PASS  graphical recording written for the same session (> 1 KB)
+PASS  ... and it plays back (guacamole-recording format check: framing, 1024x768 screen, decodable images, timed frames, screen painted)
+PASS  sshd on the target logged the login with ID token-psm-ops-alice-linux-admin (serial 488910768113607269)
+PASS  PAM audit line: ssh-checkout operator=ops-alice approvers=ops-bob cert_serial=488910768113607269
+PASS  psm-ssh.sh checkin --operator ops-alice
+PASS  connection private key wiped
+PASS  connection certificate wiped
+PASS  ops-alice no longer sees the SSH connection
+
+[22:03:02Z] == (o) ./vault-ha.sh + ./dr-drill.sh - 3-node Raft, failover, timed DR drill, rolling upgrade
+PASS  vault-ha.sh up
+PASS  3 voters, autopilot healthy, failure tolerance 1
+PASS  vault-ha.sh failover (SIGKILL the leader)
+PASS  a new leader accepted a write
+PASS  the killed node auto-unsealed and rejoined as a healthy voter
+PASS  new leader differs from the killed one
+PASS  dr-drill.sh (snapshot -> destroy all nodes + disks -> restore), run record -> ../evidence/pam-dr/20261020T220031Z
+PASS  DR: marker restored, policy restored, post-snapshot write lost (RPO shown), RTO within target
+PASS  DR report written with a numeric RTO (42.1s)
+PASS  vault-ha.sh upgrade (rolling rehearsal: followers, then step-down + leader)
+PASS  cluster healthy after the rolling upgrade
+PASS  vault-ha.sh down --volumes (the harness made it)

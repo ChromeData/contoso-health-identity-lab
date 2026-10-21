@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Mock HR 100488 (joiner 2026-10-19). -->
+<user xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000306">
+    <name>sofia.reyes</name>
+    <description>Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).</description>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000102" type="OrgType"/>
+    </assignment>
+    <assignment>
+        <description>Birthright: Nursing department.</description>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000201" type="RoleType"/>
+    </assignment>
+    <assignment>
+        <description>Requested 2026-10: ICU orientation rotation.</description>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000202" type="RoleType"/>
+    </assignment>
+    <activation>
+        <administrativeStatus>enabled</administrativeStatus>
+    </activation>
+    <fullName>Sofia Reyes</fullName>
+    <givenName>Sofia</givenName>
+    <familyName>Reyes</familyName>
+    <employeeNumber>100488</employeeNumber>
+    <organizationalUnit>Nursing</organizationalUnit>
+    <title>Registered Nurse</title>
+</user>

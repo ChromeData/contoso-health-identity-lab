@@ -1,0 +1,37 @@
+## docker ps before the PAM run, 2026-10-20T23:06:35Z
+contoso-pam-ssh-target-1	Up 11 minutes (healthy)
+contoso-pam-rdp-target-1	Up 12 minutes (healthy)
+contoso-pam-vault-1	Up 12 minutes
+contoso-pam-samba-dc-1	Up 12 minutes (healthy)
+contoso-dyndb-clinical-db-1	Up 19 minutes (healthy)
+contoso-dyndb-clinical-app-1	Up 19 minutes
+contoso-dyndb-vault-1	Up 19 minutes
+contoso-pam-itsm-mock-1	Up 22 minutes (healthy)
+contoso-pam-conjur-db-1	Up 22 minutes
+contoso-pam-midpoint-1	Up 22 minutes (healthy)
+contoso-pam-guacamole-1	Up 22 minutes
+contoso-pam-conjur-1	Up 22 minutes
+contoso-pam-guacd-1	Up 22 minutes (healthy)
+contoso-pam-midpoint-db-1	Up 22 minutes
+contoso-pam-guac-db-1	Up 22 minutes
+contoso-pam-conjur-cli-1	Up 22 minutes
+(end)
+lab/pam in the live repo == lab/pam in the tested copy: yes (93 files)
+## docker ps after the PAM run (before teardown), 2026-10-20T23:12:28Z
+contoso-dyndb-clinical-db-1	Up 50 seconds (healthy)
+contoso-dyndb-clinical-app-1	Up 50 seconds
+contoso-dyndb-vault-1	Up 50 seconds
+contoso-pam-ssh-target-1	Up 3 minutes (healthy)
+contoso-pam-rdp-target-1	Up 4 minutes (healthy)
+contoso-pam-vault-1	Up 5 minutes
+contoso-pam-samba-dc-1	Up 5 minutes (healthy)
+contoso-pam-itsm-mock-1	Up 28 minutes (healthy)
+contoso-pam-conjur-db-1	Up 28 minutes
+contoso-pam-midpoint-1	Up 28 minutes (healthy)
+contoso-pam-guacamole-1	Up 28 minutes
+contoso-pam-conjur-1	Up 28 minutes
+contoso-pam-guacd-1	Up 28 minutes (healthy)
+contoso-pam-midpoint-db-1	Up 28 minutes
+contoso-pam-guac-db-1	Up 28 minutes
+contoso-pam-conjur-cli-1	Up 28 minutes
+(end)

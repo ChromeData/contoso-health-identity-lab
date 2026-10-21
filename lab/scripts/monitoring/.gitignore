@@ -1,0 +1,3 @@
+# ingest-vault-audit.sh keeps its byte offset into the Vault audit log here.
+# Local run state, not source - never committed.
+/.state/

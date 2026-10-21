@@ -1,0 +1,7 @@
+# GUID-shaped values in this run record that are NOT in the run's inputs (lab/kql rules,
+# harness cases, schemas, shims, itdr-cases.json). Fixture ids are repeated-digit placeholders
+# and the Microsoft well-known ids come from the inputs, so neither is listed. Anything below
+# was generated during this run by the local Kusto emulator (for example a request or activity
+# id inside an engine message). No tenant exists: none is a tenant, subscription or Entra
+# object id. Each needs an entry in the public GUID allowlist scoped to this record's folder.
+# none

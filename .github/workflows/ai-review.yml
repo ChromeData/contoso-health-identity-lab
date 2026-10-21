@@ -1,0 +1,166 @@
+# =============================================================================
+# ai-review.yml  —  Contoso Health Identity Platform (lab/)
+# -----------------------------------------------------------------------------
+# On every PR touching Terraform, send the change to a hosted LLM for a
+# security read and post the model's review as a PR comment. This is ADVISORY —
+# it never blocks the merge; the human reviewer + the `prod` environment gate
+# own that decision.
+#
+# MODEL PROVIDER — Azure OpenAI, authenticated with Microsoft Entra (NOT a key)
+#   GitHub Models (models.github.ai / the old inference.ai.azure.com path) was
+#   RETIRED 2026-07-30, so we host the review model on Azure OpenAI. Auth is the
+#   SAME GitHub OIDC -> Entra identity used everywhere else in this pipeline:
+#   azure/login (PLAN app) -> `az account get-access-token` for the Cognitive
+#   Services data plane -> Bearer token to the v1 Chat Completions endpoint
+#   (/openai/v1/chat/completions, no api-version). There
+#   is NO api-key and NO secret in the repo. The PLAN app's SP needs the
+#   "Cognitive Services OpenAI User" role on the Azure OpenAI resource.
+#
+#   ANTHROPIC-API FALLBACK (commented-out config): if you prefer Claude as the
+#   reviewer, Anthropic's API is key-based (not Entra), so it needs a stored
+#   secret — see the commented block at the bottom. Left disabled on purpose:
+#   the whole lab's thesis is "no stored credentials", so the Entra path is primary.
+#
+# All third-party actions pinned to full commit SHA (Trivy-2026 rationale — see
+# terraform-plan.yml).
+# =============================================================================
+
+name: ai-review
+
+on:
+  pull_request:
+    paths:
+      - "lab/terraform/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ai-review:
+    name: AI security review (advisory)
+    # Same-repo PRs only. Fork PRs get no OIDC token and a read-only
+    # GITHUB_TOKEN, so azure/login and the comment step would fail; this job is
+    # advisory and NOT a required check, so skipping forks avoids a red X.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write          # OIDC token for Entra federation (PLAN app)
+      contents: read
+      pull-requests: write      # post the review comment
+    steps:
+      - name: Checkout (full history for base..head diff)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Azure login (OIDC, PLAN app)
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build Terraform diff
+        # HEAD is the PR merge commit (refs/pull/N/merge); HEAD^1 is the base it
+        # was merged onto, so HEAD^1..HEAD is exactly this PR's change, however
+        # far the base branch has moved since. No extra fetch: a --depth fetch
+        # into this full clone makes it shallow and breaks the merge base.
+        # A failed diff is posted as "did not run", never as "no changes".
+        run: |
+          # Only the Terraform surface; keep the review focused + the payload small.
+          if ! git diff --unified=3 HEAD^1 HEAD -- lab/terraform > plan.diff; then
+            echo "::error::Could not compute the Terraform diff (HEAD^1..HEAD)."
+            printf '### AI security review\n\n> Review did not run: the Terraform diff could not be computed (see the job log). Human review required.\n' > review.md
+            exit 1
+          fi
+          echo "diff bytes: $(wc -c < plan.diff)"
+
+      - name: Run AI review
+        id: review
+        env:
+          AZURE_OPENAI_ENDPOINT:    ${{ vars.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_DEPLOYMENT:  ${{ vars.AZURE_OPENAI_DEPLOYMENT }}
+          # Optional; empty = review.py defaults (4000 / model default effort).
+          AZURE_OPENAI_MAX_COMPLETION_TOKENS: ${{ vars.AZURE_OPENAI_MAX_COMPLETION_TOKENS }}
+          AZURE_OPENAI_REASONING_EFFORT:      ${{ vars.AZURE_OPENAI_REASONING_EFFORT }}
+          PLAN_DIFF_FILE:           plan.diff
+        # Entra token for the Cognitive Services data-plane audience, fetched in
+        # THIS step: masked, held in a shell variable, and handed only to
+        # review.py's environment. Not a step output, not written to a file.
+        run: |
+          TOKEN="$(az account get-access-token \
+            --resource https://cognitiveservices.azure.com \
+            --query accessToken -o tsv)"
+          echo "::add-mask::$TOKEN"
+          AZURE_OPENAI_TOKEN="$TOKEN" python3 lab/pipelines/ai-review/review.py > review.md
+          cat review.md
+
+      - name: Post review to PR
+        if: always()
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '';
+            try { body = fs.readFileSync('review.md', 'utf8'); } catch {}
+            // Cancelled / SIGKILL / OOM: Python wrote nothing. The fallback
+            // keeps the marker so it replaces (never leaves) a stale verdict.
+            if (!body.trim()) body = '### AI security review\n\n> Review step produced no output (failed or cancelled) — see the "Run AI review" job log. Any earlier verdict on this PR is superseded.\n\n_Advisory only._';
+            const marker = '### AI security review';
+            // Bot-authored only, paginated (as in terraform-plan.yml).
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100,
+            });
+            const mine = comments.find(c => c.user && c.user.type === 'Bot' &&
+              c.user.login === 'github-actions[bot]' && c.body && c.body.startsWith(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: mine.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }
+
+# =============================================================================
+# ANTHROPIC-API FALLBACK (commented — enable only if you accept a stored secret)
+# -----------------------------------------------------------------------------
+# Anthropic's API authenticates with an x-api-key, not Entra OIDC, so it breaks
+# the "no stored credentials" property. If you still want Claude as the reviewer,
+# store ANTHROPIC_API_KEY as a repo/environment secret and replace the
+# "Run AI review" step (which also fetches the Entra token) with:
+#
+#   - name: Run AI review (Anthropic fallback)
+#     env:
+#       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+#       PLAN_DIFF_FILE: plan.diff
+#     run: |
+#       python3 - <<'PY' > review.md
+#       import json, os, urllib.request
+#       diff = open(os.environ["PLAN_DIFF_FILE"]).read()[:60000]
+#       req = urllib.request.Request(
+#           "https://api.anthropic.com/v1/messages",
+#           data=json.dumps({
+#               "model": "claude-opus-4-20250514",   # verify current model id
+#               "max_tokens": 1200,
+#               "system": "Senior cloud identity security engineer. Review the diff...",
+#               "messages": [{"role": "user", "content": diff}],
+#           }).encode(),
+#           headers={
+#               "content-type": "application/json",
+#               "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+#               "anthropic-version": "2023-06-01",
+#           }, method="POST")
+#       r = json.loads(urllib.request.urlopen(req, timeout=90).read())
+#       print("### AI security review (Anthropic · fallback)\n")
+#       print(r["content"][0]["text"])
+#       PY
+# =============================================================================

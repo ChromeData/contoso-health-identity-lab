@@ -1,0 +1,176 @@
+{
+  "$comment": [
+    "Separation-of-duties (SoD) ruleset for Contoso Health (fictional). One rule = two sides; a person holding anything on side A AND anything on side B is in conflict.",
+    "PREVENTIVE: post-apply/Set-IncompatibleAccessPackages.ps1 turns the package/group parts into Entra incompatibleAccessPackages / incompatibleGroups links (blocks requests and new admin assignments).",
+    "DETECTIVE: 09-SoD-Report.ps1 evaluates EXISTING access (package assignments, group membership incl. transitive, directory roles incl. PIM-eligible) - incompatibility settings never remove access someone already holds (Microsoft Learn).",
+    "Every name must exist in access-catalog.json; 'planned' objects are reported as not evaluable, never as clean.",
+    "Regulatory drivers are what the control supports, not a claim that the regulation prescribes this exact pair. SOX applies only if Contoso's parent is publicly traded; otherwise SOX-style ICFR is adopted as the internal-control framework."
+  ],
+  "schemaVersion": 1,
+  "holdingSemantics": {
+    "accessPackages": "a delivered assignment",
+    "groups": "direct or transitive member; for a PIM-for-Groups group also an ELIGIBLE member (they can activate)",
+    "directoryRoles": "active (permanent or activated) or PIM-ELIGIBLE assignment, direct or through a role-assignable group",
+    "reviewerOfRecord": "the manager of someone holding a tier-T2 (request-policy) package: ADR 0012 makes the requestor's manager the T2 reviewer. Detective only (09-SoD-Report.ps1); no Entra setting can prevent it"
+  },
+  "rules": [
+    {
+      "id": "SOD-01",
+      "name": "Medication administration vs controlled-substance dispensing",
+      "risk": "High",
+      "riskStatement": "A person who administers medication and also dispenses controlled substances can divert doses and document the waste or override that hides it.",
+      "sideA": {
+        "label": "Administers medication (nursing)",
+        "accessPackages": ["Nurse - Clinical Apps", "ICU - Critical Care Apps", "ICU - Float Access"],
+        "groups": ["All-Nurses", "All-ICU"]
+      },
+      "sideB": {
+        "label": "Dispenses controlled substances (pharmacy)",
+        "accessPackages": ["Pharmacy - Controlled Substances Apps"],
+        "groups": ["App-Pharmacy-Dispensing-Users"]
+      },
+      "regulatoryDrivers": [
+        "DEA 21 CFR 1301.71(a): effective controls and procedures to guard against theft and diversion of controlled substances",
+        "HIPAA 45 CFR 164.308(a)(4): information access management (access authorization)"
+      ],
+      "mitigatingControlIfException": "Separate time-boxed override package (Microsoft's pattern for SoD exceptions) with 90-day expiry and monthly Pharmacy Director review; daily automated-dispensing-cabinet discrepancy report; every controlled-substance waste witnessed by a second licensed person.",
+      "supersedes": "The single nurse/pharmacy pair in modules/entitlement var.sod_incompatible_pairs (legacy post-apply/Set-AccessPackageSoD.ps1, now a shim for Set-IncompatibleAccessPackages.ps1).",
+      "preventiveNote": "Links sit only on the requestable packages: Pharmacy X {Nurse, ICU, ICU - Float Access, All-Nurses, All-ICU} and ICU - Float Access X {Pharmacy, App-Pharmacy-Dispensing-Users}. Nurse and ICU are birthright and never gated; a pharmacist whose HR record moves to Nursing or ICU is caught by 09-SoD-Report.ps1."
+    },
+    {
+      "id": "SOD-02",
+      "name": "Prescribe vs dispense",
+      "risk": "High",
+      "riskStatement": "A prescriber who can also dispense can issue and fill the same controlled-substance order with no independent check.",
+      "sideA": { "label": "Prescribes (CPOE ordering)", "accessPackages": ["Prescriber - CPOE Ordering Apps"] },
+      "sideB": {
+        "label": "Dispenses controlled substances",
+        "accessPackages": ["Pharmacy - Controlled Substances Apps"],
+        "groups": ["App-Pharmacy-Dispensing-Users"]
+      },
+      "regulatoryDrivers": [
+        "DEA 21 CFR 1306.04(a): a corresponding responsibility for proper prescribing rests with the pharmacist who fills the prescription",
+        "DEA 21 CFR 1301.71(a): controls against diversion"
+      ],
+      "mitigatingControlIfException": "Any order written by the dispensing person needs verification by a second pharmacist before release; monthly prescriber-equals-dispenser report to the Pharmacy & Therapeutics committee."
+    },
+    {
+      "id": "SOD-03",
+      "name": "Order vs approve (pharmacist verification) of medication orders",
+      "risk": "High",
+      "riskStatement": "The person who enters a medication order must not be the pharmacist who verifies it, or the independent appropriateness review does not happen.",
+      "sideA": { "label": "Enters medication orders", "accessPackages": ["Prescriber - CPOE Ordering Apps"] },
+      "sideB": { "label": "Verifies (approves) medication orders", "accessPackages": ["Pharmacy - Order Verification Apps"] },
+      "regulatoryDrivers": [
+        "CMS Conditions of Participation 42 CFR 482.25: pharmaceutical services (drugs controlled and distributed under pharmacy supervision)",
+        "verify: The Joint Commission MM.05.01.01 (pharmacist review of medication orders) - standard text is licensed, not checked here"
+      ],
+      "mitigatingControlIfException": "EHR configured to block self-verification of one's own orders; weekly report of orders verified by their author reviewed by the Director of Pharmacy."
+    },
+    {
+      "id": "SOD-04",
+      "name": "Pharmacy inventory and purchasing vs dispensing",
+      "risk": "High",
+      "riskStatement": "Whoever orders, receives and adjusts controlled-substance inventory can hide a shortage created when dispensing.",
+      "sideA": { "label": "Orders, receives, adjusts inventory", "accessPackages": ["Pharmacy - Inventory & Purchasing Apps"] },
+      "sideB": {
+        "label": "Dispenses controlled substances",
+        "accessPackages": ["Pharmacy - Controlled Substances Apps"],
+        "groups": ["App-Pharmacy-Dispensing-Users"]
+      },
+      "regulatoryDrivers": [
+        "DEA 21 CFR 1304.11: inventory requirements",
+        "DEA 21 CFR Part 1305: orders for Schedule I and II substances (DEA Form 222 / CSOS)",
+        "DEA 21 CFR 1301.71(a): controls against diversion"
+      ],
+      "mitigatingControlIfException": "Blind count of receipts by a second person; biennial inventory taken by someone without dispensing rights; monthly perpetual-inventory reconciliation signed by the Pharmacy Director."
+    },
+    {
+      "id": "SOD-05",
+      "name": "Accounts payable processing vs vendor master data",
+      "risk": "High",
+      "riskStatement": "A person who can create or change a vendor (incl. bank details) and also process invoices can pay a fictitious or redirected vendor.",
+      "sideA": { "label": "Processes AP invoices and payments", "accessPackages": ["Finance - Accounts Payable Apps"] },
+      "sideB": { "label": "Maintains vendor master data", "accessPackages": ["Finance - Vendor Master Data Apps"] },
+      "regulatoryDrivers": [
+        "SOX section 404 (15 U.S.C. 7262): internal control over financial reporting - if applicable, else adopted ICFR"
+      ],
+      "mitigatingControlIfException": "Weekly vendor-master change report reviewed by the Controller; bank-detail changes confirmed by call-back to a number already on file; positive pay with the bank."
+    },
+    {
+      "id": "SOD-06",
+      "name": "Payroll entry vs payroll approval",
+      "risk": "High",
+      "riskStatement": "A person who can enter pay changes and approve the payroll run can create ghost employees or raise their own pay.",
+      "sideA": { "label": "Enters payroll changes", "accessPackages": ["HR - Payroll Entry Apps"] },
+      "sideB": { "label": "Approves the payroll run", "accessPackages": ["HR - Payroll Approval Apps"] },
+      "regulatoryDrivers": [
+        "SOX section 404 (15 U.S.C. 7262): internal control over financial reporting - if applicable, else adopted ICFR"
+      ],
+      "mitigatingControlIfException": "Payroll register variance review by Finance every cycle; payroll system configured to block approving a run that contains one's own changes."
+    },
+    {
+      "id": "SOD-07",
+      "name": "EHR break-the-glass vs EHR audit-log administration",
+      "risk": "High",
+      "riskStatement": "Someone who can open any patient record in an emergency and also administer the audit trail can read PHI and suppress the evidence.",
+      "sideA": {
+        "label": "Can invoke EHR break-the-glass (every clinical bundle)",
+        "accessPackages": ["Nurse - Clinical Apps", "ICU - Critical Care Apps", "ICU - Float Access", "Prescriber - CPOE Ordering Apps"]
+      },
+      "sideB": { "label": "Administers the EHR audit trail (PIM for Groups)", "groups": ["PIM-EHR-AuditLog-Admins"] },
+      "regulatoryDrivers": [
+        "HIPAA 45 CFR 164.312(b): audit controls",
+        "HIPAA 45 CFR 164.308(a)(1)(ii)(D): information system activity review"
+      ],
+      "mitigatingControlIfException": "EHR audit trail streamed to the immutable (WORM) evidence store the admin cannot change; Privacy Office reviews every break-the-glass event within 1 business day; audit-admin activation needs Privacy Officer approval.",
+      "preventiveNote": "Nurse and ICU are birthright (never gated) and side B is a PIM group, so entitlement management can block only one direction: a member of PIM-EHR-AuditLog-Admins cannot request Prescriber or ICU - Float Access. verify: whether incompatibleGroups counts PIM-ELIGIBLE (not activated) members. Everything else in this pair is detective (09-SoD-Report.ps1)."
+    },
+    {
+      "id": "SOD-08",
+      "name": "Identity administration vs access certification",
+      "risk": "High",
+      "riskStatement": "Someone who can create accounts or change group membership and also certifies access can grant access and then approve it in review.",
+      "sideA": {
+        "label": "Administers users and groups (incl. PIM-eligible)",
+        "directoryRoles": ["Global Administrator", "User Administrator", "Groups Administrator", "Helpdesk Administrator", "Privileged Role Administrator"],
+        "groups": ["Privileged-IAM-Admins", "PIM-Tier1-Helpdesk"]
+      },
+      "sideB": {
+        "label": "Certifies or governs access, incl. as the reviewer of record (manager) of a direct report holding T2 access (ADR 0012)",
+        "groups": ["IGA-Access-Reviewers"],
+        "directoryRoles": ["Identity Governance Administrator"],
+        "reviewerOfRecord": true
+      },
+      "regulatoryDrivers": [
+        "HIPAA 45 CFR 164.308(a)(4)(ii)(B)-(C): access authorization; access establishment and modification",
+        "SOX section 404 IT general controls: independent user-access review - if applicable"
+      ],
+      "mitigatingControlIfException": "Reviewers never see their own access (ADR 0012); a second-level review by the access governance lead of every decision the person made on access they provisioned; quarterly privileged review (T1) covers their eligibility."
+    },
+    {
+      "id": "SOD-09",
+      "name": "Charge entry and coding vs payment posting and adjustments",
+      "risk": "Medium",
+      "riskStatement": "A person who enters charges and also posts payments or writes off balances can conceal lapping or inappropriate write-offs, and upcoding goes unchecked.",
+      "sideA": { "label": "Enters charges and codes encounters", "accessPackages": ["Billing - Charge Entry & Coding Apps"] },
+      "sideB": { "label": "Posts payments, adjustments, write-offs", "accessPackages": ["Billing - Payment Posting & Adjustments Apps"] },
+      "regulatoryDrivers": [
+        "SOX section 404 (15 U.S.C. 7262): internal control over financial reporting - if applicable, else adopted ICFR",
+        "False Claims Act 31 U.S.C. 3729: exposure from unchecked coding"
+      ],
+      "mitigatingControlIfException": "Adjustments above a threshold need Billing Manager approval in the billing system; monthly write-off report reviewed by Revenue Cycle leadership."
+    }
+  ],
+  "exceptions": [],
+  "exceptionsSchema": {
+    "$comment": "An approved exception (standards/exception-process.md) suppresses the violation from the exit code while unexpired; it stays listed in the report as 'excepted'. Expired = violation again.",
+    "example": {
+      "ruleId": "SOD-01",
+      "userPrincipalName": "someone@contosohealth.io",
+      "exceptionId": "E7",
+      "expires": "2027-01-31",
+      "compensatingControls": "as approved in the exception register"
+    }
+  }
+}

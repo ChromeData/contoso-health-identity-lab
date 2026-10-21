@@ -1,0 +1,47 @@
+{
+  "rule": "legacy-auth",
+  "about": "Sign-ins over legacy protocols, both sign-in tables, hourly bins; StillSucceeding = a legacy sign-in got through CA003.",
+  "defaults": {
+    "SigninLogs": {"UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "IPAddress": "203.0.113.160",
+                   "AppDisplayName": "Office 365 Exchange Online", "TimeGenerated": "ago:20m"},
+    "AADNonInteractiveUserSignInLogs": {"UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "IPAddress": "203.0.113.161",
+                                        "AppDisplayName": "Office 365 Exchange Online", "TimeGenerated": "ago:20m"}
+  },
+  "cases": [
+    {
+      "id": "imap-success",
+      "kind": "positive",
+      "label": "An IMAP4 sign-in that succeeded: CA003 is not holding",
+      "tables": {"SigninLogs": [{"ClientAppUsed": "IMAP4", "ResultType": "0"}]},
+      "expect": [{"Attempts": 1, "Successes": 1, "StillSucceeding": true, "Clients": ["IMAP4"],
+                  "Users": ["dana.okafor@contosohealthlab.onmicrosoft.com"]}]
+    },
+    {
+      "id": "activesync-blocked-noninteractive",
+      "kind": "positive",
+      "label": "An Exchange ActiveSync attempt in the non-interactive table, blocked by CA003 (still reported)",
+      "tables": {"AADNonInteractiveUserSignInLogs": [{"ClientAppUsed": "Exchange ActiveSync", "ResultType": "53003"}]},
+      "expect": [{"Attempts": 1, "Successes": 0, "StillSucceeding": false, "IPs": ["203.0.113.161"]}]
+    },
+    {
+      "id": "case-insensitive-client",
+      "kind": "positive",
+      "label": "ClientAppUsed matched case-insensitively (in~)",
+      "tables": {"SigninLogs": [{"ClientAppUsed": "pop3", "ResultType": "50126"}]},
+      "expect": [{"Attempts": 1, "Successes": 0}]
+    },
+    {
+      "id": "modern-clients",
+      "kind": "negative",
+      "label": "Browser and modern desktop / mobile clients",
+      "tables": {"SigninLogs": [{"ClientAppUsed": "Browser", "ResultType": "0"},
+                                {"ClientAppUsed": "Mobile Apps and Desktop clients", "ResultType": "0"}]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "An IMAP4 success 2 days ago is outside the 1 day look-back",
+      "tables": {"SigninLogs": [{"ClientAppUsed": "IMAP4", "ResultType": "0", "TimeGenerated": "ago:2d"}]}
+    }
+  ]
+}

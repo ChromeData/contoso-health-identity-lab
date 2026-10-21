@@ -1,0 +1,82 @@
+{
+  "$comment": [
+    "SYNTHETIC TEST FIXTURE - not tenant output. No tenant exists for this lab.",
+    "Offline inventory for 09-SoD-Report.ps1 -InputPath and tests/09-SoD-Report.Tests.ps1: the people are the fictional HR-feed personas (plus one clinical-informatics nurse), the holdings are invented to exercise every rule status.",
+    "objects = which catalog objects exist in this pretend tenant (some planned ones are deliberately absent, so SOD-02/03/04/09 come out not-evaluable and SOD-07 partial).",
+    "via: assignment | member | pimEligible (groups) | active | eligible | active-via-group | eligible-via-group (roles). Expected result: 7 open violations.",
+    "managerId mirrors hr_feed.csv / the midPoint campaign (Grace manages the nurses, Helen manages Grace and Daniel). Grace is NOT in IGA-Access-Reviewers here: her SOD-08 violation comes only from being the reviewer of record for Sofia's T2 Pharmacy package while PIM-eligible for Privileged-IAM-Admins."
+  ],
+  "asOf": "2026-10-20T12:00:00Z",
+  "objects": {
+    "accessPackages": [
+      "Nurse - Clinical Apps",
+      "ICU - Critical Care Apps",
+      "ICU - Float Access",
+      "Pharmacy - Controlled Substances Apps",
+      "Finance - Accounts Payable Apps",
+      "Finance - Vendor Master Data Apps",
+      "HR - Payroll Entry Apps",
+      "HR - Payroll Approval Apps"
+    ],
+    "groups": [
+      "All-Nurses",
+      "All-ICU",
+      "App-Pharmacy-Dispensing-Users",
+      "Privileged-IAM-Admins",
+      "PIM-Tier1-Helpdesk",
+      "IGA-Access-Reviewers",
+      "PIM-EHR-AuditLog-Admins"
+    ],
+    "directoryRoles": [
+      "User Administrator",
+      "Helpdesk Administrator",
+      "Privileged Role Administrator",
+      "Identity Governance Administrator",
+      "Global Administrator",
+      "Groups Administrator"
+    ]
+  },
+  "users": [
+    { "id": "u-dana", "userPrincipalName": "dana.okafor@contoso.test", "displayName": "Dana Okafor", "accountEnabled": true, "managerId": "u-grace" },
+    { "id": "u-sofia", "userPrincipalName": "sofia.reyes@contoso.test", "displayName": "Sofia Reyes", "accountEnabled": true, "managerId": "u-grace" },
+    { "id": "u-thomas", "userPrincipalName": "thomas.nguyen@contoso.test", "displayName": "Thomas Nguyen", "accountEnabled": true, "managerId": "u-helen" },
+    { "id": "u-grace", "userPrincipalName": "grace.mwangi@contoso.test", "displayName": "Grace Mwangi", "accountEnabled": true, "managerId": "u-helen" },
+    { "id": "u-omar", "userPrincipalName": "omar.haddad@contoso.test", "displayName": "Omar Haddad", "accountEnabled": true, "managerId": "u-helen" },
+    { "id": "u-marcus", "userPrincipalName": "marcus.bello@contoso.test", "displayName": "Marcus Bello", "accountEnabled": true, "managerId": "u-grace" },
+    { "id": "u-priya", "userPrincipalName": "priya.nair@contoso.test", "displayName": "Priya Nair", "accountEnabled": false, "managerId": "u-helen" },
+    { "id": "u-helen", "userPrincipalName": "helen.carter@contoso.test", "displayName": "Helen Carter", "accountEnabled": true, "managerId": null },
+    { "id": "u-daniel", "userPrincipalName": "daniel.osei@contoso.test", "displayName": "Daniel Osei", "accountEnabled": true, "managerId": "u-helen" },
+    { "id": "u-lena", "userPrincipalName": "lena.fischer@contoso.test", "displayName": "Lena Fischer", "accountEnabled": true, "managerId": "u-grace" }
+  ],
+  "holdings": [
+    { "userId": "u-dana", "kind": "accessPackages", "name": "Nurse - Clinical Apps", "via": "assignment" },
+    { "userId": "u-dana", "kind": "groups", "name": "All-Nurses", "via": "member" },
+
+    { "userId": "u-sofia", "kind": "accessPackages", "name": "Nurse - Clinical Apps", "via": "assignment" },
+    { "userId": "u-sofia", "kind": "groups", "name": "All-Nurses", "via": "member" },
+    { "userId": "u-sofia", "kind": "accessPackages", "name": "Pharmacy - Controlled Substances Apps", "via": "assignment" },
+
+    { "userId": "u-marcus", "kind": "accessPackages", "name": "ICU - Critical Care Apps", "via": "assignment" },
+    { "userId": "u-marcus", "kind": "groups", "name": "All-ICU", "via": "member" },
+    { "userId": "u-marcus", "kind": "groups", "name": "App-Pharmacy-Dispensing-Users", "via": "member" },
+
+    { "userId": "u-grace", "kind": "accessPackages", "name": "Nurse - Clinical Apps", "via": "assignment" },
+    { "userId": "u-grace", "kind": "groups", "name": "All-Nurses", "via": "member" },
+    { "userId": "u-grace", "kind": "groups", "name": "Privileged-IAM-Admins", "via": "pimEligible" },
+
+    { "userId": "u-helen", "kind": "directoryRoles", "name": "User Administrator", "via": "eligible" },
+    { "userId": "u-helen", "kind": "directoryRoles", "name": "Identity Governance Administrator", "via": "active" },
+
+    { "userId": "u-daniel", "kind": "accessPackages", "name": "Finance - Accounts Payable Apps", "via": "assignment" },
+    { "userId": "u-daniel", "kind": "accessPackages", "name": "Finance - Vendor Master Data Apps", "via": "assignment" },
+
+    { "userId": "u-priya", "kind": "accessPackages", "name": "HR - Payroll Entry Apps", "via": "assignment" },
+    { "userId": "u-priya", "kind": "accessPackages", "name": "HR - Payroll Approval Apps", "via": "assignment" },
+
+    { "userId": "u-lena", "kind": "accessPackages", "name": "Nurse - Clinical Apps", "via": "assignment" },
+    { "userId": "u-lena", "kind": "groups", "name": "PIM-EHR-AuditLog-Admins", "via": "pimEligible" },
+
+    { "userId": "u-thomas", "kind": "groups", "name": "PIM-Tier1-Helpdesk", "via": "pimEligible" },
+    { "userId": "u-omar", "kind": "directoryRoles", "name": "Helpdesk Administrator", "via": "eligible-via-group" }
+  ]
+}

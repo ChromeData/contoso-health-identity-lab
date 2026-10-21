@@ -1,0 +1,47 @@
+# =============================================================================
+# NEGATIVE TEST FIXTURE - deliberately insecure. Never apply it for real.
+#
+# Used ONLY by lab/k8s/test/k8s-e2e.sh as
+#   kubectl apply --dry-run=server -f lab/k8s/manifests/negative/privileged-pod.yaml
+# to prove Pod Security Admission (enforce=restricted on clinical-apps) rejects
+# a container-escape-shaped pod at admission time. --dry-run=server runs the
+# full admission chain, so the rejection is real, and nothing is persisted.
+#
+# Every field below violates the "restricted" (and most also "baseline")
+# Pod Security Standard. The rejection message lists them all, which is the
+# evidence: privileged, host PID namespace, the node's root filesystem mounted,
+# root user, privilege escalation, added capabilities, no seccomp profile.
+#
+# Excluded from Checkov on purpose (lab/k8s/ci/pipeline.sh skips this folder):
+# scanning it could only report the failures it exists to demonstrate.
+# Excluded from `kubectl apply -f lab/k8s/manifests/` too, because that is not
+# recursive (-R) and this file lives in a subfolder.
+# =============================================================================
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-escape-attempt
+  namespace: clinical-apps
+  labels:
+    app.kubernetes.io/name: privileged-escape-attempt
+    app.kubernetes.io/part-of: contoso-health-identity-lab
+spec:
+  hostPID: true
+  containers:
+    - name: shell
+      image: docker.io/library/busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+      command: ["/bin/sh", "-c", "sleep 3600"]
+      securityContext:
+        privileged: true
+        runAsUser: 0
+        allowPrivilegeEscalation: true
+        capabilities:
+          add: ["SYS_ADMIN"]
+      volumeMounts:
+        - name: node-root
+          mountPath: /host
+  volumes:
+    - name: node-root
+      hostPath:
+        path: /
+        type: Directory

@@ -1,0 +1,37 @@
+rule                                        pos  neg  hand  itdr
+ad-privileged-group-change                    5    4     0     9
+app-consent-granted                           4    1     0     5
+app-credential-added                          5    3     0     8
+auth-method-changed-by-admin                  9    4     5     8
+blocked-country-signin                        6    2     8     0
+break-glass-signin                            4    3     7     0
+ca-policy-changed                            12    4     0    16
+dc-logon-outside-operator-allowlist           9    5    14     0
+dcsync-replication-request                    2    3     0     5
+device-code-signin                            8    2    10     0
+failed-signin-spike                           3    4     7     0
+identity-risk                                 4    4     8     0
+kerberoast-rc4-service-ticket                 4    6     4     6
+legacy-auth                                   3    2     5     0
+pim-activation                                3    3     6     0
+pim-activation-without-auth-context           4    5     9     0
+pim-group-member-added-outside-pim            8    5     0    13
+role-assigned-outside-pim                     8    6     0    14
+security-info-registered-risky                8    4    12     0
+sod-violation-granted                         4    7    11     0
+tier0-logon-without-checkout                  9   10     9    10
+vault-privileged-access-anomaly               9    5    14     0
+
+tables (columns created = names a rule that reads the table uses):
+  AuditLogs: 13 of 31 columns; read by 10 rule(s)
+  SecurityEvent: 24 of 228 columns; read by 5 rule(s)
+  SigninLogs: 29 of 97 columns; read by 8 rule(s)
+  AADNonInteractiveUserSignInLogs: 23 of 87 columns; read by 5 rule(s)
+  AADUserRiskEvents: 12 of 27 columns; read by 1 rule(s)
+  AADRiskyUsers: 8 of 17 columns; read by 1 rule(s)
+  VaultCheckout_CL: 13 of 14 columns; read by 2 rule(s)
+shims: _GetWatchlist[default], _GetWatchlist[no-items-base-columns], _GetWatchlist[absent]
+probes: 13
+itdr-cases.json import: 94 rows imported, 12 skipped (stage-level / derived-let rows)
+
+OK: 223 cases over 22 rules

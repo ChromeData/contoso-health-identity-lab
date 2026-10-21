@@ -1,0 +1,131 @@
+{
+  "$comment": [
+    "Contoso Health (fictional) access catalog: every access package, group and directory role the IGA rule files (birthright-rules.json, sod-rules.json) may name.",
+    "status 'terraform' = defined in lab/terraform and created when the named flag is on (NOT a claim that it exists in any tenant: no tenant has been built).",
+    "status 'planned'   = designed here, not defined anywhere yet. Scripts skip planned objects and say so; they never count them as clean.",
+    "tier follows ADR 0012: T1 privileged, T2 requestable, T3 birthright clinical. assignment: automatic (HR attributes, T3 only, no expiry) or request (approval + expiry, T1/T2). One model per package: a requestable extra on top of a birthright bundle is its own package (ICU - Float Access), never a second policy on the birthright one.",
+    "tests/Set-AutoAssignmentPolicies.Tests.ps1 checks every 'terraform' entry against the Terraform source, and modules/entitlement/tests/governance.tftest.hcl checks tier, assignment and resources of every Terraform package against this file, so neither side can drift."
+  ],
+  "schemaVersion": 1,
+  "accessPackages": [
+    {
+      "name": "Nurse - Clinical Apps",
+      "status": "terraform",
+      "source": "modules/entitlement var.access_packages.nurse",
+      "flag": "enable_governance",
+      "tier": "T3",
+      "assignment": "automatic",
+      "resources": ["App-ServiceNow-Users", "App-AWS-IdentityCenter-Users"],
+      "note": "Birthright for nursing staff (ADR 0012 T3). Modelled assumption: the EHR role inside it carries break-the-glass (SOD-07)."
+    },
+    {
+      "name": "ICU - Critical Care Apps",
+      "status": "terraform",
+      "source": "modules/entitlement var.access_packages.icu",
+      "flag": "enable_governance",
+      "tier": "T3",
+      "assignment": "automatic",
+      "resources": ["App-ServiceNow-Users", "App-ICU-CriticalCare-Users"],
+      "note": "Birthright for ICU staff (ADR 0012 T3): automatic policy only, no request path, no expiry. Float and agency staff request 'ICU - Float Access' instead, so no SoD link ever has to sit on this package."
+    },
+    {
+      "name": "ICU - Float Access",
+      "status": "terraform",
+      "source": "modules/entitlement var.access_packages.icu_float",
+      "flag": "enable_governance",
+      "tier": "T2",
+      "assignment": "request",
+      "resources": ["App-ServiceNow-Users", "App-ICU-CriticalCare-Users"],
+      "note": "Float and agency nurses covering ICU shifts (ADR 0012 T2): manager approval, 180-day expiry, re-request to keep it. Split from the ICU birthright package so SOD-01's preventive links can sit on the requestable side. Same apps as ICU - Critical Care Apps. verify: removing this assignment keeps a group membership the ICU birthright package also grants."
+    },
+    {
+      "name": "Pharmacy - Controlled Substances Apps",
+      "status": "terraform",
+      "source": "modules/entitlement var.access_packages.pharmacy",
+      "flag": "enable_governance",
+      "tier": "T2",
+      "assignment": "request",
+      "resources": ["App-Pharmacy-Dispensing-Users"]
+    },
+    {
+      "name": "Affiliated Physicians",
+      "status": "terraform",
+      "source": "modules/entitlement b2b.tf",
+      "flag": "enable_b2b_governance",
+      "tier": "T2",
+      "assignment": "request",
+      "audience": "guest",
+      "resources": ["Ext-Affiliated-Physicians"]
+    },
+    { "name": "Radiology - Imaging Apps", "status": "planned", "tier": "T3", "assignment": "automatic", "resources": [] },
+    { "name": "Billing - Charge Entry & Coding Apps", "status": "planned", "tier": "T3", "assignment": "automatic", "resources": [] },
+    { "name": "Billing - Payment Posting & Adjustments Apps", "status": "planned", "tier": "T2", "assignment": "request", "resources": [] },
+    {
+      "name": "Prescriber - CPOE Ordering Apps",
+      "status": "planned",
+      "tier": "T2",
+      "assignment": "request",
+      "resources": [],
+      "note": "Prescribing follows medical-staff credentialing, not an HR job code, so it is requested (Medical Staff Office approves), never birthright."
+    },
+    { "name": "Pharmacy - Order Verification Apps", "status": "planned", "tier": "T2", "assignment": "request", "resources": [] },
+    { "name": "Pharmacy - Inventory & Purchasing Apps", "status": "planned", "tier": "T2", "assignment": "request", "resources": [] },
+    { "name": "Finance - Accounts Payable Apps", "status": "planned", "tier": "T2", "assignment": "request", "resources": [] },
+    { "name": "Finance - Vendor Master Data Apps", "status": "planned", "tier": "T2", "assignment": "request", "resources": [] },
+    { "name": "HR - Payroll Entry Apps", "status": "planned", "tier": "T2", "assignment": "request", "resources": [] },
+    { "name": "HR - Payroll Approval Apps", "status": "planned", "tier": "T2", "assignment": "request", "resources": [] }
+  ],
+  "groups": [
+    { "name": "All-Nurses", "status": "terraform", "source": "modules/groups", "kind": "dynamic", "privileged": false },
+    { "name": "All-ICU", "status": "terraform", "source": "modules/groups", "kind": "dynamic", "privileged": false },
+    { "name": "All-Workforce", "status": "terraform", "source": "modules/groups", "kind": "dynamic", "privileged": false },
+    { "name": "App-ServiceNow-Users", "status": "terraform", "source": "modules/groups", "kind": "assigned", "privileged": false },
+    { "name": "App-AWS-IdentityCenter-Users", "status": "terraform", "source": "modules/groups", "kind": "assigned", "privileged": false },
+    { "name": "App-ICU-CriticalCare-Users", "status": "terraform", "source": "modules/groups", "kind": "assigned", "privileged": false },
+    { "name": "App-Pharmacy-Dispensing-Users", "status": "terraform", "source": "modules/groups", "kind": "assigned", "privileged": false },
+    { "name": "Ext-Affiliated-Physicians", "status": "terraform", "source": "modules/entitlement b2b.tf", "kind": "assigned", "privileged": false },
+    { "name": "Privileged-IAM-Admins", "status": "terraform", "source": "modules/groups", "kind": "role-assignable", "privileged": true, "pimForGroups": true },
+    { "name": "PIM-Tier0-Security-Admins", "status": "terraform", "source": "modules/pim tiers.tf", "flag": "enable_pim_tiers", "kind": "role-assignable", "privileged": true, "pimForGroups": true },
+    { "name": "PIM-Tier0-CA-Admins", "status": "terraform", "source": "modules/pim tiers.tf", "flag": "enable_pim_tiers", "kind": "role-assignable", "privileged": true, "pimForGroups": true },
+    { "name": "PIM-Tier1-Intune-Admins", "status": "terraform", "source": "modules/pim tiers.tf", "flag": "enable_pim_tiers", "kind": "role-assignable", "privileged": true, "pimForGroups": true },
+    { "name": "PIM-Tier1-Helpdesk", "status": "terraform", "source": "modules/pim tiers.tf", "flag": "enable_pim_tiers", "kind": "role-assignable", "privileged": true, "pimForGroups": true },
+    { "name": "Break-Glass-Admins", "status": "terraform", "source": "modules/groups", "kind": "role-assignable", "privileged": true },
+    {
+      "name": "IGA-Access-Reviewers",
+      "status": "planned",
+      "kind": "assigned",
+      "privileged": false,
+      "note": "Today the fallback reviewer group is passed to modules/entitlement by object id only (access_review_fallback_group_object_id); this names it so SOD-08 can be evaluated."
+    },
+    {
+      "name": "PIM-EHR-AuditLog-Admins",
+      "status": "planned",
+      "kind": "role-assignable",
+      "privileged": true,
+      "pimForGroups": true,
+      "note": "In-app admin roles go through PIM for Groups (app-onboarding-intake.md field 7), so EHR audit-trail administration is a PIM group, not a package."
+    }
+  ],
+  "directoryRoles": [
+    { "name": "Global Administrator", "templateId": "62e90394-69f5-4237-9190-012177145e10", "privileged": true },
+    { "name": "Privileged Role Administrator", "templateId": "e8611ab8-c189-46e8-94e1-60213ab1f814", "privileged": true },
+    { "name": "User Administrator", "templateId": "fe930be7-5e62-47db-91af-98c3a49a38b1", "privileged": true },
+    { "name": "Groups Administrator", "templateId": "fdd7a751-b60b-444a-984c-02652fe8fa1c", "privileged": true, "note": "Template id checked on Microsoft Learn 'Microsoft Entra built-in roles' 2026-10-20. Treated as privileged here because it can change membership of any non-role-assignable group, incl. the App-* groups behind the packages (SOD-08). verify: whether Learn shows the PRIVILEGED label on it." },
+    { "name": "Helpdesk Administrator", "templateId": "729827e3-9c14-49f7-bb1b-9608f156bbb8", "privileged": true },
+    { "name": "Security Administrator", "templateId": "194ae4cb-b126-40b2-bd5b-6091b380977d", "privileged": true },
+    { "name": "Identity Governance Administrator", "templateId": "45d8d3c5-c802-45c6-b32a-1d70b5e1e86e", "privileged": true }
+  ],
+  "reviewTiers": {
+    "$comment": "How 10-Review-KPIs.ps1 assigns a review definition to a tier. First match wins: definition displayName prefix, then the access package + policy in the scope query (automatic policy = T3, request policy = the package's tier; a request policy left on a birthright package = T3), then any group / role in the scope query.",
+    "displayNamePrefixes": [
+      { "prefix": "Privileged access review:", "tier": "T1", "source": "modules/entitlement reviews.tf" },
+      { "prefix": "Inactive users review:", "tier": "HYGIENE", "source": "modules/entitlement reviews.tf", "note": "Stale-account review: outside the T1-T3 table in ADR 0012, reported on its own." }
+    ],
+    "targets": {
+      "T1": { "completionPct": 100, "source": "ADR 0012: privileged, quarterly, unanswered = removed" },
+      "T2": { "completionPct": 95, "source": "ADR 0012: requestable, 180 days, unanswered = removed" },
+      "T3": { "completionPct": null, "source": "ADR 0012: no human campaign; any T3 review is itself a finding" }
+    },
+    "rubberStamp": { "minItems": 10, "medianGapSeconds": 5, "targetReviewerPct": 10, "source": "ADR 0012 How it is measured" }
+  }
+}

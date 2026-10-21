@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Test STAND-IN for curl against the Logs Ingestion API
+# (tests/ingest-vault-audit.test.sh only). Records each POSTed body as
+# $STUB_CAPTURE_DIR/post-N.json plus the URL and the auth header file it was
+# given, writes an empty response body to -o, and prints the HTTP status from
+# STUB_CURL_CODE (default 204, what the real API returns on success).
+set -euo pipefail
+[[ "${VAULT_INGEST_TEST_STUBS:-}" == 1 ]] || { echo "stub curl: test-only" >&2; exit 1; }
+out="" data="" url="" hdrs=()
+while (( $# > 0 )); do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    -w|--max-time) shift 2 ;;
+    -H) hdrs+=("$2"); shift 2 ;;
+    --data-binary) data="${2#@}"; shift 2 ;;
+    -sS) shift ;;
+    https://*) url="$1"; shift ;;
+    *) shift ;;
+  esac
+done
+n=$(( $(find "$STUB_CAPTURE_DIR" -name 'post-*.json' | wc -l) + 1 ))
+cp "$data" "$STUB_CAPTURE_DIR/post-$n.json"
+printf '%s\n' "$url" > "$STUB_CAPTURE_DIR/post-$n.url"
+for h in "${hdrs[@]}"; do
+  if [[ "$h" == @* ]]; then cat "${h#@}" > "$STUB_CAPTURE_DIR/post-$n.auth"; fi
+done
+[[ -n "$out" ]] && printf '{"error":{"code":"stub"}}' > "$out"
+# STUB_CURL_CODES="401,204": one status per call, in order (last one repeats).
+if [[ -n "${STUB_CURL_CODES:-}" ]]; then
+  IFS=',' read -r -a codes <<< "$STUB_CURL_CODES"
+  i=$(( n - 1 )); (( i < ${#codes[@]} )) || i=$(( ${#codes[@]} - 1 ))
+  printf '%s' "${codes[$i]}"
+else
+  printf '%s' "${STUB_CURL_CODE:-204}"
+fi

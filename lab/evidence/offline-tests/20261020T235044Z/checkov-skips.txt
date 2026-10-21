@@ -1,0 +1,38 @@
+Checkov 3.3.20 on the tested copy (derived from `checkov -d lab/terraform --framework terraform -o json`, same session)
+
+this run:   passed 46, failed 0, skipped 10
+committed HEAD (git archive HEAD lab/terraform, before the inline skips): passed 36, failed 8, skipped 1
+
+failed in this run: 0
+
+failed at HEAD, not failed now: 8
+  CKV_AZURE_151  module.dc_vm.azurerm_windows_virtual_machine.dc
+  CKV_AZURE_151  module.intune_vm.azurerm_windows_virtual_machine.vm
+  CKV_AZURE_249  module.pipeline_identity.azuread_application_federated_identity_credential.apply_prod
+  CKV_AZURE_249  module.pipeline_identity.azuread_application_federated_identity_credential.plan_pr
+  CKV_AZURE_251  module.dc_vm.azurerm_managed_disk.ntds
+  CKV_AZURE_50  module.dc_vm.azurerm_windows_virtual_machine.dc
+  CKV_AZURE_50  module.intune_vm.azurerm_windows_virtual_machine.vm
+  CKV_AZURE_93  module.dc_vm.azurerm_managed_disk.ntds
+
+skipped in this run, each by an inline #checkov:skip with this reason:
+  CKV_AZURE_151  module.dc_vm.azurerm_windows_virtual_machine.dc
+      Encryption at host needs the EncryptionAtHost feature registered on the subscription; the lab DC's disks use platform-managed server-side encryption (lab/terraform/README.md, Checkov baseline).
+  CKV_AZURE_151  module.intune_vm.azurerm_windows_virtual_machine.vm
+      Encryption at host needs the EncryptionAtHost feature registered on the subscription; the lab endpoint's disks use platform-managed server-side encryption (lab/terraform/README.md, Checkov baseline).
+  CKV_AZURE_189  module.keyvault.azurerm_key_vault.idlab
+      Public access is opened only to allowed_ip_ranges (operator IP) in the lab; empty list = disabled.
+  CKV_AZURE_249  module.pipeline_identity.azuread_application_federated_identity_credential.apply_prod
+      The subject is pinned to this repository's prod environment (local.apply_subject, the immutable owner/repo form); Checkov's subject pattern does not recognise that form.
+  CKV_AZURE_249  module.pipeline_identity.azuread_application_federated_identity_credential.plan_pr
+      The subject is pinned to this repository's pull_request events (local.plan_subject, the immutable owner/repo form); Checkov's subject pattern does not recognise that form.
+  CKV_AZURE_33  module.evidence_store.azurerm_storage_account.evidence
+      No queues are used. queue_properties logging is data-plane only, which this module avoids (shared key off, data_plane_available = false); blob access logs go to Log Analytics below.
+  CKV_AZURE_50  module.dc_vm.azurerm_windows_virtual_machine.dc
+      The forest is built with az vm run-command (lab/scripts/dc/README.md), which runs through the VM agent's extension path; extensions stay allowed.
+  CKV_AZURE_50  module.intune_vm.azurerm_windows_virtual_machine.vm
+      The Entra join needs the AADLoginForWindows VM extension (see the identity block below); blocking extensions would make the VM unjoinable.
+  CKV_AZURE_59  module.evidence_store.azurerm_storage_account.evidence
+      Public access is opened only to allowed_ip_ranges (operator IP) in the lab; empty list = disabled.
+  CKV_AZURE_93  module.dc_vm.azurerm_managed_disk.ntds
+      Platform-managed keys by design in the lab; a customer-managed key adds a Key Vault key whose loss makes the DC's NTDS disk unreadable (same trade-off as the evidence store).

@@ -1,0 +1,10 @@
+#%PAM-1.0
+# xrdp-sesman: an RDP session opens ONLY with the account's DOMAIN password,
+# verified by Kerberos against the AD DC (pam_krb5, minimum_uid 1000: never
+# root, never a system account). No pam_unix auth line, so no local password
+# can open a session; the local entry (password field "*") only supplies the
+# uid, home and shell. No ticket cache is kept: the session needs none.
+auth      required  pam_krb5.so minimum_uid=1000 no_ccache
+account   required  pam_unix.so
+session   required  pam_unix.so
+password  required  pam_deny.so

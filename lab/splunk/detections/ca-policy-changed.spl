@@ -1,0 +1,108 @@
+index=entra sourcetype="azure:loganalytics:auditlogs" (Category="Policy" OR Category="ApplicationManagement") earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Conditional Access policy added/changed/disabled/deleted  ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/ca-policy-changed.kql (same logic/window)         ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over Entra AuditLogs REPLAYED     ```
+``` from Log Analytics by lab/splunk/ingest-from-loganalytics.sh.              ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   Every CA policy write, classified: Deleted, Disabled, ToReportOnly,      ```
+```   ExclusionsChanged (High unless the CI apply identity did it), Added or   ```
+```   Updated (Medium = drift from IaC), CI apply identity (Low). Also named   ```
+```   locations (deleted, country removed, range newly trusted = High) and     ```
+```   authentication strengths (deleted, phishable combination added,         ```
+```   combination configuration changed = High). The CI identity is matched  ```
+```   by servicePrincipalId / appId through lookups/contoso_iac_principals.csv ```
+```   (never its display name); an app only NAMED like it is High.            ```
+``` MITRE ATT&CK: T1556.009 Conditional Access Policies; T1562.001.          ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   TargetResources[0].x                 -> spath TargetResources{0}.x        ```
+```   strcat_array(make_list(oldValue))    -> mvjoin(mvmap(MP, spath(...)))    ```
+```   extract(state regex, 1, text)        -> rex: a non-letter, state, 1-6    ```
+```                                           non-letters (quotes, escapes,    ```
+```                                           colon), then the value; written  ```
+```                                           without backslashes              ```
+```   extract(excludeUsers/Groups regex)   -> rex with bracket classes          ```
+```   coalesce(a, b) (skips empty)         -> if(non-empty a, a, b)             ```
+```   HONEST DIFFERENCE: the SPL state pattern is looser (it does not require ```
+```   the quote right before the value). Same result on the CA policy JSON.   ```
+```   set_difference(new, old)             -> mvmap + mvfind (anchored)        ```
+```   IacPrincipalIds let-list             -> lookup contoso_iac_principals.csv ```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT1H, base severity Medium (Severity column = dynamic),   ```
+``` throttled 1 h per Actor + Severity.                                         ```
+``` ========================================================================== ```
+``` @stanza Contoso - Conditional Access policy changed outside IaC ```
+``` @conf description = CA policy added, updated, disabled, moved to report-only, exclusions changed or deleted; High when it weakens the control plane. KQL twin: lab/kql/ca-policy-changed.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 4 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Actor,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where lower(Result)=="success"
+| eval OpL=lower(OperationName)
+| where (Category=="Policy" AND in(OpL, "add conditional access policy", "update conditional access policy", "delete conditional access policy", "add named location", "update named location", "delete named location")) OR (Category=="ApplicationManagement" AND in(OpL, "authentication strength policy create", "authentication strength policy update", "authentication strength policy delete", "authentication strength combination configuration create", "authentication strength combination configuration update", "authentication strength combination configuration delete"))
+| eval ObjectKind=case(match(OpL, "named location$"), "NamedLocation", match(OpL, "^authentication strength"), "AuthStrength", true(), "CaPolicy")
+| spath path=InitiatedBy.user.userPrincipalName output=ActorUpn
+| spath path=InitiatedBy.user.id output=ActorObjectId
+| spath path=InitiatedBy.app.displayName output=ActorApp
+| spath path=InitiatedBy.app.servicePrincipalId output=ActorSpId
+| spath path=InitiatedBy.app.appId output=ActorAppId
+| spath path=InitiatedBy.user.ipAddress output=ActorUserIp
+| spath path=InitiatedBy.app.ipAddress output=ActorAppIp
+| eval ActorIp=if(isnotnull(ActorUserIp) AND ActorUserIp!="", ActorUserIp, ActorAppIp)
+| eval Actor=if(isnotnull(ActorUpn) AND ActorUpn!="", ActorUpn, ActorApp)
+| spath path=TargetResources{0}.displayName output=PolicyName
+| spath path=TargetResources{0}.id output=PolicyId
+| spath path=TargetResources{0}.modifiedProperties{} output=MP
+| eval Q=urldecode("%22")
+| eval MPState=mvindex(mvfilter(match(spath(MP, "displayName"), "(?i)^State$")), 0)
+| eval OldStateProp=trim(spath(MPState, "oldValue"), Q), NewStateProp=trim(spath(MPState, "newValue"), Q)
+| eval OldText=mvjoin(mvmap(MP, spath(MP, "oldValue")), " "), NewText=mvjoin(mvmap(MP, spath(MP, "newValue")), " ")
+| rex field=OldText "(?i)[^A-Za-z]state[^A-Za-z]{1,6}(?<OldStateJson>[A-Za-z]+)"
+| rex field=NewText "(?i)[^A-Za-z]state[^A-Za-z]{1,6}(?<NewStateJson>[A-Za-z]+)"
+| rex field=OldText "(?i)excludeUsers[^A-Za-z[]{1,6}(?<OldExU>[[][^]]*[]])"
+| rex field=OldText "(?i)excludeGroups[^A-Za-z[]{1,6}(?<OldExG>[[][^]]*[]])"
+| rex field=NewText "(?i)excludeUsers[^A-Za-z[]{1,6}(?<NewExU>[[][^]]*[]])"
+| rex field=NewText "(?i)excludeGroups[^A-Za-z[]{1,6}(?<NewExG>[[][^]]*[]])"
+| eval OldState=if(isnotnull(OldStateJson) AND OldStateJson!="", OldStateJson, OldStateProp)
+| eval NewState=if(isnotnull(NewStateJson) AND NewStateJson!="", NewStateJson, NewStateProp)
+| eval OldExclusions=coalesce(OldExU, "") . coalesce(OldExG, ""), NewExclusions=coalesce(NewExU, "") . coalesce(NewExG, "")
+| rex field=OldText "(?i)countriesAndRegions[^A-Za-z[]{1,6}(?<OldCountryList>[[][^]]*[]])"
+| rex field=NewText "(?i)countriesAndRegions[^A-Za-z[]{1,6}(?<NewCountryList>[[][^]]*[]])"
+| rex field=OldCountryList max_match=0 "(?<OldCountries>[A-Z]{2})"
+| rex field=NewCountryList max_match=0 "(?<NewCountries>[A-Z]{2})"
+| eval CountriesRemoved=mvmap(OldCountries, if(isnull(mvfind(coalesce(NewCountries, "-"), "^" . OldCountries . "$")), OldCountries, null()))
+| rex field=OldText "(?i)isTrusted[^A-Za-z]{1,6}(?<OldTrusted>true|false)"
+| rex field=NewText "(?i)isTrusted[^A-Za-z]{1,6}(?<NewTrusted>true|false)"
+| rex field=OldText max_match=0 "(?i)cidrAddress[^0-9A-Fa-f:]{1,8}(?<OldRanges>[0-9A-Fa-f:./]+)"
+| rex field=NewText max_match=0 "(?i)cidrAddress[^0-9A-Fa-f:]{1,8}(?<NewRanges>[0-9A-Fa-f:./]+)"
+| eval RangesAdded=mvmap(NewRanges, if(isnull(mvfind(coalesce(OldRanges, "-"), "^" . replace(NewRanges, "[.]", "[.]") . "$")), NewRanges, null()))
+| rex field=OldText "(?i)allowedCombinations[^A-Za-z[]{1,6}(?<OldComboList>[[][^]]*[]])"
+| rex field=NewText "(?i)allowedCombinations[^A-Za-z[]{1,6}(?<NewComboList>[[][^]]*[]])"
+| rex field=OldComboList max_match=0 "(?<OldCombos>[A-Za-z0-9]+(,[A-Za-z0-9]+)*)"
+| rex field=NewComboList max_match=0 "(?<NewCombos>[A-Za-z0-9]+(,[A-Za-z0-9]+)*)"
+| eval PhishableAdded=mvmap(NewCombos, if(isnull(mvfind(coalesce(OldCombos, "-"), "^" . NewCombos . "$")) AND NOT in(NewCombos, "fido2", "windowsHelloForBusiness", "x509CertificateMultiFactor"), NewCombos, null()))
+| eval Change=case(ObjectKind=="NamedLocation" AND OpL=="delete named location", "NamedLocationDeleted", ObjectKind=="NamedLocation" AND OpL=="add named location", "NamedLocationAdded", ObjectKind=="NamedLocation" AND mvcount(CountriesRemoved)>0, "CountryRemoved", ObjectKind=="NamedLocation" AND lower(coalesce(NewTrusted, ""))=="true" AND (lower(coalesce(OldTrusted, ""))!="true" OR mvcount(RangesAdded)>0), "TrustedRangeAdded", ObjectKind=="NamedLocation", "NamedLocationUpdated", ObjectKind=="AuthStrength" AND match(OpL, "delete$"), "AuthStrengthDeleted", ObjectKind=="AuthStrength" AND mvcount(PhishableAdded)>0, "PhishableCombinationAdded", ObjectKind=="AuthStrength" AND match(OpL, "combination configuration"), "CombinationConfigChanged", ObjectKind=="AuthStrength" AND match(OpL, "create$"), "AuthStrengthAdded", ObjectKind=="AuthStrength", "AuthStrengthUpdated", OpL=="delete conditional access policy", "Deleted", OpL=="add conditional access policy", "Added", lower(NewState)=="disabled" AND lower(coalesce(OldState, ""))!="disabled", "Disabled", lower(NewState)=="enabledforreportingbutnotenforced" AND lower(OldState)=="enabled", "ToReportOnly", OldExclusions!=NewExclusions, "ExclusionsChanged", true(), "Updated")
+| lookup contoso_iac_principals.csv principal_id AS ActorSpId OUTPUT principal_id AS IacBySp
+| lookup contoso_iac_principals.csv principal_id AS ActorAppId OUTPUT principal_id AS IacByApp
+| eval IsIac=if(isnotnull(IacBySp) OR isnotnull(IacByApp), "true", "false")
+| eval IacNameSpoof=if(IsIac=="false" AND lower(coalesce(ActorApp, ""))=="gh-oidc-entra-apply (write)", "true", "false")
+| eval Severity=case(IacNameSpoof=="true", "High", IsIac=="true", "Low", in(Change, "Deleted", "Disabled", "ToReportOnly", "ExclusionsChanged", "NamedLocationDeleted", "CountryRemoved", "TrustedRangeAdded", "AuthStrengthDeleted", "PhishableCombinationAdded", "CombinationConfigChanged"), "High", true(), "Medium")
+| sort 0 - _time
+| table TimeGenerated, Severity, ObjectKind, Change, PolicyName, PolicyId, OldState, NewState, OldExclusions, NewExclusions, CountriesRemoved, RangesAdded, NewTrusted, PhishableAdded, Actor, ActorUpn, ActorObjectId, ActorApp, ActorSpId, ActorIp, IsIac, IacNameSpoof, OperationName, CorrelationId

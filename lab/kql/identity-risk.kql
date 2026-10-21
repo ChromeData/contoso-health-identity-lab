@@ -1,0 +1,92 @@
+// =============================================================================
+// Detection: Risky user / risky sign-in (Entra ID Protection, medium+ and open)
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   Entra ID Protection says an identity is (probably) compromised and the
+//   risk is still OPEN (atRisk / confirmedCompromised). Three signals, one
+//   rule, so an incident shows the whole story for one user:
+//     RiskDetection : AADUserRiskEvents - the individual detections (leaked
+//                     credentials, anomalous token, impossible travel,
+//                     password spray, attacker-in-the-middle ...)
+//     RiskyUser     : AADRiskyUsers - the user's aggregate risk changed
+//     RiskySignIn   : SigninLogs - a sign-in scored medium/high in real time
+//   Risk that CA006 (user risk high -> MFA + secure password change
+//   remediation) or an admin already closed (remediated, dismissed,
+//   confirmedSafe) is NOT alerted: the control worked. What is left is the
+//   risk the policies did not resolve - the reason a human, or the
+//   containment playbook, has to act.
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : risk level high, or confirmedCompromised.
+//   Medium : risk level medium.
+//   (Low-risk detections stay in Identity Protection's own report - too noisy
+//   for an incident queue.)
+//
+// TABLE / SOURCE
+//   AADUserRiskEvents and AADRiskyUsers need the Entra diagnostic-setting
+//   categories "UserRiskEvents" and "RiskyUsers": envs/bootstrap adds them
+//   with enable_identity_protection_logs (default false; see
+//   lab/terraform/README.md, staging flags). SigninLogs:
+//   RiskLevelDuringSignIn / RiskState.
+//   Without P2 the risk columns read "hidden"/"none" and nothing matches.
+//
+// LICENSE
+//   Microsoft Entra ID P2 (Identity Protection) - in the M365 E5 trial.
+//   Risk-based CA (CA006/CA007) also needs P2.
+//
+// MITRE ATT&CK
+//   T1078.004 Valid Accounts: Cloud Accounts
+//   Tactics: InitialAccess, DefenseEvasion, Persistence, PrivilegeEscalation
+//   (T1110.003 Password Spraying when RiskEventType = passwordSpray)
+//
+// FALSE-POSITIVE NOTES
+//   - Travel / new VPN egress (unfamiliarFeatures, impossibleTravel) on a
+//     real user: confirm with the user, then "Confirm safe" in Identity
+//     Protection - that closes the risk and this rule stops matching.
+//   - Offline detections (DetectionTimingType offline) can arrive hours after
+//     the sign-in; the alert time is when Entra logged the detection.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · one alert per row · Severity column ·
+//   Entities: Account = UserPrincipalName / UserId, IP = IPAddress.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; containment card on High (the risky USER):
+//   approve -> revoke refresh tokens + disable (cloud-only) or flag for AD
+//   disable (synced). CA007 already blocks the high-risk SIGN-IN; revoking
+//   sessions removes the tokens the attacker may already hold.
+// =============================================================================
+
+let LookBack = 1h;
+let OpenStates = dynamic(["atRisk", "confirmedCompromised"]);
+let RiskDetections = AADUserRiskEvents
+    | where TimeGenerated > ago(LookBack)
+    | where RiskLevel in~ ("medium", "high")
+    | where RiskState in~ (OpenStates)
+    | project TimeGenerated, Signal = "RiskDetection", UserPrincipalName, UserId,
+              IPAddress = IpAddress, RiskLevel, RiskState, RiskDetail, RiskEventType,
+              DetectionTimingType, RiskSource = Source, CorrelationId;
+let RiskyUsers = AADRiskyUsers
+    | where TimeGenerated > ago(LookBack)
+    | where RiskLevel in~ ("medium", "high") or RiskState =~ "confirmedCompromised"
+    | where RiskState in~ (OpenStates)
+    | where coalesce(IsDeleted, false) == false
+    | project TimeGenerated, Signal = "RiskyUser", UserPrincipalName, UserId = Id,
+              IPAddress = "", RiskLevel, RiskState, RiskDetail, RiskEventType = "",
+              DetectionTimingType = "", RiskSource = "IdentityProtection", CorrelationId;
+let RiskySignIns = SigninLogs
+    | where TimeGenerated > ago(LookBack)
+    | where RiskLevelDuringSignIn in~ ("medium", "high")
+    | where RiskState in~ (OpenStates)
+    | project TimeGenerated, Signal = "RiskySignIn", UserPrincipalName, UserId, IPAddress,
+              RiskLevel = RiskLevelDuringSignIn, RiskState, RiskDetail,
+              RiskEventType = tostring(RiskEventTypes_V2), DetectionTimingType = "realtime",
+              RiskSource = AppDisplayName, CorrelationId,
+              SignInResult = ResultType, ConditionalAccessStatus;
+union RiskDetections, RiskyUsers, RiskySignIns
+| extend Severity = iff(RiskLevel =~ "high" or RiskState =~ "confirmedCompromised", "High", "Medium")
+| project TimeGenerated, Severity, Signal, UserPrincipalName, UserId, IPAddress, RiskLevel,
+          RiskState, RiskDetail, RiskEventType, DetectionTimingType, RiskSource,
+          SignInResult, ConditionalAccessStatus, CorrelationId
+| sort by TimeGenerated desc

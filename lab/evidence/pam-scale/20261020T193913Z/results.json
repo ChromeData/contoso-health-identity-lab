@@ -1,0 +1,326 @@
+{
+  "schema": "contoso-pam/e2e-scale/v1",
+  "run_utc": "20261020T193913Z",
+  "tenant": "none: local Docker only (Vault + Samba AD DC corp.test.local, synthetic accounts)",
+  "result": "PASS",
+  "pass": 79,
+  "fail": 0,
+  "checks": [
+    {
+      "status": "PASS",
+      "name": "images built (samba-ad-test with the bulk seed, pam-tools)"
+    },
+    {
+      "status": "PASS",
+      "name": "samba-dc healthy (LDAPS up, certificate valid for dc01.corp.test.local)"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault initialised and unsealed (API on 127.0.0.1:8240)"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault file audit device on (throughput below includes audit logging)"
+    },
+    {
+      "status": "PASS",
+      "name": "the DC's root CA installed for Vault and pam-tools (vault_install_ca)"
+    },
+    {
+      "status": "PASS",
+      "name": "LDAP secrets engine configured by vault_configure_ad (the vault-onboard-ad.sh code)"
+    },
+    {
+      "status": "PASS",
+      "name": "ldap/config: schema=ad, ldaps://dc01.corp.test.local, bound as svc-vault-rotator, CA-verified (no insecure_tls)"
+    },
+    {
+      "status": "PASS",
+      "name": "manifest: 500 bulk accounts, 250 staff users"
+    },
+    {
+      "status": "PASS",
+      "name": "mix adds up to 500: svc_spn=180 svc_batch=60 svc_tier1=10 t1_admin=80 t1_nested=20 t0_admin=20 t0_nested=10 stale_priv=40 never_priv=25 orphan_admincount=30 disabled_priv=15 kerberoast_t0=10"
+    },
+    {
+      "status": "PASS",
+      "name": "every category of the mix is present (>= 1 account each)"
+    },
+    {
+      "status": "PASS",
+      "name": "pwdLastSet snapshot: every bulk and staff account is in AD"
+    },
+    {
+      "status": "PASS",
+      "name": "dependency map: a record for every bulk account except the 'no record' ones"
+    },
+    {
+      "status": "PASS",
+      "name": "all discovered: 515 candidates = 500 bulk + 15 base layout"
+    },
+    {
+      "status": "PASS",
+      "name": "every bulk account discovered (500 of 500)"
+    },
+    {
+      "status": "PASS",
+      "name": "no staff (non-privileged) account discovered (0 of 250)"
+    },
+    {
+      "status": "PASS",
+      "name": "nothing else discovered: the non-bulk candidates are exactly the base layout"
+    },
+    {
+      "status": "PASS",
+      "name": "every bulk account classified as its category calls for (action, tier, Vault target / reason): mismatches 0"
+    },
+    {
+      "status": "PASS",
+      "name": "  svc_spn: 180/180 -> static role svc/<sam>"
+    },
+    {
+      "status": "PASS",
+      "name": "  svc_batch: 60/60 -> static role svc/<sam>"
+    },
+    {
+      "status": "PASS",
+      "name": "  svc_tier1: 10/10 -> static role tier1/<sam>"
+    },
+    {
+      "status": "PASS",
+      "name": "  t1_admin: 80/80 -> library tier1-admins"
+    },
+    {
+      "status": "PASS",
+      "name": "  t1_nested: 20/20 -> library tier1-admins"
+    },
+    {
+      "status": "PASS",
+      "name": "  t0_admin: 20/20 -> library tier0-admins"
+    },
+    {
+      "status": "PASS",
+      "name": "  t0_nested: 10/10 -> library tier0-admins"
+    },
+    {
+      "status": "PASS",
+      "name": "  stale_priv: 40/40 -> exception: stale privileged account (last logon"
+    },
+    {
+      "status": "PASS",
+      "name": "  never_priv: 25/25 -> exception: never logged on"
+    },
+    {
+      "status": "PASS",
+      "name": "  orphan_admincount: 30/30 -> exception: orphaned adminCount"
+    },
+    {
+      "status": "PASS",
+      "name": "  disabled_priv: 15/15 -> exception: disabled account"
+    },
+    {
+      "status": "PASS",
+      "name": "  kerberoast_t0: 10/10 -> exception: Kerberoastable"
+    },
+    {
+      "status": "PASS",
+      "name": "nested groups resolved: every staff account admin through Tier1-App-Admins is in Tier1-Server-Admins' chain"
+    },
+    {
+      "status": "PASS",
+      "name": "discovery report: one CSV row per candidate"
+    },
+    {
+      "status": "PASS",
+      "name": "onboard.sh (bulk) exits 0"
+    },
+    {
+      "status": "PASS",
+      "name": "all in-scope onboarded: 257 of 257 bulk accounts with clear dependencies in their Vault object (static role / library set)"
+    },
+    {
+      "status": "PASS",
+      "name": "no held or exception account in Vault (0 of 243)"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault holds nothing unexpected: static roles + library members = bulk in-scope + the base layout's"
+    },
+    {
+      "status": "PASS",
+      "name": "  static roles svc/*: 138 (rotation_period 720h, Safe svc-static-read)"
+    },
+    {
+      "status": "PASS",
+      "name": "  static roles tier1/*: 7 (rotation_period 72h, Safe tier1-static-read)"
+    },
+    {
+      "status": "PASS",
+      "name": "  library tier0-admins: 27 bulk + 2 base members"
+    },
+    {
+      "status": "PASS",
+      "name": "  library tier1-admins: 85 bulk + 2 base members"
+    },
+    {
+      "status": "PASS",
+      "name": "  Safe policy tier0-checkout written"
+    },
+    {
+      "status": "PASS",
+      "name": "  Safe policy tier1-checkout written"
+    },
+    {
+      "status": "PASS",
+      "name": "  Safe policy tier0-static-read written"
+    },
+    {
+      "status": "PASS",
+      "name": "  Safe policy tier1-static-read written"
+    },
+    {
+      "status": "PASS",
+      "name": "  Safe policy svc-static-read written"
+    },
+    {
+      "status": "PASS",
+      "name": "  Safe policy pam-reconcile written"
+    },
+    {
+      "status": "PASS",
+      "name": "onboarding report: 257 bulk vaulted, 123 held, 120 exceptions (expected 257 / 123 / 120)"
+    },
+    {
+      "status": "PASS",
+      "name": "  static role svc/svc-web-001: username, DN and rotation_period as discovered / policy"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault set a new password for every onboarded account: pwdLastSet moved on 257 of 257"
+    },
+    {
+      "status": "PASS",
+      "name": "dependency-blocked accounts untouched: pwdLastSet unchanged on all 123 held"
+    },
+    {
+      "status": "PASS",
+      "name": "exceptions untouched: pwdLastSet unchanged on all 120"
+    },
+    {
+      "status": "PASS",
+      "name": "onboard.sh re-run exits 0"
+    },
+    {
+      "status": "PASS",
+      "name": "re-run vaulted nothing new (0 'vaulted' results)"
+    },
+    {
+      "status": "PASS",
+      "name": "re-run recognised every vaulted account as already vaulted (263 incl. the base layout's 6)"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault unchanged by the re-run (same static roles)"
+    },
+    {
+      "status": "PASS",
+      "name": "dependency check: 387 eligible = 253 clear + 90 blocked + 44 unknown (no record)"
+    },
+    {
+      "status": "PASS",
+      "name": "every bulk account's gate result as recorded in the map (incl. 10 vaulted accounts the re-scan blocked): mismatches 0"
+    },
+    {
+      "status": "PASS",
+      "name": "rotation sample: 25 accounts across svc+tier1 tiers"
+    },
+    {
+      "status": "PASS",
+      "name": "rotate.sh rotated 25 of 25 sampled accounts"
+    },
+    {
+      "status": "PASS",
+      "name": "rotate.sh REFUSED 10 of 10 accounts the re-scan blocked (unresolved new consumer)"
+    },
+    {
+      "status": "PASS",
+      "name": "rotation: last_vault_rotation moved on 25 of 25"
+    },
+    {
+      "status": "PASS",
+      "name": "rotation within policy: every rotated account's last rotation is inside its tier's rotation_period"
+    },
+    {
+      "status": "PASS",
+      "name": "the new Vault-held password binds as the account (LDAPS) on 25 of 25"
+    },
+    {
+      "status": "PASS",
+      "name": "the previous password is rejected (LDAP 49) on 25 of 25"
+    },
+    {
+      "status": "PASS",
+      "name": "refused accounts NOT rotated: pwdLastSet unchanged on 10 of 10"
+    },
+    {
+      "status": "PASS",
+      "name": "... and last_vault_rotation unchanged on 10 of 10"
+    },
+    {
+      "status": "PASS",
+      "name": "... and each refusal audited (rotate-refused in pam-audit.jsonl)"
+    },
+    {
+      "status": "PASS",
+      "name": "only the sample rotated: no other account's pwdLastSet changed during the stage"
+    },
+    {
+      "status": "PASS",
+      "name": "reconcile.sh --strict exits 0 (GAP 0, ORPHAN 0, nothing rotated out of policy)"
+    },
+    {
+      "status": "PASS",
+      "name": "reconcile categories sum: 263 VAULTED + 128 EXCEPTION + 124 HELD + 0 GAP + 0 ORPHAN = 515 rows"
+    },
+    {
+      "status": "PASS",
+      "name": "... = the 515 discovered accounts (one row each)"
+    },
+    {
+      "status": "PASS",
+      "name": "GAP 0 (nothing eligible left unvaulted without a reason)"
+    },
+    {
+      "status": "PASS",
+      "name": "ORPHAN 0 (nothing in Vault that AD does not have)"
+    },
+    {
+      "status": "PASS",
+      "name": "every bulk account's reconcile status as expected (VAULTED / HELD / EXCEPTION): mismatches 0"
+    },
+    {
+      "status": "PASS",
+      "name": "every VAULTED row rotated within policy (263 of 263)"
+    },
+    {
+      "status": "PASS",
+      "name": "HELD rows carry their unresolved dependencies (or 'no dependency record')"
+    },
+    {
+      "status": "PASS",
+      "name": "report KPI line: GAP 0"
+    },
+    {
+      "status": "PASS",
+      "name": "dependency-blocked accounts never rotated: pwdLastSet unchanged since seeding on all 123 held"
+    },
+    {
+      "status": "PASS",
+      "name": "exceptions never touched: pwdLastSet unchanged since seeding on all 120"
+    },
+    {
+      "status": "PASS",
+      "name": "staff accounts never touched: pwdLastSet unchanged on all 250"
+    }
+  ]
+}

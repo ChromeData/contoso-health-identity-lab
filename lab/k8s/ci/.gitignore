@@ -1,0 +1,3 @@
+# Written only with KEEP_CLUSTER=1: the kept cluster's Vault dev root token
+# and the seed hash (0600). Never commit them; the next full run deletes them.
+.state/

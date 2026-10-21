@@ -1,0 +1,32 @@
+PASS  dry run: 5 check-out/in rows + 1 heartbeat
+PASS  check-out of tier0-admin-01 resolved from its HMAC
+PASS  timestamp trimmed to microseconds
+PASS  check-in row from check_ins list
+PASS  manage/ force check-in kept, actor recorded
+PASS  unknown HMAC -> AccountResolved=false, empty Account
+PASS  clear-text name (tuned mount) used as-is, lower-cased
+PASS  request lines, errors, other paths and other library sets ignored
+PASS  exactly one heartbeat
+PASS  every row has exactly the VaultCheckout_CL columns
+PASS  damaged line reported, not silently dropped
+PASS  unresolved HMAC reported
+PASS  dry run keeps no offset
+PASS  send run 1 exits 0 on HTTP 204
+PASS  run 1 posted 6 rows as one JSON array
+PASS  posted to the DCR stream with api-version 2023-01-01
+PASS  bearer token travels in a header file, not argv
+PASS  offset stops before the half-written line (6200 bytes)
+PASS  run 2 (nothing new) sends only the heartbeat
+PASS  run 3 picks up the completed record once
+PASS  HTTP 403 exits non-zero
+PASS  403 explains the missing DCR role
+PASS  offset unchanged after a rejected batch
+PASS  HTTP 401 (expired token) is retried and the run succeeds
+PASS  a fresh token was fetched after the 401
+PASS  a second 401 after a refresh stops the run
+PASS  offset unchanged after the failed 401 run
+PASS  follow mode refreshes a token older than TOKEN_MAX_AGE_MIN and survives a failed run
+PASS  refuses an endpoint that is not *.ingest.monitor.azure.com
+PASS  refuses a malformed DCR immutable id
+
+ingest-vault-audit: ALL PASSED

@@ -1,0 +1,107 @@
+{
+  "rule": "auth-method-changed-by-admin",
+  "about": "Raw-event versions of the itdr-cases.json rows that set RecentPrivilegedGrants joinRows (skipped by the import): the grant is a real AuditLogs record inside the 2-day grant history and the rule derives RecentPrivilegedGrants itself. The PIM-for-Groups grant uses the Learn activity string.",
+  "defaults": {
+    "AuditLogs": {
+      "Result": "success", "CorrelationId": "11111111-1111-1111-1111-111111111111"
+    }
+  },
+  "cases": [
+    {
+      "id": "tap-after-recent-role-grant",
+      "kind": "positive",
+      "label": "Helen (HR-named) got Global Administrator 3 h ago; a helpdesk lead now issues her a TAP: High by grant history",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:3h", "Category": "RoleManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to role",
+         "Identity": "iam.admin@contosohealthlab.onmicrosoft.com",
+         "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "iam.admin@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [
+           {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com",
+            "modifiedProperties": [{"displayName": "Role.DisplayName", "oldValue": null, "newValue": "\"Global Administrator\""}]},
+           {"id": "62e90394-69f5-4237-9190-012177145e10", "type": "Role", "displayName": "Global Administrator"}]},
+        {"TimeGenerated": "ago:10m", "Category": "UserManagement", "LoggedByService": "Authentication Methods",
+         "OperationName": "Admin registered security info",
+         "ResultReason": "Admin registered temporary access pass method for user",
+         "InitiatedBy": {"user": {"id": "33333333-3333-3333-3333-333333333333", "userPrincipalName": "helpdesk.lead@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.30"}},
+         "TargetResources": [{"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com"}]}
+      ]},
+      "expect": [{"Severity": "High", "PrivilegedByGrant": true, "PrivilegedById": false, "IsTap": true, "Action": "Registered",
+                  "PrivilegeBasis": "role or privileged-group grant in the grant history",
+                  "RecentGrants": ["role Global Administrator (Add member to role)"],
+                  "TargetUpn": "helen.carter@contosohealthlab.onmicrosoft.com", "ActorIp": "203.0.113.30",
+                  "Method": "temporary access pass"}],
+      "expectRows": 1
+    },
+    {
+      "id": "grant-via-privileged-group",
+      "kind": "positive",
+      "label": "Helen was added to Privileged-IAM-Admins yesterday: High",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:1d", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "TargetResources": [
+           {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com",
+            "modifiedProperties": [{"displayName": "Group.ObjectID", "oldValue": null, "newValue": "\"44444444-4444-4444-4444-444444444444\""},
+                                   {"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"Privileged-IAM-Admins\""}]}]},
+        {"TimeGenerated": "ago:10m", "Category": "UserManagement", "LoggedByService": "Authentication Methods",
+         "OperationName": "Admin updated security info", "ResultReason": "Admin updated phone method for user",
+         "InitiatedBy": {"user": {"id": "33333333-3333-3333-3333-333333333333", "userPrincipalName": "helpdesk.lead@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.30"}},
+         "TargetResources": [{"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com"}]}
+      ]},
+      "expect": [{"Severity": "High", "PrivilegedByGrant": true, "Action": "Updated", "IsTap": false,
+                  "RecentGrants": ["group Privileged-IAM-Admins (Add member to group)"]}]
+    },
+    {
+      "id": "grant-via-pim-groups-eligibility",
+      "kind": "positive",
+      "label": "Helen was made eligible for PIM-Tier0-Security-Admins (Learn string, Category GroupManagement): High",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:6h", "Category": "GroupManagement", "LoggedByService": "PIM",
+         "OperationName": "Add eligible member to role in PIM completed (permanent)",
+         "TargetResources": [
+           {"id": "55555555-5555-5555-5555-555555555555", "type": "Group", "displayName": "PIM-Tier0-Security-Admins"},
+           {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com"}]},
+        {"TimeGenerated": "ago:10m", "Category": "UserManagement", "LoggedByService": "Authentication Methods",
+         "OperationName": "Admin deleted security info", "ResultReason": "Admin deleted Authenticator app method for user",
+         "InitiatedBy": {"user": {"id": "33333333-3333-3333-3333-333333333333", "userPrincipalName": "helpdesk.lead@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [{"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com"}]}
+      ]},
+      "expect": [{"Severity": "High", "PrivilegedByGrant": true, "Action": "Deleted",
+                  "RecentGrants": ["group PIM-Tier0-Security-Admins (Add eligible member to role in PIM completed (permanent))"]}]
+    },
+    {
+      "id": "grant-older-than-history-and-ordinary-group",
+      "kind": "positive",
+      "label": "A role grant 3 days ago (outside 2 d) and a non-privileged group add: the TAP is Medium",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:3d", "Category": "RoleManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to role",
+         "TargetResources": [
+           {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com",
+            "modifiedProperties": [{"displayName": "Role.DisplayName", "oldValue": null, "newValue": "\"Global Administrator\""}]}]},
+        {"TimeGenerated": "ago:1d", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "TargetResources": [
+           {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com",
+            "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"Clinical-Nurses\""}]}]},
+        {"TimeGenerated": "ago:10m", "Category": "UserManagement", "LoggedByService": "Authentication Methods",
+         "OperationName": "Admin registered security info", "ResultReason": "Admin registered temporary access pass method for user",
+         "InitiatedBy": {"user": {"id": "33333333-3333-3333-3333-333333333333", "userPrincipalName": "helpdesk.lead@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [{"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com"}]}
+      ]},
+      "expect": [{"Severity": "Medium", "PrivilegedByGrant": false, "PrivilegeBasis": "none", "IsTap": true}]
+    },
+    {
+      "id": "self-service-and-old",
+      "kind": "negative",
+      "label": "A user's own registration (different activity) and an admin TAP 2 h ago",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:10m", "Category": "UserManagement", "LoggedByService": "Authentication Methods",
+         "OperationName": "User registered security info", "ResultReason": "User registered Authenticator App with Notification and Code",
+         "InitiatedBy": {"user": {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [{"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com"}]},
+        {"TimeGenerated": "ago:2h", "Category": "UserManagement", "LoggedByService": "Authentication Methods",
+         "OperationName": "Admin registered security info", "ResultReason": "Admin registered temporary access pass method for user",
+         "InitiatedBy": {"user": {"id": "33333333-3333-3333-3333-333333333333", "userPrincipalName": "helpdesk.lead@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [{"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "type": "User", "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com"}]}
+      ]}
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "about": "Engine-semantics probes. Each is one small query whose answer Microsoft Learn does not state outright but a lab/kql rule (and the offline KqlLite interpreter) relies on. harness.py run records what the engine returned (rows or error) in results.json 'probes'; probes are not pass/fail - the rule cases are the assertions, and a probe explains a failing case.",
+  "probes": [
+    {
+      "id": "mv-apply-empty-array-summarize",
+      "question": "Is a record whose array is EMPTY kept by mv-apply when the subquery is a summarize with no by? (Learn, mv-expand: an empty array produces no record; mv-apply expands with mv-expand first.)",
+      "query": "datatable(k:string, a:dynamic)['empty', dynamic([]), 'one', dynamic(['x'])] | mv-apply e = a on (summarize n = count(), s = make_set(tostring(e)))",
+      "reliedOnBy": [
+        "blocked-country-signin: a sign-in with ConditionalAccessPolicies == [] (comment: 'ALWAYS returns one row')",
+        "app-credential-added: the first credential on an app (OldSet == [])",
+        "role-assigned-outside-pim: a target whose modifiedProperties == []",
+        "pim-activation-without-auth-context: a step-up sign-in whose CA list == []"
+      ]
+    },
+    {
+      "id": "mv-apply-null-summarize",
+      "question": "Same, for a null dynamic (Learn, mv-expand: a null produces a single null record).",
+      "query": "datatable(k:string, a:dynamic)['null', dynamic(null)] | mv-apply e = a on (summarize n = count())",
+      "reliedOnBy": ["app-credential-added / ca-policy-changed: a modified property whose oldValue is null"]
+    },
+    {
+      "id": "mv-apply-typeof-string-on-objects",
+      "question": "mv-apply ... to typeof(string) over an array of objects: stringified, or null? (Learn, mv-expand: 'cast-only ... elements that don't conform with the declared type become null values'.)",
+      "query": "print a = dynamic([{\"Issuer\":\"https://token.actions.githubusercontent.com\",\"Subject\":\"repo:x\"}, \"[KeyType=Password]\"]) | mv-apply e = a to typeof(string) on (summarize l = make_list(e), lwn = make_list_with_nulls(e))",
+      "reliedOnBy": ["app-credential-added before CODE-NEEDED-2 was applied (it now converts with tostring()); kept to confirm the premise of that fix and of KqlLite's cast-only mv-apply"]
+    },
+    {
+      "id": "negative-array-index",
+      "question": "Does arr[-1] (no parentheses) return the last element? (Learn, dynamic: the example is arr[(-1)].)",
+      "query": "print last = tostring(split('S-1-5-21-1000000001-2000000002-3000000003-512', '-')[-1])",
+      "reliedOnBy": ["ad-privileged-group-change: GroupRid = split(GroupSid, '-')[-1] decides every domain Tier-0 group (512, 518, 519 ...)"]
+    },
+    {
+      "id": "make-set-over-arrays",
+      "question": "make_set over a column of arrays: one flat set, or a set of arrays?",
+      "query": "datatable(a:dynamic)[dynamic(['1131f6aa-9c07-11d1-f79f-00c04fc2dcd2']), dynamic(['1131f6aa-9c07-11d1-f79f-00c04fc2dcd2', '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'])] | summarize s = make_set(a, 10)",
+      "reliedOnBy": ["dcsync-replication-request: RightsUsed = make_set(RightsUsed, 10) over extract_all arrays"]
+    },
+    {
+      "id": "fuzzy-union-missing-function",
+      "question": "union isfuzzy=true with a leg that calls a function that does not exist: leg dropped, or query error?",
+      "query": "union isfuzzy=true (datatable(a:string)['kept']), (HarnessNoSuchFunction('operator_ips') | project a = tostring(SearchKey))",
+      "reliedOnBy": ["dc-logon-outside-operator-allowlist and sod-violation-granted on a workspace without Sentinel's _GetWatchlist"]
+    },
+    {
+      "id": "fuzzy-union-unresolved-column",
+      "question": "union isfuzzy=true with a leg that projects a column its source does not have (a watchlist with no items, so no watchlist columns): leg dropped, or query error?",
+      "query": "union isfuzzy=true (datatable(a:string)['kept']), (datatable(SearchKey:string)[] | project a = tostring(ExpiresOn))",
+      "reliedOnBy": ["dc-logon-outside-operator-allowlist: 'Empty watchlist = every source alerts'", "sod-violation-granted: the planned sod_holdings watchlist before it has rows"]
+    },
+    {
+      "id": "leftouter-null-fill",
+      "question": "After a leftouter join with no match, is a right-side string column null or empty, and a datetime null?",
+      "query": "datatable(k:string, a:string)['1', 'x'] | join kind=leftouter (datatable(k:string, b:string, t:datetime)[]) on k | project b, b_isnull = isnull(b), b_isempty = isempty(b), t_isnull = isnull(t)",
+      "reliedOnBy": ["security-info-registered-risky: NoContext / RiskySignIn on a registration with no context sign-in", "auth-method-changed-by-admin: PrivilegedByGrant = isnotempty(GrantUserId)"]
+    },
+    {
+      "id": "has-punctuated-guid",
+      "question": "has / has_any with a hyphenated GUID needle against 4662 Properties text.",
+      "query": "print t = '%%7688\\r\\n\\t\\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\\r\\n' | extend h = t has '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2', ha = t has_any (dynamic(['1131f6aa-9c07-11d1-f79f-00c04fc2dcd2', '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2']))",
+      "reliedOnBy": ["dcsync-replication-request: where Properties has_any (ReplicationGuids)"]
+    },
+    {
+      "id": "ipv4-in-empty-range-list",
+      "question": "ipv4_is_in_any_range against an empty dynamic array: false or null?",
+      "query": "print r = ipv4_is_in_any_range('198.51.100.7', dynamic([])), r2 = ipv4_is_in_any_range('198.51.100.7', dynamic(['198.51.100.7/32']))",
+      "reliedOnBy": ["dc-logon-outside-operator-allowlist: coalesce(ipv4_is_in_any_range(SourceIp, OperatorRanges), false)"]
+    },
+    {
+      "id": "coalesce-empty-string",
+      "question": "coalesce on strings: is the empty string skipped?",
+      "query": "print c = coalesce('', 'second'), d = coalesce(tostring(dynamic({}).countryOrRegion), 'CU')",
+      "reliedOnBy": ["blocked-country-signin: Country = coalesce(tostring(LocationDetails.countryOrRegion), Location)", "vault-privileged-access-anomaly: Actor = coalesce(Operator, VaultActor, LoginName)"]
+    },
+    {
+      "id": "dynamic-key-order-in-tostring",
+      "question": "tostring() of a modifiedProperties entry: are the keys emitted in ingestion order? (Learn, dynamic: 'Kusto doesn't attempt to preserve the order of name-to-value mappings in a property bag'.)",
+      "query": "print t = tostring(parse_json('[{\"oldValue\":null,\"newValue\":\"\\\\\"11111111-1111-1111-1111-111111111111\\\\\"\",\"displayName\":\"Group.ObjectID\"}]'))",
+      "reliedOnBy": ["pim-group-member-added-outside-pim and auth-method-changed-by-admin: extract(@'Group\\.ObjectID\"[^}]*?newValue...') assumes displayName precedes newValue inside the serialised entry"]
+    },
+    {
+      "id": "v1-dynamic-encoding",
+      "question": "How the v1 REST endpoint returns dynamic values (JSON text or objects) - the harness decodes both.",
+      "query": "print d = dynamic({\"a\":1}), arr = dynamic([1, 2]), s = 'text'",
+      "reliedOnBy": ["harness.py result comparison"]
+    }
+  ]
+}

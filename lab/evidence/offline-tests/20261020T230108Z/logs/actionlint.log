@@ -1,0 +1,32 @@
+$ actionlint -verbose
+verbose: Linting all workflow files in repository: <repo>
+verbose: Detected project: <repo>
+verbose: Collected 5 YAML files
+verbose: Linting 5 files
+verbose: Linting .github/workflows/terraform-plan.yml
+verbose: Linting .github/workflows/terraform-apply.yml
+verbose: Using project at <repo>
+verbose: Linting .github/workflows/lab-tests.yml
+verbose: Using project at <repo>
+verbose: Linting .github/workflows/ai-review.yml
+verbose: Using project at <repo>
+verbose: Linting .github/workflows/k8s-identity.yml
+verbose: Using project at <repo>
+verbose: Using project at <repo>
+verbose: Found 0 parse errors in 0 ms for .github/workflows/ai-review.yml
+verbose: Found 0 parse errors in 0 ms for .github/workflows/k8s-identity.yml
+verbose: Found 0 parse errors in 0 ms for .github/workflows/terraform-apply.yml
+verbose: Found 0 parse errors in 0 ms for .github/workflows/lab-tests.yml
+verbose: Found 0 parse errors in 0 ms for .github/workflows/terraform-plan.yml
+verbose: verbose: Rule "pyflakes" was disabled: exec: "pyflakes": executable file not found in $PATH
+verbose: Rule "pyflakes" was disabled: exec: "pyflakes": executable file not found in $PATH
+verbose: Rule "pyflakes" was disabled: exec: "pyflakes": executable file not found in $PATH
+Rule "pyflakes" was disabled: exec: "pyflakes": executable file not found in $PATH
+verbose: Rule "pyflakes" was disabled: exec: "pyflakes": executable file not found in $PATH
+verbose: Found total 0 errors in 31 ms for .github/workflows/ai-review.yml
+verbose: Found total 0 errors in 31 ms for .github/workflows/k8s-identity.yml
+verbose: Found total 0 errors in 43 ms for .github/workflows/lab-tests.yml
+verbose: Found total 0 errors in 55 ms for .github/workflows/terraform-apply.yml
+verbose: Found total 0 errors in 55 ms for .github/workflows/terraform-plan.yml
+verbose: Found 0 errors in 5 files
+exit=0

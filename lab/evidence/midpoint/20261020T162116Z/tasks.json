@@ -1,0 +1,48 @@
+[
+  {
+    "oid": "c0471e00-0000-4000-8000-000000000501",
+    "name": "Contoso: create campaign and open stage 1",
+    "archetypes": [],
+    "handlerUri": "http://midpoint.evolveum.com/xml/ns/public/certification/task/campaign-creation/handler-3",
+    "work": [],
+    "executionState": "closed",
+    "resultStatus": "success",
+    "lastRunStartTimestamp": "2026-10-20T16:21:20.261Z",
+    "lastRunFinishTimestamp": "2026-10-20T16:21:21.147Z",
+    "completionTimestamp": "2026-10-20T16:21:21.154Z"
+  },
+  {
+    "oid": "c0471e00-0000-4000-8000-000000000502",
+    "name": "Contoso: close review stage 1",
+    "archetypes": [
+      "00000000-0000-0000-0000-000000000537",
+      "00000000-0000-0000-0000-000000000520"
+    ],
+    "handlerUri": null,
+    "work": [
+      "certificationCloseCurrentStage"
+    ],
+    "executionState": "closed",
+    "resultStatus": "success",
+    "lastRunStartTimestamp": "2026-10-20T16:21:23.613Z",
+    "lastRunFinishTimestamp": "2026-10-20T16:21:23.820Z",
+    "completionTimestamp": "2026-10-20T16:21:23.830Z"
+  },
+  {
+    "oid": "c0471e00-0000-4000-8000-000000000503",
+    "name": "Contoso: remediation (revoke) and close",
+    "archetypes": [
+      "00000000-0000-0000-0000-000000000535",
+      "00000000-0000-0000-0000-000000000520"
+    ],
+    "handlerUri": null,
+    "work": [
+      "certificationRemediation"
+    ],
+    "executionState": "closed",
+    "resultStatus": "success",
+    "lastRunStartTimestamp": "2026-10-20T16:21:25.913Z",
+    "lastRunFinishTimestamp": "2026-10-20T16:21:26.313Z",
+    "completionTimestamp": "2026-10-20T16:21:26.333Z"
+  }
+]

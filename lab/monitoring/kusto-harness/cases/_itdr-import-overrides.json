@@ -1,0 +1,4 @@
+{
+  "about": "Per-row annotations for rows imported from lab/scripts/monitoring/tests/fixtures/itdr-cases.json (that file is read only here; another suite owns it). Matched by rule + exact label; an override whose row no longer exists is reported by 'harness.py check' as stale, never applied elsewhere. xfail = the row asserts the behaviour the rule's header promises, and the engine is expected to disagree until a CODE NEEDED change in README.md lands: XFAIL keeps the run green, XPASS fails it (remove the marker). Empty since CODE-NEEDED-2 (app-credential-added: tostring() instead of 'to typeof(string)') was applied.",
+  "overrides": []
+}

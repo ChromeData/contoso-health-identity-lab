@@ -1,0 +1,49 @@
+{
+  "schema": "contoso-pam/e2e-rdp-recording/v1",
+  "target": "rdp-target: a LINUX xrdp stand-in for an RDP session to DC01 (Samba AD has no RDP); not Windows",
+  "connection": "RDP-TARGET (Linux xrdp stand-in for DC01) - tier0-admin-01 (recorded)",
+  "operator": "ops-alice",
+  "account": "tier0-admin-01",
+  "ticket": "CHG0040050",
+  "approvers": [
+    "ops-carol",
+    "ops-dana"
+  ],
+  "logon": "the Vault-injected AD password, verified by Kerberos against the Samba AD DC",
+  "guacamole_history_id": "25",
+  "recording": {
+    "bytes": 47043,
+    "draw_ops_on_screen": 44,
+    "duration_ms": 13612,
+    "frames": 30,
+    "images": {
+      "jpeg": 3,
+      "png": 37
+    },
+    "images_on_screen": 35,
+    "instructions": 246,
+    "largest_image": "512x64",
+    "layer0_size": "1024x768",
+    "opcodes": {
+      "blob": 42,
+      "cfill": 22,
+      "copy": 35,
+      "cursor": 2,
+      "dispose": 6,
+      "end": 40,
+      "img": 40,
+      "mouse": 1,
+      "rect": 21,
+      "size": 7,
+      "sync": 30
+    },
+    "open_streams_at_end": 0,
+    "screen_painted_pct": 100.0,
+    "sha256": "cef7f3e4bbfef27e3160335f434a6864813f4ceed083d1f7a78688ba3dfaf431"
+  },
+  "played_back_by": [
+    "test/guac_recording.py (guacamole-recording format check)",
+    "Guacamole History API served the same bytes (sha256) to its player"
+  ],
+  "not_done": "no video encode: guacenc is not in the guacamole/guacd:1.6.0 image and Debian trixie does not package it"
+}

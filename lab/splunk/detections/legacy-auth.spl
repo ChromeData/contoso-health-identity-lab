@@ -1,0 +1,75 @@
+index=entra (sourcetype="azure:loganalytics:signinlogs" OR sourcetype="azure:loganalytics:aadnoninteractiveusersigninlogs") earliest=-24h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Legacy authentication usage                                ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM        ```
+``` KQL twin:        lab/kql/legacy-auth.kql (same logic/window/columns)          ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: runs on the Splunk Enterprise 60-day TRIAL (replaces production   ```
+``` Splunk) over Entra logs REPLAYED from Log Analytics by                      ```
+``` lab/splunk/ingest-from-loganalytics.sh (replaces the Splunk Add-on for      ```
+``` Microsoft Azure / Event Hub streaming). Base search is line 1 on purpose:   ```
+``` a comment before the first command breaks a Splunk search.                  ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   Sign-ins over legacy / basic-auth protocols (POP, IMAP, SMTP AUTH, MAPI,  ```
+```   EWS, ActiveSync, Outlook Anywhere, Outlook Service, Reporting Web         ```
+```   Services, Other clients), interactive or non-interactive, that cannot do  ```
+```   MFA. Hourly buckets over 24 h; StillSucceeding=true means CA003 is not    ```
+```   holding for someone - that is where to look first. Rows from CA-blocked   ```
+```   attempts are expected (logged as failures).                               ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   union SigninLogs, AADNonInteractive...  -> two sourcetypes OR-ed in the   ```
+```                                              base search                    ```
+```   where TimeGenerated > ago(24h)          -> earliest=-24h latest=now       ```
+```   ClientAppUsed in~ (LegacyClients)       -> search ClientAppUsed IN (...)  ```
+```                                              (search-command value matching ```
+```                                              is case-insensitive, like in~) ```
+```   summarize ... by bin(TimeGenerated, 1h) -> bin _time span=1h | stats BY _time ```
+```   countif(ResultType == 0 as string)      -> sum(eval(if(ResultType=="0",1,0))) ```
+```   make_set(x, N)                          -> values(x) + mvindex(x, 0, N-1) ```
+```   extend StillSucceeding = Successes > 0  -> eval true/false string         ```
+```   sort by TimeGenerated desc              -> sort 0 - _time                 ```
+``` Output columns follow the KQL summarize order: TimeGenerated (the bin),     ```
+``` Attempts, Successes, Users, IPs, Clients, Apps, StillSucceeding.            ```
+``` verify: ClientAppUsed labels against your tenant - Microsoft relabels them. ```
+```                                                                            ```
+``` SCHEDULE: mirrors the deployed Sentinel rule (lab/terraform/modules/        ```
+``` monitoring): frequency PT1H, lookback P1D, severity Low, trigger > 0 rows,  ```
+``` digest mode (no per-entity columns), throttled 23 h after firing (lookback ```
+``` minus one run) so one hit alerts once. The KQL header                       ```
+``` suggests alerting hardest on Successes > 0 - the StillSucceeding column is  ```
+``` there for that triage; the trigger itself matches the deployed rule.       ```
+``` ========================================================================== ```
+``` @stanza Contoso - Legacy authentication attempts ```
+``` @conf description = Sign-ins over legacy protocols that cannot do MFA. CA003-blocked attempts still alert (logged as failures); StillSucceeding = true means CA003 is not holding. KQL twin: lab/kql/legacy-auth.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = 5 * * * * ```
+``` @conf dispatch.earliest_time = -24h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 3 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 1 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.period = 23h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| search ClientAppUsed IN ("Exchange ActiveSync", "IMAP4", "IMAP", "POP3", "POP", "SMTP", "Authenticated SMTP", "MAPI", "MAPI Over HTTP", "Exchange Web Services", "Exchange Online PowerShell", "Outlook Anywhere (RPC over HTTP)", "Outlook Service", "AutoDiscover", "Offline Address Book", "Reporting Web Services", "Other clients")
+| bin _time span=1h
+| stats count AS Attempts,
+    sum(eval(if(ResultType=="0", 1, 0))) AS Successes,
+    values(UserPrincipalName) AS Users,
+    values(IPAddress) AS IPs,
+    values(ClientAppUsed) AS Clients,
+    values(AppDisplayName) AS Apps
+    BY _time
+| eval Users=mvindex(Users, 0, 49), IPs=mvindex(IPs, 0, 49), Clients=mvindex(Clients, 0, 19), Apps=mvindex(Apps, 0, 19)
+| eval StillSucceeding=if(Successes > 0, "true", "false")
+| eval TimeGenerated=strftime(_time, "%Y-%m-%dT%H:%M:%S%z")
+| sort 0 - _time
+| table TimeGenerated, Attempts, Successes, Users, IPs, Clients, Apps, StillSucceeding

@@ -1,0 +1,80 @@
+index=entra sourcetype="azure:loganalytics:signinlogs" earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Sign-in from a blocked / high-risk country                  ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM        ```
+``` KQL twin:        lab/kql/blocked-country-signin.kql (same logic/window/columns) ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: runs on the Splunk Enterprise 60-day TRIAL (replaces production   ```
+``` Splunk) over Entra logs REPLAYED from Log Analytics by                      ```
+``` lab/splunk/ingest-from-loganalytics.sh (replaces the Splunk Add-on for      ```
+``` Microsoft Azure / Event Hub streaming). Base search is line 1 on purpose:   ```
+``` a comment before the first command breaks a Splunk search.                  ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   Any sign-in whose geo-IP country is on the BLOCK list (KP, IR, SY, CU -    ```
+```   must match blocked_countries in lab/terraform/envs/dev/lab.tfvars) or the ```
+```   SOC WATCH list (RU, CN), and whether Conditional Access actually blocked  ```
+```   it. CA runs only AFTER the first factor, so wrong-password rows (CA       ```
+```   status notApplied) are spray noise, not a CA gap. The hit to investigate  ```
+```   is Outcome = SUCCEEDED - CA gap: a successful sign-in from a BLOCK-list   ```
+```   country (policy gap, excluded app, report-only mode).                     ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   where TimeGenerated > ago(1h)          -> earliest=-1h latest=now         ```
+```   coalesce(tostring(LocationDetails.countryOrRegion), Location)            ```
+```                                          -> spath + eval if(non-empty, ., Location) ```
+```                                             (KQL coalesce skips empty strings) ```
+```   Country in~ (BlockList) or in~ (WatchList)                               ```
+```                                          -> where in(upper(Country), ...)   ```
+```                                             (in~ is case-insensitive)      ```
+```   iff(Country in~ (BlockList), ...)      -> eval if(in(upper(Country), ...)) ```
+```   mv-apply CAP ... where result=failure  ```
+```     | summarize make_set(displayName)   -> spath path=ConditionalAccessPolicies{} ```
+```                                             + mvfilter(result=failure)     ```
+```                                             + mvdedup(mvmap(displayName))  ```
+```                                             Rows with no blocking policy are ```
+```                                             KEPT (BlockingPolicies empty),  ```
+```                                             same as the KQL inner summarize. ```
+```                                             mvfilter/mvmap are documented; ```
+```                                             verify: eval spath() on each   ```
+```                                             array element (its JSON text).  ```
+```   Blocked = ConditionalAccessStatus == failure -> eval true/false string    ```
+```   case(..., default)                     -> case(..., true(), default)      ```
+```   ResultType == 0 (string compare)       -> ResultType==0 as in legacy-auth ```
+```   project ... | sort by TimeGenerated desc -> sort 0 - _time | table ...    ```
+```                                                                            ```
+``` SCHEDULE: mirrors the Sentinel rule (lab/terraform/modules/monitoring):     ```
+``` PT5M / PT1H, severity Medium, trigger > 0 rows, 1 h grouping by Account +   ```
+``` IP. Keep the country list in lockstep with the KQL file and the CA named    ```
+``` location - drift between the three is a silent gap.                         ```
+``` ========================================================================== ```
+``` @stanza Contoso - Sign-in from a blocked or watched country ```
+``` @conf description = Sign-in from a country on the block or watch list; Outcome separates CA blocks, wrong-password noise and the real gap (a successful sign-in from a block-list country). KQL twin: lab/kql/blocked-country-signin.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 4 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = UserPrincipalName,IPAddress ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| spath path=LocationDetails.countryOrRegion output=GeoCountry
+| eval Country=if(isnotnull(GeoCountry) AND GeoCountry!="", GeoCountry, Location)
+| where in(upper(Country), "KP", "IR", "RU", "CN", "SY", "CU")
+| spath path=ConditionalAccessPolicies{} output=CAP
+| eval BlockingCAP=mvfilter(spath(CAP, "result")=="failure")
+| eval BlockingPolicies=mvdedup(mvmap(BlockingCAP, spath(BlockingCAP, "displayName")))
+| eval ListType=if(in(upper(Country), "KP", "IR", "SY", "CU"), "block", "watch")
+| eval Blocked=if(ConditionalAccessStatus=="failure", "true", "false")
+| eval Outcome=case(Blocked=="true", "Blocked by CA", ResultType=="0" AND ListType=="block", "SUCCEEDED - CA gap", ResultType=="0", "Succeeded - watch list", in(ResultType, "50126", "50034", "50053", "50056", "50057"), "Failed first factor - CA not reached", true(), "Other failure - review (password may be valid)")
+| sort 0 - _time
+| table TimeGenerated, UserPrincipalName, UserDisplayName, Country, ListType, IPAddress, AppDisplayName, Outcome, Blocked, ConditionalAccessStatus, BlockingPolicies, ResultType, ResultDescription, RiskLevelDuringSignIn

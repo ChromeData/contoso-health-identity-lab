@@ -1,0 +1,96 @@
+{
+  "rule": "pim-activation",
+  "about": "PIM activation completed (PIM for Groups and PIM for roles). Activity strings: Learn 'Microsoft Entra audit log activity reference', PIM section (GroupManagement 'Add member to role completed (PIM activation)', '... requested (PIM activation)').",
+  "defaults": {
+    "AuditLogs": {
+      "LoggedByService": "PIM",
+      "Result": "success",
+      "CorrelationId": "11111111-1111-1111-1111-111111111111",
+      "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.10"}},
+      "AdditionalDetails": [{"key": "Justification", "value": "CHG0031001 onboarding batch"}]
+    }
+  },
+  "cases": [
+    {
+      "id": "pim-for-groups-activation",
+      "kind": "positive",
+      "label": "Dana activates membership of Privileged-IAM-Admins (PIM for Groups)",
+      "tables": {"AuditLogs": [{
+        "Category": "GroupManagement",
+        "OperationName": "Add member to role completed (PIM activation)",
+        "ActivityDisplayName": "Add member to role completed (PIM activation)",
+        "TargetResources": [
+          {"id": "33333333-3333-3333-3333-333333333333", "displayName": "Privileged-IAM-Admins", "type": "Group"},
+          {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Dana Okafor", "type": "User", "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"}
+        ]
+      }]},
+      "expect": [{"ElevationType": "PIM for Groups", "ElevatedTo": "Privileged-IAM-Admins", "HighValue": true,
+                  "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com", "ActorIp": "203.0.113.10", "Result": "success"}]
+    },
+    {
+      "id": "pim-for-roles-activation",
+      "kind": "positive",
+      "label": "A directory role (Security Administrator) activated directly",
+      "tables": {"AuditLogs": [{
+        "Category": "RoleManagement",
+        "OperationName": "Add member to role completed (PIM activation)",
+        "ActivityDisplayName": "Add member to role completed (PIM activation)",
+        "TargetResources": [
+          {"id": "194ae4cb-b126-40b2-bd5b-6091b380977d", "displayName": "Security Administrator", "type": "Role"},
+          {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Dana Okafor", "type": "User", "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"}
+        ]
+      }]},
+      "expect": [{"ElevationType": "PIM for roles", "ElevatedTo": "Security Administrator", "HighValue": true}]
+    },
+    {
+      "id": "low-value-role-still-reported",
+      "kind": "positive",
+      "label": "An activation of a role outside the high-value list is still a row, HighValue false",
+      "tables": {"AuditLogs": [{
+        "Category": "RoleManagement",
+        "OperationName": "Add member to role completed (PIM activation)",
+        "ActivityDisplayName": "Add member to role completed (PIM activation)",
+        "TargetResources": [
+          {"id": "4a5d8f65-41da-4de4-8968-e035b65339cf", "displayName": "Reports Reader", "type": "Role"},
+          {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Dana Okafor", "type": "User", "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"}
+        ]
+      }]},
+      "expect": [{"ElevatedTo": "Reports Reader", "HighValue": false}]
+    },
+    {
+      "id": "request-is-not-the-grant",
+      "kind": "negative",
+      "label": "The activation REQUEST (not completed) is not alerted",
+      "tables": {"AuditLogs": [{
+        "Category": "GroupManagement",
+        "OperationName": "Add member to role requested (PIM activation)",
+        "ActivityDisplayName": "Add member to role requested (PIM activation)",
+        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "Privileged-IAM-Admins", "type": "Group"}]
+      }]}
+    },
+    {
+      "id": "core-directory-group-add",
+      "kind": "negative",
+      "label": "A Core Directory 'Add member to group' is not a PIM activation",
+      "tables": {"AuditLogs": [{
+        "Category": "GroupManagement",
+        "LoggedByService": "Core Directory",
+        "OperationName": "Add member to group",
+        "ActivityDisplayName": "Add member to group",
+        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "Privileged-IAM-Admins", "type": "Group"}]
+      }]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A completed activation 2 h ago is outside the 1 h look-back",
+      "tables": {"AuditLogs": [{
+        "TimeGenerated": "ago:2h",
+        "Category": "GroupManagement",
+        "OperationName": "Add member to role completed (PIM activation)",
+        "ActivityDisplayName": "Add member to role completed (PIM activation)",
+        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "Privileged-IAM-Admins", "type": "Group"}]
+      }]}
+    }
+  ]
+}

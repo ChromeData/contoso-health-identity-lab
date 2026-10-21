@@ -1,0 +1,142 @@
+{
+  "schema": "contoso-pam/scale/v1",
+  "run_utc": "20261020T193913Z",
+  "tenant": "none: local Docker only (Vault + Samba AD DC corp.test.local, synthetic accounts)",
+  "result": "PASS",
+  "checks": {
+    "pass": 79,
+    "fail": 0
+  },
+  "software": {
+    "vault": "2.1.1",
+    "samba": "Version 4.22.11-Debian-4.22.11+dfsg-0+deb13u1",
+    "pipeline": "lab/pam discover.sh, onboard.sh, rotate.sh, reconcile.sh, lib.sh"
+  },
+  "host": {
+    "ncpu": 4,
+    "mem_gib": 7.7,
+    "os": "linux/aarch64",
+    "docker": "29.5.2"
+  },
+  "population": {
+    "bulk_accounts": 500,
+    "staff_accounts_not_privileged": 250,
+    "base_layout_accounts": 15,
+    "seed": 20261020,
+    "mix": {
+      "svc_spn": 180,
+      "svc_batch": 60,
+      "svc_tier1": 10,
+      "t1_admin": 80,
+      "t1_nested": 20,
+      "t0_admin": 20,
+      "t0_nested": 10,
+      "stale_priv": 40,
+      "never_priv": 25,
+      "orphan_admincount": 30,
+      "disabled_priv": 15,
+      "kerberoast_t0": 10
+    },
+    "dependency_records": {
+      "clear": 257,
+      "n/a": 120,
+      "unknown": 44,
+      "unresolved": 79
+    }
+  },
+  "discovery": {
+    "discovered": 515,
+    "bulk_discovered": 500,
+    "staff_discovered": 0
+  },
+  "onboarding": {
+    "bulk_vaulted": 257,
+    "bulk_vaulted_static_roles": 145,
+    "bulk_vaulted_library_members": 112,
+    "bulk_held_dependencies": 123,
+    "bulk_exceptions_skipped": 120,
+    "expected_from_seed": {
+      "in_scope": 257,
+      "held": 123,
+      "exceptions": 120
+    }
+  },
+  "dependency_check": {
+    "eligible_checked": 387,
+    "clear": 253,
+    "blocked": 90,
+    "unknown_no_record": 44,
+    "vaulted_blocked_by_rescan": 10
+  },
+  "rotation": {
+    "sampled": 25,
+    "rotated": 25,
+    "blocked_attempted": 10,
+    "refused": 10
+  },
+  "reconcile": {
+    "rows": 515,
+    "by_status": {
+      "VAULTED": 263,
+      "EXCEPTION": 128,
+      "HELD": 124,
+      "GAP": 0,
+      "ORPHAN": 0
+    },
+    "gap": 0,
+    "orphan": 0
+  },
+  "stages": [
+    {
+      "stage": "seed",
+      "seconds": 23.257,
+      "accounts": 750,
+      "what": "500 PAM-relevant accounts + 250 staff users written to the running DC's directory (sam.ldb: user + group adds, attribute writes)",
+      "accounts_per_second": 32.2
+    },
+    {
+      "stage": "discovery",
+      "seconds": 1.987,
+      "accounts": 515,
+      "what": "candidates classified (privileged-group members incl. nested, SPN, adminCount, PAM OUs)",
+      "accounts_per_second": 259.2
+    },
+    {
+      "stage": "onboarding",
+      "seconds": 64.13,
+      "accounts": 515,
+      "what": "every candidate planned; 257 bulk accounts vaulted (static role created + rotated, or added to a library set + new password), 123 held on dependencies, 120 exceptions skipped",
+      "accounts_per_second": 8
+    },
+    {
+      "stage": "rerun",
+      "seconds": 25.236,
+      "accounts": 515,
+      "what": "every candidate re-planned against Vault; nothing new to vault",
+      "accounts_per_second": 20.4
+    },
+    {
+      "stage": "dependency check",
+      "seconds": 7.901,
+      "accounts": 387,
+      "what": "every eligible candidate through dep_gate against the re-scanned map",
+      "accounts_per_second": 49
+    },
+    {
+      "stage": "rotation",
+      "seconds": 17.439,
+      "accounts": 35,
+      "what": "25 of 25 rotated through rotate.sh (gate + Vault rotate-role + LDAPS password reset); 10 of 10 refused by the dependency gate",
+      "accounts_per_second": 2
+    },
+    {
+      "stage": "reconcile",
+      "seconds": 47.834,
+      "accounts": 515,
+      "what": "every discovered account joined with Vault's inventory and the dependency map",
+      "accounts_per_second": 10.8
+    }
+  ],
+  "pipeline_seconds": 139.291,
+  "note": "seconds are wall-clock on the host above; the pipeline is one process per step (bash + jq + curl), no parallelism"
+}

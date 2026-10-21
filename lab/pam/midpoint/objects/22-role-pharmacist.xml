@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Requestable (ADR 0012 T2), and one half of the lab's SoD pair
+     Nurse <-> Pharmacy (lab/docs/standards/iam-standard.md section 4,
+     sod_incompatible_pairs). Detective, not preventive: the rule RECORDS the
+     violation (built-in "Exclusion violation" mark) instead of blocking it,
+     so an existing conflict is found and put in front of a reviewer. Pattern:
+     docs.evolveum.com/midpoint/reference/support-4.10/roles-policies/segregation-of-duties/ -->
+<role xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000203">
+    <name>Pharmacist</name>
+    <displayName>Pharmacy - Controlled Substances Apps</displayName>
+    <description>Requestable controlled-substances dispensing access (ADR 0012 T2). Incompatible with Nurse (SoD). Mirrors the Entra access package "Pharmacy - Controlled Substances Apps". Managed by run-campaign.sh.</description>
+    <assignment>
+        <targetRef oid="00000000-0000-0000-0000-000000000321" type="ArchetypeType"/>
+    </assignment>
+    <assignment>
+        <policyRule>
+            <name>sod-nurse-pharmacist</name>
+            <description>Administer (Nurse) vs dispense controlled substances (Pharmacist).</description>
+            <policyConstraints>
+                <exclusion>
+                    <targetRef oid="c0471e00-0000-4000-8000-000000000201" type="RoleType"/>
+                </exclusion>
+            </policyConstraints>
+            <!-- built-in mark "Exclusion violation" -->
+            <markRef oid="00000000-0000-0000-0000-000000000811"/>
+            <policyActions>
+                <record/>
+            </policyActions>
+        </policyRule>
+    </assignment>
+    <requestable>true</requestable>
+</role>

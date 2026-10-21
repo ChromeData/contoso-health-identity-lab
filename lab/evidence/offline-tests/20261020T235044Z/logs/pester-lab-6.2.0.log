@@ -1,0 +1,755 @@
+Pester 6.2.0
+PSScriptAnalyzer: <repo>/lab/scripts/powershell
+
+ScriptName              Line Severity RuleName
+----------              ---- -------- --------
+NhiGovernance.Tests.ps1  450  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  450  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  450  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  451  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  452  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  452  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  452  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  453  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  454  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  454  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  455  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  455  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  456  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  456  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  457  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  457  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  458  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  458  Warning PSReviewUnusedParameter
+NhiGovernance.Tests.ps1  459  Warning PSReviewUnusedParameter
+
+PSScriptAnalyzer: 0 error(s), 19 warning(s)
+
+Running tests from 32 files.
+[+] <repo>/lab/scripts/powershell/tests/00-Preflight.Tests.ps1 7.83s (145 tests)
+[+] <repo>/lab/scripts/powershell/tests/01-Verify-Baseline.Tests.ps1 8.71s (22 tests)
+What if: Performing the operation "set usageLocation US" on target "dana.okafor@contoso.test".
+What if: Performing the operation "assign license SPE_E5" on target "dana.okafor@contoso.test".
+[+] <repo>/lab/scripts/powershell/tests/02-Joiner.Tests.ps1 4.83s (13 tests)
+What if: Performing the operation "set department='ICU'" on target "marcus.bello@contoso.test".
+[+] <repo>/lab/scripts/powershell/tests/03-Mover.Tests.ps1 582ms (11 tests)
+What if: Performing the operation "disable account" on target "dana.okafor@contoso.test".
+What if: Performing the operation "revoke all sign-in sessions / refresh tokens" on target "dana.okafor@contoso.test".
+What if: Performing the operation "adminRemove 'Nurse - Clinical Apps'" on target "dana.okafor@contoso.test".
+What if: Performing the operation "remove dana.okafor@contoso.test" on target "group 'App-ServiceNow-Users'".
+What if: Performing the operation "remove assignment for dana.okafor@contoso.test" on target "app 'Legacy Rostering'".
+[+] <repo>/lab/scripts/powershell/tests/04-Leaver.Tests.ps1 2.83s (11 tests)
+WARNING: Data source 'secretsRegister' FAILED: not found: <tmp>/Pester_ozrb/nope.json -- related columns are UNKNOWN, not clean.
+[+] <repo>/lab/scripts/powershell/tests/06-NHI-Inventory.Tests.ps1 809ms (14 tests)
+What if: Performing the operation "issue a 480-minute one-time Temporary Access Pass" on target "marcus.bello@contoso.test".
+What if: Performing the operation "write per-user CSV + summary JSON" on target "<tmp>/Pester_w5nx/pw8".
+[+] <repo>/lab/scripts/powershell/tests/07-Passwordless-Rollout.Tests.ps1 707ms (20 tests)
+[+] <repo>/lab/scripts/powershell/tests/08-Measure-KPIs.Tests.ps1 889ms (52 tests)
+What if: Performing the operation "write SoD report (json + csv + manifest) and identity detail" on target "<tmp>/Pester_c2ii/run-tmpid-1/public/20261020T235805Z".
+What if: Performing the operation "write SoD report (json + csv + manifest) and identity detail" on target "<tmp>/Pester_c2ii/big/20261020T235805Z".
+What if: Performing the operation "write SoD report (json + csv + manifest) and identity detail" on target "<tmp>/Pester_c2ii/tenant/20261020T235805Z".
+What if: Performing the operation "write SoD report (json + csv + manifest) and identity detail" on target "<tmp>/Pester_c2ii/ror/20261020T235806Z".
+[+] <repo>/lab/scripts/powershell/tests/09-SoD-Report.Tests.ps1 1.38s (35 tests)
+What if: Performing the operation "write review KPI snapshot (+ .sha256) and reviewer detail" on target "<tmp>/Pester_ee3t/wi/reviews-20261020T235806Z.json".
+What if: Performing the operation "write review KPI snapshot (+ .sha256) and reviewer detail" on target "<tmp>/Pester_ee3t/t/reviews-20261020T235806Z.json".
+[+] <repo>/lab/scripts/powershell/tests/10-Review-KPIs.Tests.ps1 445ms (45 tests)
+[+] <repo>/lab/scripts/powershell/tests/Convert-BuildAccountToEligible.Tests.ps1 2.4s (38 tests)
+WARNING:   assessments/20261102T100000Z-before/summary.json is NOT a tenant run (source.kind = non-tenant): listed as not-tenant, not hashed as evidence.
+WARNING:   assessments/20261103T100000Z-before/summary.json is NOT a tenant run (no source.kind recorded (not written by a tenant run of Invoke-BaselineAssessment.ps1)): listed as not-tenant, not hashed as evidence.
+WARNING:   assessments/20261102T100000Z-before/summary.json is NOT a tenant run (source.kind = non-tenant): listed as not-tenant, not hashed as evidence.
+WARNING:   assessments/20261103T100000Z-before/summary.json is NOT a tenant run (no source.kind recorded (not written by a tenant run of Invoke-BaselineAssessment.ps1)): listed as not-tenant, not hashed as evidence.
+[+] <repo>/lab/scripts/powershell/tests/Export-EvidencePack.Tests.ps1 2.57s (4 tests)
+What if: Performing the operation "create the raw run folder" on target "<tmp>/Pester_rrcn/raw/whatif-run-before".
+What if: Performing the operation "copy ScubaGear output into <tmp>/Pester_rrcn/raw/whatif-run-before/scubagear (hash-verified)" on target "<tmp>/Pester_rrcn/M365BaselineConformance_2026_05_04_17_15_48".
+What if: Performing the operation "copy Zero Trust report + results JSON (raw export left out: data minimisation)" on target "<tmp>/Pester_rrcn/raw/whatif-run-before/zero-trust".
+What if: Performing the operation "create the summary folder" on target "<tmp>/Pester_rrcn/public/whatif-run-before".
+What if: Performing the operation "hash raw outputs (manifest.json, SHA256SUMS)" on target "<tmp>/Pester_rrcn/raw/whatif-run-before".
+What if: Performing the operation "write public summary.json + SUMMARY.md" on target "<tmp>/Pester_rrcn/public/whatif-run-before".
+[+] <repo>/lab/scripts/powershell/tests/Invoke-BaselineAssessment.Tests.ps1 1.81s (32 tests)
+[+] <repo>/lab/scripts/powershell/tests/Invoke-BreakGlassDrill.Tests.ps1 695ms (14 tests)
+What if: Performing the operation "POST 1 SCIM bulk batch(es)" on target "https://graph.microsoft.com/v1.0/servicePrincipals/00000000-0000-0000-0000-000000000000/synchronization/jobs/REPLACE_WITH_SYNC_JOB_ID/bulkUpload".
+What if: Performing the operation "POST 1 SCIM bulk batch(es)" on target "https://graph.microsoft.com/v1.0/servicePrincipals/00000000-0000-0000-0000-000000000000/synchronization/jobs/REPLACE_WITH_SYNC_JOB_ID/bulkUpload".
+What if: Performing the operation "POST 1 SCIM bulk batch(es)" on target "https://graph.microsoft.com/v1.0/servicePrincipals/00000000-0000-0000-0000-000000000000/synchronization/jobs/REPLACE_WITH_SYNC_JOB_ID/bulkUpload".
+What if: Performing the operation "POST 1 SCIM bulk batch(es)" on target "https://graph.microsoft.com/v1.0/servicePrincipals/00000000-0000-0000-0000-000000000000/synchronization/jobs/REPLACE_WITH_SYNC_JOB_ID/bulkUpload".
+What if: Performing the operation "POST 1 SCIM bulk batch(es)" on target "https://graph.microsoft.com/v1.0/servicePrincipals/00000000-0000-0000-0000-000000000000/synchronization/jobs/REPLACE_WITH_SYNC_JOB_ID/bulkUpload".
+What if: Performing the operation "POST 1 SCIM bulk batch(es)" on target "https://graph.microsoft.com/v1.0/servicePrincipals/00000000-0000-0000-0000-000000000000/synchronization/jobs/REPLACE_WITH_SYNC_JOB_ID/bulkUpload".
+What if: Performing the operation "POST 1 SCIM bulk batch(es)" on target "https://graph.microsoft.com/v1.0/servicePrincipals/00000000-0000-0000-0000-000000000000/synchronization/jobs/REPLACE_WITH_SYNC_JOB_ID/bulkUpload".
+[+] <repo>/lab/scripts/powershell/tests/Invoke-InboundProvisioning.Tests.ps1 262ms (8 tests)
+[+] <repo>/lab/scripts/powershell/tests/New-AccessReviewDefinitions.Tests.ps1 250ms (17 tests)
+What if: Performing the operation "create cloud-only admin account for Ava Lin (no known password)" on target "adm-ava.lin@contosohealthlab.onmicrosoft.com".
+What if: Performing the operation "create cloud-only admin account for Raj Patel (no known password)" on target "adm-raj.patel@contosohealthlab.onmicrosoft.com".
+What if: Performing the operation "create cloud-only admin account for Mei Tanaka (no known password)" on target "adm-mei.tanaka@contosohealthlab.onmicrosoft.com".
+[+] <repo>/lab/scripts/powershell/tests/New-AdminAccounts.Tests.ps1 336ms (17 tests)
+[+] <repo>/lab/scripts/powershell/tests/New-LifecycleWorkflows.Tests.ps1 131ms (2 tests)
+What if: Performing the operation "POST /directory/administrativeUnits (isMemberManagementRestricted = true, immutable)" on target "RMAU-VIP".
+WARNING:   'RMAU-VIP' does not exist yet (dry run): members are added only once a role is assigned at its scope (the RMAU-scoped responder). None added.
+[+] <repo>/lab/scripts/powershell/tests/New-RestrictedAdminUnit.Tests.ps1 386ms (16 tests)
+
+Kind                     DisplayName                                 EnabledHum
+                                                                       anOwners
+----                     -----------                                 ----------
+AppRegistration          gh-oidc-entra-plan (read-only)                       0
+AppRegistration          gh-oidc-entra-apply (write)                          0
+AppRegistration          midpoint-reader                                      1
+AppRegistration          legacy-report-exporter                               0
+AppRegistration          ci-multi-env-deployer                                2
+AgentBlueprint           Contoso Access Review Assistant (blueprint)          2
+OrphanedServicePrincipal old-hr-connector                                     0
+ThirdPartyApp            PDF Wizard Online                                    0
+AgentIdentity            contoso-access-review-assistant                      0
+AgentIdentity            pilot-scheduling-agent                               0
+ManagedIdentity          uami-idlab-kv-reader                                 0
+ManagedIdentity          uami-agent-runtime                                   0
+ManagedIdentity          DC01                                                 0
+
+  Critical  5
+  High      10
+  Medium    8
+  Low       1
+  Info      0
+
+Owasp      Title                                    Findings CoveredHere
+-----      -----                                    -------- -----------
+NHI1:2025  Improper Offboarding                            9        True
+NHI2:2025  Secret Leakage                                  2        True
+NHI3:2025  Vulnerable Third-Party NHI                      1        True
+NHI4:2025  Insecure Authentication                         1        True
+NHI5:2025  Overprivileged NHI                              5        True
+NHI6:2025  Insecure Cloud Deployment Configurations        1        True
+NHI7:2025  Long-Lived Secrets                              3        True
+NHI8:2025  Environment Isolation                           1        True
+NHI9:2025  NHI Reuse                                       1        True
+NHI10:2025 Human Use of NHI                                0       False
+
+
+Severity DisplayName                 FindingId          OwaspNhi  StandardRule
+-------- -----------                 ---------          --------  ------------
+Critical gh-oidc-entra-apply (write) PERM-TIER0         NHI5:2025 N6
+Critical legacy-report-exporter      OWNER-ALL-DISABLED NHI1:2025 N1, N9
+Critical legacy-report-exporter      PERM-TIER0         NHI5:2025 N6
+Critical old-hr-connector            ROLE-PRIVILEGED    NHI5:2025 N6
+Critical old-hr-connector            SP-WITHOUT-APP     NHI1:2025 N1
+High     ci-multi-env-deployer       FIC-PR-WRITE       NHI6:2025 N3
+High     gh-oidc-entra-apply (write) OWNER-NONE         NHI1:2025 N1
+High     legacy-report-exporter      CRED-LONG-LIVED    NHI7:2025 N5
+High     legacy-report-exporter      CRED-LONG-LIVED    NHI7:2025 N5
+High     legacy-report-exporter      IMPLICIT-GRANT     NHI4:2025 N7
+High     legacy-report-exporter      SECRET-PRESENT     NHI2:2025 N2
+High     legacy-report-exporter      STALE              NHI1:2025 N8
+High     old-hr-connector            STALE              NHI1:2025 N8
+High     PDF Wizard Online           THIRDPARTY-CONSENT NHI3:2025 N6
+High     pilot-scheduling-agent      AGENT-NO-SPONSOR   NHI1:2025 N10
+
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=gh-oidc-entra-plan (read-only); AppId=mock-appid-plan; ObjectId=mock-sp-plan; FindingId=OWNER-NONE; Severity=Medium; OwaspNhi=NHI1:2025; OwaspTitle=Improper Offboarding; StandardRule=N1; Detail=No owners on the app registration or its service principal.; Remediation=Name two human owners (or one owner plus a team group). With no owner after 30 days, disable the identity.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=gh-oidc-entra-apply (write); AppId=mock-appid-apply; ObjectId=mock-sp-apply; FindingId=PERM-TIER0; Severity=Critical; OwaspNhi=NHI5:2025; OwaspTitle=Overprivileged NHI; StandardRule=N6; Detail=Graph application permission(s): EntitlementManagement.ReadWrite.All, Policy.ReadWrite.ConditionalAccess, RoleManagement.ReadWrite.Directory; Remediation=Tier-0 Graph permission: remove it, or record a risk acceptance with compensating controls (exception-process.md).}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=gh-oidc-entra-apply (write); AppId=mock-appid-apply; ObjectId=mock-sp-apply; FindingId=PERM-SENSITIVE; Severity=Medium; OwaspNhi=NHI5:2025; OwaspTitle=Overprivileged NHI; StandardRule=N6; Detail=Graph application permission(s): EntitlementManagement.ReadWrite.All, Group.ReadWrite.All, RoleManagementPolicy.ReadWrite.AzureADGroup, User.ReadWrite.All; Remediation=Broad write or bulk-data permission: justify it in the owner attestation or replace with a narrower one.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=gh-oidc-entra-apply (write); AppId=mock-appid-apply; ObjectId=mock-sp-apply; FindingId=OWNER-NONE; Severity=High; OwaspNhi=NHI1:2025; OwaspTitle=Improper Offboarding; StandardRule=N1; Detail=No owners on the app registration or its service principal.; Remediation=Name two human owners (or one owner plus a team group). With no owner after 30 days, disable the identity.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=midpoint-reader; AppId=mock-appid-midpoint; ObjectId=mock-sp-midpoint; FindingId=OWNER-SINGLE; Severity=Low; OwaspNhi=NHI1:2025; OwaspTitle=Improper Offboarding; StandardRule=N1; Detail=Single owner: lab-operator@contosohealth.io; Remediation=Add a second owner or a team group so one leaver doesn't orphan the identity.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=midpoint-reader; AppId=mock-appid-midpoint; ObjectId=mock-sp-midpoint; FindingId=SECRET-PRESENT; Severity=Medium; OwaspNhi=NHI2:2025; OwaspTitle=Secret Leakage; StandardRule=N2; Detail=secret 'midpoint-connector' on app; Remediation=Replace the client secret with workload identity federation, a managed identity or a Key Vault certificate, then remove it.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=midpoint-reader; AppId=mock-appid-midpoint; ObjectId=mock-sp-midpoint; FindingId=CRED-LONG-LIVED; Severity=Medium; OwaspNhi=NHI7:2025; OwaspTitle=Long-Lived Secrets; StandardRule=N5; Detail=secret 'midpoint-connector' on app lifetime 365 days (max 180).; Remediation=Credential lifetime exceeds the maximum: reissue with a shorter lifetime (Key Vault auto-rotation) or move to federation.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=legacy-report-exporter; AppId=mock-appid-legacy; ObjectId=mock-sp-legacy; FindingId=PERM-TIER0; Severity=Critical; OwaspNhi=NHI5:2025; OwaspTitle=Overprivileged NHI; StandardRule=N6; Detail=Graph application permission(s): Directory.ReadWrite.All; Remediation=Tier-0 Graph permission: remove it, or record a risk acceptance with compensating controls (exception-process.md).}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=legacy-report-exporter; AppId=mock-appid-legacy; ObjectId=mock-sp-legacy; FindingId=OWNER-ALL-DISABLED; Severity=Critical; OwaspNhi=NHI1:2025; OwaspTitle=Improper Offboarding; StandardRule=N1, N9; Detail=Every human owner is disabled: priya.nair@contosohealth.io; Remediation=Every human owner is disabled (a leaver): reassign to the owner's manager, rotate credentials the leaver could see.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=legacy-report-exporter; AppId=mock-appid-legacy; ObjectId=mock-sp-legacy; FindingId=STALE; Severity=High; OwaspNhi=NHI1:2025; OwaspTitle=Improper Offboarding; StandardRule=N8; Detail=Last sign-in 200 days ago (2026-04-03).; Remediation=No sign-in within the stale window: confirm with the owner, then disable; delete after a further 30 days.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=legacy-report-exporter; AppId=mock-appid-legacy; ObjectId=mock-sp-legacy; FindingId=SECRET-PRESENT; Severity=High; OwaspNhi=NHI2:2025; OwaspTitle=Secret Leakage; StandardRule=N2; Detail=secret 'export-job' on app; Remediation=Replace the client secret with workload identity federation, a managed identity or a Key Vault certificate, then remove it.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=legacy-report-exporter; AppId=mock-appid-legacy; ObjectId=mock-sp-legacy; FindingId=CRED-EXPIRED; Severity=Medium; OwaspNhi=NHI1:2025; OwaspTitle=Improper Offboarding; StandardRule=N8; Detail=secret 'export-job' on app expired 2026-10-10.; Remediation=Remove expired credentials; they add noise and hide which credential is live.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=legacy-report-exporter; AppId=mock-appid-legacy; ObjectId=mock-sp-legacy; FindingId=CRED-LONG-LIVED; Severity=High; OwaspNhi=NHI7:2025; OwaspTitle=Long-Lived Secrets; StandardRule=N5; Detail=secret 'export-job' on app lifetime 730 days (max 180).; Remediation=Credential lifetime exceeds the maximum: reissue with a shorter lifetime (Key Vault auto-rotation) or move to federation.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=legacy-report-exporter; AppId=mock-appid-legacy; ObjectId=mock-sp-legacy; FindingId=CRED-LONG-LIVED; Severity=High; OwaspNhi=NHI7:2025; OwaspTitle=Long-Lived Secrets; StandardRule=N5; Detail=certificate 'CN=legacy-report-exporter' on app lifetime 1095 days (max 180).; Remediation=Credential lifetime exceeds the maximum: reissue with a shorter lifetime (Key Vault auto-rotation) or move to federation.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=legacy-report-exporter; AppId=mock-appid-legacy; ObjectId=mock-sp-legacy; FindingId=IMPLICIT-GRANT; Severity=High; OwaspNhi=NHI4:2025; OwaspTitle=Insecure Authentication; StandardRule=N7; Detail=web.implicitGrantSettings.enableAccessTokenIssuance = true; Remediation=Turn off implicit-grant access-token issuance; use auth code + PKCE.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=ci-multi-env-deployer; AppId=mock-appid-ci; ObjectId=mock-sp-ci; FindingId=PERM-SENSITIVE; Severity=Medium; OwaspNhi=NHI5:2025; OwaspTitle=Overprivileged NHI; StandardRule=N6; Detail=Graph application permission(s): Group.ReadWrite.All; Remediation=Broad write or bulk-data permission: justify it in the owner attestation or replace with a narrower one.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=ci-multi-env-deployer; AppId=mock-appid-ci; ObjectId=mock-sp-ci; FindingId=FIC-PR-WRITE; Severity=High; OwaspNhi=NHI6:2025; OwaspTitle=Insecure Cloud Deployment Configurations; StandardRule=N3; Detail=Federated credential 'portal-pr' trusts pull_request for an identity with write rights.; Remediation=A pull_request subject lets any PR mint a token for an identity with write rights: split read (PR) and write (protected environment) identities.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=ci-multi-env-deployer; AppId=mock-appid-ci; ObjectId=mock-sp-ci; FindingId=FIC-MULTI-ENV; Severity=Medium; OwaspNhi=NHI8:2025; OwaspTitle=Environment Isolation; StandardRule=N3; Detail=Trusted from 3 contexts: environment:dev, environment:prod, pull_request; Remediation=One identity federates from several environments (e.g. dev and prod): give each environment its own identity.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AppRegistration; DisplayName=ci-multi-env-deployer; AppId=mock-appid-ci; ObjectId=mock-sp-ci; FindingId=FIC-REUSE; Severity=Medium; OwaspNhi=NHI9:2025; OwaspTitle=NHI Reuse; StandardRule=N3; Detail=Trusted from 2 workloads: github:contoso-health@1001/identity-lab@2002, github:contoso-health@1001/clinical-portal@3003; Remediation=One identity federates from several workloads (repositories, service accounts): one identity per workload.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=OrphanedServicePrincipal; DisplayName=old-hr-connector; AppId=mock-appid-oldhr; ObjectId=mock-sp-oldhr; FindingId=ROLE-PRIVILEGED; Severity=Critical; OwaspNhi=NHI5:2025; OwaspTitle=Overprivileged NHI; StandardRule=N6; Detail=Privileged directory role(s): User Administrator; Remediation=Privileged directory role on a workload: remove it or scope it (administrative unit, narrower role) and record a risk acceptance.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=OrphanedServicePrincipal; DisplayName=old-hr-connector; AppId=mock-appid-oldhr; ObjectId=mock-sp-oldhr; FindingId=SP-WITHOUT-APP; Severity=Critical; OwaspNhi=NHI1:2025; OwaspTitle=Improper Offboarding; StandardRule=N1; Detail=Home-tenant service principal with no app registration (deleted app; the SP, its grants and roles remain).; Remediation=The app registration was deleted but its service principal (and grants) remain: confirm nothing uses it, then delete it.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=OrphanedServicePrincipal; DisplayName=old-hr-connector; AppId=mock-appid-oldhr; ObjectId=mock-sp-oldhr; FindingId=STALE; Severity=High; OwaspNhi=NHI1:2025; OwaspTitle=Improper Offboarding; StandardRule=N8; Detail=Last sign-in 400 days ago (2025-09-15).; Remediation=No sign-in within the stale window: confirm with the owner, then disable; delete after a further 30 days.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=ThirdPartyApp; DisplayName=PDF Wizard Online; AppId=mock-appid-pdf; ObjectId=mock-sp-pdf; FindingId=THIRDPARTY-CONSENT; Severity=High; OwaspNhi=NHI3:2025; OwaspTitle=Vulnerable Third-Party NHI; StandardRule=N6; Detail=Vendor app (UNVERIFIED publisher) holds tenant-wide: Files.ReadWrite.All, Mail.Read; Remediation=Review the vendor app's tenant-wide grants; revoke high-risk scopes or the app, and route future requests through admin consent.}".
+What if: Performing the operation "Retrieve the value for property 'OwaspNhi'" on target "InputObject: @{Source=offline-mock; Kind=AgentIdentity; DisplayName=pilot-scheduling-agent; AppId=mock-appid-agent-pilot; ObjectId=mock-sp-agent-pilot; FindingId=AGENT-NO-SPONSOR; Severity=High; OwaspNhi=NHI1:2025; OwaspTitle=Improper Offboarding; StandardRule=N10; Detail=Agent identity with no sponsor: no human is accountable for what it does.; Remediation=Every agent identity needs an accountable human sponsor: add one or disable the agent.}".
+
+Kind                     DisplayName                                 EnabledHum
+                                                                       anOwners
+----                     -----------                                 ----------
+AppRegistration          gh-oidc-entra-plan (read-only)                       0
+AppRegistration          gh-oidc-entra-apply (write)                          0
+AppRegistration          midpoint-reader                                      1
+AppRegistration          legacy-report-exporter                               0
+AppRegistration          ci-multi-env-deployer                                2
+AgentBlueprint           Contoso Access Review Assistant (blueprint)          2
+OrphanedServicePrincipal old-hr-connector                                     0
+ThirdPartyApp            PDF Wizard Online                                    0
+AgentIdentity            contoso-access-review-assistant                      0
+AgentIdentity            pilot-scheduling-agent                               0
+ManagedIdentity          uami-idlab-kv-reader                                 0
+ManagedIdentity          uami-agent-runtime                                   0
+ManagedIdentity          DC01                                                 0
+
+  Critical  5
+  High      10
+  Medium    8
+  Low       1
+  Info      0
+
+Owasp      Title                                    Findings CoveredHere
+-----      -----                                    -------- -----------
+NHI1:2025  Improper Offboarding                            9        True
+NHI2:2025  Secret Leakage                                  2        True
+NHI3:2025  Vulnerable Third-Party NHI                      1        True
+NHI4:2025  Insecure Authentication                         1        True
+NHI5:2025  Overprivileged NHI                              5        True
+NHI6:2025  Insecure Cloud Deployment Configurations        1        True
+NHI7:2025  Long-Lived Secrets                              3        True
+NHI8:2025  Environment Isolation                           1        True
+NHI9:2025  NHI Reuse                                       1        True
+NHI10:2025 Human Use of NHI                                0       False
+
+
+Severity DisplayName                 FindingId          OwaspNhi  StandardRule
+-------- -----------                 ---------          --------  ------------
+Critical gh-oidc-entra-apply (write) PERM-TIER0         NHI5:2025 N6
+Critical legacy-report-exporter      OWNER-ALL-DISABLED NHI1:2025 N1, N9
+Critical legacy-report-exporter      PERM-TIER0         NHI5:2025 N6
+Critical old-hr-connector            ROLE-PRIVILEGED    NHI5:2025 N6
+Critical old-hr-connector            SP-WITHOUT-APP     NHI1:2025 N1
+High     ci-multi-env-deployer       FIC-PR-WRITE       NHI6:2025 N3
+High     gh-oidc-entra-apply (write) OWNER-NONE         NHI1:2025 N1
+High     legacy-report-exporter      CRED-LONG-LIVED    NHI7:2025 N5
+High     legacy-report-exporter      CRED-LONG-LIVED    NHI7:2025 N5
+High     legacy-report-exporter      IMPLICIT-GRANT     NHI4:2025 N7
+High     legacy-report-exporter      SECRET-PRESENT     NHI2:2025 N2
+High     legacy-report-exporter      STALE              NHI1:2025 N8
+High     old-hr-connector            STALE              NHI1:2025 N8
+High     PDF Wizard Online           THIRDPARTY-CONSENT NHI3:2025 N6
+High     pilot-scheduling-agent      AGENT-NO-SPONSOR   NHI1:2025 N10
+
+What if: Performing the operation "write nhi_inventory.csv, nhi_credentials.csv, nhi_findings.csv, nhi_inventory.json" on target "<tmp>/Pester_ppiv/whatif".
+
+Kind                     DisplayName                                 EnabledHum
+                                                                       anOwners
+----                     -----------                                 ----------
+AppRegistration          gh-oidc-entra-plan (read-only)                       0
+AppRegistration          gh-oidc-entra-apply (write)                          0
+AppRegistration          midpoint-reader                                      1
+AppRegistration          legacy-report-exporter                               0
+AppRegistration          ci-multi-env-deployer                                2
+AgentBlueprint           Contoso Access Review Assistant (blueprint)          2
+OrphanedServicePrincipal old-hr-connector                                     0
+ThirdPartyApp            PDF Wizard Online                                    0
+AgentIdentity            contoso-access-review-assistant                      0
+AgentIdentity            pilot-scheduling-agent                               0
+ManagedIdentity          uami-idlab-kv-reader                                 0
+ManagedIdentity          uami-agent-runtime                                   0
+ManagedIdentity          DC01                                                 0
+
+  Critical  5
+  High      10
+  Medium    8
+  Low       1
+  Info      0
+
+Owasp      Title                                    Findings CoveredHere
+-----      -----                                    -------- -----------
+NHI1:2025  Improper Offboarding                            9        True
+NHI2:2025  Secret Leakage                                  2        True
+NHI3:2025  Vulnerable Third-Party NHI                      1        True
+NHI4:2025  Insecure Authentication                         1        True
+NHI5:2025  Overprivileged NHI                              5        True
+NHI6:2025  Insecure Cloud Deployment Configurations        1        True
+NHI7:2025  Long-Lived Secrets                              3        True
+NHI8:2025  Environment Isolation                           1        True
+NHI9:2025  NHI Reuse                                       1        True
+NHI10:2025 Human Use of NHI                                0       False
+
+
+Severity DisplayName                 FindingId          OwaspNhi  StandardRule
+-------- -----------                 ---------          --------  ------------
+Critical gh-oidc-entra-apply (write) PERM-TIER0         NHI5:2025 N6
+Critical legacy-report-exporter      OWNER-ALL-DISABLED NHI1:2025 N1, N9
+Critical legacy-report-exporter      PERM-TIER0         NHI5:2025 N6
+Critical old-hr-connector            ROLE-PRIVILEGED    NHI5:2025 N6
+Critical old-hr-connector            SP-WITHOUT-APP     NHI1:2025 N1
+High     ci-multi-env-deployer       FIC-PR-WRITE       NHI6:2025 N3
+High     gh-oidc-entra-apply (write) OWNER-NONE         NHI1:2025 N1
+High     legacy-report-exporter      CRED-LONG-LIVED    NHI7:2025 N5
+High     legacy-report-exporter      CRED-LONG-LIVED    NHI7:2025 N5
+High     legacy-report-exporter      IMPLICIT-GRANT     NHI4:2025 N7
+High     legacy-report-exporter      SECRET-PRESENT     NHI2:2025 N2
+High     legacy-report-exporter      STALE              NHI1:2025 N8
+High     old-hr-connector            STALE              NHI1:2025 N8
+High     PDF Wizard Online           THIRDPARTY-CONSENT NHI3:2025 N6
+High     pilot-scheduling-agent      AGENT-NO-SPONSOR   NHI1:2025 N10
+
+
+Kind            DisplayName EnabledHumanOwners SecretCount FederatedCredentialC
+                                                                           ount
+----            ----------- ------------------ ----------- --------------------
+AppRegistration svc-app                      2           0                    0
+
+  Critical  0
+  High      0
+  Medium    0
+  Low       0
+  Info      0
+
+Owasp      Title                                    Findings CoveredHere
+-----      -----                                    -------- -----------
+NHI1:2025  Improper Offboarding                            0        True
+NHI2:2025  Secret Leakage                                  0        True
+NHI3:2025  Vulnerable Third-Party NHI                      0        True
+NHI4:2025  Insecure Authentication                         0        True
+NHI5:2025  Overprivileged NHI                              0        True
+NHI6:2025  Insecure Cloud Deployment Configurations        0        True
+NHI7:2025  Long-Lived Secrets                              0        True
+NHI8:2025  Environment Isolation                           0        True
+NHI9:2025  NHI Reuse                                       0        True
+NHI10:2025 Human Use of NHI                                0       False
+
+
+Severity Status      Principal                     Technique
+-------- ------      ---------                     ---------                   
+Critical accepted:E1 gh-oidc-entra-apply (write)   OwnerOfRoleAssignableGroup  
+Critical open        omar.haddad@contosohealth.io  OwnerOfTierZeroApp          
+Critical accepted:E1 gh-oidc-entra-apply (write)   TierZeroWorkload            
+Critical open        legacy-report-exporter        TierZeroWorkload            
+High     open        daniel.osei@contosohealth.io  AppAdminOverTierZeroApp     
+High     open        daniel.osei@contosohealth.io  EligibleAndPermanent        
+High     open        grace.mwangi@contosohealth.io EligibleAndPermanent        
+High     open        lab-operator@contosohealth.io OwnerOfRoleAssignableGroup  
+High     open        marcus.bello@contosohealth.io OwnerOfRoleAssignableGroup  
+Medium   open        omar.haddad@contosohealth.io  EligibleOwnerOfRoleAssignab…
+
+
+Severity Status      Principal                     Technique
+-------- ------      ---------                     ---------                   
+Critical accepted:E1 gh-oidc-entra-apply (write)   OwnerOfRoleAssignableGroup  
+Critical open        omar.haddad@contosohealth.io  OwnerOfTierZeroApp          
+Critical accepted:E1 gh-oidc-entra-apply (write)   TierZeroWorkload            
+Critical open        legacy-report-exporter        TierZeroWorkload            
+High     open        daniel.osei@contosohealth.io  AppAdminOverTierZeroApp     
+High     open        daniel.osei@contosohealth.io  EligibleAndPermanent        
+High     open        grace.mwangi@contosohealth.io EligibleAndPermanent        
+High     open        lab-operator@contosohealth.io OwnerOfRoleAssignableGroup  
+High     open        marcus.bello@contosohealth.io OwnerOfRoleAssignableGroup  
+Medium   open        omar.haddad@contosohealth.io  EligibleOwnerOfRoleAssignab…
+
+
+Severity Status      Principal                     Technique
+-------- ------      ---------                     ---------                   
+Critical accepted:E1 gh-oidc-entra-apply (write)   OwnerOfRoleAssignableGroup  
+Critical open        omar.haddad@contosohealth.io  OwnerOfTierZeroApp          
+Critical accepted:E1 gh-oidc-entra-apply (write)   TierZeroWorkload            
+Critical open        legacy-report-exporter        TierZeroWorkload            
+High     open        daniel.osei@contosohealth.io  AppAdminOverTierZeroApp     
+High     open        daniel.osei@contosohealth.io  EligibleAndPermanent        
+High     open        grace.mwangi@contosohealth.io EligibleAndPermanent        
+High     open        lab-operator@contosohealth.io OwnerOfRoleAssignableGroup  
+High     open        marcus.bello@contosohealth.io OwnerOfRoleAssignableGroup  
+Medium   open        omar.haddad@contosohealth.io  EligibleOwnerOfRoleAssignab…
+
+
+Severity Status      Principal                     Technique
+-------- ------      ---------                     ---------                   
+Critical accepted:E1 gh-oidc-entra-apply (write)   OwnerOfRoleAssignableGroup  
+Critical accepted:X  omar.haddad@contosohealth.io  OwnerOfTierZeroApp          
+Critical accepted:E1 gh-oidc-entra-apply (write)   TierZeroWorkload            
+Critical accepted:X  legacy-report-exporter        TierZeroWorkload            
+High     accepted:X  daniel.osei@contosohealth.io  AppAdminOverTierZeroApp     
+High     accepted:X  daniel.osei@contosohealth.io  EligibleAndPermanent        
+High     accepted:X  grace.mwangi@contosohealth.io EligibleAndPermanent        
+High     accepted:X  lab-operator@contosohealth.io OwnerOfRoleAssignableGroup  
+High     accepted:X  marcus.bello@contosohealth.io OwnerOfRoleAssignableGroup  
+Medium   accepted:X  omar.haddad@contosohealth.io  EligibleOwnerOfRoleAssignab…
+
+
+Severity Status Principal     Technique                  Target
+-------- ------ ---------     ---------                  ------                
+Critical open   owner@x.io    OwnerOfRoleAssignableGroup Break-Glass-Admins    
+Critical open   appowner@x.io OwnerOfTierZeroApp         tier0-app             
+Critical open   tier0-app     TierZeroWorkload           tier0-app             
+High     open   d@x.io        AppAdminOverTierZeroApp    Application Administr…
+High     open   d@x.io        EligibleAndPermanent       Application Administr…
+
+
+Collection                   Restriction                 State   MaxLifetime Ap
+                                                                             ps
+                                                                             Cr
+                                                                             ea
+                                                                             te
+                                                                             dA
+                                                                             ft
+                                                                             er
+----------                   -----------                 -----   ----------- --
+applicationRestrictions      passwordAddition            enabled             2…
+applicationRestrictions      symmetricKeyAddition        enabled             2…
+applicationRestrictions      customPasswordAddition      enabled             2…
+applicationRestrictions      passwordLifetime            enabled P90D        2…
+applicationRestrictions      symmetricKeyLifetime        enabled P90D        2…
+applicationRestrictions      trustedCertificateAuthority enabled             
+applicationRestrictions      asymmetricKeyLifetime       enabled P180D       2…
+servicePrincipalRestrictions passwordAddition            enabled             2…
+servicePrincipalRestrictions symmetricKeyAddition        enabled             2…
+servicePrincipalRestrictions customPasswordAddition      enabled             2…
+servicePrincipalRestrictions passwordLifetime            enabled P90D        2…
+servicePrincipalRestrictions symmetricKeyLifetime        enabled P90D        2…
+servicePrincipalRestrictions asymmetricKeyLifetime       enabled P180D       2…
+
+
+Collection                   Restriction                 State   MaxLifetime Ap
+                                                                             ps
+                                                                             Cr
+                                                                             ea
+                                                                             te
+                                                                             dA
+                                                                             ft
+                                                                             er
+----------                   -----------                 -----   ----------- --
+applicationRestrictions      passwordAddition            enabled             2…
+applicationRestrictions      symmetricKeyAddition        enabled             2…
+applicationRestrictions      customPasswordAddition      enabled             2…
+applicationRestrictions      passwordLifetime            enabled P90D        2…
+applicationRestrictions      symmetricKeyLifetime        enabled P90D        2…
+applicationRestrictions      trustedCertificateAuthority enabled             
+applicationRestrictions      asymmetricKeyLifetime       enabled P180D       2…
+servicePrincipalRestrictions passwordAddition            enabled             2…
+servicePrincipalRestrictions symmetricKeyAddition        enabled             2…
+servicePrincipalRestrictions customPasswordAddition      enabled             2…
+servicePrincipalRestrictions passwordLifetime            enabled P90D        2…
+servicePrincipalRestrictions symmetricKeyLifetime        enabled P90D        2…
+servicePrincipalRestrictions asymmetricKeyLifetime       enabled P180D       2…
+
+
+Collection                   Restriction                 State   MaxLifetime Ap
+                                                                             ps
+                                                                             Cr
+                                                                             ea
+                                                                             te
+                                                                             dA
+                                                                             ft
+                                                                             er
+----------                   -----------                 -----   ----------- --
+applicationRestrictions      passwordAddition            enabled             2…
+applicationRestrictions      symmetricKeyAddition        enabled             2…
+applicationRestrictions      customPasswordAddition      enabled             2…
+applicationRestrictions      passwordLifetime            enabled P90D        2…
+applicationRestrictions      symmetricKeyLifetime        enabled P90D        2…
+applicationRestrictions      trustedCertificateAuthority enabled             
+applicationRestrictions      asymmetricKeyLifetime       enabled P180D       2…
+servicePrincipalRestrictions passwordAddition            enabled             2…
+servicePrincipalRestrictions symmetricKeyAddition        enabled             2…
+servicePrincipalRestrictions customPasswordAddition      enabled             2…
+servicePrincipalRestrictions passwordLifetime            enabled P90D        2…
+servicePrincipalRestrictions symmetricKeyLifetime        enabled P90D        2…
+servicePrincipalRestrictions asymmetricKeyLifetime       enabled P180D       2…
+
+
+Collection                   Restriction                 State   MaxLifetime Ap
+                                                                             ps
+                                                                             Cr
+                                                                             ea
+                                                                             te
+                                                                             dA
+                                                                             ft
+                                                                             er
+----------                   -----------                 -----   ----------- --
+applicationRestrictions      passwordAddition            enabled             2…
+applicationRestrictions      symmetricKeyAddition        enabled             2…
+applicationRestrictions      customPasswordAddition      enabled             2…
+applicationRestrictions      passwordLifetime            enabled P90D        2…
+applicationRestrictions      symmetricKeyLifetime        enabled P90D        2…
+applicationRestrictions      trustedCertificateAuthority enabled             
+applicationRestrictions      asymmetricKeyLifetime       enabled P180D       2…
+servicePrincipalRestrictions passwordAddition            enabled             2…
+servicePrincipalRestrictions symmetricKeyAddition        enabled             2…
+servicePrincipalRestrictions customPasswordAddition      enabled             2…
+servicePrincipalRestrictions passwordLifetime            enabled P90D        2…
+servicePrincipalRestrictions symmetricKeyLifetime        enabled P90D        2…
+servicePrincipalRestrictions asymmetricKeyLifetime       enabled P180D       2…
+
+What if: Performing the operation "PATCH (applicationRestrictions, servicePrincipalRestrictions, isEnabled)" on target "tenant defaultAppManagementPolicy".
+{
+  "isEnabled": true,
+  "applicationRestrictions": {
+    "identifierUris": {
+      "nonDefaultUriAddition": {
+        "restrictForAppsCreatedAfterDateTime": "2024-01-01T00:00:00Z",
+        "state": "enabled"
+      }
+    },
+    "keyCredentials": [
+      {
+        "certificateBasedApplicationConfigurationIds": [
+          "ca1"
+        ],
+        "restrictionType": "trustedCertificateAuthority",
+        "state": "enabled"
+      },
+      {
+        "restrictionType": "asymmetricKeyLifetime",
+        "state": "enabled",
+        "maxLifetime": "P180D",
+        "restrictForAppsCreatedAfterDateTime": "2026-10-20T23:58:16Z"
+      }
+    ],
+    "passwordCredentials": [
+      {
+        "restrictionType": "passwordAddition",
+        "state": "enabled",
+        "maxLifetime": null,
+        "restrictForAppsCreatedAfterDateTime": "2026-10-20T23:58:16Z"
+      },
+      {
+        "restrictionType": "symmetricKeyAddition",
+        "state": "enabled",
+        "maxLifetime": null,
+        "restrictForAppsCreatedAfterDateTime": "2026-10-20T23:58:16Z"
+      },
+      {
+        "restrictionType": "customPasswordAddition",
+        "state": "enabled",
+        "maxLifetime": null,
+        "restrictForAppsCreatedAfterDateTime": "2015-01-01T00:00:00Z"
+      },
+      {
+        "restrictionType": "passwordLifetime",
+        "state": "enabled",
+        "maxLifetime": "P90D",
+        "restrictForAppsCreatedAfterDateTime": "2015-01-01T00:00:00Z"
+      },
+      {
+        "restrictionType": "symmetricKeyLifetime",
+        "state": "enabled",
+        "maxLifetime": "P90D",
+        "restrictForAppsCreatedAfterDateTime": "2015-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "servicePrincipalRestrictions": {
+    "keyCredentials": [
+      {
+        "restrictionType": "asymmetricKeyLifetime",
+        "state": "enabled",
+        "maxLifetime": "P180D",
+        "restrictForAppsCreatedAfterDateTime": "2026-10-20T23:58:16Z"
+      }
+    ],
+    "passwordCredentials": [
+      {
+        "restrictionType": "passwordAddition",
+        "state": "enabled",
+        "maxLifetime": null,
+        "restrictForAppsCreatedAfterDateTime": "2026-10-20T23:58:16Z"
+      },
+      {
+        "restrictionType": "symmetricKeyAddition",
+        "state": "enabled",
+        "maxLifetime": null,
+        "restrictForAppsCreatedAfterDateTime": "2026-10-20T23:58:16Z"
+      },
+      {
+        "restrictionType": "customPasswordAddition",
+        "state": "enabled",
+        "maxLifetime": null,
+        "restrictForAppsCreatedAfterDateTime": "2015-01-01T00:00:00Z"
+      },
+      {
+        "restrictionType": "passwordLifetime",
+        "state": "enabled",
+        "maxLifetime": "P90D",
+        "restrictForAppsCreatedAfterDateTime": "2015-01-01T00:00:00Z"
+      },
+      {
+        "restrictionType": "symmetricKeyLifetime",
+        "state": "enabled",
+        "maxLifetime": "P90D",
+        "restrictForAppsCreatedAfterDateTime": "2015-01-01T00:00:00Z"
+      }
+    ]
+  }
+}
+
+Setting                 Status    Detail
+-------                 ------    ------
+User consent            updated   ManagePermissionGrantsForOwnedResource.micro…
+Classify openid         unchanged low
+Classify profile        created   low
+Classify email          created   low
+Classify offline_access created   low
+Classify User.Read      created   low
+Admin consent workflow  updated   1 reviewer scope(s), 14 d
+
+
+Setting                 Status    Detail
+-------                 ------    ------
+User consent            updated   ManagePermissionGrantsForOwnedResource.micro…
+Classify openid         unchanged low
+Classify profile        created   low
+Classify email          created   low
+Classify offline_access created   low
+Classify User.Read      created   low
+Admin consent workflow  updated   1 reviewer scope(s), 14 d
+
+
+Setting                 Status    Detail
+-------                 ------    ------
+User consent            updated   ManagePermissionGrantsForOwnedResource.micro…
+Classify openid         unchanged low
+Classify profile        created   low
+Classify email          created   low
+Classify offline_access created   low
+Classify User.Read      created   low
+Admin consent workflow  updated   1 reviewer scope(s), 14 d
+
+
+Setting                    Status  Detail
+-------                    ------  ------
+User consent               updated ManagePermissionGrantsForOwnedResource.micr…
+Low-impact classifications skipped user consent disabled
+Admin consent workflow     updated 1 reviewer scope(s), 14 d
+
+
+Object               Status  Id
+------               ------  --
+blueprint            created bp-app
+blueprint principal  created bp-sp
+federated credential created 11111111-2222-3333-4444-555555555555
+agent identity       created agent-1
+
+
+System                        Action             Status
+------                        ------             ------                        
+Entra ID                      Disable account    disabled-by-hr-sync           
+Entra ID                      Revoke sessions    revoked                       
+Entitlement Mgmt              adminRemove        none-active                   
+Groups                        Remove membership  none                          
+Apps                          Remove assignment  none                          
+NHI:nursing-roster-sync       Hand off ownership reassigned:grace.mwangi@conto…
+NHI:nursing-roster-sync       Rotate credentials FLAGGED-rotate:1              
+NHI:nursing-roster-sync       Hand off ownership reassigned:grace.mwangi@conto…
+OwnedGroup:PIM-Tier1-Helpdesk Owner review       FLAGGED-role-assignable       
+
+
+System                        Action             Status                  Timest
+                                                                         ampUtc
+------                        ------             ------                  ------
+Entra ID                      Disable account    disabled-by-hr-sync     2026-…
+Entra ID                      Revoke sessions    revoked                 2026-…
+Entitlement Mgmt              adminRemove        none-active             2026-…
+Groups                        Remove membership  none                    2026-…
+Apps                          Remove assignment  none                    2026-…
+NHI:nursing-roster-sync       Hand off ownership FAILED                  2026-…
+NHI:nursing-roster-sync       Rotate credentials FLAGGED-rotate:1        2026-…
+NHI:nursing-roster-sync       Hand off ownership FAILED                  2026-…
+OwnedGroup:PIM-Tier1-Helpdesk Owner review       FLAGGED-role-assignable 2026-…
+
+
+System                        Action             Status                  Timest
+                                                                         ampUtc
+------                        ------             ------                  ------
+Entra ID                      Disable account    disabled-by-hr-sync     2026-…
+Entra ID                      Revoke sessions    revoked                 2026-…
+Entitlement Mgmt              adminRemove        none-active             2026-…
+Groups                        Remove membership  none                    2026-…
+Apps                          Remove assignment  none                    2026-…
+NHI:nursing-roster-sync       Hand off ownership FLAGGED-no-new-owner    2026-…
+NHI:nursing-roster-sync       Rotate credentials FLAGGED-rotate:1        2026-…
+NHI:nursing-roster-sync       Hand off ownership FLAGGED-no-new-owner    2026-…
+OwnedGroup:PIM-Tier1-Helpdesk Owner review       FLAGGED-role-assignable 2026-…
+
+
+System                        Action             Status                  Timest
+                                                                         ampUtc
+------                        ------             ------                  ------
+Entra ID                      Disable account    disabled-by-hr-sync     2026-…
+Entra ID                      Revoke sessions    revoked                 2026-…
+Entitlement Mgmt              adminRemove        none-active             2026-…
+Groups                        Remove membership  none                    2026-…
+Apps                          Remove assignment  none                    2026-…
+NHI:nursing-roster-sync       Hand off ownership FLAGGED-review          2026-…
+NHI:nursing-roster-sync       Rotate credentials FLAGGED-rotate:1        2026-…
+NHI:nursing-roster-sync       Hand off ownership FLAGGED-review          2026-…
+OwnedGroup:PIM-Tier1-Helpdesk Owner review       FLAGGED-role-assignable 2026-…
+
+What if: Performing the operation "revoke all sign-in sessions / refresh tokens" on target "dana.okafor@contosohealth.io".
+
+System                        Action             Status                  Timest
+                                                                         ampUtc
+------                        ------             ------                  ------
+Entra ID                      Disable account    disabled-by-hr-sync     2026-…
+Entra ID                      Revoke sessions    whatif                  2026-…
+Entitlement Mgmt              adminRemove        none-active             2026-…
+Groups                        Remove membership  none                    2026-…
+Apps                          Remove assignment  none                    2026-…
+NHI:nursing-roster-sync       Hand off ownership FLAGGED-review          2026-…
+NHI:nursing-roster-sync       Rotate credentials FLAGGED-rotate:1        2026-…
+NHI:nursing-roster-sync       Hand off ownership FLAGGED-review          2026-…
+OwnedGroup:PIM-Tier1-Helpdesk Owner review       FLAGGED-role-assignable 2026-…
+
+[+] <repo>/lab/scripts/powershell/tests/NhiGovernance.Tests.ps1 1.15s (63 tests)
+What if: Performing the operation "POST /identityGovernance/accessReviews/definitions" on target "Privileged access review: PIM-Tier0-CA-Admins".
+What if: Performing the operation "POST /identityGovernance/accessReviews/definitions" on target "Privileged access review: Privileged-IAM-Admins".
+What if: Performing the operation "PATCH state proposed -> configured" on target "connected organization 'Fabrikam Affiliated Clinic' (org-1)".
+What if: Performing the operation "add internal sponsor group g-sponsors" on target "connected organization 'Fabrikam Affiliated Clinic'".
+What if: Performing the operation "PATCH externalUserLifecycleAction=blockSignInAndDelete, delete after P30D" on target "entitlement management settings (TENANT-WIDE)".
+[+] <repo>/lab/scripts/powershell/tests/PostApply.Tests.ps1 1.21s (25 tests)
+What if: Performing the operation "edit rows 100492 (Dana) and 100310 (Marcus) for segment Leaver" on target "<tmp>/Pester_bfya/hr_feed_tmpid-2.csv".
+What if: Performing the operation "edit rows 100492 (Dana) and 100310 (Marcus) for segment Mover" on target "<tmp>/Pester_bfya/hr_feed_tmpid-3.csv".
+What if: Performing the operation "edit rows 100492 (Dana) and 100310 (Marcus) for segment Mover" on target "<tmp>/Pester_bfya/hr_feed_tmpid-4.csv".
+What if: Performing the operation "adminRemove 'Pharmacy - Controlled Substances Apps'" on target "Marcus <marcus.bello@contoso.test>".
+[+] <repo>/lab/scripts/powershell/tests/Reset-DemoState.Tests.ps1 1.19s (18 tests)
+[+] <repo>/lab/scripts/powershell/tests/ScriptAnalyzerScope.Tests.ps1 1.57s (76 tests)
+What if: Performing the operation "apply with Set-IncompatibleAccessPackages.ps1" on target "separation-of-duties links from lab/iga/sod-rules.json".
+What if: Performing the operation "mark incompatible with accessPackage 'Pharmacy - Controlled Substances Apps' [SOD-01]" on target "'ICU - Float Access'".
+What if: Performing the operation "mark incompatible with group 'App-Pharmacy-Dispensing-Users' [SOD-01]" on target "'ICU - Float Access'".
+What if: Performing the operation "mark incompatible with accessPackage 'Nurse - Clinical Apps' [SOD-01]" on target "'Pharmacy - Controlled Substances Apps'".
+What if: Performing the operation "mark incompatible with accessPackage 'ICU - Critical Care Apps' [SOD-01]" on target "'Pharmacy - Controlled Substances Apps'".
+What if: Performing the operation "mark incompatible with accessPackage 'ICU - Float Access' [SOD-01]" on target "'Pharmacy - Controlled Substances Apps'".
+What if: Performing the operation "mark incompatible with group 'All-Nurses' [SOD-01]" on target "'Pharmacy - Controlled Substances Apps'".
+What if: Performing the operation "mark incompatible with group 'All-ICU' [SOD-01]" on target "'Pharmacy - Controlled Substances Apps'".
+[+] <repo>/lab/scripts/powershell/tests/Set-AccessPackageSoD.Tests.ps1 543ms (9 tests)
+What if: Performing the operation "create (PATCH)" on target "authentication context c1".
+What if: Performing the operation "create Conditional Access policy (POST)" on target "CA021 - Require phishing-resistant strength for privileged role activation (auth context c1)".
+What if: Performing the operation "create (PATCH)" on target "authentication context c1".
+What if: Performing the operation "create Conditional Access policy (POST)" on target "CA021 - Require phishing-resistant strength for privileged role activation (auth context c1)".
+[+] <repo>/lab/scripts/powershell/tests/Set-AuthContextPolicies.Tests.ps1 736ms (34 tests)
+What if: Performing the operation "PATCH https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/fido2 (passkeyProfiles, includeTargets)" on target "Passkeys (FIDO2)".
+What if: Performing the operation "PATCH https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/TemporaryAccessPass (state, defaultLength, isUsableOnce, includeTargets, excludeTargets)" on target "Temporary Access Pass".
+What if: Performing the operation "PATCH https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/MicrosoftAuthenticator (isSoftwareOathEnabled, featureSettings, excludeTargets)" on target "Microsoft Authenticator".
+What if: Performing the operation "PATCH https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy (registrationEnforcement)" on target "Registration campaign".
+What if: Performing the operation "PATCH https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/Sms (excludeTargets)" on target "Sms method".
+What if: Performing the operation "PATCH https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/Voice (excludeTargets)" on target "Voice method".
+[+] <repo>/lab/scripts/powershell/tests/Set-AuthenticationMethodsPolicy.Tests.ps1 2.33s (37 tests)
+What if: Performing the operation "create automatic assignment policy: (user.accountEnabled -eq true) -and (user.userType -eq "Member") -and (user.employeeHireDate -le system.now) -and ((user.department -eq "ICU" -and user.jobTitle -in ["Nurse Manager","Registered Nurse"]))" on target "ICU - Critical Care Apps".
+What if: Performing the operation "create automatic assignment policy: (user.accountEnabled -eq true) -and (user.userType -eq "Member") -and (user.employeeHireDate -le system.now) -and ((user.department -eq "Nursing" -and user.jobTitle -in ["Nurse Manager","Registered Nurse"]))" on target "Nurse - Clinical Apps".
+[+] <repo>/lab/scripts/powershell/tests/Set-AutoAssignmentPolicies.Tests.ps1 1.24s (46 tests)
+What if: Performing the operation "PATCH roleManagementPolicies rule" on target "Global Administrator rule Expiration_EndUser_Assignment".
+What if: Performing the operation "PATCH roleManagementPolicies rule" on target "Global Administrator rule Enablement_EndUser_Assignment".
+What if: Performing the operation "PATCH roleManagementPolicies rule" on target "Global Administrator rule Approval_EndUser_Assignment".
+What if: Performing the operation "PATCH roleManagementPolicies rule" on target "Global Administrator rule Expiration_Admin_Eligibility".
+What if: Performing the operation "make eligible for Global Administrator for P180D" on target "adm-ava.lin@contosohealthlab.onmicrosoft.com".
+[+] <repo>/lab/scripts/powershell/tests/Set-DirectoryRolePimPolicies.Tests.ps1 497ms (17 tests)
+What if: Performing the operation "PATCH allowInvitesFrom=adminsAndGuestInviters, guestUserRoleId=2af84b1e-32c8-42b7-82bc-daa82404023b, allowEmailVerifiedUsersToJoinOrganization=False" on target "authorizationPolicy (tenant-wide)".
+What if: Performing the operation "selfServiceSignUp.isEnabled = false" on target "authenticationFlowsPolicy (tenant-wide)".
+{
+  "allowInvitesFrom": "adminsAndGuestInviters",
+  "guestUserRoleId": "2af84b1e-32c8-42b7-82bc-daa82404023b",
+  "allowEmailVerifiedUsersToJoinOrganization": false
+}
+{
+  "selfServiceSignUp": {
+    "isEnabled": false
+  }
+}
+[+] <repo>/lab/scripts/powershell/tests/Set-ExternalCollaboration.Tests.ps1 414ms (18 tests)
+What if: Performing the operation "remove incompatibility with accessPackage 'Pharmacy - Controlled Substances Apps'" on target "'Nurse - Clinical Apps'".
+What if: Performing the operation "mark incompatible with accessPackage 'Pharmacy - Controlled Substances Apps' [SOD-01]" on target "'ICU - Float Access'".
+What if: Performing the operation "mark incompatible with group 'App-Pharmacy-Dispensing-Users' [SOD-01]" on target "'ICU - Float Access'".
+What if: Performing the operation "mark incompatible with accessPackage 'Nurse - Clinical Apps' [SOD-01]" on target "'Pharmacy - Controlled Substances Apps'".
+What if: Performing the operation "mark incompatible with accessPackage 'ICU - Critical Care Apps' [SOD-01]" on target "'Pharmacy - Controlled Substances Apps'".
+What if: Performing the operation "mark incompatible with accessPackage 'ICU - Float Access' [SOD-01]" on target "'Pharmacy - Controlled Substances Apps'".
+What if: Performing the operation "mark incompatible with group 'All-Nurses' [SOD-01]" on target "'Pharmacy - Controlled Substances Apps'".
+What if: Performing the operation "mark incompatible with group 'All-ICU' [SOD-01]" on target "'Pharmacy - Controlled Substances Apps'".
+[+] <repo>/lab/scripts/powershell/tests/Set-IncompatibleAccessPackages.Tests.ps1 944ms (30 tests)
+What if: Performing the operation "make eligible member of pim-tier0-ca-admins for P180D" on target "adm-ava.lin@contosohealthlab.onmicrosoft.com".
+[+] <repo>/lab/scripts/powershell/tests/Set-PimGroupEligibility.Tests.ps1 395ms (17 tests)
+[+] <repo>/lab/scripts/powershell/tests/TokenProtectionAndRestore.Tests.ps1 335ms (11 tests)
+Tests completed in 50.43s
+Tests Passed: 917, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
+All 917 tests passed; 0 analyzer errors.

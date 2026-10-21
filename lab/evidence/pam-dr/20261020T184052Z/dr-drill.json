@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-10-20T18:44:26Z",
+  "rto_seconds": 40.5,
+  "rpo_seconds": 2.2,
+  "target_rto_seconds": 300,
+  "drill_seconds": 44.6,
+  "snapshot": {
+    "file": "dr-20261020T184341Z.snap",
+    "sha256": "a8ad500ffe21774e3393dc77660ed2c4736f30c19b2d1990477e3fb62ce95a97",
+    "bytes": 16121,
+    "seconds": 0.3
+  },
+  "checks": {
+    "marker_restored": "PASS",
+    "policy_restored": "PASS",
+    "post_snapshot_write_lost": "PASS",
+    "rto_within_target": "PASS"
+  },
+  "versions": "vault-1=2.1.1 vault-2=2.1.1 vault-3=2.1.1 "
+}

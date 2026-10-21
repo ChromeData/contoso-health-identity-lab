@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Mock HR 300001 (lab/scripts/mock-hr/hr_feed.csv). Member and manager of the org root, so she reviews the department managers. She has no manager herself, so her own item goes to the fallback reviewer. -->
+<user xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000301">
+    <name>helen.carter</name>
+    <description>Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).</description>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000101" type="OrgType"/>
+    </assignment>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000101" type="OrgType" relation="org:manager"/>
+    </assignment>
+    <assignment>
+        <description>Built-in midPoint role "Reviewer": may record certification decisions.</description>
+        <targetRef oid="00000000-0000-0000-0000-00000000000b" type="RoleType"/>
+    </assignment>
+    <assignment>
+        <description>Requested 2025-02: night-shift escalation cover for the ICU.</description>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000202" type="RoleType"/>
+    </assignment>
+    <activation>
+        <administrativeStatus>enabled</administrativeStatus>
+    </activation>
+    <fullName>Helen Carter</fullName>
+    <givenName>Helen</givenName>
+    <familyName>Carter</familyName>
+    <employeeNumber>300001</employeeNumber>
+    <organizationalUnit>Administration</organizationalUnit>
+    <title>Chief Nursing Officer</title>
+</user>

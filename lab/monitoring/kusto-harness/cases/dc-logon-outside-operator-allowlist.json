@@ -1,0 +1,129 @@
+{
+  "rule": "dc-logon-outside-operator-allowlist",
+  "about": "RDP on DC01 from anywhere, or a network / cleartext logon from a public IP, not covered by an unexpired operator_ips entry. ExpiresOn is the yyyy-mm-dd string Terraform writes (itdr_v2.tf). The three watchlist edge cases run the documented fail-safe ('empty watchlist = every source alerts') against the _GetWatchlist shim variants in shims.kql.",
+  "defaults": {
+    "SecurityEvent": {
+      "Computer": "DC01.corp.test.local", "TargetDomainName": "CORP", "WorkstationName": "OPS-LAPTOP",
+      "TargetUserName": "tier0-admin-01", "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201",
+      "EventID": 4624, "LogonType": 10, "TimeGenerated": "ago:20m"
+    }
+  },
+  "cases": [
+    {
+      "id": "rdp-from-public-ip-not-allowlisted",
+      "kind": "positive",
+      "label": "RDP to DC01 from 203.0.113.50, the allowlist holds only 198.51.100.7/32",
+      "tables": {"SecurityEvent": [{"IpAddress": "203.0.113.50"}]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2099-12-31"}]},
+      "expect": [{"Severity": "High", "Verdict": "DC01 accepted a logon from a public IP outside the operator allowlist",
+                  "Account": "tier0-admin-01", "Tier0Account": true, "SourceIp": "203.0.113.50", "IsPrivate": false,
+                  "AllowlistLoaded": true, "Successes": 1, "Failures": 0, "Host": "DC01"}]
+    },
+    {
+      "id": "allowlist-entry-expired",
+      "kind": "positive",
+      "label": "RDP from the operator IP whose entry expired: every source alerts",
+      "tables": {"SecurityEvent": [{"IpAddress": "198.51.100.7"}]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2020-01-01"}]},
+      "expect": [{"SourceIp": "198.51.100.7", "AllowlistLoaded": false, "Severity": "High",
+                  "Verdict": "DC01 accepted a logon from a public IP outside the operator allowlist (operator_ips watchlist empty or missing: every source alerts)"}]
+    },
+    {
+      "id": "failed-network-logon-public",
+      "kind": "positive",
+      "label": "A failed network logon (4625, type 3) from a public IP: the port is reachable",
+      "tables": {"SecurityEvent": [{"EventID": 4625, "LogonType": 3, "IpAddress": "203.0.113.60",
+                                    "TargetUserName": "Administrator", "TargetUserSid": "S-1-0-0"}]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2099-12-31"}]},
+      "expect": [{"Severity": "Medium", "Verdict": "Failed logons from outside the allowlist - the port is reachable: check the NSG",
+                  "Account": "administrator", "Tier0Account": true, "Failures": 1, "Successes": 0}]
+    },
+    {
+      "id": "rdp-from-inside-vnet",
+      "kind": "positive",
+      "label": "RDP from a private address: no jump host exists, so lateral movement",
+      "tables": {"SecurityEvent": [{"IpAddress": "10.0.1.50"}]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2099-12-31"}]},
+      "expect": [{"IsPrivate": true, "Severity": "High",
+                  "Verdict": "Logon on DC01 from inside the VNet - no jump host exists, treat as lateral movement"}]
+    },
+    {
+      "id": "ipv4-mapped-ipv6-source",
+      "kind": "positive",
+      "label": "Source logged as ::ffff:203.0.113.51 is judged as 203.0.113.51",
+      "tables": {"SecurityEvent": [{"IpAddress": "::ffff:203.0.113.51", "LogonType": 7}]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2099-12-31"}]},
+      "expect": [{"SourceIp": "203.0.113.51", "Kinds": ["RDP reconnect / unlock"]}]
+    },
+    {
+      "id": "ipv6-source-never-allowlisted",
+      "kind": "positive",
+      "label": "An IPv6 RDP source can never match the IPv4 allowlist",
+      "tables": {"SecurityEvent": [{"IpAddress": "2001:db8::10"}]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2099-12-31"}]},
+      "expect": [{"SourceIp": "2001:db8::10", "IsPrivate": false, "Severity": "High"}]
+    },
+    {
+      "id": "watchlist-has-no-rows",
+      "kind": "positive",
+      "label": "The watchlist exists but the store is empty (shim default): RDP from the operator IP alerts, AllowlistLoaded false",
+      "tables": {"SecurityEvent": [{"IpAddress": "198.51.100.7"}]},
+      "expect": [{"SourceIp": "198.51.100.7", "AllowlistLoaded": false}]
+    },
+    {
+      "id": "watchlist-no-items-base-columns",
+      "kind": "positive",
+      "label": "Fail-safe with Sentinel's no-items shape (base columns only, no ExpiresOn): the isfuzzy leg must drop, not fail the query",
+      "shimVariant": {"_GetWatchlist": "no-items-base-columns"},
+      "tables": {"SecurityEvent": [{"IpAddress": "198.51.100.7"}]},
+      "expect": [{"SourceIp": "198.51.100.7", "AllowlistLoaded": false}]
+    },
+    {
+      "id": "watchlist-function-absent",
+      "kind": "positive",
+      "label": "Fail-safe with no _GetWatchlist at all (workspace without Sentinel): every source alerts",
+      "shimVariant": {"_GetWatchlist": "absent"},
+      "tables": {"SecurityEvent": [{"IpAddress": "198.51.100.7"}]},
+      "expect": [{"SourceIp": "198.51.100.7", "AllowlistLoaded": false}]
+    },
+    {
+      "id": "allowlisted-operator-rdp",
+      "kind": "negative",
+      "label": "RDP from the allowlisted operator IP with an unexpired entry",
+      "tables": {"SecurityEvent": [{"IpAddress": "198.51.100.7"}]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2099-12-31"}]}
+    },
+    {
+      "id": "private-network-logon",
+      "kind": "negative",
+      "label": "A network logon (type 3) from a domain member inside the VNet",
+      "tables": {"SecurityEvent": [{"LogonType": 3, "IpAddress": "10.0.1.20", "TargetUserName": "svc-backup"}]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2099-12-31"}]}
+    },
+    {
+      "id": "machine-account-and-excluded-sources",
+      "kind": "negative",
+      "label": "A machine account from a public IP, a loopback RDP, a console logon with no source",
+      "tables": {"SecurityEvent": [
+        {"LogonType": 3, "IpAddress": "203.0.113.70", "TargetUserName": "WS01$"},
+        {"IpAddress": "127.0.0.1"},
+        {"LogonType": 2, "IpAddress": "-"}
+      ]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2099-12-31"}]}
+    },
+    {
+      "id": "member-server-not-dc",
+      "kind": "negative",
+      "label": "RDP to a member server (FILE01) from a public IP is not this rule",
+      "tables": {"SecurityEvent": [{"Computer": "FILE01.corp.test.local", "IpAddress": "203.0.113.50"}]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2099-12-31"}]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "Public-IP RDP 2 h ago",
+      "tables": {"SecurityEvent": [{"IpAddress": "203.0.113.50", "TimeGenerated": "ago:2h"}]},
+      "watchlists": {"operator_ips": [{"SearchKey": "198.51.100.7/32", "IpRange": "198.51.100.7/32", "Owner": "pam-operators", "ExpiresOn": "2099-12-31"}]}
+    }
+  ]
+}

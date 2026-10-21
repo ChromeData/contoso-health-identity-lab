@@ -1,0 +1,76 @@
+// =============================================================================
+// Detection: Break-glass (emergency access) account sign-in — ANY sign-in
+// Lab:       Contoso Health Identity Platform
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   ANY authentication — success OR failure, interactive OR non-interactive —
+//   by either emergency-access account (bg-admin-01 / bg-admin-02). These
+//   accounts hold standing Global Administrator, are cloud-only, sign in with
+//   FIDO2 keys (a human step: lab/terraform/README.md, human step 6), and
+//   are *excluded* from all Conditional Access and from PIM. They should be
+//   used only when normal admin access is impossible. Therefore every sign-in
+//   is high-signal and must be alerted on immediately (threshold = 1).
+//
+// TABLE / SOURCE
+//   union of:
+//     SigninLogs                        (interactive user sign-ins)
+//     AADNonInteractiveUserSignInLogs   (token refresh / background / legacy)
+//   Both from Microsoft Entra ID -> Diagnostic settings -> Log Analytics.
+//   The union matters: an attacker using a stolen token or a legacy protocol
+//   may never show in SigninLogs alone.
+//
+// LICENSE
+//   - SigninLogs + AADNonInteractiveUserSignInLogs export requires Entra ID P1.
+//   - Runs as a Log Analytics scheduled query or a Microsoft Sentinel rule.
+//
+// FALSE-POSITIVE NOTES
+//   - The only "expected" hit is a planned break-glass drill. A quarterly
+//     drill is designed, not yet run; the drill procedure is in
+//     lab/docs/runbooks/break-glass-drill.md. Even then it should alert —
+//     you WANT the record. Suppress by correlating with a pre-logged change
+//     ticket, never by muting the rule.
+//   - Matching is on the naming convention (bg-admin-NN@...), so the rule does
+//     not hardcode a tenant domain. Production hardening: match on the
+//     accounts' immutable object ids (UserId) from a Sentinel watchlist, so a
+//     rename cannot blind the rule. Terraform output
+//     `break_glass_user_principal_names` lists the current accounts.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · Trigger > 0 rows · Severity High ·
+//   Entities: Account=UserPrincipalName, IP=IPAddress.
+//
+// AUTOMATED RESPONSE (Logic App - lab/monitoring/playbook-notify.json)
+//   Shared by all five rules, Sentinel path only (the post-trial Log
+//   Analytics alerts just email the ag-identity-secops action group).
+//   Incident created -> automation rule (lab/terraform/modules/monitoring) ->
+//   (1) Teams adaptive card: incident severity, title, number, created time,
+//       status, description and an "Open in Sentinel" link;
+//   (2) ServiceNow incident: urgency/impact from severity (High -> urgency 1
+//       / impact 1, P1 under ServiceNow's default priority matrix - verify:
+//       on the PDI),
+//       category "inquiry"; (3) the INC number is commented back on the
+//       Sentinel incident for the audit trail.
+//   Process, not automation: break-glass use is always reviewed by a second
+//   admin per the runbook.
+// =============================================================================
+
+// Break-glass naming convention from lab/terraform/modules/groups.
+let BreakGlassPattern = @"(?i)^bg-admin-\d{2}@";
+// SCHEMA TRAP: LocationDetails is `dynamic` in SigninLogs but `string` in
+// AADNonInteractiveUserSignInLogs. A plain union splits it into
+// LocationDetails_dynamic / LocationDetails_string and the property access
+// below stops resolving (Sentinel rejects the rule). Normalise the
+// non-interactive leg to dynamic first. (verify once in Log Analytics)
+union
+    (SigninLogs
+        | extend SignInType = "interactive"),
+    (AADNonInteractiveUserSignInLogs
+        | extend SignInType = "non-interactive"
+        | extend LocationDetails = todynamic(tostring(LocationDetails)))
+| where TimeGenerated > ago(1h)
+| where UserPrincipalName matches regex BreakGlassPattern
+| extend Country = tostring(LocationDetails.countryOrRegion)
+| project TimeGenerated, SignInType, UserPrincipalName, IPAddress, Country,
+          AppDisplayName, ClientAppUsed, ResultType, ResultDescription,
+          ConditionalAccessStatus, CorrelationId
+| sort by TimeGenerated desc

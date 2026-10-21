@@ -1,0 +1,91 @@
+// =============================================================================
+// Detection: Privileged Identity Management (PIM) activation (groups + roles)
+// Lab:       Contoso Health Identity Platform  (lab/ — screen-share build)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   A just-in-time elevation that actually completed. The lab elevates through
+//   PIM for GROUPS: an eligible member of Privileged-IAM-Admins activates
+//   membership, and the group actively holds User Administrator (see
+//   lab/terraform/modules/pim). Direct PIM *role* activations are matched too,
+//   so the rule keeps working if a role is ever made eligible directly.
+//   Zero standing admin exists outside the two break-glass accounts, so every
+//   activation is expected to be deliberate, approved, time-boxed (4h cap) and
+//   attached to a justification.
+//
+// TABLE / SOURCE
+//   AuditLogs  (Microsoft Entra ID -> Diagnostic settings -> Log Analytics).
+//   PIM writes to AuditLogs with LoggedByService == "PIM":
+//     PIM for Groups -> Category "GroupManagement"
+//     PIM for roles  -> Category "RoleManagement"
+//   (PIM for Azure *resources* logs to AzureActivity - out of scope.)
+//   VERIFY: after the first real activation in the lab, copy the exact
+//   ActivityDisplayName strings from AuditLogs into the filter below if they
+//   differ - Microsoft has renamed PIM activity strings before.
+//
+// LICENSE
+//   - PIM itself requires Microsoft Entra ID P2 (or Entra ID Governance).
+//   - Exporting AuditLogs to Log Analytics requires a Log Analytics workspace;
+//     the KQL runs as a Log Analytics scheduled query OR a Microsoft Sentinel
+//     analytics rule. Sentinel optional (31-day trial in the lab).
+//
+// FALSE-POSITIVE NOTES
+//   - Legitimate approved elevations ARE the normal signal — this rule is for
+//     visibility/audit, not pure "bad". Tune by sensitivity: alert hard when
+//     HighValue == true; log-only otherwise.
+//   - Break-glass accounts are excluded from PIM by design (they hold standing
+//     role); they will not appear here — see break-glass-signin.kql instead.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · Trigger > 0 rows · Entities: Account=Actor,
+//   IP=ActorIp. (Tighten the role filter for the hard-alert copy.)
+//
+// AUTOMATED RESPONSE (Logic App - lab/monitoring/playbook-notify.json)
+//   One playbook shared by all five rules, Sentinel path only (the post-trial
+//   Log Analytics alerts just email the ag-identity-secops action group).
+//   Incident created -> automation rule (lab/terraform/modules/monitoring) ->
+//   (1) adaptive card to the Teams "Identity-SecOps" channel: incident
+//       severity, title, number, created time, status, description and an
+//       "Open in Sentinel" link;
+//   (2) ServiceNow incident: urgency/impact from severity (Medium -> 2),
+//       category "inquiry"; (3) the INC number is commented back on the
+//       Sentinel incident for the audit trail.
+//   Actor/ActorIp are the incident's mapped entities; ElevatedTo and the
+//   justification (AdditionalDetails) are in its query results, not the card.
+//   NOT BUILT (production follow-up): Actor/Role/Justification on the card,
+//   ServiceNow assignment_group routing.
+// =============================================================================
+
+AuditLogs
+| where TimeGenerated > ago(1h)
+| where LoggedByService == "PIM"
+| where Category in ("GroupManagement", "RoleManagement")
+// Completion event (the elevation that actually happened), e.g.
+//   "Add member to group completed (PIM activation)"   <- PIM for Groups
+//   "Add member to role completed (PIM activation)"    <- PIM for roles
+// PIM also logs "...requested..." / "...approved..." events; we alert on the
+// grant, not the request.
+| where ActivityDisplayName has "PIM activation" and ActivityDisplayName has "completed"
+| extend Actor         = tostring(InitiatedBy.user.userPrincipalName)
+| extend ActorObjectId = tostring(InitiatedBy.user.id)
+| extend ActorIp       = tostring(InitiatedBy.user.ipAddress)
+// Pick the elevated object by TYPE rather than by array index (ordering in
+// TargetResources is not guaranteed).
+| mv-apply tr = TargetResources on (
+    summarize TargetGroup = take_anyif(tostring(tr.displayName), tostring(tr.type) == "Group"),
+              TargetRole  = take_anyif(tostring(tr.displayName), tostring(tr.type) == "Role")
+  )
+| extend ElevatedTo = iff(isnotempty(TargetGroup), TargetGroup, TargetRole)
+| extend ElevationType = iff(isnotempty(TargetGroup), "PIM for Groups", "PIM for roles")
+// Highlight what is worth paging on: the role-bearing group, or a Tier-0/1 role.
+| extend HighValue = ElevatedTo in ("Privileged-IAM-Admins",
+                                    "Global Administrator",
+                                    "Privileged Role Administrator",
+                                    "Security Administrator",
+                                    "Application Administrator",
+                                    "User Administrator")
+| project TimeGenerated, Actor, ActorObjectId, ActorIp, ElevationType, ElevatedTo,
+          HighValue, Result, ActivityDisplayName, CorrelationId,
+          // Activation reason/justification + approver live in AdditionalDetails;
+          // key casing varies by schema version — surface the raw bag for review.
+          AdditionalDetails
+| sort by TimeGenerated desc

@@ -1,0 +1,13 @@
+# Every GUID-shaped id in this evidence set and what it is. All were generated during
+# this run by the local kind cluster (object uids, printed by terraform destroy) or by
+# Terraform (terraform_data id). The cluster was deleted at the end of the run; none is
+# a tenant, subscription or Entra object id.
+10ead2c2-3d4e-df66-cdb4-48edd729997f  # id of terraform_data.vault_release_inputs (random UUID Terraform generated in this run) (4x in run.log)
+23eac7b3-927c-43ba-81bc-074361f4afe5  # Kubernetes uid of ServiceAccount clinical-apps/unapproved-job (1x in run.log)
+346a3d26-4ecb-4a12-93ba-4b9b454b45f3  # Kubernetes uid of Role clinical-apps/auditor (1x in run.log)
+4b36d5fc-9a11-481c-93f9-57c9f512f05d  # Kubernetes uid of Namespace vault (1x in run.log)
+81e4d9e4-45c9-4d5f-8949-9190b15a4ca0  # Kubernetes uid of ServiceAccount clinical-apps/nightly-report (1x in run.log)
+9d12589f-5241-46a9-9cda-d0e2445b1f55  # Kubernetes uid of RoleBinding clinical-apps/auditor--k8s-clinical-auditors (1x in run.log)
+9e557918-2216-450e-8864-dd81c046d3f9  # Kubernetes uid of Namespace clinical-apps (1x in run.log)
+9f3623fe-4600-4ecb-bb7f-c24e154d5961  # Kubernetes uid of RoleBinding clinical-apps/app-deployer--k8s-clinical-deployers (1x in run.log)
+e964b553-7fa8-483b-bb4c-4261f63a76ad  # Kubernetes uid of Role clinical-apps/app-deployer (1x in run.log)

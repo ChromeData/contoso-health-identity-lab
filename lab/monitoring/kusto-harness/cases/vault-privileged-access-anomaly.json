@@ -1,0 +1,156 @@
+{
+  "rule": "vault-privileged-access-anomaly",
+  "about": "The six vault signals on VaultCheckout_CL rows shaped like lab/scripts/monitoring/ingest-vault-audit.sh --signals all output (field values follow the real rows lab/pam/test/e2e-vault-anomaly.sh records). One case runs the 11-column base schema (vault_feed_v2_columns = false), where Ticket / Operator / ErrorText do not exist and column_ifexists / getschema must cope.",
+  "defaults": {
+    "VaultCheckout_CL": {
+      "Account": "", "Library": "", "RemoteAddress": "172.22.0.1", "VaultActor": "token-psm-broker",
+      "TokenPolicies": "default", "SourceHost": "pam-host", "Ticket": "", "Operator": "", "ErrorText": "",
+      "TimeGenerated": "ago:10m"
+    }
+  },
+  "cases": [
+    {
+      "id": "tier0-read-uncovered",
+      "kind": "positive",
+      "label": "ops-mallory reads the Tier-0 static credential: no ticket, no check-out",
+      "tables": {"VaultCheckout_CL": [{"Operation": "cred-read", "VaultPath": "ldap/static-cred/tier0/svc-legacy-da",
+                                       "Operator": "ops-mallory", "VaultActor": "token-ops-mallory",
+                                       "TokenPolicies": "tier0-cred-reader", "RequestId": "req-0001"}]},
+      "expect": [{"Signal": "Tier0CredReadUncovered", "Severity": "High", "Actor": "ops-mallory",
+                  "VaultPath": "ldap/static-cred/tier0/svc-legacy-da", "Events": 1,
+                  "CyberArkAnalogue": "PTA-style: retrieval outside a ticketed request"}],
+      "expectRows": 1
+    },
+    {
+      "id": "checkout-without-ticket-covers-read",
+      "kind": "positive",
+      "label": "ops-bob checks out a Tier-0 admin with ticket 'none' and then reads: the check-out alerts, the covered read does not",
+      "tables": {"VaultCheckout_CL": [
+        {"Operation": "check-out", "Library": "tier0-admins", "VaultPath": "ldap/library/tier0-admins/check-out",
+         "Account": "tier0-admin-01", "Operator": "ops-bob", "Ticket": "none", "TokenPolicies": "tier0-checkout",
+         "RequestId": "req-0002", "TimeGenerated": "ago:30m"},
+        {"Operation": "cred-read", "VaultPath": "ldap/static-cred/tier0/svc-legacy-da", "Operator": "ops-bob",
+         "Ticket": "none", "TokenPolicies": "tier0-cred-reader", "RequestId": "req-0003", "TimeGenerated": "ago:20m"}
+      ]},
+      "expect": [{"Signal": "Tier0CheckoutWithoutTicket", "Severity": "High", "Operator": "ops-bob", "Account": "tier0-admin-01",
+                  "Ticket": "none", "CyberArkAnalogue": "Master Policy dual control / ticketing bypassed"}],
+      "expectNone": [{"Signal": "Tier0CredReadUncovered"}],
+      "expectRows": 1
+    },
+    {
+      "id": "helpdesk-checkout-does-not-cover-tier0-read",
+      "kind": "positive",
+      "label": "A helpdesk-library check-out never covers a Tier-0 read",
+      "tables": {"VaultCheckout_CL": [
+        {"Operation": "check-out", "Library": "helpdesk", "VaultPath": "ldap/library/helpdesk/check-out",
+         "Account": "hd-admin-01", "Operator": "ops-mallory", "Ticket": "CHG0031002", "RequestId": "req-0004", "TimeGenerated": "ago:30m"},
+        {"Operation": "cred-read", "VaultPath": "ldap/static-cred/tier0/svc-legacy-da", "Operator": "ops-mallory",
+         "RequestId": "req-0005", "TimeGenerated": "ago:20m"}
+      ]},
+      "expect": [{"Signal": "Tier0CredReadUncovered", "Actor": "ops-mallory"}]
+    },
+    {
+      "id": "tier0-rotation-failed",
+      "kind": "positive",
+      "label": "Rotation of the Tier-0 static role failed (DC unreachable): High",
+      "tables": {"VaultCheckout_CL": [{"Operation": "rotation-failed", "VaultPath": "ldap/rotate-role/tier0/svc-legacy-da",
+                                       "VaultActor": "token-pam-rotate", "TokenPolicies": "pam-rotate", "RequestId": "req-0010",
+                                       "ErrorText": "LDAP Result Code 200 \"Network Error\": dial tcp: connection refused"}]},
+      "expect": [{"Signal": "RotationFailed", "Severity": "High", "CyberArkAnalogue": "CPM change failed",
+                  "Errors": ["LDAP Result Code 200 \"Network Error\": dial tcp: connection refused"]}]
+    },
+    {
+      "id": "other-rotation-failed",
+      "kind": "positive",
+      "label": "A non-Tier-0 rotation failure is Medium",
+      "tables": {"VaultCheckout_CL": [{"Operation": "rotation-failed", "VaultPath": "ldap/rotate-role/helpdesk/svc-print",
+                                       "VaultActor": "token-pam-rotate", "RequestId": "req-0011", "ErrorText": "permission denied"}]},
+      "expect": [{"Signal": "RotationFailed", "Severity": "Medium"}]
+    },
+    {
+      "id": "root-token-audit-tamper",
+      "kind": "positive",
+      "label": "The root token touches sys/audit/file: High",
+      "tables": {"VaultCheckout_CL": [{"Operation": "root-token", "VaultPath": "sys/audit/file", "VaultActor": "root",
+                                       "TokenPolicies": "root", "RequestId": "req-0020"}]},
+      "expect": [{"Signal": "RootTokenUse", "Severity": "High", "AuditTamper": 1, "Actor": "root",
+                  "CyberArkAnalogue": "Built-in Vault Administrator used"}]
+    },
+    {
+      "id": "root-token-lab-automation-only",
+      "kind": "positive",
+      "label": "The root token only on the lab automation paths: Low",
+      "tables": {"VaultCheckout_CL": [{"Operation": "root-token", "VaultPath": "auth/token/create", "VaultActor": "root",
+                                       "TokenPolicies": "root", "RequestId": "req-0021"}]},
+      "expect": [{"Signal": "RootTokenUse", "Severity": "Low", "NonLabRootPaths": [], "AuditTamper": 0}]
+    },
+    {
+      "id": "auth-failure-burst",
+      "kind": "positive",
+      "label": "5 failed userpass logins from one address in one 10-minute bin: High (a login name is known)",
+      "tables": {"VaultCheckout_CL": [{"_repeat": 5, "Operation": "auth-failed", "VaultPath": "auth/userpass/login/ops-dave",
+                                       "RemoteAddress": "192.0.2.66", "VaultActor": "", "TokenPolicies": "",
+                                       "ErrorText": "invalid username or password", "RequestId": "req-003{i}", "TimeGenerated": "ago:6m"}]},
+      "expect": [{"Signal": "AuthFailureBurst", "Severity": "High", "Events": 5, "LoginNames": ["ops-dave"],
+                  "RemoteAddress": "192.0.2.66", "Actor": "ops-dave"}],
+      "expectRows": 1
+    },
+    {
+      "id": "tier0-access-denied",
+      "kind": "positive",
+      "label": "A tier1-only token asks for the Tier-0 credential and is refused: Medium",
+      "tables": {"VaultCheckout_CL": [{"Operation": "access-denied", "VaultPath": "ldap/static-cred/tier0/svc-legacy-da",
+                                       "Operator": "ops-carol", "TokenPolicies": "tier1-cred-reader", "RequestId": "req-0040",
+                                       "ErrorText": "permission denied"}]},
+      "expect": [{"Signal": "Tier0AccessDenied", "Severity": "Medium", "Actor": "ops-carol",
+                  "CyberArkAnalogue": "Safe permission violation"}]
+    },
+    {
+      "id": "ticketed-checkout-read-checkin",
+      "kind": "negative",
+      "label": "A ticketed Tier-0 check-out, a ticketed read inside it and the check-in",
+      "tables": {"VaultCheckout_CL": [
+        {"Operation": "check-out", "Library": "tier0-admins", "VaultPath": "ldap/library/tier0-admins/check-out",
+         "Account": "tier0-admin-01", "Operator": "ops-alice", "Ticket": "CHG0031001", "RequestId": "req-0050", "TimeGenerated": "ago:40m"},
+        {"Operation": "cred-read", "VaultPath": "ldap/static-cred/tier0/svc-legacy-da", "Operator": "ops-alice",
+         "Ticket": "CHG0031001", "RequestId": "req-0051", "TimeGenerated": "ago:35m"},
+        {"Operation": "check-in", "Library": "tier0-admins", "VaultPath": "ldap/library/tier0-admins/check-in",
+         "Account": "tier0-admin-01", "Operator": "ops-alice", "Ticket": "CHG0031001", "RequestId": "req-0052", "TimeGenerated": "ago:5m"}
+      ]}
+    },
+    {
+      "id": "auth-failures-below-threshold",
+      "kind": "negative",
+      "label": "4 failed logins from one address",
+      "tables": {"VaultCheckout_CL": [{"_repeat": 4, "Operation": "auth-failed", "VaultPath": "auth/userpass/login/ops-dave",
+                                       "RemoteAddress": "192.0.2.66", "VaultActor": "", "RequestId": "req-006{i}", "TimeGenerated": "ago:6m"}]}
+    },
+    {
+      "id": "non-tier0-access-denied-and-heartbeat",
+      "kind": "negative",
+      "label": "A refused tier1 read and a heartbeat",
+      "tables": {"VaultCheckout_CL": [
+        {"Operation": "access-denied", "VaultPath": "ldap/static-cred/tier1/svc-app", "Operator": "ops-carol", "RequestId": "req-0070"},
+        {"Operation": "heartbeat", "VaultPath": "", "RequestId": "", "VaultActor": ""}
+      ]}
+    },
+    {
+      "id": "base-schema-unticketed-checkout",
+      "kind": "negative",
+      "label": "vault_feed_v2_columns off (no Ticket column): an un-ticketed Tier-0 check-out cannot be judged, so no alert",
+      "tableVariant": {"VaultCheckout_CL": "base"},
+      "tables": {"VaultCheckout_CL": [
+        {"Operation": "check-out", "Library": "tier0-admins", "VaultPath": "ldap/library/tier0-admins/check-out",
+         "Account": "tier0-admin-02", "RequestId": "req-0080", "TimeGenerated": "ago:20m"},
+        {"Operation": "heartbeat", "VaultPath": "", "RequestId": "", "VaultActor": ""}
+      ]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "An uncovered Tier-0 read 2 h ago",
+      "tables": {"VaultCheckout_CL": [{"Operation": "cred-read", "VaultPath": "ldap/static-cred/tier0/svc-legacy-da",
+                                       "Operator": "ops-mallory", "RequestId": "req-0090", "TimeGenerated": "ago:2h"}]}
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# ShellCheck settings for every script under lab/ (ShellCheck reads the
+# nearest .shellcheckrc above the script it checks).
+#
+# The scripts source their helpers relative to themselves
+# (source "$(dirname "$0")/lib.sh"). ShellCheck resolves such a path from the
+# directory it was started in, so `shellcheck -x lab/**/*.sh` run from the
+# repo root could not follow lib.sh / ha-lib.sh / lib-midpoint.sh and reported
+# SC1091 (info) on 15 scripts. Searching each script's own directory lets -x
+# follow every helper from any working directory, so the helpers are checked
+# in context instead of skipped.
+source-path=SCRIPTDIR

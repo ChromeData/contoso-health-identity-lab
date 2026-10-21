@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Test STAND-IN for the Azure CLI (tests/ingest-vault-audit.test.sh only).
+# Answers the one call ingest-vault-audit.sh makes when sending - an Azure
+# Monitor access token - with a dummy value. Refuses to run unless
+# VAULT_INGEST_TEST_STUBS=1, so it can never pass for the real CLI.
+set -euo pipefail
+[[ "${VAULT_INGEST_TEST_STUBS:-}" == 1 ]] || { echo "stub az: test-only" >&2; exit 1; }
+case "${1:-} ${2:-}" in
+  "account get-access-token")
+    # Count fetches so the test can prove a 401 triggers a refresh.
+    [[ -n "${STUB_CAPTURE_DIR:-}" ]] && printf 'x\n' >> "$STUB_CAPTURE_DIR/token-fetches"
+    echo "stub-token-not-a-secret" ;;
+  *) echo "stub az: unexpected call: $*" >&2; exit 2 ;;
+esac

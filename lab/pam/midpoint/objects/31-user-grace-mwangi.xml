@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Mock HR 200015. Nursing manager: the stage-1 reviewer for the nurses. -->
+<user xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000302">
+    <name>grace.mwangi</name>
+    <description>Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).</description>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000102" type="OrgType"/>
+    </assignment>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000102" type="OrgType" relation="org:manager"/>
+    </assignment>
+    <assignment>
+        <description>Built-in midPoint role "Reviewer": may record certification decisions.</description>
+        <targetRef oid="00000000-0000-0000-0000-00000000000b" type="RoleType"/>
+    </assignment>
+    <assignment>
+        <description>Birthright: Nursing department.</description>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000201" type="RoleType"/>
+    </assignment>
+    <assignment>
+        <description>Requested 2024-06: ICU charge-nurse cover.</description>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000202" type="RoleType"/>
+    </assignment>
+    <activation>
+        <administrativeStatus>enabled</administrativeStatus>
+    </activation>
+    <fullName>Grace Mwangi</fullName>
+    <givenName>Grace</givenName>
+    <familyName>Mwangi</familyName>
+    <employeeNumber>200015</employeeNumber>
+    <organizationalUnit>Nursing</organizationalUnit>
+    <title>Nurse Manager</title>
+</user>

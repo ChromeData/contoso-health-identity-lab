@@ -1,0 +1,90 @@
+{
+  "campaignOid": "db5f38a0-1617-4f75-89d0-a9d021e646e7",
+  "probes": [
+    {
+      "actor": "dana.okafor",
+      "user": "marcus.bello",
+      "role": "ICU Nurse",
+      "response": "accept",
+      "why": "holds no Reviewer role and is not the assigned reviewer",
+      "assignedReviewer": "grace.mwangi",
+      "status": "refused",
+      "error": "AuthorizationException: User ''dana.okafor'' not authorized for operation http://midpoint.evolveum.com/xml/ns/public/security/authorization-model-3#completeWorkItem on (PrismContainerValueImpl)PCV(451):[PP({.../common/common-3}stageNumber):[PPV(Integer:1)], PrismReferenceImpl({.../common/common-3}originalAssigneeRef):[PRV(oid=c0471e00-0000-4000-8000-000000000302, targetType={.../common/common-3}UserType, relation={.../common/org-3}default)], PrismReferenceImpl(..."
+    },
+    {
+      "actor": "access-governance-lead",
+      "user": "marcus.bello",
+      "role": "Pharmacist",
+      "response": "revoke",
+      "why": "holds the Reviewer role but is not the reviewer this item is assigned to",
+      "assignedReviewer": "grace.mwangi",
+      "status": "refused",
+      "error": "AuthorizationException: User ''access-governance-lead'' not authorized for operation http://midpoint.evolveum.com/xml/ns/public/security/authorization-model-3#completeWorkItem on (PrismContainerValueImpl)PCV(453):[PP({.../common/common-3}stageNumber):[PPV(Integer:1)], PrismReferenceImpl({.../common/common-3}originalAssigneeRef):[PRV(oid=c0471e00-0000-4000-8000-000000000302, targetType={.../common/common-3}UserType, relation={.../common/org-3}default)], PrismReferenceImpl(..."
+    }
+  ],
+  "decisions": [
+    {
+      "user": "marcus.bello",
+      "role": "ICU Nurse",
+      "response": "accept",
+      "caseId": 450,
+      "workItemId": 451,
+      "reviewer": "grace.mwangi",
+      "status": "recorded"
+    },
+    {
+      "user": "marcus.bello",
+      "role": "Pharmacist",
+      "response": "revoke",
+      "caseId": 452,
+      "workItemId": 453,
+      "reviewer": "grace.mwangi",
+      "status": "recorded"
+    },
+    {
+      "user": "dana.okafor",
+      "role": "ICU Nurse",
+      "response": "none",
+      "caseId": 454,
+      "workItemId": 455,
+      "reviewer": "grace.mwangi",
+      "status": "left-unanswered"
+    },
+    {
+      "user": "sofia.reyes",
+      "role": "ICU Nurse",
+      "response": "accept",
+      "caseId": 456,
+      "workItemId": 457,
+      "reviewer": "grace.mwangi",
+      "status": "recorded"
+    },
+    {
+      "user": "grace.mwangi",
+      "role": "ICU Nurse",
+      "response": "accept",
+      "caseId": 446,
+      "workItemId": 447,
+      "reviewer": "helen.carter",
+      "status": "recorded"
+    },
+    {
+      "user": "daniel.osei",
+      "role": "AP Clerk",
+      "response": "revoke",
+      "caseId": 448,
+      "workItemId": 449,
+      "reviewer": "helen.carter",
+      "status": "recorded"
+    },
+    {
+      "user": "helen.carter",
+      "role": "ICU Nurse",
+      "response": "accept",
+      "caseId": 444,
+      "workItemId": 445,
+      "reviewer": "access-governance-lead",
+      "status": "recorded"
+    }
+  ]
+}

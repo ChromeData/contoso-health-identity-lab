@@ -1,0 +1,78 @@
+// =============================================================================
+// Detection: DCSync - directory replication requested by a non-DC account
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, hybrid)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   An account that is NOT a domain controller using the directory
+//   replication rights on the domain object (4662, control access 0x100,
+//   with the DS-Replication-Get-Changes / -Get-Changes-All /
+//   -Get-Changes-In-Filtered-Set GUIDs). That is DCSync (Mimikatz lsadump::dcsync,
+//   Impacket secretsdump): pull every password hash, krbtgt included, without
+//   touching the DC's disk. Domain controllers replicate as their machine
+//   accounts (NAME$), so a user account here is the attack, or a directory
+//   sync account that must be on the allow-list.
+//
+// SEVERITY
+//   High, always (static High; the Severity column keeps the ITDR shape).
+//
+// TABLE / SOURCE
+//   SecurityEvent 4662 from DC01. modules/monitoring collects 4662 ONLY with
+//   AccessMask 0x100 (a second XPath in the DC01 DCR), because 4662 is the
+//   noisiest event a DC writes. verify: "Audit Directory Service Access"
+//   success is on for DC01 AND the domain object's SACL audits the
+//   replication extended rights for Everyone (Defender for Identity's
+//   documented setting); without the SACL no 4662 is written at all.
+//   verify: SecurityEvent via AMA needs Microsoft Sentinel + the "Windows
+//   Security Events via AMA" connector (Microsoft Learn); keep the rule in
+//   itdr_exclude_rules until DC01 rows are in SecurityEvent.
+//
+// LICENSE
+//   No Entra licence. AMA ingestion billed per GB.
+//
+// MITRE ATT&CK
+//   T1003.006 OS Credential Dumping: DCSync
+//   Tactic: CredentialAccess
+//
+// FALSE-POSITIVE NOTES
+//   - Microsoft Entra Connect Sync's AD DS connector account (MSOL_*) holds
+//     these rights for password hash sync. The lab uses none by default;
+//     if one is installed, add it to SyncAccounts below (with an owner).
+//   - Other DCs (machine accounts, NAME$) are excluded.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · one alert per row · High ·
+//   Entities: Account = Account / AccountDomain / AccountSid, Host = Host.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; the actor is an AD account, so containment
+//   takes the AD path (Invoke-AdContainment.ps1 by a human). Treat as full
+//   domain compromise: krbtgt double reset (runbook) after containment.
+// =============================================================================
+
+let LookBack = 1h;
+let DcHosts = dynamic(["DC01"]);
+// DS-Replication-Get-Changes, -Get-Changes-All, -Get-Changes-In-Filtered-Set.
+let ReplicationGuids = dynamic(["1131f6aa-9c07-11d1-f79f-00c04fc2dcd2",
+                                "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2",
+                                "89e95b76-444d-4c62-991a-0facbeda640c"]);
+let SyncAccounts = dynamic([]);   // e.g. "msol_0123456789ab" - documented exceptions only
+SecurityEvent
+| where TimeGenerated > ago(LookBack)
+| where EventID == 4662
+| extend Host = toupper(tostring(split(Computer, ".")[0]))
+| where Host in (DcHosts)
+| where AccessMask =~ "0x100"
+| where Properties has_any (ReplicationGuids)
+| extend Account       = tolower(SubjectUserName)
+| extend AccountDomain = SubjectDomainName
+| extend AccountSid    = SubjectUserSid
+| where not(Account endswith "$")
+| where Account !in (SyncAccounts)
+| extend RightsUsed = extract_all(@"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})", Properties)
+| summarize TimeGenerated = max(TimeGenerated), FirstSeen = min(TimeGenerated),
+            Requests = count(), RightsUsed = make_set(RightsUsed, 10)
+            by Account, AccountDomain, AccountSid, Host, Computer
+| extend Severity = "High"
+| project TimeGenerated, Severity, Account, AccountDomain, AccountSid, Host, Computer,
+          Requests, RightsUsed, FirstSeen
+| sort by TimeGenerated desc

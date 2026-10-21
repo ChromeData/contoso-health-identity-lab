@@ -1,0 +1,28 @@
+# Tenant data exported by the lab scripts: real names, role assignments and
+# audit history. Keep it out of git.
+lab/evidence/out/
+lab/scripts/powershell/out/
+
+# PAM stand-in stack: generated credentials, Vault unseal key / root token,
+# broker tokens, Conjur API keys, generated Guacamole schema.
+lab/pam/.env
+lab/pam/.secrets/
+lab/pam/guacamole/initdb.sql
+# midPoint connector JARs are downloaded outside the repo (README); second line
+# of defence in case one lands here.
+lab/pam/*.jar
+
+# Splunk second-SIEM stack: generated admin password + HEC token, replay
+# high-water marks and dry-run payloads (tenant sign-in data), and UI edits
+# Splunk writes into the bind-mounted app.
+lab/splunk/.env
+lab/splunk/.state/
+lab/splunk/app/contoso_identity/local/
+lab/splunk/app/contoso_identity/metadata/local.meta
+
+# Python / OS / editor noise
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+.idea/

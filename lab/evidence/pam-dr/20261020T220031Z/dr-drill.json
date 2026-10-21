@@ -1,0 +1,28 @@
+{
+  "schema": "contoso-pam/dr-drill/v2",
+  "generated_at": "2026-10-20T22:04:26Z",
+  "rto_seconds": 42.1,
+  "rpo_seconds": 2.2,
+  "target_rto_seconds": 300,
+  "drill_seconds": 46.4,
+  "snapshot": {
+    "file": "dr-20261020T220339Z.snap",
+    "sha256": "8c21f951fee06677323986e0b31666332bf614980dcd40cb55d4bdc96a3cf30a",
+    "bytes": 16130,
+    "seconds": 0.3
+  },
+  "checks": {
+    "marker_restored": "PASS",
+    "policy_restored": "PASS",
+    "post_snapshot_write_lost": "PASS",
+    "rto_within_target": "PASS"
+  },
+  "rpo_note": "set by this drill: its own 2 s pause between the snapshot and the disaster. It shows the mechanism (writes after the last snapshot are lost); a planning RPO is the snapshot interval.",
+  "versions": "vault-1=2.1.1 vault-2=2.1.1 vault-3=2.1.1 ",
+  "code": {
+    "scope": "lab/pam: every file git tracks there except *.md, hashed when the run started",
+    "list": "code.sha256sums",
+    "sha256": "06db93b8206da62b76ec72f3b20346ea56561b26d2761c8e462f42731d424ca1",
+    "files": 90
+  }
+}

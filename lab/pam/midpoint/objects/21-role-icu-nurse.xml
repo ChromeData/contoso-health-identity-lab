@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Requestable (ADR 0012 tier T2): "ICU apps for float and agency staff".
+     No expiry in this lab, so it is certified by a review where an unanswered
+     item means REMOVED. -->
+<role xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000202">
+    <name>ICU Nurse</name>
+    <displayName>ICU Nurse - ICU Clinical Apps</displayName>
+    <description>Requestable ICU access for float, agency and charge-cover staff (ADR 0012 T2). Managed by run-campaign.sh.</description>
+    <assignment>
+        <targetRef oid="00000000-0000-0000-0000-000000000321" type="ArchetypeType"/>
+    </assignment>
+    <requestable>true</requestable>
+</role>

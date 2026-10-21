@@ -1,0 +1,155 @@
+{
+  "rule": "security-info-registered-risky",
+  "about": "Self-service MFA registration judged against the user's context sign-in (either table, up to 1 h before) and 14-day country baseline. Baseline rows sit 3 days back (inside 14 d, outside the 2 h gap); context rows 20 min before a registration 10 min ago. Non-interactive DeviceDetail / LocationDetails are strings (Learn).",
+  "defaults": {
+    "AuditLogs": {
+      "Category": "UserManagement", "LoggedByService": "Authentication Methods", "Result": "success",
+      "OperationName": "User registered security info",
+      "ResultReason": "User registered Authenticator App with Notification and Code",
+      "InitiatedBy": {"user": {"id": "11111111-1111-1111-1111-111111111111", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.90"}},
+      "TargetResources": [{"id": "11111111-1111-1111-1111-111111111111", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com", "displayName": "Nina Patel"}],
+      "CorrelationId": "22222222-2222-2222-2222-222222222222", "TimeGenerated": "ago:10m"
+    },
+    "SigninLogs": {
+      "UserId": "11111111-1111-1111-1111-111111111111", "UserPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+      "IPAddress": "203.0.113.90", "ResultType": "0", "AppDisplayName": "My Signins", "RiskLevelDuringSignIn": "none",
+      "RiskEventTypes_V2": "[]", "LocationDetails": {"countryOrRegion": "US"},
+      "DeviceDetail": {"operatingSystem": "Windows10", "browser": "Edge 141.0.0", "isCompliant": true, "isManaged": true},
+      "AuthenticationDetails": "[{\"authenticationMethod\":\"Password\",\"succeeded\":true}]",
+      "CorrelationId": "33333333-3333-3333-3333-333333333333", "TimeGenerated": "ago:20m"
+    },
+    "AADNonInteractiveUserSignInLogs": {
+      "UserId": "11111111-1111-1111-1111-111111111111", "UserPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+      "IPAddress": "192.0.2.200", "ResultType": "0", "AppDisplayName": "My Signins", "RiskLevelDuringSignIn": "none",
+      "RiskEventTypes_V2": "[]", "LocationDetails": "{\"countryOrRegion\":\"US\"}",
+      "DeviceDetail": "{\"operatingSystem\":\"Windows10\",\"isCompliant\":true,\"isManaged\":true}",
+      "AuthenticationDetails": "[]",
+      "CorrelationId": "44444444-4444-4444-4444-444444444444", "TimeGenerated": "ago:15m"
+    }
+  },
+  "cases": [
+    {
+      "id": "risky-context-sign-in",
+      "kind": "positive",
+      "label": "Registration right after a medium-risk sign-in from the same IP: Medium",
+      "tables": {
+        "AuditLogs": [{}],
+        "SigninLogs": [{"RiskLevelDuringSignIn": "medium"}, {"TimeGenerated": "ago:3d", "IPAddress": "203.0.113.91"}]
+      },
+      "expect": [{"Severity": "Medium", "RiskySignIn": true, "NewCountry": false, "UnmanagedDevice": false, "Signals": 1,
+                  "NoContext": false, "NoBaseline": false, "ContextSignInType": "interactive", "IPAddress": "203.0.113.90",
+                  "SignInRisk": "medium",
+                  "UserPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com", "PrivilegedTarget": false}]
+    },
+    {
+      "id": "new-country-and-unmanaged",
+      "kind": "positive",
+      "label": "Context sign-in from NG (baseline only US) on an unmanaged device: two signals, High",
+      "tables": {
+        "AuditLogs": [{}],
+        "SigninLogs": [
+          {"LocationDetails": {"countryOrRegion": "NG"}, "DeviceDetail": {"operatingSystem": "Android", "isCompliant": false, "isManaged": false}},
+          {"TimeGenerated": "ago:3d", "IPAddress": "203.0.113.91"}
+        ]
+      },
+      "expect": [{"Severity": "High", "NewCountry": true, "UnmanagedDevice": true, "RiskySignIn": false, "Signals": 2,
+                  "Country": "NG", "KnownCountries": ["US"]}]
+    },
+    {
+      "id": "new-country-only",
+      "kind": "positive",
+      "label": "Context sign-in from NG on a managed device: one signal, Medium",
+      "tables": {
+        "AuditLogs": [{}],
+        "SigninLogs": [{"LocationDetails": {"countryOrRegion": "NG"}}, {"TimeGenerated": "ago:3d", "IPAddress": "203.0.113.91"}]
+      },
+      "expect": [{"Severity": "Medium", "NewCountry": true, "Signals": 1}]
+    },
+    {
+      "id": "privileged-by-name-clean-context",
+      "kind": "positive",
+      "label": "tier0-admin-02 registers from a clean context: High (every privileged registration)",
+      "tables": {
+        "AuditLogs": [{"InitiatedBy": {"user": {"id": "55555555-5555-5555-5555-555555555555", "userPrincipalName": "tier0-admin-02@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.90"}},
+                       "TargetResources": [{"id": "55555555-5555-5555-5555-555555555555", "type": "User", "userPrincipalName": "tier0-admin-02@contosohealthlab.onmicrosoft.com"}]}],
+        "SigninLogs": [{"UserId": "55555555-5555-5555-5555-555555555555", "UserPrincipalName": "tier0-admin-02@contosohealthlab.onmicrosoft.com"},
+                       {"UserId": "55555555-5555-5555-5555-555555555555", "TimeGenerated": "ago:3d"}]
+      },
+      "expect": [{"Severity": "High", "PrivilegedTarget": true, "PrivilegedById": false, "Signals": 0, "RiskySignIn": false}]
+    },
+    {
+      "id": "privileged-by-rendered-id",
+      "kind": "positive",
+      "label": "Nina is on the rendered PrivilegedUserIds list: High from a clean context",
+      "lets": {"PrivilegedUserIds": ["11111111-1111-1111-1111-111111111111"]},
+      "tables": {"AuditLogs": [{}], "SigninLogs": [{}, {"TimeGenerated": "ago:3d"}]},
+      "expect": [{"Severity": "High", "PrivilegedTarget": true, "PrivilegedById": true}]
+    },
+    {
+      "id": "no-context-sign-in",
+      "kind": "positive",
+      "label": "No sign-in in either table explains the registration: NoContext, Medium",
+      "tables": {"AuditLogs": [{}]},
+      "expect": [{"Severity": "Medium", "NoContext": true, "NoBaseline": true, "RiskySignIn": false, "NewCountry": false,
+                  "UnmanagedDevice": false, "IPAddress": "203.0.113.90"}]
+    },
+    {
+      "id": "token-replay-non-interactive",
+      "kind": "positive",
+      "label": "The context is a non-interactive sign-in from an anonymizer on an unmanaged device (string columns): High",
+      "tables": {
+        "AuditLogs": [{"InitiatedBy": {"user": {"id": "11111111-1111-1111-1111-111111111111", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com", "ipAddress": "192.0.2.200"}}}],
+        "AADNonInteractiveUserSignInLogs": [{"RiskEventTypes_V2": "[\"anonymizedIPAddress\"]",
+                                             "DeviceDetail": "{\"operatingSystem\":\"Linux\",\"isCompliant\":false,\"isManaged\":false}"}],
+        "SigninLogs": [{"TimeGenerated": "ago:3d"}]
+      },
+      "expect": [{"Severity": "High", "ContextSignInType": "non-interactive", "RiskySignIn": true, "UnmanagedDevice": true,
+                  "Signals": 2, "SignInIp": "192.0.2.200"}]
+    },
+    {
+      "id": "all-required-variant",
+      "kind": "positive",
+      "label": "'User registered all required security info' (interrupt mode) is matched too",
+      "tables": {
+        "AuditLogs": [{"OperationName": "User registered all required security info"}],
+        "SigninLogs": [{"RiskLevelDuringSignIn": "high"}, {"TimeGenerated": "ago:3d"}]
+      },
+      "expect": [{"Severity": "High", "SignInRisk": "high", "OperationName": "User registered all required security info"}]
+    },
+    {
+      "id": "clean-registration",
+      "kind": "negative",
+      "label": "Known country, managed device, no risk, not privileged",
+      "tables": {"AuditLogs": [{}], "SigninLogs": [{}, {"TimeGenerated": "ago:3d"}]}
+    },
+    {
+      "id": "unmanaged-device-alone",
+      "kind": "negative",
+      "label": "Only UnmanagedDevice (known country, no risk): never alerts alone, by design",
+      "tables": {
+        "AuditLogs": [{}],
+        "SigninLogs": [{"DeviceDetail": {"operatingSystem": "iOS", "isCompliant": false, "isManaged": false}}, {"TimeGenerated": "ago:3d"}]
+      }
+    },
+    {
+      "id": "not-self-service",
+      "kind": "negative",
+      "label": "Admin-registered, deleted and failed registrations are not this rule",
+      "tables": {
+        "AuditLogs": [{"OperationName": "Admin registered security info"},
+                      {"OperationName": "User deleted security info"},
+                      {"Result": "failure"}],
+        "SigninLogs": [{"RiskLevelDuringSignIn": "high"}]
+      }
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A registration 2 h ago (with a risky context before it)",
+      "tables": {
+        "AuditLogs": [{"TimeGenerated": "ago:2h"}],
+        "SigninLogs": [{"TimeGenerated": "ago:130m", "RiskLevelDuringSignIn": "high"}]
+      }
+    }
+  ]
+}

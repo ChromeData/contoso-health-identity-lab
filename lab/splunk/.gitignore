@@ -1,0 +1,33 @@
+# =============================================================================
+# lab/splunk/.gitignore - keep the Splunk second-SIEM stack's generated and
+# tenant-derived files out of git.
+# -----------------------------------------------------------------------------
+# STAND-IN context: Splunk Enterprise 60-day TRIAL in a local container
+# (replaces production Splunk); see README.md.
+#
+# WHY A LOCAL .gitignore: splunk-up.sh writes .env (admin password + HEC token)
+# on its very first run. This file makes that safe on its own, without
+# depending on the repo-root .gitignore being updated first. Paths here are
+# relative to lab/splunk/. (The root .gitignore may list the same paths; the
+# duplication is harmless.)
+# =============================================================================
+
+# Generated admin password + HEC token (mode 0600). Never commit.
+/.env
+
+# Replay high-water marks, the verified-app fingerprint and --dry-run
+# payloads (the payloads are real tenant sign-in data).
+/.state/
+
+# Edits made in Splunk Web land in the bind-mounted app's local/ and
+# metadata/local.meta - they silently diverge from detections/*.spl, so they
+# are never committed. Change the .spl file and re-render instead.
+/app/contoso_identity/local/
+/app/contoso_identity/metadata/local.meta
+
+# Tenant-sensitive lookups: the operator's own IP (dc-logon detection) and the
+# SoD holdings snapshot (object ids + UPNs, from 09-SoD-Report.ps1
+# -HoldingsSnapshotPath). splunk-up.sh creates header-only copies when they
+# are missing; the filled files never reach git.
+/app/contoso_identity/lookups/contoso_operator_ips.csv
+/app/contoso_identity/lookups/contoso_sod_holdings.csv

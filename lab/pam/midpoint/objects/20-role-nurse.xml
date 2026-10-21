@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Birthright (ADR 0012 tier T3): granted from HR attributes, certified by
+     HR data, never by a reviewer campaign. requestable=false keeps it OUT of
+     the campaign scope (see 40-certdef-requestable-roles.xml). -->
+<role xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000201">
+    <name>Nurse</name>
+    <displayName>Nurse - Clinical Apps</displayName>
+    <description>Birthright clinical access for Nursing (ADR 0012 T3). Mirrors the Entra access package "Nurse - Clinical Apps". Managed by run-campaign.sh.</description>
+    <assignment>
+        <!-- built-in archetype "Business role" -->
+        <targetRef oid="00000000-0000-0000-0000-000000000321" type="ArchetypeType"/>
+    </assignment>
+    <requestable>false</requestable>
+</role>

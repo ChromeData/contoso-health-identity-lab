@@ -1,0 +1,176 @@
+# =============================================================================
+# envs/dev :: terraform.tfvars.example
+# -----------------------------------------------------------------------------
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored - do NOT
+# commit real tenant ids / object ids. All values below are placeholders.
+# In CI the same values come from GitHub Actions *variables* (TF_*), except
+# operator_ip_ranges and alert_email, which come from the TF_OPERATOR_IP_RANGES /
+# TF_ALERT_EMAIL repo *secrets*.
+# =============================================================================
+
+# Staging flags and CA states are NOT here - they live in the committed
+# lab.tfvars (pass -var-file=lab.tfvars) so every change is a reviewed diff.
+
+# ---- Azure platform ---------------------------------------------------------
+subscription_id = "00000000-0000-0000-0000-000000000000"
+tenant_id       = "11111111-1111-1111-1111-111111111111"
+location        = "eastus2"
+
+resource_group_name = "rg-identity-lab"
+log_analytics_name  = "loga-idlab"
+
+# Key Vault names are GLOBALLY unique - add a short suffix.
+key_vault_name = "kv-idlab-7f3a"
+
+# Your current public IP as /32 (curl -s https://ifconfig.me). Used by the
+# Key Vault firewall, the evidence store firewall and the DC + Intune VM NSGs
+# (RDP; LDAPS on the DC), and - with enable_dc - the Sentinel operator_ips
+# watchlist. Empty = PE only / no inbound to the VMs. Each entry a single
+# host /32: with enable_dc = true anything wider fails validation (ADR 0013),
+# and nothing wider than /24 (e.g. 0.0.0.0/0) is ever accepted.
+operator_ip_ranges = ["203.0.113.7/32"]
+
+# Object id of your admin@ account (Key Vault Secrets Officer; the break-glass
+# password is kept outside this vault - README human step 6).
+key_vault_secrets_officer_ids = ["33333333-3333-3333-3333-333333333333"]
+
+# ---- Monitoring --------------------------------------------------------------
+# Post-trial Log Analytics alerts notify this address (empty = none).
+alert_email = ""
+# Printed by lab/scripts/monitoring/Deploy-Playbook.ps1 (empty = no automation rule yet).
+sentinel_playbook_id = ""
+
+# ---- Entra ID ---------------------------------------------------------------
+# The tenant's INITIAL domain - break-glass accounts live here, not on the
+# custom domain.
+onmicrosoft_domain = "contosohealthlab.onmicrosoft.com"
+
+# CA states live in the committed lab.tfvars. To override locally: CA001..CA005
+# are always required; CA006..CA010, CA020..CA022 and CA060 while their flag
+# is on (variables.tf ca_policy_states). Graduate one policy per PR:
+# ca_policy_states = {
+#   CA001 = "enabled"
+#   CA002 = "enabledForReportingButNotEnforced"
+#   CA003 = "enabled"
+#   CA004 = "enabledForReportingButNotEnforced"
+#   CA005 = "enabledForReportingButNotEnforced"
+#   CA006 = "enabledForReportingButNotEnforced"
+#   CA007 = "enabledForReportingButNotEnforced"
+#   CA008 = "enabledForReportingButNotEnforced"
+#   CA009 = "enabledForReportingButNotEnforced"
+#   CA010 = "enabledForReportingButNotEnforced"
+#   CA020 = "enabledForReportingButNotEnforced"
+#   CA021 = "enabledForReportingButNotEnforced"
+#   CA022 = "enabledForReportingButNotEnforced"
+#   CA060 = "enabledForReportingButNotEnforced"
+# }
+
+# Optional EXISTING CA008 pilot group (empty = module creates
+# CA008-Pilot-PhishingResistant). Must be a literal id.
+ca008_pilot_group_object_id = ""
+
+# CA010 (block device code flow) exception groups, excluded NEXT TO
+# break-glass: CA010-Exclusion-<reason> through the exception process
+# (owner, expiry, monthly review; role-assignable group). Empty = none.
+ca010_exception_group_object_ids = []
+
+blocked_countries = ["KP", "IR", "SY", "CU"]
+
+# ---- PIM --------------------------------------------------------------------
+# Object ids of users who approve PIM-for-Groups activations (your admin@).
+pim_require_approval    = true
+pim_approver_object_ids = ["22222222-2222-2222-2222-222222222222"]
+
+# Tier-0 activation approvers (PIM tier groups). Empty = pim_approver_object_ids.
+# They become the members of PIM-Approvers-Tier0 (Tier-1: pim_approver_object_ids
+# -> PIM-Approvers-Tier1). Two or more each; never the people made eligible.
+pim_tier0_approver_object_ids = []
+
+# Security mailbox for PIM's admin notifications (one address; empty = tenant
+# default). Tenant data - in CI a repo SECRET, never lab.tfvars.
+pim_alert_mailbox = ""
+
+# ---- Entitlement ------------------------------------------------------------
+# Group whose members approve access-package requests (empty = requestor's manager).
+entitlement_approver_group_object_id = ""
+
+# Fallback reviewers (group) for access reviews when a user has no manager,
+# and the mandatory fallback of every privileged (PIM-eligible) review.
+# Required once any enable_access_reviews* flag is on (empty = the approver
+# group above).
+access_review_fallback_group_object_id = ""
+
+# Governance group reviewing PIM-eligible (privileged) access - never one of
+# the reviewed admin groups. Empty = the fallback group above.
+privileged_review_reviewer_group_object_id = ""
+
+# The affiliated clinic (enable_b2b_governance): a domain you control, or a
+# second free Entra tenant's id. The default is fictional.
+b2b_connected_organization = {
+  display_name = "Fabrikam Affiliated Clinic"
+  domain_name  = "fabrikam-clinic.example"
+  # tenant_id  = "44444444-4444-4444-4444-444444444444"
+}
+
+# Printed by post-apply/New-B2BConnectedOrganization.ps1 (empty = all
+# configured connected organizations).
+b2b_connected_organization_id = ""
+
+# ---- SSO apps (modules/apps) -------------------------------------------------
+# Accountable human owners of every app (your admin@ object id).
+app_owner_object_ids = ["33333333-3333-3333-3333-333333333333"]
+# Team mailbox for SAML signing-certificate expiry mails.
+saml_cert_notification_emails = []
+
+# From AWS IAM Identity Center -> Settings -> Identity source -> Change
+# identity source -> External IdP -> Service provider metadata. Empty = the
+# AWS app exists but cannot complete a SAML sign-in yet (fails closed).
+aws_saml_entity_id    = "" # https://<region>.signin.aws.amazon.com/platform/saml/<id>
+aws_saml_acs_urls     = [] # ["https://<region>.signin.aws.amazon.com/platform/saml/acs/<id>"]
+aws_access_portal_url = "" # https://d-xxxxxxxxxx.awsapps.com/start
+
+# Read AFTER the first SSO apply (output aws_scim_template_lookup_command).
+aws_scim_template_id = ""
+
+# NEVER put aws_scim_credentials in this file. The one seeding apply exports
+# it from Key Vault for that run only (modules/apps/README.md "SCIM credential"):
+#   export TF_VAR_aws_scim_credentials="$(jq -n \
+#     --arg u "$(az keyvault secret show --vault-name <kv> -n aws-scim-tenant-url --query value -o tsv)" \
+#     --arg t "$(az keyvault secret show --vault-name <kv> -n aws-scim-token --query value -o tsv)" \
+#     '{tenant_url:$u, secret_token:$t}')"
+
+# ServiceNow PDI SAML app (enable_servicenow_sso). The instance URL is the
+# SAML Identifier exactly - no trailing slash. The sys_id comes from the
+# ServiceNow identity provider record (Multi-Provider SSO -> Identity
+# Providers -> Copy sys_id) after its metadata import: second apply.
+servicenow_instance_url = "" # https://devNNNNN.service-now.com
+servicenow_sso_sys_id   = "" # 32 hex characters
+
+# ---- ITDR ----------------------------------------------------------------------
+# Printed by lab/scripts/monitoring/Deploy-ContainmentPlaybook.ps1.
+containment_playbook_id = ""
+# itdr_exclude_rules (rules held back until their table has data) is NOT set
+# here: it lives in lab.tfvars, which CI reads and -var-file lets override
+# this file. A list set only here would never reach a CI apply.
+# The APPLY identity by immutable id (envs/bootstrap output iac_principal_ids):
+# only these ids count as "IaC" in the ITDR rules. Empty = nothing is IaC.
+iac_principal_ids = []
+# Extra privileged users (Find-ShadowAdmins.ps1 -PrivilegedIdsPath).
+privileged_user_object_ids = []
+
+# ---- Evidence store ------------------------------------------------------------
+# Globally unique - add a short suffix.
+evidence_storage_account_name = "stidlabevidence7f3a"
+
+# ---- Intune VM --------------------------------------------------------------
+# Your admin user's object id - may RDP into the Intune VM with Entra creds
+# (the CA005 pilot group is granted automatically when enable_premium = true).
+intune_vm_admin_login_object_ids = ["00000000-0000-0000-0000-000000000000"]
+
+# ---- Tags -------------------------------------------------------------------
+tags = {
+  project     = "contoso-health-identity-lab"
+  environment = "dev"
+  managed_by  = "terraform"
+  owner       = "iam-platform-team"
+}

@@ -1,0 +1,61 @@
+employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate
+# ---------------------------------------------------------------------------
+# hr_feed.csv  --  Mock HR roster for Contoso Health (contosohealth.io)
+#
+# This file stands in for a Workday / SAP SuccessFactors worker export. In
+# production the HR system of record feeds the same Entra provisioning
+# service (Workday/SuccessFactors via Entra's native connectors, which pull;
+# any other HRIS via this API-driven endpoint). The downstream automation
+# does not change.
+#
+# COLUMN CONTRACT (consumed by Invoke-InboundProvisioning.ps1 and 02/03/04-*.ps1)
+#   employeeId  numeric worker id. Maps to SCIM externalId AND
+#               enterprise extension employeeNumber. Also the join key the
+#               'manager' column points at (manager-by-employeeId resolution).
+#   givenName   first name  -> SCIM name.givenName
+#   surname     last name   -> SCIM name.familyName
+#   dept        department  -> enterprise extension 'department'
+#   jobTitle    title       -> SCIM title
+#   manager     employeeId of this worker's manager (blank = top of chain)
+#   status      joiner | active | leaver  (lifecycle state -- see note below)
+#   startDate   ISO-8601 hire / effective date (YYYY-MM-DD)
+#   endDate     ISO-8601 termination date for leavers, else blank
+#
+# LIFECYCLE STATUS SEMANTICS
+#   joiner  pre-hire / day-1 worker. SCIM active=true; onboarding runs.
+#   active  steady-state worker. A "MOVER" is an *active* row whose dept or
+#           jobTitle differs from what the directory currently holds -- there
+#           is intentionally no 'mover' status; movers are detected by diffing
+#           this feed against Entra (see 03-Mover.ps1 and this folder's README).
+#   leaver  terminated worker. SCIM active=false; offboarding runs (04-Leaver).
+#
+# NOTE: lines beginning with '#' are comments stripped by Invoke-InboundProvisioning.ps1
+#       before parsing. Keep the header row (line 1) first and uncommented.
+#
+# PROTAGONIST: Dana Okafor (employeeId 100492) -- the worker the video follows
+#              from hire (segment 2) to departure (segment 7). Shipped as a
+#              'joiner' so the segment-2 onboarding demo runs against her.
+# MOVER:       Marcus Bello (employeeId 100310) ships in Nursing. The mover demo
+#              edits his dept to ICU here, re-runs inbound provisioning
+#              (-StatusFilter active), then runs 03-Mover.ps1.
+# LEAVER:      the leaver demo flips Dana's status to 'leaver' + sets endDate.
+# IT / IAM:    Ava Lin (IAM engineer), Raj Patel (service desk analyst) and
+#              Mei Tanaka (access governance lead) work in Information
+#              Technology under Joan Ferris. Their WORKFORCE accounts here get
+#              no privileged birthright; admin work uses separate cloud-only
+#              adm- accounts (lab/iga/admin-accounts.json,
+#              post-apply/New-AdminAccounts.ps1) that are only ever PIM-eligible.
+# ---------------------------------------------------------------------------
+100492,Dana,Okafor,Nursing,Registered Nurse,200015,joiner,2026-10-19,
+100488,Sofia,Reyes,Nursing,Registered Nurse,200015,joiner,2026-10-19,
+100477,Thomas,Nguyen,Radiology,Radiologic Technologist,200021,joiner,2026-10-20,
+200015,Grace,Mwangi,Nursing,Nurse Manager,300001,active,2019-03-04,
+200021,Omar,Haddad,Radiology,Radiology Manager,300001,active,2020-06-15,
+100310,Marcus,Bello,Nursing,Registered Nurse,200015,active,2022-01-10,
+100205,Priya,Nair,Billing,Billing Specialist,200030,leaver,2021-09-01,2026-10-17
+300001,Helen,Carter,Administration,Chief Nursing Officer,,active,2016-02-01,
+200030,Daniel,Osei,Billing,Billing Manager,300001,active,2018-11-20,
+400100,Joan,Ferris,Information Technology,IT Director,,active,2017-05-08,
+400101,Ava,Lin,Information Technology,IAM Engineer,400100,active,2021-04-12,
+400102,Raj,Patel,Information Technology,Service Desk Analyst,400100,active,2023-02-06,
+400103,Mei,Tanaka,Information Technology,Access Governance Lead,400100,active,2020-09-14,

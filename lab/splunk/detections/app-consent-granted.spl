@@ -1,0 +1,91 @@
+index=entra sourcetype="azure:loganalytics:auditlogs" Category="ApplicationManagement" earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Permission (consent) granted to an application           ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/app-consent-granted.kql (same logic/window)       ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over Entra AuditLogs REPLAYED     ```
+``` from Log Analytics by lab/splunk/ingest-from-loganalytics.sh.              ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   Consent to application, Add delegated permission grant and Add app role  ```
+```   assignment to service principal (application permission). Severity     ```
+```   column: High = tenant-wide AND a high-risk scope (mail, files, directory ```
+```   or role write), Medium = either, Low = neither or the CI apply identity. ```
+``` MITRE ATT&CK: T1528 Steal Application Access Token; T1098.003.            ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   take_anyif(newValue, displayName =~ X) -> mvfilter on spath(MP, name)    ```
+```                                            + mvindex 0 + spath newValue   ```
+```   trim(@'quote', v)                      -> trim(v, urldecode(%22)): the   ```
+```                                            quote char without a backslash ```
+```   extract_all(Scope: ...)                -> rex max_match=0 on Scope:      ```
+```   extract_all(token regex)               -> rex max_match=0 (multivalue)   ```
+```   IacPrincipalIds let-list             -> lookup contoso_iac_principals.csv ```
+```   set_intersect(Permissions, list)       -> mvfilter(in(Permissions, ...)) ```
+```   HONEST DIFFERENCE: the KQL scope regex stops at a comma or a closing    ```
+```   bracket; the SPL one too ([^],]+), written without backslashes.         ```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT1H, base severity Medium (Severity column = dynamic),   ```
+``` throttled 1 h per Actor + Severity.                                         ```
+``` ========================================================================== ```
+``` @stanza Contoso - Permission (consent) granted to an application ```
+``` @conf description = Delegated or application permission granted to an app; High when tenant-wide and high-risk. KQL twin: lab/kql/app-consent-granted.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 4 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Actor,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where Category=="ApplicationManagement" AND lower(Result)=="success"
+| where in(lower(OperationName), "consent to application", "add delegated permission grant", "add app role assignment to service principal")
+| spath path=InitiatedBy.user.userPrincipalName output=ActorUpn
+| spath path=InitiatedBy.user.id output=ActorObjectId
+| spath path=InitiatedBy.app.displayName output=ActorApp
+| spath path=InitiatedBy.app.servicePrincipalId output=ActorSpId
+| spath path=InitiatedBy.app.appId output=ActorAppId
+| spath path=InitiatedBy.user.ipAddress output=ActorUserIp
+| spath path=InitiatedBy.app.ipAddress output=ActorAppIp
+| eval ActorIp=if(isnotnull(ActorUserIp) AND ActorUserIp!="", ActorUserIp, ActorAppIp)
+| eval Actor=if(isnotnull(ActorUpn) AND ActorUpn!="", ActorUpn, ActorApp)
+| spath path=TargetResources{} output=TR
+| eval TR1=mvindex(mvfilter(match(spath(TR, "type"), "(?i)^ServicePrincipal$")), 0)
+| eval TargetName=spath(TR1, "displayName"), TargetObjectId=spath(TR1, "id")
+| eval MP=spath(TR1, "modifiedProperties{}")
+| eval MPAdmin=mvindex(mvfilter(match(spath(MP, "displayName"), "(?i)^ConsentContext.IsAdminConsent$")), 0)
+| eval MPAll=mvindex(mvfilter(match(spath(MP, "displayName"), "(?i)^ConsentContext.OnBehalfOfAll$")), 0)
+| eval MPPerm=mvindex(mvfilter(match(spath(MP, "displayName"), "(?i)^ConsentAction.Permissions$")), 0)
+| eval MPScope=mvindex(mvfilter(match(spath(MP, "displayName"), "(?i)^DelegatedPermissionGrant.Scope$")), 0)
+| eval MPRole=mvindex(mvfilter(match(spath(MP, "displayName"), "(?i)^AppRole.Value$")), 0)
+| eval MPClient=mvindex(mvfilter(match(spath(MP, "displayName"), "(?i)^ServicePrincipal.DisplayName$")), 0)
+| eval Q=urldecode("%22")
+| eval IsAdminConsent=if(lower(trim(spath(MPAdmin, "newValue"), Q))=="true", "true", "false")
+| eval OnBehalfOfAll=if(lower(trim(spath(MPAll, "newValue"), Q))=="true", "true", "false")
+| eval PermissionsRaw=spath(MPPerm, "newValue")
+| eval GrantKind=case(lower(OperationName)=="add app role assignment to service principal", "ApplicationPermission", lower(OperationName)=="add delegated permission grant", "DelegatedGrant", true(), "Consent")
+| eval ClientApp=if(GrantKind=="Consent", TargetName, trim(spath(MPClient, "newValue"), Q))
+| eval ResourceApp=if(GrantKind=="Consent", "", TargetName)
+| rex max_match=0 field=PermissionsRaw "Scope: *(?<ScopeChunk>[^],]+)"
+| eval PermissionText=case(GrantKind=="Consent", mvjoin(ScopeChunk, " "), GrantKind=="DelegatedGrant", trim(spath(MPScope, "newValue"), Q), true(), trim(spath(MPRole, "newValue"), Q))
+| rex max_match=0 field=PermissionText "(?<Permissions>[A-Za-z][A-Za-z0-9_.-]*)"
+| eval HighRiskGranted=mvfilter(in(Permissions, "Mail.Read", "Mail.ReadWrite", "Mail.Send", "MailboxSettings.ReadWrite", "EWS.AccessAsUser.All", "full_access_as_app", "Contacts.Read", "Files.Read.All", "Files.ReadWrite.All", "Sites.Read.All", "Sites.ReadWrite.All", "Sites.FullControl.All", "Notes.Read.All", "Directory.ReadWrite.All", "Directory.AccessAsUser.All", "Application.ReadWrite.All", "AppRoleAssignment.ReadWrite.All", "RoleManagement.ReadWrite.Directory", "RoleAssignmentSchedule.ReadWrite.Directory", "RoleEligibilitySchedule.ReadWrite.Directory", "RoleManagementPolicy.ReadWrite.Directory", "PrivilegedAccess.ReadWrite.AzureADGroup", "PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup", "PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup", "User.ReadWrite.All", "User-PasswordProfile.ReadWrite.All", "Group.ReadWrite.All", "GroupMember.ReadWrite.All", "Policy.ReadWrite.ConditionalAccess", "Policy.ReadWrite.PermissionGrant", "Policy.ReadWrite.AuthenticationMethod", "UserAuthenticationMethod.ReadWrite.All", "Domain.ReadWrite.All", "Organization.ReadWrite.All", "EntitlementManagement.ReadWrite.All"))
+| eval TenantWide=if(IsAdminConsent=="true" OR OnBehalfOfAll=="true" OR GrantKind=="ApplicationPermission", "true", "false")
+| eval HighRisk=if(coalesce(mvcount(HighRiskGranted), 0) > 0, "true", "false")
+| lookup contoso_iac_principals.csv principal_id AS ActorSpId OUTPUT principal_id AS IacBySp
+| lookup contoso_iac_principals.csv principal_id AS ActorAppId OUTPUT principal_id AS IacByApp
+| eval IsIac=if(isnotnull(IacBySp) OR isnotnull(IacByApp), "true", "false")
+| eval IacNameSpoof=if(IsIac=="false" AND lower(coalesce(ActorApp, ""))=="gh-oidc-entra-apply (write)", "true", "false")
+| eval Severity=case(IacNameSpoof=="true", "High", IsIac=="true", "Low", TenantWide=="true" AND HighRisk=="true", "High", TenantWide=="true" OR HighRisk=="true", "Medium", true(), "Low")
+| sort 0 - _time
+| table TimeGenerated, Severity, Actor, ActorUpn, ActorObjectId, ActorApp, ActorIp, IsIac, IacNameSpoof, OperationName, GrantKind, ClientApp, ResourceApp, TargetObjectId, IsAdminConsent, OnBehalfOfAll, TenantWide, Permissions, HighRiskGranted, CorrelationId

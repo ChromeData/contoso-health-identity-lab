@@ -1,0 +1,21 @@
+# gitleaks configuration for this repository: every default rule, plus one
+# narrowly scoped allowlist.
+#
+# The Kusto-emulator harness writes the sha256 of each input file into its run
+# record (results.json "inputs"), keyed by the rule or file name. Names that
+# contain "auth", "credential" or "access" make gitleaks' generic-api-key rule
+# read those sha256 values as API keys. The allowlist below matches only when
+# all of these hold: rule generic-api-key, a Kusto run record's results.json,
+# and a secret that is exactly 64 lowercase hex characters (a sha256 digest).
+# Anything else in those files, and every other file, is scanned as usual.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "sha256 input digests in Kusto-emulator run records (lab/evidence/kusto/<UTC>/results.json)"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^[0-9a-f]{64}$''']
+paths = ['''(^|/)lab/evidence/kusto/[0-9]{8}T[0-9]{6}Z/results\.json$''']

@@ -1,0 +1,21 @@
+# Conjur policy-as-code: who may read which pipeline secret.
+# Loaded by conjur-demo.sh into the root branch.
+#
+#   apps/nightly-report   (host)  -> MAY read apps/servicenow-api-key
+#   apps/unapproved-job   (host)  -> exists, but has NO grant (the denied demo)
+#
+# Production mapping: hosts are workloads (a GitHub Actions job via the
+# authn-jwt authenticator, a K8s service account, a VM); this lab uses API
+# keys because GitHub-hosted runners cannot reach a Conjur on your laptop.
+- !policy
+  id: apps
+  body:
+    - !host nightly-report
+    - !host unapproved-job
+
+    - !variable servicenow-api-key
+
+    - !permit
+      role: !host nightly-report
+      privileges: [ read, execute ]
+      resource: !variable servicenow-api-key

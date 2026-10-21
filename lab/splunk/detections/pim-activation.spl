@@ -1,0 +1,91 @@
+index=entra sourcetype="azure:loganalytics:auditlogs" LoggedByService="PIM" earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Privileged Identity Management (PIM) activation            ```
+```                  (PIM for Groups + PIM for roles)                           ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM        ```
+``` KQL twin:        lab/kql/pim-activation.kql (same logic/window/columns)       ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: runs on the Splunk Enterprise 60-day TRIAL (replaces production   ```
+``` Splunk) over Entra logs REPLAYED from Log Analytics by                      ```
+``` lab/splunk/ingest-from-loganalytics.sh (replaces the Splunk Add-on for      ```
+``` Microsoft Azure / Event Hub streaming). Base search is line 1 on purpose:   ```
+``` a comment before the first command breaks a Splunk search.                  ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   A just-in-time elevation that actually COMPLETED: an eligible member of  ```
+```   Privileged-IAM-Admins activating (PIM for Groups), or a direct PIM role  ```
+```   activation. Requests/approvals are not matched - only the grant.         ```
+```   HighValue=true marks the role-bearing group or a Tier-0/1 role.          ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   where TimeGenerated > ago(1h)           -> earliest=-1h latest=now        ```
+```   LoggedByService == PIM (case-SENSITIVE) -> base-search pre-filter (case-  ```
+```                                              insensitive) + where ==        ```
+```   Category in (GroupManagement, RoleManagement) -> where in(Category, ...)  ```
+```                                              (both case-sensitive)          ```
+```   ActivityDisplayName has PIM activation  ```
+```     and has completed (has = whole-term, case-insensitive)                 ```
+```                                           -> where match(..., (?i) term     ```
+```                                              bounded by start/end or a non- ```
+```                                              alphanumeric char - the KQL    ```
+```                                              term boundary; no backslash    ```
+```                                              escapes to survive eval quoting) ```
+```   tostring(InitiatedBy.user.*)            -> spath path=InitiatedBy.user.*  ```
+```   mv-apply tr = TargetResources on (                                       ```
+```     summarize take_anyif(displayName, type == Group / Role))               ```
+```                                           -> spath path=TargetResources{}   ```
+```                                              + mvfilter(type == Group/Role) ```
+```                                              + displayName of the 1st match ```
+```                                              (picked by TYPE, never index)  ```
+```   iff(isnotempty(TargetGroup), ...)       -> eval if(non-empty, ...)        ```
+```   ElevatedTo in (high-value list)         -> in() - case-sensitive, as KQL  ```
+```   AdditionalDetails (raw dynamic bag)     -> spath path=AdditionalDetails{} ```
+```                                              (one key/value JSON per value) ```
+```   project ... | sort by TimeGenerated desc -> sort 0 - _time | table ...    ```
+``` VERIFY (same as the KQL): after the first real activation, copy the exact  ```
+``` ActivityDisplayName strings from the events - Microsoft has renamed PIM    ```
+``` activity strings before. verify: eval spath() on each TargetResources{}    ```
+``` element (its JSON text); mvfilter itself is documented.                     ```
+```                                                                            ```
+``` SCHEDULE: mirrors the Sentinel rule (lab/terraform/modules/monitoring):     ```
+``` PT5M / PT1H, severity Medium, trigger > 0 rows, 1 h grouping by Account +   ```
+``` IP entities (Actor, ActorIp).                                               ```
+``` ========================================================================== ```
+``` @stanza Contoso - PIM activation (just-in-time elevation) ```
+``` @conf description = A PIM for Groups / PIM for roles activation completed. Expected for approved changes; every one is reviewed. KQL twin: lab/kql/pim-activation.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 4 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Actor,ActorIp ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where LoggedByService=="PIM" AND in(Category, "GroupManagement", "RoleManagement")
+| where match(ActivityDisplayName, "(?i)(^|[^A-Za-z0-9])PIM activation($|[^A-Za-z0-9])") AND match(ActivityDisplayName, "(?i)(^|[^A-Za-z0-9])completed($|[^A-Za-z0-9])")
+| spath path=InitiatedBy.user.userPrincipalName output=Actor
+| spath path=InitiatedBy.user.id output=ActorObjectId
+| spath path=InitiatedBy.user.ipAddress output=ActorIp
+| spath path=TargetResources{} output=TR
+| eval TRGroup=mvfilter(spath(TR, "type")=="Group")
+| eval TRRole=mvfilter(spath(TR, "type")=="Role")
+| eval TRGroup1=mvindex(TRGroup, 0)
+| eval TRRole1=mvindex(TRRole, 0)
+| eval TargetGroup=spath(TRGroup1, "displayName")
+| eval TargetRole=spath(TRRole1, "displayName")
+| eval HasGroup=if(isnotnull(TargetGroup) AND TargetGroup!="", 1, 0)
+| eval ElevatedTo=if(HasGroup==1, TargetGroup, TargetRole)
+| eval ElevationType=if(HasGroup==1, "PIM for Groups", "PIM for roles")
+| eval HighValue=if(isnotnull(ElevatedTo) AND in(ElevatedTo, "Privileged-IAM-Admins", "Global Administrator", "Privileged Role Administrator", "Security Administrator", "Application Administrator", "User Administrator"), "true", "false")
+| spath path=AdditionalDetails{} output=AdditionalDetails
+| sort 0 - _time
+| table TimeGenerated, Actor, ActorObjectId, ActorIp, ElevationType, ElevatedTo, HighValue, Result, ActivityDisplayName, CorrelationId, AdditionalDetails

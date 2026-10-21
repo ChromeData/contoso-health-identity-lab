@@ -1,0 +1,107 @@
+{
+  "run_utc": "20261020T152623Z",
+  "tool": "Evolveum midPoint 4.10.4 (local Docker stand-in for SailPoint / Saviynt; lab/pam/docker-compose.yml)",
+  "driven_by": "lab/pam/midpoint/run-campaign.sh over the midPoint REST API",
+  "tenant": "none: local lab data only (fictional personas from lab/scripts/mock-hr/hr_feed.csv)",
+  "campaign": {
+    "oid": "db5f38a0-1617-4f75-89d0-a9d021e646e7",
+    "name": "Contoso T2 requestable-access review 9",
+    "definition": "c0471e00-0000-4000-8000-000000000401",
+    "state": "closed",
+    "start_utc": "2026-10-20T15:26:25.976Z",
+    "end_utc": "2026-10-20T15:26:31.084Z",
+    "stage": [
+      {
+        "number": 1,
+        "name": "Manager review",
+        "startTimestamp": "2026-10-20T15:26:25.914Z",
+        "deadline": "2026-11-03T23:59:59.999Z",
+        "endTimestamp": "2026-10-20T15:26:28.644Z"
+      }
+    ]
+  },
+  "cases": 7,
+  "work_items": 7,
+  "decisions_recorded": 6,
+  "decided_by_assigned_reviewer": 6,
+  "left_unanswered": 1,
+  "case_outcomes": {
+    "accept": 4,
+    "noResponse": 1,
+    "revoke": 2
+  },
+  "remediated_cases": [
+    {
+      "user": "daniel.osei",
+      "role": "AP Clerk",
+      "outcome": "revoke",
+      "remediedTimestamp": "2026-10-20T15:26:30.946Z"
+    },
+    {
+      "user": "marcus.bello",
+      "role": "Pharmacist",
+      "outcome": "revoke",
+      "remediedTimestamp": "2026-10-20T15:26:30.993Z"
+    },
+    {
+      "user": "dana.okafor",
+      "role": "ICU Nurse",
+      "outcome": "noResponse",
+      "remediedTimestamp": "2026-10-20T15:26:31.047Z"
+    }
+  ],
+  "reviewers": {
+    "access-governance-lead": 1,
+    "grace.mwangi": 4,
+    "helen.carter": 2
+  },
+  "authorization_probes": [
+    {
+      "actor": "dana.okafor",
+      "item": "marcus.bello / ICU Nurse",
+      "assignedReviewer": "grace.mwangi",
+      "status": "refused"
+    },
+    {
+      "actor": "access-governance-lead",
+      "item": "marcus.bello / Pharmacist",
+      "assignedReviewer": "grace.mwangi",
+      "status": "refused"
+    }
+  ],
+  "kpis": {
+    "definitions": "lab/docs/adr/0012-access-review-no-response-and-clinical-lockout.md, How it is measured (written for Entra reviews; applied here to the midPoint campaign)",
+    "completion_pct": 85.7,
+    "completion_target_t2_pct": 95,
+    "revocation_rate_pct": 33.3,
+    "per_reviewer": [
+      {
+        "reviewer": "helen.carter",
+        "items": 2,
+        "decided": 2,
+        "revoked": 1,
+        "median_seconds_between_decisions": 0.019
+      },
+      {
+        "reviewer": "grace.mwangi",
+        "items": 4,
+        "decided": 3,
+        "revoked": 1,
+        "median_seconds_between_decisions": 0.024
+      },
+      {
+        "reviewer": "access-governance-lead",
+        "items": 1,
+        "decided": 1,
+        "revoked": 0,
+        "median_seconds_between_decisions": null
+      }
+    ],
+    "rubber_stamp_flagged": [
+      "helen.carter",
+      "grace.mwangi"
+    ],
+    "approve_against_recommendation": "n/a: no recommendation engine configured in this lab",
+    "note": "Every decision here is recorded by a script within about a second, so each reviewer with two or more decisions is flagged by the under-5-seconds rule. That is the KPI working: it cannot tell a script from a rubber stamp. Completion is below the T2 target because one item was left unanswered on purpose."
+  }
+}

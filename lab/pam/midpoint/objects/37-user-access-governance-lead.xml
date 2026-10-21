@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Functional persona, not in the HR feed: the fallback reviewer (ADR 0012: the manager, plus a fallback) for items whose holder has no manager. -->
+<user xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000308">
+    <name>access-governance-lead</name>
+    <description>Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).</description>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000101" type="OrgType"/>
+    </assignment>
+    <assignment>
+        <description>Built-in midPoint role "Reviewer": may record certification decisions.</description>
+        <targetRef oid="00000000-0000-0000-0000-00000000000b" type="RoleType"/>
+    </assignment>
+    <activation>
+        <administrativeStatus>enabled</administrativeStatus>
+    </activation>
+    <fullName>Access Governance Lead</fullName>
+    <givenName>Access</givenName>
+    <familyName>Governance Lead</familyName>
+    <employeeNumber>900001</employeeNumber>
+    <organizationalUnit>Identity Governance</organizationalUnit>
+    <title>Access Governance Lead</title>
+</user>

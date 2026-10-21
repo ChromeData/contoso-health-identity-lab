@@ -1,0 +1,53 @@
+{
+  "rule": "kerberoast-rc4-service-ticket",
+  "about": "Raw-event versions of the itdr-cases.json alert-stage rows (which are aggregated rows the import skips): several 4769 events summarised by the rule itself. The ticket encryption type is read from EventData XML, as the rule does.",
+  "defaults": {
+    "SecurityEvent": {
+      "EventID": 4769, "Computer": "DC01.corp.test.local", "TargetUserName": "alice@CORP.TEST.LOCAL",
+      "TargetDomainName": "CORP.TEST.LOCAL", "IpAddress": "::ffff:10.0.1.20", "Status": "0x0", "TimeGenerated": "ago:20m"
+    }
+  },
+  "cases": [
+    {
+      "id": "rc4-sweep-three-services",
+      "kind": "positive",
+      "label": "RC4 tickets for three user SPNs from one requester: a sweep, High",
+      "tables": {"SecurityEvent": [
+        {"ServiceName": "svc-sql01", "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">svc-sql01</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"Status\">0x0</Data></EventData>"},
+        {"ServiceName": "svc-iis-app", "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">svc-iis-app</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"Status\">0x0</Data></EventData>"},
+        {"ServiceName": "svc-backup", "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">svc-backup</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"Status\">0x0</Data></EventData>"}
+      ]},
+      "expect": [{"Severity": "High", "Account": "alice", "AccountDomain": "CORP.TEST.LOCAL", "ServiceCount": 3, "Tickets": 3,
+                  "Tier0Roasted": false, "SourceIp": "10.0.1.20", "Services": ["svc-sql01", "svc-iis-app", "svc-backup"]}],
+      "expectRows": 1
+    },
+    {
+      "id": "tier0-spn-single-ticket",
+      "kind": "positive",
+      "label": "One RC4 ticket for the Tier-0 SPN svc-legacy-da: High",
+      "tables": {"SecurityEvent": [
+        {"ServiceName": "svc-legacy-da", "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">svc-legacy-da</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"Status\">0x0</Data></EventData>"}
+      ]},
+      "expect": [{"Severity": "High", "Tier0Roasted": true, "ServiceCount": 1}]
+    },
+    {
+      "id": "single-ordinary-spn",
+      "kind": "positive",
+      "label": "One RC4 ticket for an ordinary SPN: Medium",
+      "tables": {"SecurityEvent": [
+        {"ServiceName": "SVC-SQL01", "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">SVC-SQL01</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"Status\">0x0</Data></EventData>"}
+      ]},
+      "expect": [{"Severity": "Medium", "Tier0Roasted": false, "Services": ["svc-sql01"]}]
+    },
+    {
+      "id": "aes-sweep",
+      "kind": "negative",
+      "label": "The same three services with AES256 (0x12) tickets",
+      "tables": {"SecurityEvent": [
+        {"ServiceName": "svc-sql01", "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"ServiceName\">svc-sql01</Data><Data Name=\"TicketEncryptionType\">0x12</Data></EventData>"},
+        {"ServiceName": "svc-iis-app", "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"ServiceName\">svc-iis-app</Data><Data Name=\"TicketEncryptionType\">0x12</Data></EventData>"},
+        {"ServiceName": "svc-backup", "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"ServiceName\">svc-backup</Data><Data Name=\"TicketEncryptionType\">0x12</Data></EventData>"}
+      ]}
+    }
+  ]
+}

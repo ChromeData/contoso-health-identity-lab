@@ -1,0 +1,34 @@
+# captured by the evidence wrapper before the run (pipeline.sh logs its own preflight versions in run.log)
+captured_utc: 2026-10-20T20:21:12Z
+host: Darwin 25.5.0 arm64
+macos: 26.5.2 (25F84)
+bash (env bash): GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+colima: colima version v0.10.3
+colima vm: 4 CPU, 8307167232 bytes RAM, Ubuntu 24.04.4 LTS, 6.8.0-117-generic
+docker client: 29.9.0
+docker server: 29.5.2 (linux/arm64)
+kind: kind v0.33.0 go1.26.7 darwin/arm64  path=~/.local/bin/kind  sha256=0c8c7dbe5e23594a198b786c4bc13dacc101fa6196b0cb0b23a1ca44e61f4b4f
+kubectl: v1.37.1 darwin/arm64 commit f78e722310e50bcaca9276be22276d9e91d91308  path=~/.local/bin/kubectl  sha256=fd65982c97ddad3106754b69ffa196d0e543aa591930ae52aed1adfb92f8c77f
+terraform: 1.16.5 darwin_arm64  path=~/.local/bin/terraform  sha256=22df21d6313d216a8c43737fc8c07411dd744925059f946e86d60cbad1acea23
+helm: not installed (not used: the Vault chart is installed by the Terraform helm provider, see provider lock below)
+checkov: 3.3.20
+jq: jq-1.7.1-apple
+curl: curl 8.7.1 (x86_64-apple-darwin25.0) libcurl/8.7.1 (SecureTransport) LibreSSL/3.3.6 zlib/1.2.12 nghttp2/1.68.1
+openssl: LibreSSL 3.3.6
+git commit and status: omitted at publication (code-under-test.sha256 is the fingerprint)
+
+## pins in the code under test
+kind node image (lab/k8s/kind/cluster.yaml): kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
+platform main.tf:53:  vault_chart_version    = "0.34.1"          # chart appVersion is 2.0.4; image overridden below
+platform main.tf:55:  vault_image_version    = "2.1.1"           # same as lab/pam/docker-compose.yml
+platform main.tf:56:  injector_image_version = "1.7.6"           # hashicorp/vault-k8s, the 0.34.1 chart default, pinned explicitly
+platform main.tf:77:  vault_image_digest    = "sha256:47f14a6acb98f48d798a07df7c83f23a6e636e1cf724c5f8ff165cb32667a1e2"
+platform main.tf:78:  injector_image_digest = "sha256:55e27b080c9b0469fd420dfb3631243488c6319504b779423caa46c529a95490"
+app image (manifests/nightly-report.yaml): docker.io/library/busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+
+## Terraform provider lock (lab/terraform/k8s/*/.terraform.lock.hcl)
+  platform: registry.terraform.io/hashicorp/helm 3.3.0
+  platform: registry.terraform.io/hashicorp/kubernetes 3.3.0
+  identity: registry.terraform.io/hashicorp/kubernetes 3.3.0
+  identity: registry.terraform.io/hashicorp/vault 5.12.0
+  aks-mapping: registry.terraform.io/hashicorp/azuread 3.10.0

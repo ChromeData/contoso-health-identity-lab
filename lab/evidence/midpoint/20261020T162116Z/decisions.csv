@@ -1,0 +1,8 @@
+"case_id","user","role","reviewer_assigned","decided_by","response","comment","decided_at_utc","case_outcome","remediated_at_utc"
+629,"helen.carter","ICU Nurse","access-governance-lead","access-governance-lead","accept","Night-shift escalation cover confirmed with the CNO office.","2026-10-20T16:21:23.444Z","accept",""
+631,"grace.mwangi","ICU Nurse","helen.carter","helen.carter","accept","Covers ICU charge-nurse shifts.","2026-10-20T16:21:23.377Z","accept",""
+633,"daniel.osei","AP Clerk","helen.carter","helen.carter","revoke","Stale: temporary month-end AP cover from 2023-12. The vacancy was filled; he no longer processes invoices.","2026-10-20T16:21:23.416Z","revoke","2026-10-20T16:21:26.058Z"
+635,"marcus.bello","ICU Nurse","grace.mwangi","grace.mwangi","accept","Still on the ICU float rota this quarter.","2026-10-20T16:21:23.213Z","accept",""
+637,"marcus.bello","Pharmacist","grace.mwangi","grace.mwangi","revoke","SoD conflict flagged by midPoint: Nurse + Pharmacist (administer vs dispense controlled substances). He is not a pharmacist; the access was copied from a colleague.","2026-10-20T16:21:23.253Z","revoke","2026-10-20T16:21:26.141Z"
+639,"dana.okafor","ICU Nurse","grace.mwangi","","(no response)","","","noResponse","2026-10-20T16:21:26.199Z"
+641,"sofia.reyes","ICU Nurse","grace.mwangi","grace.mwangi","accept","In ICU orientation until 2026-12.","2026-10-20T16:21:23.338Z","accept",""

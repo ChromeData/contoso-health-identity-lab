@@ -1,0 +1,60 @@
+index=entra sourcetype="azure:loganalytics:securityevent" EventID=4769 earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Kerberoasting - RC4 service tickets for user SPNs         ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/kerberoast-rc4-service-ticket.kql                 ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over SecurityEvent REPLAYED from  ```
+``` Log Analytics (ingest-from-loganalytics.sh -T SecurityEvent).              ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                            ```
+```   4769 on DC01, TicketEncryptionType 0x17 (RC4), Status 0x0, service a     ```
+```   user account (not NAME$, not krbtgt). High for 3+ services per           ```
+```   requester (a sweep) or a Tier-0 SPN account (svc-legacy-da),             ```
+```   else Medium.                                                             ```
+``` MITRE ATT&CK: T1558.003 Kerberoasting.                                     ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                     ```
+```   summarize dcount(Service) by Requester -> stats dc(Service) BY Requester ```
+```   set_intersect(Services, Tier0Spn)     -> mvfind on the values() list     ```
+```   TicketEncryptionType is not a SecurityEvent column (Microsoft Learn):    ```
+```   KQL extract() from EventData  -> rex field=EventData                     ```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT1H, severity from the Severity column, throttled 1 h    ```
+``` per Account + Severity.                                                    ```
+``` ========================================================================== ```
+``` @stanza Contoso - Kerberoasting RC4 service tickets ```
+``` @conf description = RC4 (0x17) Kerberos service tickets for user-account SPNs on DC01: offline-crackable; High for a sweep or a Tier-0 SPN. KQL twin: lab/kql/kerberoast-rc4-service-ticket.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Account,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where EventID==4769
+| eval Host=upper(mvindex(split(coalesce(Computer, ""), "."), 0))
+| rex field=EventData "Name=\"TicketEncryptionType\">(?<TicketEncryptionType>[^<]+)<"
+| where in(Host, "DC01") AND lower(coalesce(TicketEncryptionType, ""))=="0x17" AND lower(coalesce(Status, ""))=="0x0"
+| eval Service=lower(ServiceName)
+| where NOT match(coalesce(Service, ""), "[$]$") AND NOT match(coalesce(Service, ""), "^krbtgt")
+| eval Requester=lower(mvindex(split(coalesce(TargetUserName, ""), "@"), 0)), RequesterRealm=mvindex(split(coalesce(TargetUserName, ""), "@"), 1)
+| where NOT match(Requester, "[$]$")
+| eval SourceIp=replace(coalesce(IpAddress, ""), "^::ffff:", "")
+| stats max(_time) AS LastEpoch, min(_time) AS FirstEpoch, values(Service) AS Services, dc(Service) AS ServiceCount, count AS Tickets, values(SourceIp) AS SourceIps BY Requester RequesterRealm Host
+| eval Tier0Roasted=if(isnotnull(mvfind(Services, "^svc-legacy-da$")), "true", "false")
+| eval Account=Requester, AccountDomain=RequesterRealm, SourceIp=mvindex(SourceIps, 0)
+| eval Severity=if(ServiceCount>=3 OR Tier0Roasted=="true", "High", "Medium")
+| eval _time=LastEpoch, TimeGenerated=strftime(LastEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z"), FirstSeen=strftime(FirstEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z")
+| sort 0 - _time
+| table TimeGenerated, Severity, Account, AccountDomain, Host, SourceIp, SourceIps, ServiceCount, Services, Tier0Roasted, Tickets, FirstSeen

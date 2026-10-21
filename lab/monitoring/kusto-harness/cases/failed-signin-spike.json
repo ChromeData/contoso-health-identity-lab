@@ -1,0 +1,65 @@
+{
+  "rule": "failed-signin-spike",
+  "about": "10+ failed sign-ins from one IP in one 10-minute clock bin. All rows of a case share one timestamp, so they fall in one bin whatever the clock (the rule's bins are tumbling - a burst that straddles a :x0 boundary splits, by design).",
+  "defaults": {
+    "SigninLogs": {
+      "TimeGenerated": "ago:7m", "IPAddress": "198.51.100.66", "ResultType": "50126",
+      "AppDisplayName": "Microsoft Office", "LocationDetails": {"countryOrRegion": "NL"}
+    }
+  },
+  "cases": [
+    {
+      "id": "password-spray",
+      "kind": "positive",
+      "label": "12 failures from one IP against 12 users: likely password spray",
+      "tables": {"SigninLogs": [{"_repeat": 12, "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com"}]},
+      "expect": [{"IPAddress": "198.51.100.66", "FailedCount": 12, "TargetedUsers": 12, "Pattern": "likely password spray",
+                  "Country": "NL", "ErrorCodes": ["50126"]}],
+      "expectRows": 1
+    },
+    {
+      "id": "brute-force",
+      "kind": "positive",
+      "label": "10 failures from one IP against one user (exactly the threshold): likely brute force",
+      "tables": {"SigninLogs": [{"_repeat": 10, "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"}]},
+      "expect": [{"FailedCount": 10, "TargetedUsers": 1, "Pattern": "likely brute force"}]
+    },
+    {
+      "id": "spray-of-five-users",
+      "kind": "positive",
+      "label": "10 failures over exactly 5 users is already a spray",
+      "tables": {"SigninLogs": [
+        {"_repeat": 5, "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com"},
+        {"_repeat": 5, "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com", "ResultType": "50053"}
+      ]},
+      "expect": [{"FailedCount": 10, "TargetedUsers": 5, "Pattern": "likely password spray", "ErrorCodes": ["50126", "50053"]}]
+    },
+    {
+      "id": "below-threshold",
+      "kind": "negative",
+      "label": "9 failures from one IP",
+      "tables": {"SigninLogs": [{"_repeat": 9, "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com"}]}
+    },
+    {
+      "id": "successes-do-not-count",
+      "kind": "negative",
+      "label": "12 SUCCESSFUL sign-ins (ResultType 0) from one IP",
+      "tables": {"SigninLogs": [{"_repeat": 12, "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com", "ResultType": "0"}]}
+    },
+    {
+      "id": "split-across-two-ips",
+      "kind": "negative",
+      "label": "12 failures split 6 + 6 across two source IPs",
+      "tables": {"SigninLogs": [
+        {"_repeat": 6, "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com"},
+        {"_repeat": 6, "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com", "IPAddress": "198.51.100.67"}
+      ]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A 12-failure burst 2 h ago",
+      "tables": {"SigninLogs": [{"_repeat": 12, "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com", "TimeGenerated": "ago:2h"}]}
+    }
+  ]
+}

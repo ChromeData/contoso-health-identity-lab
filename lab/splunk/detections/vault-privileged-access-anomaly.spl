@@ -1,0 +1,102 @@
+index=entra sourcetype="azure:loganalytics:vaultcheckout_cl" earliest=-6h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): PAM vault anomalies (PTA-equivalent): Tier-0 credential  ```
+```                  read outside a ticketed check-out, check-out without a    ```
+```                  ticket, rotation failure, root-token use, failed vault    ```
+```                  login bursts, Tier-0 access denied                        ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/vault-privileged-access-anomaly.kql               ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over VaultCheckout_CL REPLAYED    ```
+``` from Log Analytics (ingest-from-loganalytics.sh -T ... VaultCheckout_CL).  ```
+``` VaultCheckout_CL is filled by lab/scripts/monitoring/ingest-vault-audit.sh ```
+``` and only carries the new Operation values (cred-read, rotation-failed,    ```
+``` root-token, auth-failed, access-denied) and the Ticket / Operator /       ```
+``` ErrorText fields once that script is extended - until then this search   ```
+``` returns nothing, exactly like the KQL.                                    ```
+```                                                                            ```
+``` WHAT IT CATCHES (one row per event or per burst, Signal column)            ```
+```   Tier0CredReadUncovered, Tier0CheckoutWithoutTicket, RotationFailed,      ```
+```   RootTokenUse, AuthFailureBurst (5+ in a 10-minute clock bin from one     ```
+```   address, across login names - LoginNames lists them), Tier0AccessDenied. ```
+```   Only a TIER-0 (tier0-admins) check-out covers a Tier-0 read. Severity   ```
+```   and the CyberArk analogue per signal: see the KQL header.               ```
+``` MITRE ATT&CK: T1555; T1078; T1110; T1562.                                  ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   column_ifexists(Ticket, empty)        -> coalesce(Ticket, empty)          ```
+```   getschema has a Ticket column          -> eventstats count(Ticket): does ```
+```                                            any row in the window carry it ```
+```   ReadCoverage join on Operator (any    -> ONE forward pass: tier0 check-  ```
+```   tier0 check-out in read-4h..read+5m)     outs shifted 5 min earlier,    ```
+```                                            sorted by Operator and time,   ```
+```                                            streamstats last(check-out)    ```
+```                                            BY Operator; covered when that ```
+```                                            check-out is at most 4 h old.   ```
+```                                            The latest check-out before    ```
+```                                            read+5m is in the window if    ```
+```                                            any is, so the two agree.      ```
+```   VaultPath has tier0 (term match)      -> match() with non-alphanumeric   ```
+```                                            boundaries                     ```
+```   bin(TimeGenerated, 10m)               -> floor(epoch / 600) * 600        ```
+```   summarize ... by Signal, GroupKey     -> stats BY Signal GroupKey        ```
+```   take_any(x)                           -> first(x)                        ```
+```   make_set_if(VaultPath, not lab path)  -> values() of an eval that is    ```
+```                                            null for the lab paths         ```
+```   HONEST DIFFERENCE: HasTicketColumn is a schema test in KQL and a data   ```
+```   test here (no row in the 6 h window carries Ticket = treated as absent).```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT6H (1 h judged + 4 h 5 m of check-out history), base   ```
+``` severity High (Severity column = dynamic), throttled 1 h per Actor +      ```
+``` Signal.                                                                    ```
+``` ========================================================================== ```
+``` @stanza Contoso - PAM vault anomaly (PTA-equivalent) ```
+``` @conf description = Vault stand-in misuse: Tier-0 credential read or check-out outside a ticket, rotation failure, root-token use, failed vault login bursts, Tier-0 access denied. KQL twin: lab/kql/vault-privileged-access-anomaly.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -6h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Actor,Signal ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where Operation!="heartbeat"
+| eventstats count(Ticket) AS TicketFieldRows
+| eval Ticket=coalesce(Ticket, ""), Operator=coalesce(Operator, ""), ErrorText=coalesce(ErrorText, ""), VaultPath=coalesce(VaultPath, "")
+| rex field=VaultPath "^auth/[^/]+/login/(?<LoginName>[^/?]+)"
+| eval LoginName=coalesce(LoginName, "")
+| eval Actor=case(Operator!="", Operator, coalesce(VaultActor, "")!="", VaultActor, true(), LoginName)
+| eval TicketValid=if(match(Ticket, "^CHG[0-9]{7}$"), "true", "false")
+| eval OrigTime=_time
+| eval OutOrig=if(Operation=="check-out" AND Library=="tier0-admins" AND Operator!="", OrigTime, null())
+| eval SortTime=if(isnotnull(OutOrig), OrigTime - 300, OrigTime)
+| sort 0 Operator SortTime
+| streamstats last(OutOrig) AS LastOut BY Operator
+| eval CoveredByCheckout=if(Operation=="cred-read" AND isnotnull(LastOut) AND LastOut>=OrigTime - 14400, 1, 0)
+| where OrigTime>=relative_time(now(), "-1h")
+| eval Signal=case(Operation=="cred-read" AND like(VaultPath, "ldap/static-cred/tier0/%") AND TicketValid=="false" AND CoveredByCheckout==0, "Tier0CredReadUncovered", Operation=="check-out" AND Library=="tier0-admins" AND TicketFieldRows > 0 AND TicketValid=="false", "Tier0CheckoutWithoutTicket", Operation=="rotation-failed", "RotationFailed", Operation=="root-token", "RootTokenUse", Operation=="auth-failed", "AuthFailureBurst", Operation=="access-denied" AND match(VaultPath, "(^|[^A-Za-z0-9])tier0($|[^A-Za-z0-9])"), "Tier0AccessDenied", true(), "")
+| where Signal!=""
+| eval Bin=floor(OrigTime / 600) * 600
+| eval GroupKey=case(in(Signal, "RootTokenUse", "Tier0AccessDenied"), Actor . "|" . coalesce(RemoteAddress, "") . "|" . Bin, Signal=="AuthFailureBurst", coalesce(RemoteAddress, "") . "|" . Bin, true(), coalesce(RequestId, "") . "|" . coalesce(Account, ""))
+| eval NonLabRootPath=if(in(VaultPath, "auth/token/create", "auth/token/revoke", "sys/audit-hash/file"), null(), VaultPath)
+| eval IsAuditTamper=if(match(VaultPath, "^sys/audit/"), 1, 0)
+| eval IsTier0Rotation=if(match(VaultPath, "(^|[^A-Za-z0-9])tier0($|[^A-Za-z0-9])") OR VaultPath=="ldap/rotate-root" OR Library=="tier0-admins", 1, 0)
+| eval IsConsumerRead=0, NamedLogin=if(LoginName!="", LoginName, null())
+| stats max(OrigTime) AS LastEpoch, min(OrigTime) AS FirstEpoch, count AS Events, first(Actor) AS Actor, first(Operator) AS Operator, first(VaultActor) AS VaultActor, first(Ticket) AS Ticket, first(Account) AS Account, first(Library) AS Library, first(LoginName) AS LoginName, values(NamedLogin) AS LoginNames, first(RemoteAddress) AS RemoteAddress, first(SourceHost) AS SourceHost, first(TokenPolicies) AS TokenPolicies, values(VaultPath) AS VaultPaths, values(ErrorText) AS Errors, values(RequestId) AS RequestIds, values(NonLabRootPath) AS NonLabRootPaths, max(IsAuditTamper) AS AuditTamper, max(IsTier0Rotation) AS Tier0Rotation, max(IsConsumerRead) AS ConsumerRead BY Signal GroupKey
+| where Signal!="AuthFailureBurst" OR Events >= 5
+| eval VaultPath=mvindex(VaultPaths, 0), VaultPaths=mvindex(VaultPaths, 0, 9), Errors=mvindex(Errors, 0, 4), RequestIds=mvindex(RequestIds, 0, 9), NonLabRootPaths=mvindex(NonLabRootPaths, 0, 9), LoginNames=mvindex(LoginNames, 0, 9)
+| eval Severity=case(Signal=="Tier0CredReadUncovered" AND ConsumerRead==1, "Low", in(Signal, "Tier0CredReadUncovered", "Tier0CheckoutWithoutTicket"), "High", Signal=="RotationFailed" AND Tier0Rotation==1, "High", Signal=="RotationFailed", "Medium", Signal=="RootTokenUse" AND (AuditTamper==1 OR coalesce(mvcount(NonLabRootPaths), 0) > 0), "High", Signal=="RootTokenUse", "Low", Signal=="AuthFailureBurst" AND coalesce(mvcount(LoginNames), 0) > 0, "High", true(), "Medium")
+| eval CyberArkAnalogue=case(Signal=="Tier0CredReadUncovered", "PTA-style: retrieval outside a ticketed request", Signal=="Tier0CheckoutWithoutTicket", "Master Policy dual control / ticketing bypassed", Signal=="RotationFailed", "CPM change failed", Signal=="RootTokenUse", "Built-in Vault Administrator used", Signal=="AuthFailureBurst", "PTA-style: failed Vault logon burst", true(), "Safe permission violation")
+| eval _time=LastEpoch
+| eval TimeGenerated=strftime(LastEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z"), FirstSeen=strftime(FirstEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z")
+| sort 0 - _time
+| table TimeGenerated, Severity, Signal, CyberArkAnalogue, Actor, Operator, VaultActor, Ticket, Account, Library, LoginName, LoginNames, VaultPath, VaultPaths, Events, Errors, NonLabRootPaths, AuditTamper, RemoteAddress, SourceHost, TokenPolicies, FirstSeen, RequestIds

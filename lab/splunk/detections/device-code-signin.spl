@@ -1,0 +1,82 @@
+index=entra (sourcetype="azure:loganalytics:signinlogs" OR sourcetype="azure:loganalytics:aadnoninteractiveusersigninlogs") (AuthenticationProtocol="deviceCode" OR OriginalTransferMethod="deviceCodeFlow") earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Device-code flow sign-in (device code phishing)         ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/device-code-signin.kql (same logic/window)        ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over Entra sign-in logs REPLAYED  ```
+``` from Log Analytics by lab/splunk/ingest-from-loganalytics.sh. Base search  ```
+``` is line 1 on purpose: a comment before the first command breaks a search. ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   Sign-ins with AuthenticationProtocol deviceCode, and later tokens from a ```
+```   session that started that way (OriginalTransferMethod deviceCodeFlow),   ```
+```   interactive or not. One row per user + IP + signal. Detective twin of   ```
+```   the planned CA policy that blocks device-code flow. Severity column:   ```
+```   High = tokens issued to a privileged or PIM-eligible user, or with      ```
+```   medium/high sign-in risk; Medium = tokens issued; Low = blocked/failed. ```
+``` MITRE ATT&CK: T1528 Steal Application Access Token; T1566.002; T1078.004. ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   union of the two tables, per-leg project -> two sourcetypes, one search  ```
+```   =~ (case-insensitive)                    -> lower() comparisons          ```
+```   CaPolicyText has reportOnlyFailure       -> like(_raw, ...) substring     ```
+```   summarize ... by UPN, UserId, IP, Via    -> stats BY the same fields     ```
+```   make_set(x, N)                           -> values(x) + mvindex 0..N-1   ```
+```   UserId in (PrivilegedUserIds)            -> lookup                      ```
+```                                               contoso_privileged_identities ```
+```                                               .csv (object_id), as in      ```
+```                                               auth-method-changed-by-admin ```
+```   matches regex (bg|tier0)-admin-NN@       -> match() with [0-9]{2}        ```
+```   SanctionedDeviceCodeAppIds empty         -> Sanctioned fixed to false;   ```
+```                                               add an in(AppIds, ...) test ```
+```                                               here when the KQL list grows ```
+```   HONEST DIFFERENCE: stats drops events whose BY field is null, KQL keeps ```
+```   them in an empty group - so UserId / IPAddress are filled with (none)  ```
+```   before stats and emptied again after.                                  ```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT1H, base severity Medium (Severity column = dynamic),   ```
+``` throttled 1 h per user + Severity.                                          ```
+``` ========================================================================== ```
+``` @stanza Contoso - Device-code flow sign-in ```
+``` @conf description = Sign-in through the OAuth device-code grant, or a token from a session that started with one (device code phishing). High for privileged users or risky sign-ins. KQL twin: lab/kql/device-code-signin.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 4 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = UserPrincipalName,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where lower(AuthenticationProtocol)=="devicecode" OR lower(OriginalTransferMethod)=="devicecodeflow"
+| eval SignInType=if(sourcetype=="azure:loganalytics:signinlogs", "interactive", "non-interactive")
+| eval Via=if(lower(AuthenticationProtocol)=="devicecode", "device code grant", "token from a device-code session")
+| spath path=LocationDetails.countryOrRegion output=Country
+| eval RiskN=case(lower(RiskLevelDuringSignIn)=="high", 3, lower(RiskLevelDuringSignIn)=="medium", 2, lower(RiskLevelDuringSignIn)=="low", 1, true(), 0)
+| eval IsSuccess=if(ResultType=="0", 1, 0), IsCaBlock=if(ConditionalAccessStatus=="failure", 1, 0)
+| eval ReportOnlyWouldBlock=if(like(_raw, "%reportOnlyFailure%"), 1, 0)
+| eval UserPrincipalName=lower(UserPrincipalName)
+| fillnull value="(none)" UserId IPAddress
+| stats max(_time) AS LastEpoch, min(_time) AS FirstEpoch, count AS SignIns, sum(IsSuccess) AS Successes, sum(IsCaBlock) AS CaBlocks, max(ReportOnlyWouldBlock) AS AnyReportOnlyWouldBlock, max(RiskN) AS MaxRiskN, values(SignInType) AS SignInTypes, values(AppDisplayName) AS Apps, values(AppId) AS AppIds, values(ResourceDisplayName) AS Resources, values(ResultType) AS ErrorCodes, values(Country) AS Countries, values(CorrelationId) AS CorrelationIds BY UserPrincipalName UserId IPAddress Via
+| eval UserId=if(UserId=="(none)", "", UserId), IPAddress=if(IPAddress=="(none)", "", IPAddress)
+| lookup contoso_privileged_identities.csv object_id AS UserId OUTPUT object_id AS PrivIdHit
+| eval PrivilegedById=if(isnotnull(PrivIdHit) AND UserId!="", "true", "false")
+| eval PrivilegedTarget=if(PrivilegedById=="true" OR match(coalesce(UserPrincipalName, ""), "(?i)^(bg-admin-[0-9]{2}|tier0-admin-[0-9]{2})@"), "true", "false")
+| eval Sanctioned="false"
+| eval MaxSignInRisk=case(MaxRiskN==3, "high", MaxRiskN==2, "medium", MaxRiskN==1, "low", true(), "none")
+| eval Outcome=case(Successes > 0, "SUCCEEDED - device-code tokens issued", CaBlocks > 0, "Blocked by CA", true(), "Failed - no tokens issued")
+| eval Severity=case(Successes > 0 AND (PrivilegedTarget=="true" OR MaxRiskN >= 2), "High", Successes > 0 AND Sanctioned=="true", "Low", Successes > 0, "Medium", true(), "Low")
+| eval Apps=mvindex(Apps, 0, 9), AppIds=mvindex(AppIds, 0, 9), Resources=mvindex(Resources, 0, 9), ErrorCodes=mvindex(ErrorCodes, 0, 9), Countries=mvindex(Countries, 0, 9), CorrelationIds=mvindex(CorrelationIds, 0, 9)
+| eval _time=LastEpoch
+| eval TimeGenerated=strftime(LastEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z"), FirstSeen=strftime(FirstEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z")
+| sort 0 - _time
+| table TimeGenerated, Severity, Outcome, Via, UserPrincipalName, UserId, IPAddress, PrivilegedTarget, PrivilegedById, MaxSignInRisk, SignIns, Successes, CaBlocks, AnyReportOnlyWouldBlock, Sanctioned, SignInTypes, Apps, AppIds, Resources, ErrorCodes, Countries, FirstSeen, CorrelationIds

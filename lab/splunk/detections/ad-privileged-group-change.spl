@@ -1,0 +1,53 @@
+index=entra sourcetype="azure:loganalytics:securityevent" (EventID=4728 OR EventID=4732 OR EventID=4756) earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Member added to a privileged Active Directory group       ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/ad-privileged-group-change.kql                    ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over SecurityEvent REPLAYED from  ```
+``` Log Analytics (ingest-from-loganalytics.sh -T SecurityEvent).              ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                            ```
+```   4728 / 4732 / 4756 on DC01 for a pam-policy.json Tier-0 group (matched   ```
+```   by well-known SID / RID first, then name: DnsAdmins) = High, or          ```
+```   Tier1-Server-Admins = Medium. The actor (Subject) is the Account.        ```
+``` MITRE ATT&CK: T1098.007; T1078.002.                                        ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                     ```
+```   split(TargetSid, "-")[-1]            -> mvindex(split(...), -1)          ```
+```   GroupSid in (list) / startswith      -> in() / match(^S-1-5-21-)         ```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT1H, severity from the Severity column, throttled 1 h    ```
+``` per Account + Severity.                                                    ```
+``` ========================================================================== ```
+``` @stanza Contoso - Member added to a privileged AD group ```
+``` @conf description = Member added to a Tier-0 (or Tier1-Server-Admins) AD group on DC01, matched by well-known SID/RID. KQL twin: lab/kql/ad-privileged-group-change.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Account,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where in(EventID, 4728, 4732, 4756)
+| eval Host=upper(mvindex(split(coalesce(Computer, ""), "."), 0))
+| where in(Host, "DC01")
+| eval GroupName=TargetUserName, GroupSid=TargetSid
+| eval GroupRid=mvindex(split(coalesce(GroupSid, ""), "-"), -1)
+| eval GroupTier=case(in(GroupSid, "S-1-5-32-544", "S-1-5-32-548", "S-1-5-32-549", "S-1-5-32-550", "S-1-5-32-551"), "tier0", match(coalesce(GroupSid, ""), "^S-1-5-21-") AND in(GroupRid, "512", "518", "519", "520", "526", "527"), "tier0", lower(coalesce(GroupName, ""))=="dnsadmins", "tier0", lower(coalesce(GroupName, ""))=="tier1-server-admins", "tier1", true(), null())
+| where isnotnull(GroupTier)
+| eval Account=lower(SubjectUserName), AccountDomain=SubjectDomainName, AccountSid=SubjectUserSid
+| eval NewMember=if(isnotnull(MemberName) AND MemberName!="" AND MemberName!="-", MemberName, MemberSid)
+| eval Severity=if(GroupTier=="tier0", "High", "Medium")
+| sort 0 - _time
+| table TimeGenerated, Severity, GroupName, GroupSid, GroupTier, NewMember, MemberSid, Account, AccountDomain, AccountSid, Host, Computer, EventID

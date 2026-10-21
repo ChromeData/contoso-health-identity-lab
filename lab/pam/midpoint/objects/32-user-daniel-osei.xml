@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Mock HR 200030. Billing manager. Holds the STALE assignment: AP Clerk, granted as temporary month-end cover and never removed. -->
+<user xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000303">
+    <name>daniel.osei</name>
+    <description>Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).</description>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000103" type="OrgType"/>
+    </assignment>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000103" type="OrgType" relation="org:manager"/>
+    </assignment>
+    <assignment>
+        <description>Built-in midPoint role "Reviewer": may record certification decisions.</description>
+        <targetRef oid="00000000-0000-0000-0000-00000000000b" type="RoleType"/>
+    </assignment>
+    <assignment>
+        <description>Requested 2023-12 as temporary month-end AP cover during a vacancy. No end date was set.</description>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000204" type="RoleType"/>
+    </assignment>
+    <activation>
+        <administrativeStatus>enabled</administrativeStatus>
+    </activation>
+    <fullName>Daniel Osei</fullName>
+    <givenName>Daniel</givenName>
+    <familyName>Osei</familyName>
+    <employeeNumber>200030</employeeNumber>
+    <organizationalUnit>Billing</organizationalUnit>
+    <title>Billing Manager</title>
+</user>

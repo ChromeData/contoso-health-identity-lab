@@ -1,0 +1,422 @@
+# =============================================================================
+# terraform-plan.yml  —  Contoso Health Identity Platform (lab/)
+# -----------------------------------------------------------------------------
+# Runs on every pull request (TruffleHog always; the rest only when the
+# Terraform changed - see the `changes` job). Formats, inits, validates, and plans the Entra ID (azuread) + Azure (azurerm) configuration,
+# then posts the plan as a PR comment. Security scans (Checkov, TruffleHog) run
+# alongside. Authentication to Entra is GitHub OIDC workload-identity
+# federation against the read-only PLAN app registration — NO stored credential,
+# NO client secret, NO service-principal password anywhere.
+#
+# SUPPLY-CHAIN HARDENING — every third-party action is pinned to a full commit
+# SHA, with the human-readable version in a trailing comment. We pin GitHub's
+# own actions/* too, not just vendor actions. Rationale: in 2026 the Trivy /
+# aquasecurity GitHub Actions were compromised (malicious tag re-point), so a
+# floating tag (@v4) or even @v4.1 is an attacker-controlled pointer. A commit
+# SHA is immutable. Bump SHAs deliberately via Dependabot PRs, never blindly.
+# A SHA pins the action's own code, NOT a container image it pulls: TruffleHog's
+# image is pinned by digest below; Checkov's is a tag we cannot override.
+# =============================================================================
+
+name: terraform-plan
+
+on:
+  # No workflow-level `paths:` filter on purpose: these jobs are required
+  # checks, and a path-filtered required check never reports on a PR it skips
+  # (it stays Pending and blocks the merge). Change detection is job-level
+  # instead (the `changes` job), and TruffleHog scans every PR.
+  pull_request:
+
+# Least privilege at the top; individual jobs narrow further.
+permissions:
+  contents: read
+
+concurrency:
+  group: tf-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Did this PR touch the Terraform? Fail-closed: if this job fails, its output
+  # is empty, which is not 'false', so plan + Checkov still run.
+  # ---------------------------------------------------------------------------
+  changes:
+    name: detect terraform changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tf: ${{ steps.diff.outputs.tf }}
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Diff base...head
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if ! files="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"; then
+            echo "::warning::git diff failed; failing closed (tf=true)"
+            echo "tf=true" >> "$GITHUB_OUTPUT"
+          elif grep -qE '^(lab/terraform/|\.github/workflows/terraform-plan\.yml$)' <<< "$files"; then
+            echo "tf=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tf=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Plan against Entra/Azure using the read-only PLAN identity, comment to PR.
+  # ---------------------------------------------------------------------------
+  terraform-plan:
+    name: terraform plan
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.tf != 'false' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write          # mint the GitHub OIDC token for Entra federation
+      contents: read           # checkout
+      pull-requests: write     # post the plan comment
+    # Job-scoped, not workflow-level: the Checkov container and TruffleHog never
+    # receive the ARM_* identity or the privacy secrets (least privilege).
+    env:
+      TF_WORKING_DIR: lab/terraform/envs/dev
+      # Terraform azuread + azurerm providers authenticate over GitHub OIDC.
+      # No ARM_CLIENT_SECRET is set — its absence is the point.
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}      # PLAN app (read-only)
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      # Tenant identifiers (NOT secrets) come from repo Variables; policy knobs
+      # come from the committed lab.tfvars so every flag / CA-state change is a
+      # reviewable diff. List-typed vars fall back to '[]' when unset.
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      TF_VAR_key_vault_name: ${{ vars.TF_KEY_VAULT_NAME || 'kv-idlab' }}
+      TF_VAR_onmicrosoft_domain: ${{ vars.TF_ONMICROSOFT_DOMAIN }}
+      TF_VAR_pim_approver_object_ids: ${{ vars.TF_PIM_APPROVER_OBJECT_IDS || '[]' }}
+      # PRIVACY, not credentials: GitHub masks *secrets* in public run logs but
+      # prints *variables* in every step's env header. Your home IP and email
+      # are therefore stored as repository SECRETS purely so they are masked.
+      # Dependabot-triggered runs see only *Dependabot* secrets, so store every
+      # TF_* secret there too, or the plan shows false removals (the comment
+      # names the missing ones).
+      TF_VAR_operator_ip_ranges: ${{ secrets.TF_OPERATOR_IP_RANGES || '[]' }}
+      TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+      TF_VAR_sentinel_playbook_id: ${{ vars.TF_SENTINEL_PLAYBOOK_ID }}
+      TF_VAR_key_vault_secrets_officer_ids: ${{ vars.TF_KV_SECRETS_OFFICER_IDS || '[]' }}
+      TF_VAR_access_review_fallback_group_object_id: ${{ vars.TF_ACCESS_REVIEW_FALLBACK_GROUP_OBJECT_ID }}
+      # Access-package approver group (also the review fallback above when that
+      # is unset). A group id, so a Variable; unset = '' = requestor's manager.
+      # Set here, not only in a local terraform.tfvars, or the next CI apply
+      # moves approval back to the manager.
+      TF_VAR_entitlement_approver_group_object_id: ${{ vars.TF_ENTITLEMENT_APPROVER_GROUP_OBJECT_ID }}
+      TF_VAR_intune_vm_admin_login_object_ids: ${{ vars.TF_INTUNE_VM_ADMIN_LOGIN_OBJECT_IDS || '[]' }}
+      # Senior-scope extensions (all staging flags live in lab.tfvars). Tenant
+      # identifiers come from Variables; owner ids and the certificate mailbox
+      # are SECRETS so the env header masks them, AND sensitive Terraform
+      # variables: masking covers only the whole secret string (not each id
+      # of a JSON list) and never the PR comment. aws_scim_credentials is
+      # NEVER passed here: it is written once by a local seeding apply.
+      TF_VAR_pim_tier0_approver_object_ids: ${{ vars.TF_PIM_TIER0_APPROVER_OBJECT_IDS || '[]' }}
+      TF_VAR_privileged_review_reviewer_group_object_id: ${{ vars.TF_PRIVILEGED_REVIEW_REVIEWER_GROUP_OBJECT_ID }}
+      TF_VAR_b2b_connected_organization_id: ${{ vars.TF_B2B_CONNECTED_ORGANIZATION_ID }}
+      TF_VAR_ca008_pilot_group_object_id: ${{ vars.TF_CA008_PILOT_GROUP_OBJECT_ID }}
+      TF_VAR_aws_saml_entity_id: ${{ vars.TF_AWS_SAML_ENTITY_ID }}
+      TF_VAR_aws_saml_acs_urls: ${{ vars.TF_AWS_SAML_ACS_URLS || '[]' }}
+      TF_VAR_aws_access_portal_url: ${{ vars.TF_AWS_ACCESS_PORTAL_URL }}
+      TF_VAR_aws_scim_template_id: ${{ vars.TF_AWS_SCIM_TEMPLATE_ID }}
+      TF_VAR_app_owner_object_ids: ${{ secrets.TF_APP_OWNER_OBJECT_IDS || '[]' }}
+      TF_VAR_saml_cert_notification_emails: ${{ secrets.TF_SAML_CERT_NOTIFICATION_EMAILS || '[]' }}
+      TF_VAR_containment_playbook_id: ${{ vars.TF_CONTAINMENT_PLAYBOOK_ID }}
+      # PIM notification mailbox (modules/pim): a SECRET for the same reason as
+      # the alert email. Unset = '' = tenant-default PIM notifications.
+      TF_VAR_pim_alert_mailbox: ${{ secrets.TF_PIM_ALERT_MAILBOX }}
+      # CA010-Exclusion-<reason> groups, excluded next to break-glass (group
+      # ids, so a Variable). Unset = none. Set here, not only in a local
+      # terraform.tfvars, or the next CI apply removes the exception.
+      TF_VAR_ca010_exception_group_object_ids: ${{ vars.TF_CA010_EXCEPTION_GROUP_OBJECT_IDS || '[]' }}
+      # ServiceNow SAML app (enable_servicenow_sso in lab.tfvars): the instance
+      # URL and, once the IdP record exists, its sys_id. Identifiers (like the
+      # AWS portal URL), so Variables. Unset = '': nothing plans while the flag
+      # is off, and the plan refuses the flag without the URL.
+      TF_VAR_servicenow_instance_url: ${{ vars.TF_SERVICENOW_INSTANCE_URL }}
+      TF_VAR_servicenow_sso_sys_id: ${{ vars.TF_SERVICENOW_SSO_SYS_ID }}
+      # ITDR: the APPLY identity by immutable id (envs/bootstrap output
+      # iac_principal_ids) and extra privileged users - JSON lists of GUIDs.
+      TF_VAR_iac_principal_ids: ${{ vars.TF_IAC_PRINCIPAL_IDS || '[]' }}
+      TF_VAR_privileged_user_object_ids: ${{ vars.TF_PRIVILEGED_USER_OBJECT_IDS || '[]' }}
+      TF_VAR_evidence_storage_account_name: ${{ vars.TF_EVIDENCE_STORAGE_ACCOUNT_NAME || 'stidlabevidence' }}
+      # TF_B2B_CONNECTED_ORGANIZATION (an object) is passed on the plan step,
+      # not here: see that step.
+      # POLICY KNOBS ARE NOT TF_VAR_ HERE, on purpose: itdr_exclude_rules (set
+      # in lab.tfvars) and evidence_immutability_days / _state /
+      # _lock_acknowledged (added to lab.tfvars in the Day 28 lock PR) reach CI
+      # through -var-file=lab.tfvars. -var-file outranks TF_VAR_, so a
+      # TF_VAR_itdr_exclude_rules would be silently ignored; and a repo Variable
+      # for the evidence_immutability_* trio would let a settings change, with
+      # no PR and no review, Lock the WORM store irreversibly.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      # Step-level, not job-level: a skipped job reports Success, which would
+      # let a fork PR pass the required check without a plan.
+      - name: Fork PRs get no OIDC token
+        if: github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::error::Fork PRs get no OIDC token, so they cannot plan. A maintainer must push this branch to the base repo and open a same-repo PR."
+          exit 1
+
+      # OIDC login to Entra. azure/login exchanges the GitHub OIDC token for an
+      # Entra access token for the PLAN app — used by the az CLI and by any
+      # azuread/azurerm data sources during plan. subscription-id is optional
+      # for a pure azuread (Graph) plan; kept for azurerm resources/state.
+      - name: Azure login (OIDC, PLAN app)
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.16.5"  # same CLI that generated the committed .terraform.lock.hcl files
+          # Off (as in terraform-apply.yml): nothing reads its stdout/stderr/
+          # exitcode outputs, and it rewrites `exitcode` after EVERY call.
+          terraform_wrapper: false
+
+      # fmt + validate keep going on failure (HashiCorp's pattern) so the PR
+      # comment always shows real results; the last step turns the job red.
+      - name: terraform fmt -check
+        id: fmt
+        continue-on-error: true
+        run: terraform fmt -check -recursive
+        working-directory: lab/terraform
+
+      - name: terraform init
+        id: init
+        # Backend values are repo Variables (the state account name is
+        # globally unique per deployment). Auth is OIDC via ARM_USE_OIDC.
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ vars.TFSTATE_RG }}" \
+            -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}"
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      - name: terraform validate
+        id: validate
+        continue-on-error: true
+        run: terraform validate -no-color
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      - name: terraform plan
+        id: plan
+        # PLAN app: read-only Graph/ARM and Storage Blob Data READER on state, so
+        # no state lock (-lock=false); terraform-apply.yml re-plans under a lock.
+        # It can still read state (generated passwords).
+        # plan_exit = plan's own code (or show's, if show fails); show runs only
+        # on a good plan, so a failed re-plan never posts a stale plan.
+        # b2b_connected_organization is an OBJECT, and Terraform rejects an
+        # empty TF_VAR_ value for one ("Missing expression"), so it is exported
+        # only when the Variable is set: one JSON object, e.g.
+        # {"display_name":"...","domain_name":"...","tenant_id":"..."}.
+        # Unset = the variable's fictional default (fabrikam-clinic.example).
+        env:
+          B2B_CONNECTED_ORGANIZATION: ${{ vars.TF_B2B_CONNECTED_ORGANIZATION }}
+        run: |
+          set +e
+          if [ -n "${B2B_CONNECTED_ORGANIZATION}" ]; then
+            export TF_VAR_b2b_connected_organization="${B2B_CONNECTED_ORGANIZATION}"
+          fi
+          terraform plan -input=false -no-color -lock=false -var-file=lab.tfvars -out=tfplan
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            terraform show -no-color tfplan > "${GITHUB_WORKSPACE}/plan.txt" || rc=$?
+          fi
+          echo "plan_exit=$rc" >> "$GITHUB_OUTPUT"
+          exit 0                    # the final step below turns the job red
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      - name: Post plan to PR
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          FMT:      ${{ steps.fmt.outcome }}
+          INIT:     ${{ steps.init.outcome }}
+          VALIDATE: ${{ steps.validate.outcome }}
+          PLAN_EXIT: ${{ steps.plan.outputs.plan_exit || 'not run' }}
+          # In a Dependabot run `secrets` holds Dependabot secrets only. Each
+          # EMPTY_* is the string true/false (is it unset?), never a value.
+          DEPENDABOT_RUN: ${{ github.actor == 'dependabot[bot]' }}
+          EMPTY_TF_OPERATOR_IP_RANGES: ${{ secrets.TF_OPERATOR_IP_RANGES == '' }}
+          EMPTY_TF_ALERT_EMAIL: ${{ secrets.TF_ALERT_EMAIL == '' }}
+          EMPTY_TF_APP_OWNER_OBJECT_IDS: ${{ secrets.TF_APP_OWNER_OBJECT_IDS == '' }}
+          EMPTY_TF_SAML_CERT_NOTIFICATION_EMAILS: ${{ secrets.TF_SAML_CERT_NOTIFICATION_EMAILS == '' }}
+          EMPTY_TF_PIM_ALERT_MAILBOX: ${{ secrets.TF_PIM_ALERT_MAILBOX == '' }}
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = '';
+            try { plan = fs.readFileSync(`${process.env.GITHUB_WORKSPACE}/plan.txt`, 'utf8'); }
+            catch { plan = ''; }
+            if (!plan.trim()) plan = '(no plan output — see job log)';
+            // GitHub comment hard limit is 65536 chars; truncate the middle.
+            const MAX = 60000;
+            if (plan.length > MAX) {
+              plan = plan.slice(0, MAX) + '\n\n... [truncated — see the full plan in the Actions log] ...';
+            }
+            // verify: Dependabot runs honour id-token: write + vars; if not,
+            // azure/login fails and this comment shows every step skipped.
+            const banner = [];
+            const missing = Object.keys(process.env)
+              .filter(k => k.startsWith('EMPTY_TF_') && process.env[k] === 'true')
+              .map(k => k.slice('EMPTY_'.length)).sort();
+            if (process.env.DEPENDABOT_RUN === 'true' && missing.length > 0) {
+              const msg = `Dependabot run without these Dependabot secrets: ${missing.join(', ')}. ` +
+                'A Key Vault firewall, NSG, action-group, app-owner, certificate-mailbox or ' +
+                'PIM-notification removal they feed is NOT real drift unless the repo secret ' +
+                'is unset too. Store every TF_* secret you use as a Dependabot secret as well.';
+              core.warning(msg);
+              banner.push('> [!WARNING]', `> ${msg}`, '');
+            }
+            const body = [
+              '## Terraform plan — `lab/terraform/envs/dev`',
+              '',
+              ...banner,
+              `| step | result |`,
+              `|---|---|`,
+              `| fmt | \`${process.env.FMT}\` |`,
+              `| init | \`${process.env.INIT}\` |`,
+              `| validate | \`${process.env.VALIDATE}\` |`,
+              `| plan exit code | \`${process.env.PLAN_EXIT}\` |`,
+              '',
+              '<details><summary>Show plan</summary>',
+              '',
+              '```terraform',
+              plan,
+              '```',
+              '',
+              '</details>',
+              '',
+              `_Authenticated to Entra via OIDC (PLAN app, read-only). Commit ${context.sha.slice(0,7)}._`,
+            ].join('\n');
+            // Upsert: find our previous comment and edit it instead of spamming.
+            // Bot-authored only (a user comment copying the heading is never
+            // edited) and paginated (found even on PRs with >30 comments).
+            const marker = '## Terraform plan — `lab/terraform/envs/dev`';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100,
+            });
+            const mine = comments.find(c => c.user && c.user.type === 'Bot' &&
+              c.user.login === 'github-actions[bot]' && c.body && c.body.startsWith(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: mine.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }
+
+      - name: Fail job if any check failed
+        if: ${{ !cancelled() && (steps.fmt.outcome != 'success' || steps.init.outcome != 'success' || steps.validate.outcome != 'success' || steps.plan.outputs.plan_exit != '0') }}
+        env:
+          FMT:       ${{ steps.fmt.outcome }}
+          INIT:      ${{ steps.init.outcome }}
+          VALIDATE:  ${{ steps.validate.outcome }}
+          PLAN_EXIT: ${{ steps.plan.outputs.plan_exit || 'not run' }}
+        run: |
+          echo "::error::fmt=${FMT} init=${INIT} validate=${VALIDATE} plan_exit=${PLAN_EXIT}"
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # Checkov — IaC misconfiguration scan. No cloud creds needed (static).
+  # Public repo => GitHub code scanning is free, so results go to the Security &
+  # quality tab (Code scanning) as SARIF. soft_fail is OFF: any failed check
+  # blocks the merge. Every accepted finding is an inline
+  # `#checkov:skip=<ID>:<reason>` on its resource (lab/terraform/README.md,
+  # "Checkov"), so a new finding is either fixed or skipped with a reason in
+  # the same PR, where a reviewer sees it.
+  # The pinned action hard-codes image ghcr.io/bridgecrewio/checkov:3.3.3 (a
+  # tag, not a digest) and the workflow cannot override it: accepted residual
+  # risk (verify: re-check the image line on each SHA bump). The local runs
+  # and k8s-identity.yml use Checkov 3.3.20, so CI's 3.3.3 may report a
+  # different set of checks (verify: on the first CI run).
+  # ---------------------------------------------------------------------------
+  checkov:
+    name: checkov (IaC scan)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.tf != 'false' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # upload SARIF to code scanning (Security & quality tab)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false   # no token in .git/config for the container
+
+      - name: Checkov
+        id: checkov
+        uses: bridgecrewio/checkov-action@a59d390da81ed70dbf0bced4d76d0c2b3a5dbf6e # v12.3109.0
+        with:
+          directory: lab/terraform
+          framework: terraform
+          quiet: true
+          soft_fail: false                # a failed check blocks the merge
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+
+      # verify: on fork PRs security-events: write is downgraded, so this upload
+      # may fail. Moot for merging: a fork PR touching Terraform already fails
+      # the plan check by design (no OIDC token).
+      - name: Upload Checkov SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+
+  # ---------------------------------------------------------------------------
+  # TruffleHog — secret scanning. The whole pipeline's claim is "no secrets",
+  # so we enforce it: scan the PR diff for verified credentials. Needs full
+  # history (fetch-depth: 0) to diff base..head.
+  # ---------------------------------------------------------------------------
+  trufflehog:
+    name: trufflehog (secret scan)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false   # no token in .git/config for the container
+
+      - name: TruffleHog (diff scan, verified only)
+        uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
+        with:
+          path: ./
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          # The action docker-runs ${image}:${version} (default :latest), which
+          # the SHA pin above does not cover. Pin the scanner image by tag +
+          # digest (3.97.9 manifest list); bump it by hand with the SHA —
+          # Dependabot does not update this input.
+          version: "3.97.9@sha256:52e67fef4d054ecff5c2ce4b4ae376626d1ef54aa0898b53cac19c25e92e14db"
+          # The action itself passes --fail (exit 183 on findings); do NOT repeat
+          # it, or the CLI rejects the duplicate flag and exits 1 unscanned.
+          # --results=verified: only a live, verified credential fails the build.
+          extra_args: --results=verified

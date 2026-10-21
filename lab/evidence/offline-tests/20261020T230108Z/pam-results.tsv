@@ -1,0 +1,9 @@
+dependency-scan	PASS	8	0	0	0	2
+ingest	PASS	30	0	0	0	1
+itsm-dual-control	PASS	45	0	0	0	5
+recording-format	PASS	29	0	0	0	1
+e2e	PASS	284	0	0	0	242
+midpoint	PASS	91	0	0	0	27
+dynamic-db	PASS	60	0	0	0	28
+vault-anomaly	PASS	63	0	1	0	33
+scale	NOT-RUN	0	0	0	-	0	optional, slow: add --scale

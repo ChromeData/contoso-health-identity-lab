@@ -1,0 +1,2 @@
+$ terraform fmt -check -recursive lab/terraform
+exit=0

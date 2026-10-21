@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<role xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000204">
+    <name>AP Clerk</name>
+    <displayName>Finance - Accounts Payable Processing</displayName>
+    <description>Requestable accounts-payable invoice processing (ADR 0012 T2). Managed by run-campaign.sh.</description>
+    <assignment>
+        <targetRef oid="00000000-0000-0000-0000-000000000321" type="ArchetypeType"/>
+    </assignment>
+    <requestable>true</requestable>
+</role>

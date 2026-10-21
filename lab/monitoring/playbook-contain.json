@@ -1,0 +1,1011 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Contoso Health identity lab - ITDR containment playbook. High identity incident -> per account: protected-account check -> restricted-management-AU check (RMAU members are escalated to an RMAU-scoped human: app permissions cannot act on them) -> Teams adaptive card APPROVAL (Contain / Revoke only / Reject, 4 h timeout; only a listed approver who is not the subject can decide - a missing responder identity fails closed) -> Graph revokeSignInSessions + confirmCompromised (Identity Protection: user risk High, so CA006 applies) + accountEnabled=false (cloud-only) or an AD-disable flag (synced / AD-only accounts: AD is the authority) -> Sentinel incident comment + ServiceNow work note on the notify ticket (or a new ticket). Uses its system-assigned managed identity: Graph app roles User.RevokeSessions.All, User.EnableDisableAccount.All, User.Read.All, AdministrativeUnit.Read.All, IdentityRiskyUser.ReadWrite.All (+ a directory role for the disable, opt-in) and Microsoft Sentinel Responder on the workspace. ServiceNow secret comes from Key Vault at deploy time. Deployed by lab/scripts/monitoring/Deploy-ContainmentPlaybook.ps1; triggered by the automation rule in lab/terraform/modules/monitoring (enable_itdr_containment)."
+  },
+  "parameters": {
+    "playbookName": {
+      "type": "string",
+      "defaultValue": "pb-identity-contain"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "teamsGroupId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Teams team (M365 group) id that owns the Identity-SecOps channel. Not a secret."
+      }
+    },
+    "teamsChannelId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Channel id (19:...@thread.tacv2) the approval cards go to. Not a secret."
+      }
+    },
+    "protectedUpnPrefixes": {
+      "type": "array",
+      "defaultValue": [
+        "bg-admin-"
+      ],
+      "metadata": {
+        "description": "LOG-ONLY: UPN prefixes that LOOK like break-glass (bg-admin-). A match is written to the card and the log as a warning, but it never blocks containment: anyone who can set a UPN could rename a compromised account to bg-admin-x and make it uncontainable. Protection is by object id only (protectedObjectIds)."
+      }
+    },
+    "protectedObjectIds": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "THE protection list: Entra object ids the playbook refuses to contain (break-glass). Deploy-ContainmentPlaybook.ps1 fills it with the Break-Glass-Admins members; re-run it (or -VerifyProtectedList) whenever that membership changes."
+      }
+    },
+    "approverObjectIds": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Entra object ids allowed to DECIDE a containment card (the ITDR-Containment-Approvers group, resolved by Deploy-ContainmentPlaybook.ps1). Anyone else's answer - any other member of the Teams channel - is ignored. Empty = every answer is ignored (fail closed)."
+      }
+    },
+    "snowInstance": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "ServiceNow instance name (devNNNNN). Empty (or empty user/password) = skip ServiceNow."
+      }
+    },
+    "snowUser": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "snowPassword": {
+      "type": "securestring",
+      "defaultValue": ""
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "project": "contoso-health-identity-lab",
+        "managed_by": "Deploy-ContainmentPlaybook.ps1"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[concat('azuresentinel-', parameters('playbookName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "displayName": "[concat('Sentinel (managed identity) - ', parameters('playbookName'))]",
+        "customParameterValues": {},
+        "api": {
+          "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('location'), 'azuresentinel')]"
+        },
+        "parameterValueType": "Alternative"
+      },
+      "kind": "V1"
+    },
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[concat('teams-', parameters('playbookName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "displayName": "[concat('Teams approvals (authorize once after deploy) - ', parameters('playbookName'))]",
+        "customParameterValues": {},
+        "api": {
+          "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('location'), 'teams')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('playbookName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connections', concat('azuresentinel-', parameters('playbookName')))]",
+        "[resourceId('Microsoft.Web/connections', concat('teams-', parameters('playbookName')))]"
+      ],
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": {
+              "type": "Object",
+              "defaultValue": {}
+            },
+            "teamsGroupId": {
+              "type": "String",
+              "defaultValue": ""
+            },
+            "teamsChannelId": {
+              "type": "String",
+              "defaultValue": ""
+            },
+            "protectedUpnPrefixes": {
+              "type": "Array",
+              "defaultValue": [
+                "bg-admin-"
+              ]
+            },
+            "protectedObjectIds": {
+              "type": "Array",
+              "defaultValue": []
+            },
+            "approverObjectIds": {
+              "type": "Array",
+              "defaultValue": []
+            },
+            "snowInstance": {
+              "type": "String",
+              "defaultValue": ""
+            },
+            "snowUser": {
+              "type": "String",
+              "defaultValue": ""
+            },
+            "snowPassword": {
+              "type": "SecureString",
+              "defaultValue": ""
+            }
+          },
+          "triggers": {
+            "Microsoft_Sentinel_incident": {
+              "type": "ApiConnectionWebhook",
+              "inputs": {
+                "body": {
+                  "callback_url": "@{listCallbackUrl()}"
+                },
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                  }
+                },
+                "path": "/incident-creation"
+              }
+            }
+          },
+          "actions": {
+            "Initialize_ContainmentLog": {
+              "type": "InitializeVariable",
+              "runAfter": {},
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "ContainmentLog",
+                    "type": "array",
+                    "value": []
+                  }
+                ]
+              }
+            },
+            "Entities_-_Get_Accounts": {
+              "type": "ApiConnection",
+              "runAfter": {
+                "Initialize_ContainmentLog": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "path": "/entities/account"
+              }
+            },
+            "For_each_account": {
+              "type": "Foreach",
+              "description": "One approval per account entity, one at a time (concurrency 1: the shared log variable and the Teams thread stay in order).",
+              "foreach": "@body('Entities_-_Get_Accounts')?['Accounts']",
+              "runAfter": {
+                "Entities_-_Get_Accounts": [
+                  "Succeeded"
+                ]
+              },
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "Condition_has_Entra_object": {
+                  "type": "If",
+                  "description": "No AadUserId = an AD-only account (the Tier-0 rule maps sAMAccountName + domain + SID). Automation never touches AD from here: it flags the AD-side disable for a human.",
+                  "expression": {
+                    "and": [
+                      {
+                        "not": {
+                          "equals": [
+                            "@coalesce(items('For_each_account')?['AadUserId'], '')",
+                            ""
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Get_user": {
+                      "type": "Http",
+                      "description": "Read the account before acting (Graph User.Read.All): UPN for the protected-account check, onPremisesSyncEnabled for the cloud vs AD decision.",
+                      "inputs": {
+                        "method": "GET",
+                        "uri": "https://graph.microsoft.com/v1.0/users/@{encodeUriComponent(items('For_each_account')?['AadUserId'])}?$select=id,userPrincipalName,displayName,accountEnabled,onPremisesSyncEnabled,onPremisesSamAccountName",
+                        "authentication": {
+                          "type": "ManagedServiceIdentity",
+                          "audience": "https://graph.microsoft.com"
+                        }
+                      }
+                    },
+                    "Append_lookup_failed": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "ContainmentLog",
+                        "value": "LOOKUP FAILED for Entra object @{items('For_each_account')?['AadUserId']} (HTTP @{coalesce(string(outputs('Get_user')?['statusCode']), 'n/a')}): no action taken."
+                      },
+                      "runAfter": {
+                        "Get_user": [
+                          "Failed",
+                          "TimedOut"
+                        ]
+                      }
+                    },
+                    "Filter_protected_prefixes": {
+                      "type": "Query",
+                      "runAfter": {
+                        "Get_user": [
+                          "Succeeded"
+                        ]
+                      },
+                      "inputs": {
+                        "from": "@parameters('protectedUpnPrefixes')",
+                        "where": "@startsWith(toLower(coalesce(body('Get_user')?['userPrincipalName'], '')), toLower(item()))"
+                      }
+                    },
+                    "Condition_protected_account": {
+                      "type": "If",
+                      "description": "Break-glass accounts are never contained by automation: disabling the last way in during an incident is the outage an attacker wants. Matched by OBJECT ID ONLY - a UPN prefix can be given to any account by whoever can rename users, which would make a compromised account uncontainable. A bg-admin- UPN that is NOT on the id list is only flagged on the card (log-only).",
+                      "runAfter": {
+                        "Filter_protected_prefixes": [
+                          "Succeeded"
+                        ]
+                      },
+                      "expression": {
+                        "and": [
+                          {
+                            "contains": [
+                              "@parameters('protectedObjectIds')",
+                              "@body('Get_user')?['id']"
+                            ]
+                          }
+                        ]
+                      },
+                      "actions": {
+                        "Append_protected_refused": {
+                          "type": "AppendToArrayVariable",
+                          "inputs": {
+                            "name": "ContainmentLog",
+                            "value": "REFUSED: @{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])} is a protected (break-glass) account - no automated action. Investigate under the break-glass procedure."
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Get_restricted_AUs": {
+                            "type": "Http",
+                            "description": "Restricted management administrative units the account is in (Graph AdministrativeUnit.Read.All; verify: the least-privileged app role for this read). Graph APPLICATION permissions do not apply to RMAU members (Learn, restricted management administrative units), so this playbook cannot contain them: route to a human with an RMAU-scoped role instead of asking for an approval it cannot act on.",
+                            "inputs": {
+                              "method": "GET",
+                              "uri": "https://graph.microsoft.com/v1.0/users/@{encodeUriComponent(body('Get_user')?['id'])}/memberOf/microsoft.graph.administrativeUnit?$select=id,displayName,isMemberManagementRestricted",
+                              "authentication": {
+                                "type": "ManagedServiceIdentity",
+                                "audience": "https://graph.microsoft.com"
+                              }
+                            }
+                          },
+                          "Append_rmau_check_failed": {
+                            "type": "AppendToArrayVariable",
+                            "inputs": {
+                              "name": "ContainmentLog",
+                              "value": "RMAU CHECK FAILED for @{body('Get_user')?['userPrincipalName']} (HTTP @{coalesce(string(outputs('Get_restricted_AUs')?['statusCode']), 'n/a')}): continuing to the approval; if the account is in a restricted management AU the Graph calls below will be refused - escalate to an RMAU-scoped responder."
+                            },
+                            "runAfter": {
+                              "Get_restricted_AUs": [
+                                "Failed",
+                                "TimedOut"
+                              ]
+                            }
+                          },
+                          "Filter_restricted_AUs": {
+                            "type": "Query",
+                            "runAfter": {
+                              "Get_restricted_AUs": [
+                                "Succeeded"
+                              ]
+                            },
+                            "inputs": {
+                              "from": "@coalesce(body('Get_restricted_AUs')?['value'], json('[]'))",
+                              "where": "@equals(item()?['isMemberManagementRestricted'], true)"
+                            }
+                          },
+                          "Condition_RMAU_member": {
+                            "type": "If",
+                            "description": "RMAU member -> no automated containment (app permissions cannot act on restricted-management AU members); escalate to a human holding a role scoped to that AU. Otherwise the normal approval flow.",
+                            "expression": {
+                              "and": [
+                                {
+                                  "greater": [
+                                    "@length(coalesce(body('Filter_restricted_AUs'), json('[]')))",
+                                    0
+                                  ]
+                                }
+                              ]
+                            },
+                            "actions": {
+                              "Append_rmau_escalated": {
+                                "type": "AppendToArrayVariable",
+                                "inputs": {
+                                  "name": "ContainmentLog",
+                                  "value": "ESCALATED, NOT CONTAINED: @{body('Get_user')?['userPrincipalName']} is a member of @{length(body('Filter_restricted_AUs'))} restricted management administrative unit(s). Graph application permissions do not apply to RMAU members, so this playbook cannot revoke, confirm or disable the account. Page the RMAU-scoped responder (a role assigned at that AU's scope) to revoke sessions and disable it by hand, and record that on this incident."
+                                }
+                              }
+                            },
+                            "else": {
+                              "actions": {
+                                "Compose_approval_card": {
+                                  "type": "Compose",
+                                  "inputs": {
+                                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                                    "type": "AdaptiveCard",
+                                    "version": "1.4",
+                                    "body": [
+                                      {
+                                        "type": "TextBlock",
+                                        "size": "Large",
+                                        "weight": "Bolder",
+                                        "wrap": true,
+                                        "text": "ITDR containment approval - Sentinel incident #@{triggerBody()?['object']?['properties']?['incidentNumber']}"
+                                      },
+                                      {
+                                        "type": "TextBlock",
+                                        "wrap": true,
+                                        "text": "@{triggerBody()?['object']?['properties']?['severity']} - @{triggerBody()?['object']?['properties']?['title']}"
+                                      },
+                                      {
+                                        "type": "FactSet",
+                                        "facts": [
+                                          {
+                                            "title": "Account",
+                                            "value": "@{body('Get_user')?['displayName']} (@{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])})"
+                                          },
+                                          {
+                                            "title": "Entra object id",
+                                            "value": "@{body('Get_user')?['id']}"
+                                          },
+                                          {
+                                            "title": "Currently enabled",
+                                            "value": "@{body('Get_user')?['accountEnabled']}"
+                                          },
+                                          {
+                                            "title": "Source of authority",
+                                            "value": "@{if(equals(body('Get_user')?['onPremisesSyncEnabled'], true), 'Synced from AD - Contain revokes sessions and FLAGS the account for AD disable (AD is the authority)', 'Cloud-only - Contain revokes sessions and disables the account in Entra')}"
+                                          },
+                                          {
+                                            "title": "Break-glass name check",
+                                            "value": "@{if(greater(length(body('Filter_protected_prefixes')), 0), 'WARNING: the UPN looks like a break-glass account but its object id is NOT on the protected list - verify before deciding (possible rename of a compromised account)', 'n/a')}"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "type": "TextBlock",
+                                        "wrap": true,
+                                        "isSubtle": true,
+                                        "text": "Contain = revoke all refresh tokens and session cookies, confirm the user compromised in Identity Protection (user risk High, so CA006 applies at the next sign-in), then disable (cloud-only) or flag for AD disable (synced). Revoke only = sign the account out everywhere, leave it enabled. Reject = no action. Only a listed containment approver who is not the subject can decide; any other answer is ignored. The decision, your identity and every Graph result are written to the incident and the ServiceNow ticket. No answer within 4 hours = no action."
+                                      }
+                                    ],
+                                    "actions": [
+                                      {
+                                        "type": "Action.Submit",
+                                        "title": "Contain (revoke + disable)",
+                                        "style": "destructive",
+                                        "data": {
+                                          "decision": "contain"
+                                        }
+                                      },
+                                      {
+                                        "type": "Action.Submit",
+                                        "title": "Revoke sessions only",
+                                        "data": {
+                                          "decision": "revoke"
+                                        }
+                                      },
+                                      {
+                                        "type": "Action.Submit",
+                                        "title": "Reject - no action",
+                                        "data": {
+                                          "decision": "reject"
+                                        }
+                                      },
+                                      {
+                                        "type": "Action.OpenUrl",
+                                        "title": "Open in Sentinel",
+                                        "url": "@{triggerBody()?['object']?['properties']?['incidentUrl']}"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "Post_approval_card_and_wait": {
+                                  "type": "ApiConnectionWebhook",
+                                  "description": "Teams 'Post adaptive card and wait for a response' (channel). Waits up to 4 h; no answer = no action. The teams connection is OAuth: authorize it once after deploy.",
+                                  "runAfter": {
+                                    "Compose_approval_card": [
+                                      "Succeeded"
+                                    ]
+                                  },
+                                  "limit": {
+                                    "timeout": "PT4H"
+                                  },
+                                  "inputs": {
+                                    "host": {
+                                      "connection": {
+                                        "name": "@parameters('$connections')['teams']['connectionId']"
+                                      }
+                                    },
+                                    "path": "/flowbot/actions/flowcontinuation/recipienttypes/channel/$subscriptions",
+                                    "queries": {
+                                      "groupId": "@parameters('teamsGroupId')"
+                                    },
+                                    "body": {
+                                      "notificationUrl": "@{listCallbackUrl()}",
+                                      "body": {
+                                        "messageBody": "@{outputs('Compose_approval_card')}",
+                                        "recipient": {
+                                          "channelId": "@parameters('teamsChannelId')"
+                                        },
+                                        "shouldUpdateCard": true,
+                                        "updateMessage": "Decision recorded - see the Sentinel incident comments."
+                                      }
+                                    }
+                                  }
+                                },
+                                "Append_no_decision": {
+                                  "type": "AppendToArrayVariable",
+                                  "inputs": {
+                                    "name": "ContainmentLog",
+                                    "value": "NO DECISION for @{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])} within 4 h (or the Teams connection failed): no action taken."
+                                  },
+                                  "runAfter": {
+                                    "Post_approval_card_and_wait": [
+                                      "TimedOut",
+                                      "Failed"
+                                    ]
+                                  }
+                                },
+                                "Scope_decided": {
+                                  "type": "Scope",
+                                  "runAfter": {
+                                    "Post_approval_card_and_wait": [
+                                      "Succeeded"
+                                    ]
+                                  },
+                                  "actions": {
+                                    "Condition_authorized_approver": {
+                                      "type": "If",
+                                      "description": "Who may decide. Fails CLOSED: the answer counts only if Teams returned the responder's object id AND UPN, the id is on approverObjectIds (the containment approver group, not just anyone in the channel), and the responder is not the subject (four-eyes, by id and by UPN). verify: the Teams 'post adaptive card and wait' response carries responder.objectId and responder.userPrincipalName.",
+                                      "expression": {
+                                        "and": [
+                                          {
+                                            "not": {
+                                              "equals": [
+                                                "@coalesce(body('Post_approval_card_and_wait')?['responder']?['objectId'], '')",
+                                                ""
+                                              ]
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "equals": [
+                                                "@toLower(coalesce(body('Post_approval_card_and_wait')?['responder']?['userPrincipalName'], ''))",
+                                                ""
+                                              ]
+                                            }
+                                          },
+                                          {
+                                            "contains": [
+                                              "@parameters('approverObjectIds')",
+                                              "@coalesce(body('Post_approval_card_and_wait')?['responder']?['objectId'], '')"
+                                            ]
+                                          },
+                                          {
+                                            "not": {
+                                              "equals": [
+                                                "@coalesce(body('Post_approval_card_and_wait')?['responder']?['objectId'], '')",
+                                                "@coalesce(body('Get_user')?['id'], '#subject#')"
+                                              ]
+                                            }
+                                          },
+                                          {
+                                            "not": {
+                                              "equals": [
+                                                "@toLower(coalesce(body('Post_approval_card_and_wait')?['responder']?['userPrincipalName'], ''))",
+                                                "@toLower(coalesce(body('Get_user')?['userPrincipalName'], '#subject#'))"
+                                              ]
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      "actions": {
+                                        "Switch_on_decision": {
+                                          "type": "Switch",
+                                          "expression": "@coalesce(body('Post_approval_card_and_wait')?['data']?['decision'], 'none')",
+                                          "cases": {
+                                            "Contain": {
+                                              "case": "contain",
+                                              "actions": {
+                                                "Revoke_sessions": {
+                                                  "type": "Http",
+                                                  "description": "POST /users/{id}/revokeSignInSessions - Graph app role User.RevokeSessions.All on the playbook's managed identity. Tokens die within minutes (Graph docs), not instantly; CAE-aware apps react faster.",
+                                                  "inputs": {
+                                                    "method": "POST",
+                                                    "uri": "https://graph.microsoft.com/v1.0/users/@{encodeUriComponent(body('Get_user')?['id'])}/revokeSignInSessions",
+                                                    "authentication": {
+                                                      "type": "ManagedServiceIdentity",
+                                                      "audience": "https://graph.microsoft.com"
+                                                    }
+                                                  }
+                                                },
+                                                "Confirm_compromised": {
+                                                  "type": "Http",
+                                                  "description": "POST /identityProtection/riskyUsers/confirmCompromised - Graph app role IdentityRiskyUser.ReadWrite.All. Sets the user's risk to High, which closes the loop with risk-based Conditional Access: CA006 (user risk High -> MFA + secure password change) applies at the next sign-in, and Identity Protection learns from the verdict. Works for cloud and synced users; needs Entra ID P2 (without it Graph answers 403 and the log says so).",
+                                                  "runAfter": {
+                                                    "Revoke_sessions": [
+                                                      "Succeeded",
+                                                      "Failed"
+                                                    ]
+                                                  },
+                                                  "inputs": {
+                                                    "method": "POST",
+                                                    "uri": "https://graph.microsoft.com/v1.0/identityProtection/riskyUsers/confirmCompromised",
+                                                    "headers": {
+                                                      "Content-Type": "application/json"
+                                                    },
+                                                    "body": {
+                                                      "userIds": [
+                                                        "@{body('Get_user')?['id']}"
+                                                      ]
+                                                    },
+                                                    "authentication": {
+                                                      "type": "ManagedServiceIdentity",
+                                                      "audience": "https://graph.microsoft.com"
+                                                    }
+                                                  }
+                                                },
+                                                "Condition_synced_from_AD": {
+                                                  "type": "If",
+                                                  "description": "Synced users are mastered in AD: Entra rejects an accountEnabled write on them, and the next sync would undo it anyway. So the playbook flags them for the AD-side disable instead (Invoke-AdContainment.ps1).",
+                                                  "runAfter": {
+                                                    "Confirm_compromised": [
+                                                      "Succeeded",
+                                                      "Failed"
+                                                    ]
+                                                  },
+                                                  "expression": {
+                                                    "and": [
+                                                      {
+                                                        "equals": [
+                                                          "@body('Get_user')?['onPremisesSyncEnabled']",
+                                                          true
+                                                        ]
+                                                      }
+                                                    ]
+                                                  },
+                                                  "actions": {
+                                                    "Append_synced_flag": {
+                                                      "type": "AppendToArrayVariable",
+                                                      "inputs": {
+                                                        "name": "ContainmentLog",
+                                                        "value": "CONTAIN approved by @{body('Post_approval_card_and_wait')?['responder']?['userPrincipalName']} (object id @{body('Post_approval_card_and_wait')?['responder']?['objectId']}) for @{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])}: revokeSignInSessions HTTP @{coalesce(string(outputs('Revoke_sessions')?['statusCode']), 'n/a')}, confirmCompromised HTTP @{coalesce(string(outputs('Confirm_compromised')?['statusCode']), 'n/a')}. SYNCED from AD - AD DISABLE REQUIRED (AD is the authority): lab/scripts/monitoring/Invoke-AdContainment.ps1 -SamAccountName @{coalesce(body('Get_user')?['onPremisesSamAccountName'], '<sAMAccountName>')} -IncidentNumber @{triggerBody()?['object']?['properties']?['incidentNumber']}"
+                                                      }
+                                                    }
+                                                  },
+                                                  "else": {
+                                                    "actions": {
+                                                      "Disable_user": {
+                                                        "type": "Http",
+                                                        "description": "PATCH accountEnabled=false - Graph app roles User.EnableDisableAccount.All + User.Read.All AND (app-only sensitive action) a directory role able to act on the target, e.g. Authentication Administrator for non-admin users. Without the role Graph answers 403 and the log says so.",
+                                                        "inputs": {
+                                                          "method": "PATCH",
+                                                          "uri": "https://graph.microsoft.com/v1.0/users/@{encodeUriComponent(body('Get_user')?['id'])}",
+                                                          "headers": {
+                                                            "Content-Type": "application/json"
+                                                          },
+                                                          "body": {
+                                                            "accountEnabled": false
+                                                          },
+                                                          "authentication": {
+                                                            "type": "ManagedServiceIdentity",
+                                                            "audience": "https://graph.microsoft.com"
+                                                          }
+                                                        }
+                                                      },
+                                                      "Append_contained": {
+                                                        "type": "AppendToArrayVariable",
+                                                        "inputs": {
+                                                          "name": "ContainmentLog",
+                                                          "value": "CONTAIN approved by @{body('Post_approval_card_and_wait')?['responder']?['userPrincipalName']} (object id @{body('Post_approval_card_and_wait')?['responder']?['objectId']}) for @{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])}: revokeSignInSessions HTTP @{coalesce(string(outputs('Revoke_sessions')?['statusCode']), 'n/a')}, confirmCompromised HTTP @{coalesce(string(outputs('Confirm_compromised')?['statusCode']), 'n/a')}, disable (accountEnabled=false) HTTP @{coalesce(string(outputs('Disable_user')?['statusCode']), 'n/a')}. Expect 204 for all three; 403 = the managed identity lacks the Graph app role or the directory role (see Deploy-ContainmentPlaybook.ps1)."
+                                                        },
+                                                        "runAfter": {
+                                                          "Disable_user": [
+                                                            "Succeeded",
+                                                            "Failed"
+                                                          ]
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            },
+                                            "Revoke": {
+                                              "case": "revoke",
+                                              "actions": {
+                                                "Revoke_sessions_only": {
+                                                  "type": "Http",
+                                                  "description": "POST /users/{id}/revokeSignInSessions - Graph app role User.RevokeSessions.All on the playbook's managed identity. Tokens die within minutes (Graph docs), not instantly; CAE-aware apps react faster.",
+                                                  "inputs": {
+                                                    "method": "POST",
+                                                    "uri": "https://graph.microsoft.com/v1.0/users/@{encodeUriComponent(body('Get_user')?['id'])}/revokeSignInSessions",
+                                                    "authentication": {
+                                                      "type": "ManagedServiceIdentity",
+                                                      "audience": "https://graph.microsoft.com"
+                                                    }
+                                                  }
+                                                },
+                                                "Append_revoked": {
+                                                  "type": "AppendToArrayVariable",
+                                                  "inputs": {
+                                                    "name": "ContainmentLog",
+                                                    "value": "REVOKE ONLY approved by @{body('Post_approval_card_and_wait')?['responder']?['userPrincipalName']} (object id @{body('Post_approval_card_and_wait')?['responder']?['objectId']}) for @{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])}: revokeSignInSessions HTTP @{coalesce(string(outputs('Revoke_sessions_only')?['statusCode']), 'n/a')}. Account left enabled."
+                                                  },
+                                                  "runAfter": {
+                                                    "Revoke_sessions_only": [
+                                                      "Succeeded",
+                                                      "Failed"
+                                                    ]
+                                                  }
+                                                }
+                                              }
+                                            },
+                                            "Reject": {
+                                              "case": "reject",
+                                              "actions": {
+                                                "Append_rejected": {
+                                                  "type": "AppendToArrayVariable",
+                                                  "inputs": {
+                                                    "name": "ContainmentLog",
+                                                    "value": "REJECTED by @{coalesce(body('Post_approval_card_and_wait')?['responder']?['userPrincipalName'], 'unknown')} for @{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])}: no action taken."
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          },
+                                          "default": {
+                                            "actions": {
+                                              "Append_unknown_answer": {
+                                                "type": "AppendToArrayVariable",
+                                                "inputs": {
+                                                  "name": "ContainmentLog",
+                                                  "value": "UNKNOWN answer from @{coalesce(body('Post_approval_card_and_wait')?['responder']?['userPrincipalName'], 'unknown')} for @{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])}: no action taken."
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "else": {
+                                        "actions": {
+                                          "Append_answer_ignored": {
+                                            "type": "AppendToArrayVariable",
+                                            "inputs": {
+                                              "name": "ContainmentLog",
+                                              "value": "IGNORED for @{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])}: answer from @{coalesce(body('Post_approval_card_and_wait')?['responder']?['userPrincipalName'], 'unknown responder')} not accepted - @{if(equals(coalesce(body('Post_approval_card_and_wait')?['responder']?['objectId'], ''), ''), 'the response carried no responder identity', if(or(equals(coalesce(body('Post_approval_card_and_wait')?['responder']?['objectId'], ''), coalesce(body('Get_user')?['id'], '#subject#')), equals(toLower(coalesce(body('Post_approval_card_and_wait')?['responder']?['userPrincipalName'], '')), toLower(coalesce(body('Get_user')?['userPrincipalName'], '#subject#')))), 'the SUBJECT answered for their own account', 'the responder is not on the containment approver list'))}. No action taken - a listed approver who is not the subject must decide (re-run the playbook from the incident)."
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "runAfter": {
+                              "Filter_restricted_AUs": [
+                                "Succeeded",
+                                "Skipped"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Append_AD_only": {
+                        "type": "AppendToArrayVariable",
+                        "inputs": {
+                          "name": "ContainmentLog",
+                          "value": "AD ACCOUNT @{items('For_each_account')?['NTDomain']}\\@{items('For_each_account')?['Name']} has no Entra object: AD DISABLE REQUIRED (AD is the authority) - lab/scripts/monitoring/Invoke-AdContainment.ps1 -SamAccountName @{items('For_each_account')?['Name']} -IncidentNumber @{triggerBody()?['object']?['properties']?['incidentNumber']} - then force a Vault check-in so the password rotates."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "Compose_summary": {
+              "type": "Compose",
+              "runAfter": {
+                "For_each_account": [
+                  "Succeeded",
+                  "Failed",
+                  "TimedOut",
+                  "Skipped"
+                ]
+              },
+              "inputs": "@{if(not(equals(actions('Entities_-_Get_Accounts')?['status'], 'Succeeded')), 'Could not read the incident entities (Sentinel connection or the Microsoft Sentinel Responder role) - nothing was contained.', if(equals(length(variables('ContainmentLog')), 0), 'No account entities on this incident - nothing to contain.', join(variables('ContainmentLog'), '<br/>')))}"
+            },
+            "Comment_on_Sentinel_incident": {
+              "type": "ApiConnection",
+              "runAfter": {
+                "Compose_summary": [
+                  "Succeeded"
+                ]
+              },
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "path": "/Incidents/Comment",
+                "body": {
+                  "incidentArmId": "@triggerBody()?['object']?['id']",
+                  "message": "<p><b>ITDR containment - playbook @{workflow()?['name']} run @{workflow()?['run']?['name']}</b></p><p>@{outputs('Compose_summary')}</p>"
+                }
+              }
+            },
+            "If_ServiceNow_configured": {
+              "type": "If",
+              "runAfter": {
+                "Compose_summary": [
+                  "Succeeded"
+                ]
+              },
+              "expression": {
+                "and": [
+                  {
+                    "not": {
+                      "equals": [
+                        "@parameters('snowInstance')",
+                        ""
+                      ]
+                    }
+                  },
+                  {
+                    "not": {
+                      "equals": [
+                        "@parameters('snowUser')",
+                        ""
+                      ]
+                    }
+                  },
+                  {
+                    "not": {
+                      "equals": [
+                        "@parameters('snowPassword')",
+                        ""
+                      ]
+                    }
+                  }
+                ]
+              },
+              "actions": {
+                "Find_ticket_by_correlation_id": {
+                  "type": "Http",
+                  "description": "playbook-notify.json opens the ticket with correlation_id = the Sentinel incident name (GUID), so the containment record lands on the SAME ticket instead of a duplicate.",
+                  "inputs": {
+                    "method": "GET",
+                    "uri": "https://@{parameters('snowInstance')}.service-now.com/api/now/table/incident",
+                    "queries": {
+                      "sysparm_query": "correlation_id=@{triggerBody()?['object']?['name']}",
+                      "sysparm_fields": "sys_id,number",
+                      "sysparm_limit": "1"
+                    },
+                    "headers": {
+                      "Accept": "application/json"
+                    },
+                    "authentication": {
+                      "type": "Basic",
+                      "username": "@parameters('snowUser')",
+                      "password": "@parameters('snowPassword')"
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs"
+                      ]
+                    }
+                  }
+                },
+                "Condition_ticket_exists": {
+                  "type": "If",
+                  "runAfter": {
+                    "Find_ticket_by_correlation_id": [
+                      "Succeeded"
+                    ]
+                  },
+                  "expression": {
+                    "and": [
+                      {
+                        "greater": [
+                          "@length(coalesce(body('Find_ticket_by_correlation_id')?['result'], json('[]')))",
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Add_work_note": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "PATCH",
+                        "uri": "https://@{parameters('snowInstance')}.service-now.com/api/now/table/incident/@{first(body('Find_ticket_by_correlation_id')?['result'])?['sys_id']}",
+                        "headers": {
+                          "Content-Type": "application/json",
+                          "Accept": "application/json"
+                        },
+                        "body": {
+                          "work_notes": "ITDR containment (Sentinel #@{triggerBody()?['object']?['properties']?['incidentNumber']}):\n@{replace(outputs('Compose_summary'), '<br/>', '\n')}"
+                        },
+                        "authentication": {
+                          "type": "Basic",
+                          "username": "@parameters('snowUser')",
+                          "password": "@parameters('snowPassword')"
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Create_ticket": {
+                        "type": "Http",
+                        "inputs": {
+                          "method": "POST",
+                          "uri": "https://@{parameters('snowInstance')}.service-now.com/api/now/table/incident",
+                          "headers": {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                          },
+                          "body": {
+                            "short_description": "[Sentinel #@{triggerBody()?['object']?['properties']?['incidentNumber']}] ITDR containment: @{triggerBody()?['object']?['properties']?['title']}",
+                            "description": "@{replace(outputs('Compose_summary'), '<br/>', '\n')}\n\nSentinel incident: @{triggerBody()?['object']?['properties']?['incidentUrl']}",
+                            "urgency": "1",
+                            "impact": "1",
+                            "category": "inquiry",
+                            "correlation_id": "@{triggerBody()?['object']?['name']}",
+                            "correlation_display": "Microsoft Sentinel"
+                          },
+                          "authentication": {
+                            "type": "Basic",
+                            "username": "@parameters('snowUser')",
+                            "password": "@parameters('snowPassword')"
+                          }
+                        },
+                        "runtimeConfiguration": {
+                          "secureData": {
+                            "properties": [
+                              "inputs"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azuresentinel": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', concat('azuresentinel-', parameters('playbookName')))]",
+                "connectionName": "[concat('azuresentinel-', parameters('playbookName'))]",
+                "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('location'), 'azuresentinel')]",
+                "connectionProperties": {
+                  "authentication": {
+                    "type": "ManagedServiceIdentity"
+                  }
+                }
+              },
+              "teams": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', concat('teams-', parameters('playbookName')))]",
+                "connectionName": "[concat('teams-', parameters('playbookName'))]",
+                "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('location'), 'teams')]"
+              }
+            }
+          },
+          "teamsGroupId": {
+            "value": "[parameters('teamsGroupId')]"
+          },
+          "teamsChannelId": {
+            "value": "[parameters('teamsChannelId')]"
+          },
+          "protectedUpnPrefixes": {
+            "value": "[parameters('protectedUpnPrefixes')]"
+          },
+          "protectedObjectIds": {
+            "value": "[parameters('protectedObjectIds')]"
+          },
+          "approverObjectIds": {
+            "value": "[parameters('approverObjectIds')]"
+          },
+          "snowInstance": {
+            "value": "[parameters('snowInstance')]"
+          },
+          "snowUser": {
+            "value": "[parameters('snowUser')]"
+          },
+          "snowPassword": {
+            "value": "[parameters('snowPassword')]"
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "playbookId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Logic/workflows', parameters('playbookName'))]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('playbookName')), '2019-05-01', 'full').identity.principalId]"
+    },
+    "teamsConnectionName": {
+      "type": "string",
+      "value": "[concat('teams-', parameters('playbookName'))]"
+    }
+  }
+}

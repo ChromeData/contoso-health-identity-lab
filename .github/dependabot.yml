@@ -1,0 +1,35 @@
+# Keep the SHA-pinned actions and the Terraform providers current through
+# reviewable PRs - never by re-pointing a floating tag (see
+# lab/pipelines/README.md, "SHA-pinning rationale"). Dependabot bumps the
+# full commit SHA *and* the trailing "# vX.Y.Z" comment together.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+
+  # The three lab/terraform/k8s roots are listed too. platform and identity
+  # run against a throwaway kind cluster, and aks-mapping is never applied. A
+  # bump PR for them is checked by k8s-identity.yml (lab/k8s/ci/pipeline.sh).
+  # Their lock files hold linux_amd64 + darwin_arm64 hashes only (verify:
+  # Dependabot's re-lock keeps both platforms on the first k8s bump PR).
+  # Image digests under lab/k8s and the Vault Agent digest in k8s/platform
+  # are not covered here; bump them by hand.
+  - package-ecosystem: "terraform"
+    directories:
+      - "/lab/terraform/envs/dev"
+      - "/lab/terraform/envs/bootstrap"
+      - "/lab/terraform/aws"
+      - "/lab/terraform/k8s/platform"
+      - "/lab/terraform/k8s/identity"
+      - "/lab/terraform/k8s/aks-mapping"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps(terraform)"

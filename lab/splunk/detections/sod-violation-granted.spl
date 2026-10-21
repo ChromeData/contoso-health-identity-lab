@@ -1,0 +1,130 @@
+index=entra sourcetype="azure:loganalytics:auditlogs" (Category="EntitlementManagement" OR Category="GroupManagement") earliest=-14d latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Separation-of-duties violation GRANTED (sod-rules.json)  ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/sod-violation-granted.kql (same logic/window)     ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over Entra AuditLogs REPLAYED     ```
+``` from Log Analytics by lab/splunk/ingest-from-loganalytics.sh, plus the    ```
+``` contoso_sod_holdings.csv lookup (UserObjectId, UserPrincipalName, Kind,  ```
+``` Name, SnapshotTime - the snapshot the Sentinel watchlist sod_holdings     ```
+``` holds). Produced by 09-SoD-Report.ps1 -HoldingsSnapshotPath (object ids  ```
+``` + UPNs: gitignored). splunk-up.sh creates a header-only copy (mode 0600) ```
+``` when missing, so inputlookup never errors; copying the real snapshot in  ```
+``` is a TENANT-TIME step. Header-only = grants inside the 14 d window only. ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   Fulfill access package assignment, Add member to group, or a PIM-for-   ```
+```   Groups "Add eligible member to role in PIM completed" (Learn's string:  ```
+```   no term group - Category GroupManagement scopes it; an ELIGIBLE member  ```
+```   holds the group - sod-rules.json holdingSemantics), in the last         ```
+```   hour, of something on one side of an SoD rule while the user already    ```
+```   holds something on the other side (14 days of grants and removals plus  ```
+```   the snapshot). Severity = the rule's risk (High, SOD-09 Medium). Notify ```
+```   only: never a containment trigger (ADR 0012, clinical lockout).         ```
+``` MITRE ATT&CK: T1098 Account Manipulation.                                 ```
+```                                                                            ```
+``` RULESET MIRROR: the SodTags, RuleName and Risk case() lines below are     ```
+``` generated from lab/iga/sod-rules.json (accessPackages + groups), the same ```
+``` source as the KQL datatables. Regenerate both when the ruleset changes.   ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   extract_all(displayName|newValue|oldValue) + set_intersect(SodNames)    ```
+```                                        -> spath TargetResources{}.displayName ```
+```                                           and modifiedProperties{}.newValue ```
+```                                           and .oldValue (a removal names   ```
+```                                           the group in oldValue), quotes   ```
+```                                           trimmed, mvdedup, mvexpand,      ```
+```                                           then the SodTags case()         ```
+```   datatable SodSides + join on Name   -> SodTags = space-separated        ```
+```                                           RuleId:Side tags per name       ```
+```   arg_max(EventTime, State) by user + name + path (Holdings)              ```
+```                                        -> eventstats max(epoch) BY user + ```
+```                                           name + Path, held when that     ```
+```                                           latest row says Held (Path      ```
+```                                           Member / Eligible / Snapshot:   ```
+```                                           an activation ending does not   ```
+```                                           cancel a standing eligibility)  ```
+```   verify: PIM-for-Groups eligibility activity strings (matched on         ```
+```   "eligible member" + "completed", Category GroupManagement,              ```
+```   LoggedByService PIM).                                                   ```
+```   join NewGrants to Holdings on user + rule, other side                    ```
+```                                        -> eventstats values(Tag=Name=Epoch) ```
+```                                           BY user, then mvmap keeps the   ```
+```                                           packs whose prefix is the other ```
+```                                           side of the same rule           ```
+```   _GetWatchlist(sod_holdings)         -> append inputlookup                ```
+```                                           contoso_sod_holdings.csv         ```
+```   SodExceptions (empty)               -> Excepted fixed to false          ```
+```   verify: mvmap reading a second field (OppositePrefix) inside its        ```
+```   expression, and eval spath() on each TargetResources{} element.         ```
+```                                                                            ```
+``` SCHEDULE: PT1H / P14D, base severity High (Severity column = dynamic),     ```
+``` throttled 1 h per user + rule.                                              ```
+``` ========================================================================== ```
+``` @stanza Contoso - Separation-of-duties violation granted ```
+``` @conf description = Access package or group granted that completes a toxic pair from lab/iga/sod-rules.json (e.g. nursing plus controlled-substance dispensing). Notify only. KQL twin: lab/kql/sod-violation-granted.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = 9 * * * * ```
+``` @conf dispatch.earliest_time = -14d ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = UserPrincipalName,RuleId ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| eval IsElig=if(Category=="GroupManagement" AND lower(LoggedByService)=="pim" AND like(lower(OperationName), "%eligible member%") AND like(lower(OperationName), "%completed%"), 1, 0)
+| where lower(Result)=="success" AND ((Category=="EntitlementManagement" AND in(lower(OperationName), "fulfill access package assignment", "remove access package assignment")) OR (Category=="GroupManagement" AND in(lower(OperationName), "add member to group", "remove member from group")) OR IsElig==1)
+| spath path=TargetResources{} output=TR
+| eval TRUser=mvindex(mvfilter(match(spath(TR, "type"), "(?i)^User$")), 0)
+| eval TargetUserId=spath(TRUser, "id"), TargetUserUpn=spath(TRUser, "userPrincipalName")
+| spath path=InitiatedBy.user.id output=ActorId
+| spath path=InitiatedBy.user.userPrincipalName output=ActorUpn
+| spath path=InitiatedBy.app.displayName output=ActorApp
+| spath path=TargetResources{}.displayName output=TrNames
+| spath path=TargetResources{}.modifiedProperties{}.newValue output=MpValues
+| spath path=TargetResources{}.modifiedProperties{}.oldValue output=MpOldValues
+| eval Q=urldecode("%22")
+| eval MpValues=mvmap(MpValues, trim(MpValues, Q)), MpOldValues=mvmap(MpOldValues, trim(MpOldValues, Q))
+| eval Candidates=mvdedup(mvappend(TrNames, MpValues, MpOldValues))
+| eval IsEm=if(Category=="EntitlementManagement", 1, 0)
+| eval UserId=if(isnotnull(TargetUserId) AND TargetUserId!="", TargetUserId, if(IsEm==1, ActorId, null()))
+| eval UserPrincipalName=lower(if(isnotnull(TargetUserUpn) AND TargetUserUpn!="", TargetUserUpn, if(IsEm==1, ActorUpn, null())))
+| eval State=if(in(lower(OperationName), "fulfill access package assignment", "add member to group") OR (IsElig==1 AND like(lower(OperationName), "add%")), "Held", "Removed")
+| eval Path=if(IsElig==1, "Eligible", "Member")
+| eval GrantedBy=if(Category=="EntitlementManagement", "entitlement management (Access Package Activity workbook)", coalesce(ActorUpn, ActorApp))
+| eval EventEpoch=_time, IsSnapshot=0
+| mvexpand Candidates
+| eval Name=Candidates
+| append [| inputlookup contoso_sod_holdings.csv | eval UserId=UserObjectId, UserPrincipalName=lower(UserPrincipalName), EventEpoch=coalesce(strptime(SnapshotTime, "%Y-%m-%dT%H:%M:%S"), relative_time(now(), "-14d")), State="Held", IsSnapshot=1, Path="Snapshot" | fields UserId UserPrincipalName Name EventEpoch State IsSnapshot Path]
+| eval SodTags=case(Name=="All-ICU", "SOD-01:A", Name=="All-Nurses", "SOD-01:A", Name=="App-Pharmacy-Dispensing-Users", "SOD-01:B SOD-02:B SOD-04:B", Name=="Billing - Charge Entry & Coding Apps", "SOD-09:A", Name=="Billing - Payment Posting & Adjustments Apps", "SOD-09:B", Name=="Finance - Accounts Payable Apps", "SOD-05:A", Name=="Finance - Vendor Master Data Apps", "SOD-05:B", Name=="HR - Payroll Approval Apps", "SOD-06:B", Name=="HR - Payroll Entry Apps", "SOD-06:A", Name=="ICU - Critical Care Apps", "SOD-01:A SOD-07:A", Name=="ICU - Float Access", "SOD-01:A SOD-07:A", Name=="IGA-Access-Reviewers", "SOD-08:B", Name=="Nurse - Clinical Apps", "SOD-01:A SOD-07:A", Name=="PIM-EHR-AuditLog-Admins", "SOD-07:B", Name=="PIM-Tier1-Helpdesk", "SOD-08:A", Name=="Pharmacy - Controlled Substances Apps", "SOD-01:B SOD-02:B SOD-04:B", Name=="Pharmacy - Inventory & Purchasing Apps", "SOD-04:A", Name=="Pharmacy - Order Verification Apps", "SOD-03:B", Name=="Prescriber - CPOE Ordering Apps", "SOD-02:A SOD-03:A SOD-07:A", Name=="Privileged-IAM-Admins", "SOD-08:A", true(), null())
+| where isnotnull(SodTags) AND isnotnull(UserId) AND UserId!=""
+| eval GrantedKind=if(in(Name, "All-Nurses", "All-ICU", "App-Pharmacy-Dispensing-Users", "PIM-EHR-AuditLog-Admins", "Privileged-IAM-Admins", "PIM-Tier1-Helpdesk", "IGA-Access-Reviewers"), "Group", "AccessPackage")
+| eval TagList=split(SodTags, " ")
+| eventstats max(EventEpoch) AS LatestEpoch BY UserId Name Path
+| eval HeldPack=if(EventEpoch==LatestEpoch AND State=="Held", mvmap(TagList, TagList . "=" . Name . "=" . EventEpoch), null())
+| eventstats values(HeldPack) AS HeldPacks BY UserId
+| where IsSnapshot==0 AND State=="Held" AND EventEpoch>=relative_time(now(), "-1h")
+| mvexpand TagList
+| eval RuleId=mvindex(split(TagList, ":"), 0), GrantedSide=mvindex(split(TagList, ":"), 1)
+| eval OppositePrefix=RuleId . ":" . if(GrantedSide=="A", "B", "A") . "="
+| eval ConflictingPacks=mvmap(HeldPacks, if(substr(HeldPacks, 1, len(OppositePrefix))==OppositePrefix, HeldPacks, null()))
+| where coalesce(mvcount(ConflictingPacks), 0) > 0
+| eval ConflictingAccess=mvdedup(mvmap(ConflictingPacks, mvindex(split(ConflictingPacks, "="), 1)))
+| eval ConflictEpochs=mvmap(ConflictingPacks, mvindex(split(ConflictingPacks, "="), 2))
+| eval ConflictingSinceEpoch=tonumber(mvindex(mvsort(ConflictEpochs), 0))
+| eval RuleName=case(RuleId=="SOD-01", "Medication administration vs controlled-substance dispensing", RuleId=="SOD-02", "Prescribe vs dispense", RuleId=="SOD-03", "Order vs approve (pharmacist verification) of medication orders", RuleId=="SOD-04", "Pharmacy inventory and purchasing vs dispensing", RuleId=="SOD-05", "Accounts payable processing vs vendor master data", RuleId=="SOD-06", "Payroll entry vs payroll approval", RuleId=="SOD-07", "EHR break-the-glass vs EHR audit-log administration", RuleId=="SOD-08", "Identity administration vs access certification", RuleId=="SOD-09", "Charge entry and coding vs payment posting and adjustments", true(), null()), Risk=case(RuleId=="SOD-01", "High", RuleId=="SOD-02", "High", RuleId=="SOD-03", "High", RuleId=="SOD-04", "High", RuleId=="SOD-05", "High", RuleId=="SOD-06", "High", RuleId=="SOD-07", "High", RuleId=="SOD-08", "High", RuleId=="SOD-09", "Medium", true(), null())
+| eval Excepted="false", ExceptionId=""
+| eval Severity=if(Excepted=="true", "Low", Risk)
+| eval GrantedName=Name, GrantedVia=Path, ConflictingAccess=mvindex(ConflictingAccess, 0, 9)
+| eval TimeGenerated=strftime(EventEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z"), ConflictingSince=strftime(ConflictingSinceEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z")
+| sort 0 - EventEpoch
+| table TimeGenerated, Severity, RuleId, RuleName, UserPrincipalName, UserId, GrantedName, GrantedKind, GrantedSide, GrantedVia, ConflictingAccess, ConflictingSince, GrantedBy, OperationName, Excepted, ExceptionId, CorrelationId

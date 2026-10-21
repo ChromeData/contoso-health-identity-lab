@@ -1,0 +1,4288 @@
+[
+  {
+    "rule": "app-credential-added",
+    "case": "secret / certificate / federated credential ADDED (additions only)",
+    "category": "ApplicationManagement",
+    "operation": "Certificates and secrets management",
+    "expectInKql": [
+      "summarize OldStrings = make_list(tostring(o))",
+      "extend ns = tostring(n)",
+      "where not(set_has_element(OldStrings, ns))"
+    ],
+    "regexChain": [
+      "KeyType=([^,\\]]+)"
+    ],
+    "op": "newMinusOld",
+    "oldText": "[KeyIdentifier=00000000-0000-0000-0000-000000000000,KeyType=Password,KeyUsage=Verify,DisplayName=portal-secret]",
+    "newText": "[KeyIdentifier=00000000-0000-0000-0000-000000000000,KeyType=Password,KeyUsage=Verify,DisplayName=portal-secret] [KeyIdentifier=11111111-1111-1111-1111-111111111111,KeyType=AsymmetricX509Cert,KeyUsage=Verify,DisplayName=portal-cert]",
+    "expect": [
+      "AsymmetricX509Cert"
+    ],
+    "minus": null,
+    "table": "AuditLogs",
+    "note": "KeyDescription old / new values are JSON-encoded lists of '[KeyIdentifier=..,KeyType=..,KeyUsage=..,DisplayName=..]' strings (the format the rule header cites). verify: the exact OperationName text (en dash, trailing space), and the FederatedIdentityCredentials value shape, on the first lab change.",
+    "rows": [
+      {
+        "label": "positive: first client secret on an app registration (Medium)",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Update application – Certificates and secrets management ",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Clinical Portal",
+              "type": "Application",
+              "modifiedProperties": [
+                {
+                  "displayName": "KeyDescription",
+                  "oldValue": "[]",
+                  "newValue": "[\"[KeyIdentifier=00000000-0000-0000-0000-000000000000,KeyType=Password,KeyUsage=Verify,DisplayName=portal-secret]\"]"
+                },
+                {
+                  "displayName": "Included Updated Properties",
+                  "oldValue": null,
+                  "newValue": "\"KeyDescription\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "TargetType": "Application",
+          "CredentialKind": "ClientSecret",
+          "KeyTypes": [
+            "Password"
+          ],
+          "AddedCount": 1,
+          "FirstCredential": true,
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "positive: a certificate on the SERVICE PRINCIPAL (never shown in App registrations) is High",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Add service principal credentials",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Clinical Portal",
+              "type": "ServicePrincipal",
+              "modifiedProperties": [
+                {
+                  "displayName": "KeyDescription",
+                  "oldValue": "[]",
+                  "newValue": "[\"[KeyIdentifier=00000000-0000-0000-0000-000000000000,KeyType=AsymmetricX509Cert,KeyUsage=Verify,DisplayName=sp-cert]\"]"
+                },
+                {
+                  "displayName": "Included Updated Properties",
+                  "oldValue": null,
+                  "newValue": "\"KeyDescription\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "TargetType": "ServicePrincipal",
+          "CredentialKind": "Certificate",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "positive: a new federated identity credential (GitHub OIDC trust) is High",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Update application",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Clinical Portal",
+              "type": "Application",
+              "modifiedProperties": [
+                {
+                  "displayName": "FederatedIdentityCredentials",
+                  "oldValue": "[]",
+                  "newValue": "[{\"Name\":\"gh-main\",\"Issuer\":\"https://token.actions.githubusercontent.com\",\"Subject\":\"repo:contoso-health/clinical-portal:environment:prod\",\"Audiences\":[\"api://AzureADTokenExchange\"]}]"
+                },
+                {
+                  "displayName": "Included Updated Properties",
+                  "oldValue": null,
+                  "newValue": "\"FederatedIdentityCredentials\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "CredentialKind": "FederatedIdentityCredential",
+          "FicIssuers": [
+            "https://token.actions.githubusercontent.com"
+          ],
+          "FicSubject": [
+            "repo:contoso-health/clinical-portal:environment:prod"
+          ],
+          "KeyTypes": [],
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: a second secret next to an existing one is still an addition (not the first)",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Update application – Certificates and secrets management ",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Clinical Portal",
+              "type": "Application",
+              "modifiedProperties": [
+                {
+                  "displayName": "KeyDescription",
+                  "oldValue": "[\"[KeyIdentifier=00000000-0000-0000-0000-000000000000,KeyType=Password,KeyUsage=Verify,DisplayName=portal-secret]\"]",
+                  "newValue": "[\"[KeyIdentifier=00000000-0000-0000-0000-000000000000,KeyType=Password,KeyUsage=Verify,DisplayName=portal-secret]\",\"[KeyIdentifier=11111111-1111-1111-1111-111111111111,KeyType=Password,KeyUsage=Verify,DisplayName=portal-secret-2]\"]"
+                },
+                {
+                  "displayName": "Included Updated Properties",
+                  "oldValue": null,
+                  "newValue": "\"KeyDescription\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "AddedCount": 1,
+          "FirstCredential": false,
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "contrast: the CI apply identity (by id) is Low",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Update application – Certificates and secrets management ",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "gh-oidc-entra-apply (write)",
+          "InitiatedBy": {
+            "app": {
+              "appId": "66666666-6666-6666-6666-666666666666",
+              "displayName": "gh-oidc-entra-apply (write)",
+              "servicePrincipalId": "44444444-4444-4444-4444-444444444444",
+              "servicePrincipalName": null
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Clinical Portal",
+              "type": "Application",
+              "modifiedProperties": [
+                {
+                  "displayName": "KeyDescription",
+                  "oldValue": "[]",
+                  "newValue": "[\"[KeyIdentifier=00000000-0000-0000-0000-000000000000,KeyType=Password,KeyUsage=Verify,DisplayName=portal-secret]\"]"
+                },
+                {
+                  "displayName": "Included Updated Properties",
+                  "oldValue": null,
+                  "newValue": "\"KeyDescription\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "IsIac": true,
+          "Severity": "Low"
+        },
+        "lets": {
+          "IacPrincipalIds": [
+            "44444444-4444-4444-4444-444444444444"
+          ]
+        }
+      },
+      {
+        "label": "negative: a secret REMOVED (the new list is a subset of the old)",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Update application – Certificates and secrets management ",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Clinical Portal",
+              "type": "Application",
+              "modifiedProperties": [
+                {
+                  "displayName": "KeyDescription",
+                  "oldValue": "[\"[KeyIdentifier=00000000-0000-0000-0000-000000000000,KeyType=Password,KeyUsage=Verify,DisplayName=portal-secret]\",\"[KeyIdentifier=11111111-1111-1111-1111-111111111111,KeyType=Password,KeyUsage=Verify,DisplayName=portal-secret-2]\"]",
+                  "newValue": "[\"[KeyIdentifier=00000000-0000-0000-0000-000000000000,KeyType=Password,KeyUsage=Verify,DisplayName=portal-secret]\"]"
+                },
+                {
+                  "displayName": "Included Updated Properties",
+                  "oldValue": null,
+                  "newValue": "\"KeyDescription\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where AddedCount > 0"
+      },
+      {
+        "label": "negative: an 'Update application' that changes only the display name",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Update application",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Clinical Portal",
+              "type": "Application",
+              "modifiedProperties": [
+                {
+                  "displayName": "DisplayName",
+                  "oldValue": "[\"Clinical Portal\"]",
+                  "newValue": "[\"Clinical Portal (prod)\"]"
+                },
+                {
+                  "displayName": "Included Updated Properties",
+                  "oldValue": null,
+                  "newValue": "\"DisplayName\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where OperationName has_any (\"Add service principal credentials\", \"Certificates and secrets management\")"
+      },
+      {
+        "label": "negative: a certificates-and-secrets event with no key list in it",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Update application – Certificates and secrets management ",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Clinical Portal",
+              "type": "Application",
+              "modifiedProperties": [
+                {
+                  "displayName": "AppAddress",
+                  "oldValue": "[]",
+                  "newValue": "[]"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where isnotempty(ChangedProperty)"
+      }
+    ]
+  },
+  {
+    "rule": "role-assigned-outside-pim",
+    "case": "direct add (Core Directory, not MS-PIM)",
+    "category": "RoleManagement",
+    "operation": "Add member to role",
+    "expectInKql": [
+      "Identity !in (\"MS-PIM\", \"MS-PIM-Fairfax\")"
+    ],
+    "regexChain": null,
+    "op": null,
+    "oldText": null,
+    "newText": null,
+    "expect": null,
+    "minus": null,
+    "table": "AuditLogs",
+    "note": "Row shapes follow the AuditLogs schema (Microsoft Learn) and the Graph directoryAudit resource: InitiatedBy.user / .app, TargetResources[] with modifiedProperties whose values are JSON-encoded strings. verify: Identity on a Core Directory role write (the actor's display name; MS-PIM for PIM's own writes) and the Role.* property names on the first lab assignment.",
+    "rows": [
+      {
+        "label": "positive: Global Administrator added directly to a user (Core Directory, user actor)",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Role.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"33333333-3333-3333-3333-333333333333\""
+                },
+                {
+                  "displayName": "Role.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Global Administrator\""
+                },
+                {
+                  "displayName": "Role.TemplateId",
+                  "oldValue": null,
+                  "newValue": "\"62e90394-69f5-4237-9190-012177145e10\""
+                },
+                {
+                  "displayName": "Role.WellKnownObjectName",
+                  "oldValue": null,
+                  "newValue": "\"TenantAdmins\""
+                }
+              ],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "Direct",
+          "RoleName": "Global Administrator",
+          "RoleTier": "Tier0",
+          "TargetType": "User",
+          "TargetName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+          "Actor": "mallory.admin@contosohealthlab.onmicrosoft.com",
+          "IsIac": false,
+          "IacNameSpoof": false,
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "positive: 'Add member to role outside of PIM' giving a SERVICE PRINCIPAL Application Administrator",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role outside of PIM",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Clinical Portal",
+              "type": "ServicePrincipal",
+              "userPrincipalName": null,
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Role.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"33333333-3333-3333-3333-333333333333\""
+                },
+                {
+                  "displayName": "Role.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Application Administrator\""
+                },
+                {
+                  "displayName": "Role.TemplateId",
+                  "oldValue": null,
+                  "newValue": "\"9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3\""
+                },
+                {
+                  "displayName": "Role.WellKnownObjectName",
+                  "oldValue": null,
+                  "newValue": "\"\""
+                }
+              ],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "Direct",
+          "RoleName": "Application Administrator",
+          "RoleTier": "Tier0",
+          "TargetType": "ServicePrincipal",
+          "TargetName": "Clinical Portal",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: the CI apply identity matched by its service principal id (rendered IacPrincipalIds) is Medium",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "gh-oidc-entra-apply (write)",
+          "InitiatedBy": {
+            "app": {
+              "appId": "66666666-6666-6666-6666-666666666666",
+              "displayName": "gh-oidc-entra-apply (write)",
+              "servicePrincipalId": "44444444-4444-4444-4444-444444444444",
+              "servicePrincipalName": null
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Role.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"33333333-3333-3333-3333-333333333333\""
+                },
+                {
+                  "displayName": "Role.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Global Administrator\""
+                },
+                {
+                  "displayName": "Role.TemplateId",
+                  "oldValue": null,
+                  "newValue": "\"62e90394-69f5-4237-9190-012177145e10\""
+                },
+                {
+                  "displayName": "Role.WellKnownObjectName",
+                  "oldValue": null,
+                  "newValue": "\"TenantAdmins\""
+                }
+              ],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": {
+          "IsIac": true,
+          "IacNameSpoof": false,
+          "Actor": "gh-oidc-entra-apply (write)",
+          "Severity": "Medium"
+        },
+        "lets": {
+          "IacPrincipalIds": [
+            "44444444-4444-4444-4444-444444444444"
+          ]
+        }
+      },
+      {
+        "label": "contrast: an app only NAMED like the CI identity (other ids) is High - IacNameSpoof",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "gh-oidc-entra-apply (write)",
+          "InitiatedBy": {
+            "app": {
+              "appId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+              "displayName": "gh-oidc-entra-apply (write)",
+              "servicePrincipalId": "55555555-5555-5555-5555-555555555555",
+              "servicePrincipalName": null
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Role.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"33333333-3333-3333-3333-333333333333\""
+                },
+                {
+                  "displayName": "Role.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Global Administrator\""
+                },
+                {
+                  "displayName": "Role.TemplateId",
+                  "oldValue": null,
+                  "newValue": "\"62e90394-69f5-4237-9190-012177145e10\""
+                },
+                {
+                  "displayName": "Role.WellKnownObjectName",
+                  "oldValue": null,
+                  "newValue": "\"TenantAdmins\""
+                }
+              ],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": {
+          "IsIac": false,
+          "IacNameSpoof": true,
+          "Severity": "High"
+        },
+        "lets": {
+          "IacPrincipalIds": [
+            "44444444-4444-4444-4444-444444444444"
+          ]
+        }
+      },
+      {
+        "label": "negative: the same Core Directory write made by MS-PIM (a PIM activation) is not this rule",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "app": {
+              "appId": null,
+              "displayName": "MS-PIM",
+              "servicePrincipalId": null,
+              "servicePrincipalName": null
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Role.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"33333333-3333-3333-3333-333333333333\""
+                },
+                {
+                  "displayName": "Role.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Global Administrator\""
+                },
+                {
+                  "displayName": "Role.TemplateId",
+                  "oldValue": null,
+                  "newValue": "\"62e90394-69f5-4237-9190-012177145e10\""
+                },
+                {
+                  "displayName": "Role.WellKnownObjectName",
+                  "oldValue": null,
+                  "newValue": "\"TenantAdmins\""
+                }
+              ],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "Identity !in (\"MS-PIM\", \"MS-PIM-Fairfax\")"
+      },
+      {
+        "label": "negative: a failed attempt (Result failure)",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role",
+          "LoggedByService": "Core Directory",
+          "Result": "failure",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Role.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"33333333-3333-3333-3333-333333333333\""
+                },
+                {
+                  "displayName": "Role.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Global Administrator\""
+                },
+                {
+                  "displayName": "Role.TemplateId",
+                  "oldValue": null,
+                  "newValue": "\"62e90394-69f5-4237-9190-012177145e10\""
+                },
+                {
+                  "displayName": "Role.WellKnownObjectName",
+                  "oldValue": null,
+                  "newValue": "\"TenantAdmins\""
+                }
+              ],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where Result =~ \"success\""
+      },
+      {
+        "label": "negative: an assignment older than the 1 h look-back",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Role.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"33333333-3333-3333-3333-333333333333\""
+                },
+                {
+                  "displayName": "Role.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Global Administrator\""
+                },
+                {
+                  "displayName": "Role.TemplateId",
+                  "oldValue": null,
+                  "newValue": "\"62e90394-69f5-4237-9190-012177145e10\""
+                },
+                {
+                  "displayName": "Role.WellKnownObjectName",
+                  "oldValue": null,
+                  "newValue": "\"TenantAdmins\""
+                }
+              ],
+              "administrativeUnits": []
+            }
+          ],
+          "TimeGenerated": "ago:2h"
+        },
+        "expect": null,
+        "droppedBy": "where TimeGenerated > ago(LookBack)"
+      }
+    ]
+  },
+  {
+    "rule": "role-assigned-outside-pim",
+    "case": "PIM permanent ACTIVE assignment (High)",
+    "category": "RoleManagement",
+    "operation": "Add member to role in PIM completed (permanent)",
+    "expectInKql": [
+      "\"PimPermanentActive\""
+    ],
+    "regexChain": null,
+    "op": null,
+    "oldText": null,
+    "newText": null,
+    "expect": null,
+    "minus": null,
+    "table": "AuditLogs",
+    "note": "verify: the PIM-logged record's TargetResources (a type Role entry carrying the role name, the member, a Request entry) and its Identity on the first permanent assignment in the lab tenant.",
+    "rows": [
+      {
+        "label": "positive: permanent ACTIVE Privileged Role Administrator made in the PIM blade (logged by PIM, Identity MS-PIM)",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role in PIM completed (permanent)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "e8611ab8-c189-46e8-94e1-60213ab1f814",
+              "displayName": "Privileged Role Administrator",
+              "type": "Role",
+              "modifiedProperties": []
+            },
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": "Dana Okafor",
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "PimPermanentActive",
+          "RoleName": "Privileged Role Administrator",
+          "RoleTier": "Tier0",
+          "TargetType": "User",
+          "TargetName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "positive: permanent ACTIVE Global Administrator on a role-assignable GROUP",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role in PIM completed (permanent)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "62e90394-69f5-4237-9190-012177145e10",
+              "displayName": "Global Administrator",
+              "type": "Role",
+              "modifiedProperties": []
+            },
+            {
+              "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "displayName": "PIM-Tier0-Global-Admins",
+              "type": "Group",
+              "userPrincipalName": null,
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "PimPermanentActive",
+          "RoleName": "Global Administrator",
+          "TargetType": "Group",
+          "TargetName": "PIM-Tier0-Global-Admins",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "negative: a PIM ACTIVATION (expires, approved) is pim-activation.kql, not this rule",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role completed (PIM activation)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "e8611ab8-c189-46e8-94e1-60213ab1f814",
+              "displayName": "Privileged Role Administrator",
+              "type": "Role",
+              "modifiedProperties": []
+            },
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": "Dana Okafor",
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "LoggedByService =~ \"PIM\" and OperationName in~ (PimActiveOps)"
+      },
+      {
+        "label": "negative: an ELIGIBLE assignment grants nothing until activated",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add eligible member to role in PIM completed (permanent)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "e8611ab8-c189-46e8-94e1-60213ab1f814",
+              "displayName": "Privileged Role Administrator",
+              "type": "Role",
+              "modifiedProperties": []
+            },
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": "Dana Okafor",
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "LoggedByService =~ \"PIM\" and OperationName in~ (PimActiveOps)"
+      }
+    ]
+  },
+  {
+    "rule": "role-assigned-outside-pim",
+    "case": "PIM time-bound ACTIVE assignment (Medium)",
+    "category": "RoleManagement",
+    "operation": "Add member to role in PIM completed (timebound)",
+    "expectInKql": [
+      "AssignmentPath == \"PimTimeboundActive\", \"Medium\""
+    ],
+    "regexChain": null,
+    "op": null,
+    "oldText": null,
+    "newText": null,
+    "expect": null,
+    "minus": null,
+    "table": "AuditLogs",
+    "note": "verify: the PIM-logged record's TargetResources (a type Role entry carrying the role name, the member, a Request entry) and its Identity on the first permanent assignment in the lab tenant.",
+    "rows": [
+      {
+        "label": "positive: time-bound ACTIVE Security Administrator is Medium (it expires, but is not an activation)",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role in PIM completed (timebound)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+              "displayName": "Security Administrator",
+              "type": "Role",
+              "modifiedProperties": []
+            },
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": "Dana Okafor",
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "PimTimeboundActive",
+          "RoleName": "Security Administrator",
+          "RoleTier": "Tier0",
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "contrast: the same by an app only NAMED like the CI identity is High",
+        "row": {
+          "Category": "RoleManagement",
+          "OperationName": "Add member to role in PIM completed (timebound)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "app": {
+              "appId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+              "displayName": "gh-oidc-entra-apply (write)",
+              "servicePrincipalId": "55555555-5555-5555-5555-555555555555",
+              "servicePrincipalName": null
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+              "displayName": "Security Administrator",
+              "type": "Role",
+              "modifiedProperties": []
+            },
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": "Dana Okafor",
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "PimTimeboundActive",
+          "IacNameSpoof": true,
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "negative: a PIM-for-Groups time-bound membership (Category GroupManagement) belongs to the group rule",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to role in PIM completed (timebound)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "displayName": "PIM-Tier0-Global-Admins",
+              "type": "Group",
+              "modifiedProperties": []
+            },
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": "Dana Okafor",
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where Category == \"RoleManagement\""
+      }
+    ]
+  },
+  {
+    "rule": "pim-group-member-added-outside-pim",
+    "case": "direct add to Break-Glass-Admins (always High)",
+    "category": "GroupManagement",
+    "operation": "Add member to group",
+    "expectInKql": [
+      "IsBreakGlassGroup,                     \"High\"",
+      "\"Break-Glass-Admins\""
+    ],
+    "regexChain": [
+      "Group\\.DisplayName\"[^}]*?newValue\"\\s*:\\s*\"(?:\\\\\")?([^\"\\\\]+)"
+    ],
+    "op": "new",
+    "oldText": "",
+    "newText": "[{\"id\":\"88888888-8888-8888-8888-888888888888\",\"displayName\":null,\"type\":\"User\",\"userPrincipalName\":\"mallory.alt@contosohealthlab.onmicrosoft.com\",\"groupType\":null,\"modifiedProperties\":[{\"displayName\":\"Group.ObjectID\",\"oldValue\":null,\"newValue\":\"\\\"99999999-9999-9999-9999-999999999999\\\"\"},{\"displayName\":\"Group.DisplayName\",\"oldValue\":null,\"newValue\":\"\\\"Break-Glass-Admins\\\"\"}],\"administrativeUnits\":[]},{\"id\":\"99999999-9999-9999-9999-999999999999\",\"displayName\":null,\"type\":\"Group\",\"userPrincipalName\":null,\"groupType\":\"unifiedSecurityGroup\",\"modifiedProperties\":[],\"administrativeUnits\":[]}]",
+    "expect": [
+      "Break-Glass-Admins"
+    ],
+    "minus": null,
+    "table": "AuditLogs",
+    "note": "Core Directory 'Add member to group': the MEMBER is the User entry and carries the Group.ObjectID / Group.DisplayName modified properties; the Group entry has the id but no display name. verify: that shape (and groupType) on the first lab add.",
+    "rows": [
+      {
+        "label": "positive: direct add to Break-Glass-Admins (standalone: matched by name)",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to group",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "mallory.alt@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Group.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"99999999-9999-9999-9999-999999999999\""
+                },
+                {
+                  "displayName": "Group.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Break-Glass-Admins\""
+                }
+              ],
+              "administrativeUnits": []
+            },
+            {
+              "id": "99999999-9999-9999-9999-999999999999",
+              "displayName": null,
+              "type": "Group",
+              "userPrincipalName": null,
+              "groupType": "unifiedSecurityGroup",
+              "modifiedProperties": [],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "Direct",
+          "GroupName": "Break-Glass-Admins",
+          "GroupId": "99999999-9999-9999-9999-999999999999",
+          "IsBreakGlassGroup": true,
+          "MemberType": "User",
+          "MemberName": "mallory.alt@contosohealthlab.onmicrosoft.com",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "positive: the group renamed away from Break-Glass-Admins is still caught by its rendered object id",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to group",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "mallory.alt@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Group.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"99999999-9999-9999-9999-999999999999\""
+                },
+                {
+                  "displayName": "Group.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"BG-Archive\""
+                }
+              ],
+              "administrativeUnits": []
+            },
+            {
+              "id": "99999999-9999-9999-9999-999999999999",
+              "displayName": null,
+              "type": "Group",
+              "userPrincipalName": null,
+              "groupType": "unifiedSecurityGroup",
+              "modifiedProperties": [],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": {
+          "GroupName": "BG-Archive",
+          "IsBreakGlassGroup": true,
+          "Severity": "High"
+        },
+        "lets": {
+          "BreakGlassGroupIds": [
+            "99999999-9999-9999-9999-999999999999"
+          ],
+          "PrivilegedGroupIds": [
+            "99999999-9999-9999-9999-999999999999"
+          ]
+        }
+      },
+      {
+        "label": "contrast: even the CI apply identity (matched by id) is High on Break-Glass-Admins",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to group",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "gh-oidc-entra-apply (write)",
+          "InitiatedBy": {
+            "app": {
+              "appId": "66666666-6666-6666-6666-666666666666",
+              "displayName": "gh-oidc-entra-apply (write)",
+              "servicePrincipalId": "44444444-4444-4444-4444-444444444444",
+              "servicePrincipalName": null
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "mallory.alt@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Group.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"99999999-9999-9999-9999-999999999999\""
+                },
+                {
+                  "displayName": "Group.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Break-Glass-Admins\""
+                }
+              ],
+              "administrativeUnits": []
+            },
+            {
+              "id": "99999999-9999-9999-9999-999999999999",
+              "displayName": null,
+              "type": "Group",
+              "userPrincipalName": null,
+              "groupType": "unifiedSecurityGroup",
+              "modifiedProperties": [],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": {
+          "IsIac": true,
+          "IsBreakGlassGroup": true,
+          "Severity": "High"
+        },
+        "lets": {
+          "IacPrincipalIds": [
+            "44444444-4444-4444-4444-444444444444"
+          ]
+        }
+      },
+      {
+        "label": "contrast: a direct add to PIM-Tier0-Global-Admins (role-holding) is High",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to group",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "mallory.alt@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Group.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\""
+                },
+                {
+                  "displayName": "Group.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"PIM-Tier0-Global-Admins\""
+                }
+              ],
+              "administrativeUnits": []
+            },
+            {
+              "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "displayName": null,
+              "type": "Group",
+              "userPrincipalName": null,
+              "groupType": "unifiedSecurityGroup",
+              "modifiedProperties": [],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "Direct",
+          "GroupName": "PIM-Tier0-Global-Admins",
+          "IsBreakGlassGroup": false,
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: a direct add to the Azure PIM group is its intended path - AzurePimEligibleMember, Medium",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to group",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "mallory.alt@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Group.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"cccccccc-cccc-cccc-cccc-cccccccccccc\""
+                },
+                {
+                  "displayName": "Group.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"PIM-Azure-RG-Contributors\""
+                }
+              ],
+              "administrativeUnits": []
+            },
+            {
+              "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+              "displayName": null,
+              "type": "Group",
+              "userPrincipalName": null,
+              "groupType": "unifiedSecurityGroup",
+              "modifiedProperties": [],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "AzurePimEligibleMember",
+          "GroupName": "PIM-Azure-RG-Contributors",
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "negative: an add to an ordinary group (Clinical-Nurses)",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to group",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "mallory.alt@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Group.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee\""
+                },
+                {
+                  "displayName": "Group.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Clinical-Nurses\""
+                }
+              ],
+              "administrativeUnits": []
+            },
+            {
+              "id": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+              "displayName": null,
+              "type": "Group",
+              "userPrincipalName": null,
+              "groupType": "unifiedSecurityGroup",
+              "modifiedProperties": [],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where GroupId in (PrivilegedGroupIds) or IsBreakGlassGroup"
+      },
+      {
+        "label": "negative: the same add written by MS-PIM (a PIM-for-Groups activation)",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to group",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "app": {
+              "appId": null,
+              "displayName": "MS-PIM",
+              "servicePrincipalId": null,
+              "servicePrincipalName": null
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "mallory.alt@contosohealthlab.onmicrosoft.com",
+              "groupType": null,
+              "modifiedProperties": [
+                {
+                  "displayName": "Group.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"99999999-9999-9999-9999-999999999999\""
+                },
+                {
+                  "displayName": "Group.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Break-Glass-Admins\""
+                }
+              ],
+              "administrativeUnits": []
+            },
+            {
+              "id": "99999999-9999-9999-9999-999999999999",
+              "displayName": null,
+              "type": "Group",
+              "userPrincipalName": null,
+              "groupType": "unifiedSecurityGroup",
+              "modifiedProperties": [],
+              "administrativeUnits": []
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "OperationName =~ \"Add member to group\" and Identity !in (\"MS-PIM\", \"MS-PIM-Fairfax\")"
+      }
+    ]
+  },
+  {
+    "rule": "pim-group-member-added-outside-pim",
+    "case": "PIM-for-Groups permanent active membership",
+    "category": "GroupManagement",
+    "operation": "Add member to role in PIM completed (permanent)",
+    "expectInKql": [
+      "let PrivilegedGroupIds = dynamic([]); // @@PRIVILEGED_GROUP_IDS@@"
+    ],
+    "regexChain": null,
+    "op": null,
+    "oldText": null,
+    "newText": null,
+    "expect": null,
+    "minus": null,
+    "table": "AuditLogs",
+    "note": "verify: the PIM-for-Groups record's Category (GroupManagement), its Group target (type Group with a display name) and its Identity on the first lab assignment.",
+    "rows": [
+      {
+        "label": "positive: permanent ACTIVE membership of PIM-Tier0-Global-Admins (standalone: matched by name prefix)",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to role in PIM completed (permanent)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "displayName": "PIM-Tier0-Global-Admins",
+              "type": "Group",
+              "modifiedProperties": []
+            },
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": "Marcus Bello",
+              "type": "User",
+              "userPrincipalName": "marcus.bello@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "PimPermanentActive",
+          "GroupName": "PIM-Tier0-Global-Admins",
+          "GroupId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          "MemberName": "marcus.bello@contosohealthlab.onmicrosoft.com",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "positive: a renamed role-holding group is still caught by the rendered PrivilegedGroupIds",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to role in PIM completed (permanent)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "displayName": "Ops-Helpers",
+              "type": "Group",
+              "modifiedProperties": []
+            },
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": "Marcus Bello",
+              "type": "User",
+              "userPrincipalName": "marcus.bello@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "PimPermanentActive",
+          "GroupName": "Ops-Helpers",
+          "Severity": "High"
+        },
+        "lets": {
+          "PrivilegedGroupIds": [
+            "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          ]
+        }
+      },
+      {
+        "label": "contrast: a time-bound active membership is Medium",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to role in PIM completed (timebound)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "displayName": "PIM-Tier0-Global-Admins",
+              "type": "Group",
+              "modifiedProperties": []
+            },
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": "Marcus Bello",
+              "type": "User",
+              "userPrincipalName": "marcus.bello@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": {
+          "AssignmentPath": "PimTimeboundActive",
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "negative: an ELIGIBLE PIM-for-Groups membership grants nothing until activated",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add eligible member to role in PIM completed (permanent)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "displayName": "PIM-Tier0-Global-Admins",
+              "type": "Group",
+              "modifiedProperties": []
+            },
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": "Marcus Bello",
+              "type": "User",
+              "userPrincipalName": "marcus.bello@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "LoggedByService =~ \"PIM\" and OperationName in~ (PimGroupOps)"
+      },
+      {
+        "label": "negative: a PIM-for-Groups ACTIVATION is pim-activation.kql",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to role completed (PIM activation)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "displayName": "PIM-Tier0-Global-Admins",
+              "type": "Group",
+              "modifiedProperties": []
+            },
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": "Marcus Bello",
+              "type": "User",
+              "userPrincipalName": "marcus.bello@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "LoggedByService =~ \"PIM\" and OperationName in~ (PimGroupOps)"
+      },
+      {
+        "label": "negative: a PIM-governed group that holds no privileged role (not on any list)",
+        "row": {
+          "Category": "GroupManagement",
+          "OperationName": "Add member to role in PIM completed (permanent)",
+          "LoggedByService": "PIM",
+          "Result": "success",
+          "Identity": "MS-PIM",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+              "displayName": "Clinical-Nurses",
+              "type": "Group",
+              "modifiedProperties": []
+            },
+            {
+              "id": "88888888-8888-8888-8888-888888888888",
+              "displayName": "Marcus Bello",
+              "type": "User",
+              "userPrincipalName": "marcus.bello@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000000",
+              "displayName": null,
+              "type": "Request",
+              "modifiedProperties": []
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where GroupId in (PrivilegedGroupIds) or IsBreakGlassGroup"
+      }
+    ]
+  },
+  {
+    "rule": "ca-policy-changed",
+    "case": "named location: country removed",
+    "category": "Policy",
+    "operation": "Update named location",
+    "regexChain": [
+      "(?i)countriesAndRegions\\\\?\"\\s*:\\s*(\\[[^\\]]*\\])",
+      "([A-Z]{2})"
+    ],
+    "op": "oldMinusNew",
+    "oldText": "{\\\"@odata.type\\\":\\\"#microsoft.graph.countryNamedLocation\\\",\\\"countriesAndRegions\\\":[\\\"RU\\\",\\\"KP\\\",\\\"IR\\\"]}",
+    "newText": "{\\\"@odata.type\\\":\\\"#microsoft.graph.countryNamedLocation\\\",\\\"countriesAndRegions\\\":[\\\"KP\\\",\\\"IR\\\"]}",
+    "expect": [
+      "RU"
+    ],
+    "minus": null,
+    "expectInKql": [],
+    "table": "AuditLogs",
+    "note": "verify: the modifiedProperties entry Entra writes for named locations / authentication strengths (this fixture puts the whole object, JSON-encoded, in one entry's oldValue / newValue - the rule reads all values, so the property's display name does not matter to it).",
+    "rows": [
+      {
+        "label": "positive: RU removed from the blocked-countries location",
+        "row": {
+          "Category": "Policy",
+          "OperationName": "Update named location",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Blocked countries",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "NamedLocation",
+                  "oldValue": "{\"@odata.type\":\"#microsoft.graph.countryNamedLocation\",\"displayName\":\"Blocked countries\",\"countriesAndRegions\":[\"RU\",\"KP\",\"IR\"],\"includeUnknownCountriesAndRegions\":false}",
+                  "newValue": "{\"@odata.type\":\"#microsoft.graph.countryNamedLocation\",\"displayName\":\"Blocked countries\",\"countriesAndRegions\":[\"KP\",\"IR\"],\"includeUnknownCountriesAndRegions\":false}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "ObjectKind": "NamedLocation",
+          "Change": "CountryRemoved",
+          "CountriesRemoved": [
+            "RU"
+          ],
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: a country ADDED narrows access - NamedLocationUpdated, Medium",
+        "row": {
+          "Category": "Policy",
+          "OperationName": "Update named location",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Blocked countries",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "NamedLocation",
+                  "oldValue": "{\"@odata.type\":\"#microsoft.graph.countryNamedLocation\",\"displayName\":\"Blocked countries\",\"countriesAndRegions\":[\"KP\",\"IR\"],\"includeUnknownCountriesAndRegions\":false}",
+                  "newValue": "{\"@odata.type\":\"#microsoft.graph.countryNamedLocation\",\"displayName\":\"Blocked countries\",\"countriesAndRegions\":[\"RU\",\"KP\",\"IR\"],\"includeUnknownCountriesAndRegions\":false}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Change": "NamedLocationUpdated",
+          "CountriesRemoved": [],
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "contrast: the location deleted outright is High",
+        "row": {
+          "Category": "Policy",
+          "OperationName": "Delete named location",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Blocked countries",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "NamedLocation",
+                  "oldValue": "{\"@odata.type\":\"#microsoft.graph.countryNamedLocation\",\"displayName\":\"Blocked countries\",\"countriesAndRegions\":[\"RU\",\"KP\",\"IR\"],\"includeUnknownCountriesAndRegions\":false}",
+                  "newValue": null
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Change": "NamedLocationDeleted",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: the CI apply identity (by id) is Low whatever it changed",
+        "row": {
+          "Category": "Policy",
+          "OperationName": "Update named location",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "gh-oidc-entra-apply (write)",
+          "InitiatedBy": {
+            "app": {
+              "appId": "66666666-6666-6666-6666-666666666666",
+              "displayName": "gh-oidc-entra-apply (write)",
+              "servicePrincipalId": "44444444-4444-4444-4444-444444444444",
+              "servicePrincipalName": null
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Blocked countries",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "NamedLocation",
+                  "oldValue": "{\"@odata.type\":\"#microsoft.graph.countryNamedLocation\",\"displayName\":\"Blocked countries\",\"countriesAndRegions\":[\"RU\",\"KP\",\"IR\"],\"includeUnknownCountriesAndRegions\":false}",
+                  "newValue": "{\"@odata.type\":\"#microsoft.graph.countryNamedLocation\",\"displayName\":\"Blocked countries\",\"countriesAndRegions\":[\"KP\",\"IR\"],\"includeUnknownCountriesAndRegions\":false}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Change": "CountryRemoved",
+          "IsIac": true,
+          "Severity": "Low"
+        },
+        "lets": {
+          "IacPrincipalIds": [
+            "44444444-4444-4444-4444-444444444444"
+          ]
+        }
+      },
+      {
+        "label": "negative: a policy write that is not CA / named location / auth strength (token lifetime)",
+        "row": {
+          "Category": "Policy",
+          "OperationName": "Update policy",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Default token lifetime",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "PolicyDetail",
+                  "oldValue": "\"[]\"",
+                  "newValue": "\"[]\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where (Category == \"Policy\" and (OperationName in~ (CaOps) or OperationName in~ (NamedLocationOps)))"
+      }
+    ]
+  },
+  {
+    "rule": "ca-policy-changed",
+    "case": "named location: range newly trusted",
+    "category": "Policy",
+    "operation": "Update named location",
+    "regexChain": [
+      "(?i)cidrAddress\\\\?\"\\s*:\\s*\\\\?\"([0-9A-Fa-f:./]+)"
+    ],
+    "op": "newMinusOld",
+    "oldText": "{\"isTrusted\":true,\"ipRanges\":[{\"cidrAddress\":\"198.51.100.0/24\"}]}",
+    "newText": "{\"isTrusted\":true,\"ipRanges\":[{\"cidrAddress\":\"198.51.100.0/24\"},{\"cidrAddress\":\"203.0.113.0/24\"}]}",
+    "expect": [
+      "203.0.113.0/24"
+    ],
+    "minus": null,
+    "expectInKql": [],
+    "table": "AuditLogs",
+    "note": "verify: the modifiedProperties entry Entra writes for named locations / authentication strengths (this fixture puts the whole object, JSON-encoded, in one entry's oldValue / newValue - the rule reads all values, so the property's display name does not matter to it).",
+    "rows": [
+      {
+        "label": "positive: a range added to a TRUSTED location",
+        "row": {
+          "Category": "Policy",
+          "OperationName": "Update named location",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Clinic egress",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "NamedLocation",
+                  "oldValue": "{\"@odata.type\":\"#microsoft.graph.ipNamedLocation\",\"displayName\":\"Clinic egress\",\"isTrusted\":true,\"ipRanges\":[{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"198.51.100.0/24\"}]}",
+                  "newValue": "{\"@odata.type\":\"#microsoft.graph.ipNamedLocation\",\"displayName\":\"Clinic egress\",\"isTrusted\":true,\"ipRanges\":[{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"198.51.100.0/24\"},{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"203.0.113.0/24\"}]}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Change": "TrustedRangeAdded",
+          "RangesAdded": [
+            "203.0.113.0/24"
+          ],
+          "NewTrusted": "true",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "positive: an existing location newly marked trusted (same ranges)",
+        "row": {
+          "Category": "Policy",
+          "OperationName": "Update named location",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Clinic egress",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "NamedLocation",
+                  "oldValue": "{\"@odata.type\":\"#microsoft.graph.ipNamedLocation\",\"displayName\":\"Clinic egress\",\"isTrusted\":false,\"ipRanges\":[{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"198.51.100.0/24\"}]}",
+                  "newValue": "{\"@odata.type\":\"#microsoft.graph.ipNamedLocation\",\"displayName\":\"Clinic egress\",\"isTrusted\":true,\"ipRanges\":[{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"198.51.100.0/24\"}]}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Change": "TrustedRangeAdded",
+          "RangesAdded": [],
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: a range added to an UNTRUSTED location is Medium",
+        "row": {
+          "Category": "Policy",
+          "OperationName": "Update named location",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Clinic egress",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "NamedLocation",
+                  "oldValue": "{\"@odata.type\":\"#microsoft.graph.ipNamedLocation\",\"displayName\":\"Clinic egress\",\"isTrusted\":false,\"ipRanges\":[{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"198.51.100.0/24\"}]}",
+                  "newValue": "{\"@odata.type\":\"#microsoft.graph.ipNamedLocation\",\"displayName\":\"Clinic egress\",\"isTrusted\":false,\"ipRanges\":[{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"198.51.100.0/24\"},{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"203.0.113.0/24\"}]}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Change": "NamedLocationUpdated",
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "negative: a failed update",
+        "row": {
+          "Category": "Policy",
+          "OperationName": "Update named location",
+          "LoggedByService": "Core Directory",
+          "Result": "failure",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Clinic egress",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "NamedLocation",
+                  "oldValue": "{\"@odata.type\":\"#microsoft.graph.ipNamedLocation\",\"displayName\":\"Clinic egress\",\"isTrusted\":true,\"ipRanges\":[{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"198.51.100.0/24\"}]}",
+                  "newValue": "{\"@odata.type\":\"#microsoft.graph.ipNamedLocation\",\"displayName\":\"Clinic egress\",\"isTrusted\":true,\"ipRanges\":[{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"198.51.100.0/24\"},{\"@odata.type\":\"#microsoft.graph.iPv4CidrRange\",\"cidrAddress\":\"203.0.113.0/24\"}]}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where Result =~ \"success\""
+      }
+    ]
+  },
+  {
+    "rule": "ca-policy-changed",
+    "case": "auth strength: phishable combination added",
+    "category": "ApplicationManagement",
+    "operation": "Authentication Strength Policy Update",
+    "regexChain": [
+      "(?i)allowedCombinations\\\\?\"\\s*:\\s*(\\[[^\\]]*\\])",
+      "([A-Za-z0-9]+(?:,[A-Za-z0-9]+)*)"
+    ],
+    "op": "newMinusOld",
+    "minus": [
+      "fido2",
+      "windowsHelloForBusiness",
+      "x509CertificateMultiFactor"
+    ],
+    "oldText": "{\\\"allowedCombinations\\\":[\\\"fido2\\\",\\\"windowsHelloForBusiness\\\"]}",
+    "newText": "{\\\"allowedCombinations\\\":[\\\"fido2\\\",\\\"windowsHelloForBusiness\\\",\\\"password,sms\\\",\\\"x509CertificateMultiFactor\\\"]}",
+    "expect": [
+      "password,sms"
+    ],
+    "expectInKql": [],
+    "table": "AuditLogs",
+    "note": "verify: the modifiedProperties entry Entra writes for named locations / authentication strengths (this fixture puts the whole object, JSON-encoded, in one entry's oldValue / newValue - the rule reads all values, so the property's display name does not matter to it).",
+    "rows": [
+      {
+        "label": "positive: password,sms added to a phishing-resistant strength",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Authentication Strength Policy Update",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Contoso phishing-resistant",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "AuthenticationStrengthPolicy",
+                  "oldValue": "{\"displayName\":\"Contoso phishing-resistant\",\"policyType\":\"custom\",\"allowedCombinations\":[\"fido2\",\"windowsHelloForBusiness\"]}",
+                  "newValue": "{\"displayName\":\"Contoso phishing-resistant\",\"policyType\":\"custom\",\"allowedCombinations\":[\"fido2\",\"windowsHelloForBusiness\",\"password,sms\",\"x509CertificateMultiFactor\"]}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "ObjectKind": "AuthStrength",
+          "Change": "PhishableCombinationAdded",
+          "PhishableAdded": [
+            "password,sms"
+          ],
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: only a phishing-resistant combination added - AuthStrengthUpdated, Medium",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Authentication Strength Policy Update",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Contoso phishing-resistant",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "AuthenticationStrengthPolicy",
+                  "oldValue": "{\"displayName\":\"Contoso phishing-resistant\",\"policyType\":\"custom\",\"allowedCombinations\":[\"fido2\",\"windowsHelloForBusiness\"]}",
+                  "newValue": "{\"displayName\":\"Contoso phishing-resistant\",\"policyType\":\"custom\",\"allowedCombinations\":[\"fido2\",\"windowsHelloForBusiness\",\"x509CertificateMultiFactor\"]}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Change": "AuthStrengthUpdated",
+          "PhishableAdded": [],
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "contrast: the strength deleted is High",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Authentication Strength Policy Delete",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Contoso phishing-resistant",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "AuthenticationStrengthPolicy",
+                  "oldValue": "{\"displayName\":\"Contoso phishing-resistant\",\"policyType\":\"custom\",\"allowedCombinations\":[\"fido2\",\"windowsHelloForBusiness\"]}",
+                  "newValue": null
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Change": "AuthStrengthDeleted",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "negative: an authentication-strength operation name under the Policy category is not matched",
+        "row": {
+          "Category": "Policy",
+          "OperationName": "Authentication Strength Policy Update",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Contoso phishing-resistant",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "AuthenticationStrengthPolicy",
+                  "oldValue": "{\"displayName\":\"Contoso phishing-resistant\",\"policyType\":\"custom\",\"allowedCombinations\":[\"fido2\"]}",
+                  "newValue": "{\"displayName\":\"Contoso phishing-resistant\",\"policyType\":\"custom\",\"allowedCombinations\":[\"fido2\",\"password,sms\"]}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where (Category == \"Policy\" and (OperationName in~ (CaOps) or OperationName in~ (NamedLocationOps)))"
+      }
+    ]
+  },
+  {
+    "rule": "ca-policy-changed",
+    "case": "auth strength: combination configuration (AAGUID list) changed",
+    "category": "ApplicationManagement",
+    "operation": "Authentication Strength Combination Configuration Update",
+    "expectInKql": [
+      "\"CombinationConfigChanged\""
+    ],
+    "regexChain": null,
+    "op": null,
+    "oldText": null,
+    "newText": null,
+    "expect": null,
+    "minus": null,
+    "table": "AuditLogs",
+    "note": "verify: the modifiedProperties entry Entra writes for named locations / authentication strengths (this fixture puts the whole object, JSON-encoded, in one entry's oldValue / newValue - the rule reads all values, so the property's display name does not matter to it). verify: the property carrying the FIDO2 AAGUID list; the rule keys on the operation name only.",
+    "rows": [
+      {
+        "label": "positive: a FIDO2 AAGUID added to a strength's combination configuration",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Authentication Strength Combination Configuration Update",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Contoso phishing-resistant",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "CombinationConfiguration",
+                  "oldValue": "{\"@odata.type\":\"#microsoft.graph.fido2CombinationConfiguration\",\"allowedAAGUIDs\":[\"cb69481e-8ff7-4039-93ec-0a2729a154a8\"]}",
+                  "newValue": "{\"@odata.type\":\"#microsoft.graph.fido2CombinationConfiguration\",\"allowedAAGUIDs\":[\"cb69481e-8ff7-4039-93ec-0a2729a154a8\",\"00000000-0000-0000-0000-000000000000\"]}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "ObjectKind": "AuthStrength",
+          "Change": "CombinationConfigChanged",
+          "PhishableAdded": [],
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: a strength renamed only - AuthStrengthUpdated, Medium",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Authentication Strength Policy Update",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Contoso phishing-resistant",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "AuthenticationStrengthPolicy",
+                  "oldValue": "{\"displayName\":\"Contoso phishing-resistant\",\"policyType\":\"custom\",\"allowedCombinations\":[\"fido2\"]}",
+                  "newValue": "{\"displayName\":\"Contoso FIDO2 only\",\"allowedCombinations\":[\"fido2\"]}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Change": "AuthStrengthUpdated",
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "negative: the configuration change failed",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Authentication Strength Combination Configuration Update",
+          "LoggedByService": "Core Directory",
+          "Result": "failure",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+              "displayName": "Contoso phishing-resistant",
+              "type": "Policy",
+              "modifiedProperties": [
+                {
+                  "displayName": "CombinationConfiguration",
+                  "oldValue": "{\"@odata.type\":\"#microsoft.graph.fido2CombinationConfiguration\",\"allowedAAGUIDs\":[\"cb69481e-8ff7-4039-93ec-0a2729a154a8\"]}",
+                  "newValue": "{\"@odata.type\":\"#microsoft.graph.fido2CombinationConfiguration\",\"allowedAAGUIDs\":[\"cb69481e-8ff7-4039-93ec-0a2729a154a8\",\"00000000-0000-0000-0000-000000000000\"]}"
+                }
+              ]
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where Result =~ \"success\""
+      }
+    ]
+  },
+  {
+    "rule": "app-consent-granted",
+    "case": "hyphenated Tier-0 permission is one token and on the list",
+    "category": "ApplicationManagement",
+    "operation": "Consent to application",
+    "regexChain": [
+      "([A-Za-z][A-Za-z0-9_.-]*)"
+    ],
+    "op": "new",
+    "oldText": "",
+    "newText": "User-PasswordProfile.ReadWrite.All RoleAssignmentSchedule.ReadWrite.Directory",
+    "expect": [
+      "RoleAssignmentSchedule.ReadWrite.Directory",
+      "User-PasswordProfile.ReadWrite.All"
+    ],
+    "expectInKql": [
+      "\"User-PasswordProfile.ReadWrite.All\"",
+      "\"RoleAssignmentSchedule.ReadWrite.Directory\"",
+      "\"Policy.ReadWrite.PermissionGrant\""
+    ],
+    "minus": null,
+    "table": "AuditLogs",
+    "note": "ConsentAction.Permissions follows the '[] => [[Id: ..., Scope: <space-separated scopes>, ...]]; ' text Entra logs for 'Consent to application'. verify: that format and the ConsentContext.* names on the first lab consent.",
+    "rows": [
+      {
+        "label": "positive: tenant-wide admin consent to two Tier-0 Graph permissions (one hyphenated)",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Consent to application",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Unknown Mail Sync",
+              "type": "ServicePrincipal",
+              "modifiedProperties": [
+                {
+                  "displayName": "ConsentContext.IsAdminConsent",
+                  "oldValue": null,
+                  "newValue": "\"True\""
+                },
+                {
+                  "displayName": "ConsentContext.IsAppOnly",
+                  "oldValue": null,
+                  "newValue": "\"False\""
+                },
+                {
+                  "displayName": "ConsentContext.OnBehalfOfAll",
+                  "oldValue": null,
+                  "newValue": "\"True\""
+                },
+                {
+                  "displayName": "ConsentContext.Tags",
+                  "oldValue": null,
+                  "newValue": "\"[]\""
+                },
+                {
+                  "displayName": "ConsentAction.Permissions",
+                  "oldValue": null,
+                  "newValue": "\"[] => [[Id: 00000000-0000-0000-0000-000000000000, ClientId: 77777777-7777-7777-7777-777777777777, PrincipalId: , ResourceId: 33333333-3333-3333-3333-333333333333, ConsentType: AllPrincipals, Scope: User-PasswordProfile.ReadWrite.All RoleAssignmentSchedule.ReadWrite.Directory, CreatedDateTime: , LastModifiedDateTime ]]; \""
+                },
+                {
+                  "displayName": "ConsentAction.Reason",
+                  "oldValue": null,
+                  "newValue": "\"\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "GrantKind": "Consent",
+          "ClientApp": "Unknown Mail Sync",
+          "IsAdminConsent": true,
+          "TenantWide": true,
+          "Permissions": [
+            "User-PasswordProfile.ReadWrite.All",
+            "RoleAssignmentSchedule.ReadWrite.Directory"
+          ],
+          "HighRiskGranted": [
+            "User-PasswordProfile.ReadWrite.All",
+            "RoleAssignmentSchedule.ReadWrite.Directory"
+          ],
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: one user's consent to Mail.Read - high-risk but not tenant-wide, Medium",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Consent to application",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Unknown Mail Sync",
+              "type": "ServicePrincipal",
+              "modifiedProperties": [
+                {
+                  "displayName": "ConsentContext.IsAdminConsent",
+                  "oldValue": null,
+                  "newValue": "\"False\""
+                },
+                {
+                  "displayName": "ConsentContext.IsAppOnly",
+                  "oldValue": null,
+                  "newValue": "\"False\""
+                },
+                {
+                  "displayName": "ConsentContext.OnBehalfOfAll",
+                  "oldValue": null,
+                  "newValue": "\"False\""
+                },
+                {
+                  "displayName": "ConsentContext.Tags",
+                  "oldValue": null,
+                  "newValue": "\"[]\""
+                },
+                {
+                  "displayName": "ConsentAction.Permissions",
+                  "oldValue": null,
+                  "newValue": "\"[] => [[Id: 00000000-0000-0000-0000-000000000000, ClientId: 77777777-7777-7777-7777-777777777777, PrincipalId: , ResourceId: 33333333-3333-3333-3333-333333333333, ConsentType: Principal, Scope: openid profile Mail.Read, CreatedDateTime: , LastModifiedDateTime ]]; \""
+                },
+                {
+                  "displayName": "ConsentAction.Reason",
+                  "oldValue": null,
+                  "newValue": "\"\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "TenantWide": false,
+          "HighRiskGranted": [
+            "Mail.Read"
+          ],
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "contrast: one user's consent to User.Read - Low",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Consent to application",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Clinical Portal",
+              "type": "ServicePrincipal",
+              "modifiedProperties": [
+                {
+                  "displayName": "ConsentContext.IsAdminConsent",
+                  "oldValue": null,
+                  "newValue": "\"False\""
+                },
+                {
+                  "displayName": "ConsentContext.IsAppOnly",
+                  "oldValue": null,
+                  "newValue": "\"False\""
+                },
+                {
+                  "displayName": "ConsentContext.OnBehalfOfAll",
+                  "oldValue": null,
+                  "newValue": "\"False\""
+                },
+                {
+                  "displayName": "ConsentContext.Tags",
+                  "oldValue": null,
+                  "newValue": "\"[]\""
+                },
+                {
+                  "displayName": "ConsentAction.Permissions",
+                  "oldValue": null,
+                  "newValue": "\"[] => [[Id: 00000000-0000-0000-0000-000000000000, ClientId: 77777777-7777-7777-7777-777777777777, PrincipalId: , ResourceId: 33333333-3333-3333-3333-333333333333, ConsentType: Principal, Scope: User.Read, CreatedDateTime: , LastModifiedDateTime ]]; \""
+                },
+                {
+                  "displayName": "ConsentAction.Reason",
+                  "oldValue": null,
+                  "newValue": "\"\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "TenantWide": false,
+          "HighRiskGranted": [],
+          "Severity": "Low"
+        }
+      },
+      {
+        "label": "positive: an application permission (app role) RoleManagement.ReadWrite.Directory is tenant-wide and High",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Add app role assignment to service principal",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "33333333-3333-3333-3333-333333333333",
+              "displayName": "Microsoft Graph",
+              "type": "ServicePrincipal",
+              "modifiedProperties": [
+                {
+                  "displayName": "AppRole.Id",
+                  "oldValue": null,
+                  "newValue": "\"00000000-0000-0000-0000-000000000000\""
+                },
+                {
+                  "displayName": "AppRole.Value",
+                  "oldValue": null,
+                  "newValue": "\"RoleManagement.ReadWrite.Directory\""
+                },
+                {
+                  "displayName": "ServicePrincipal.DisplayName",
+                  "oldValue": null,
+                  "newValue": "\"Unknown Mail Sync\""
+                },
+                {
+                  "displayName": "ServicePrincipal.ObjectID",
+                  "oldValue": null,
+                  "newValue": "\"77777777-7777-7777-7777-777777777777\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "GrantKind": "ApplicationPermission",
+          "ClientApp": "Unknown Mail Sync",
+          "ResourceApp": "Microsoft Graph",
+          "TenantWide": true,
+          "HighRiskGranted": [
+            "RoleManagement.ReadWrite.Directory"
+          ],
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "negative: a consent that failed (blocked by consent policy)",
+        "row": {
+          "Category": "ApplicationManagement",
+          "OperationName": "Consent to application",
+          "LoggedByService": "Core Directory",
+          "Result": "failure",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "77777777-7777-7777-7777-777777777777",
+              "displayName": "Unknown Mail Sync",
+              "type": "ServicePrincipal",
+              "modifiedProperties": [
+                {
+                  "displayName": "ConsentContext.IsAdminConsent",
+                  "oldValue": null,
+                  "newValue": "\"True\""
+                },
+                {
+                  "displayName": "ConsentContext.IsAppOnly",
+                  "oldValue": null,
+                  "newValue": "\"False\""
+                },
+                {
+                  "displayName": "ConsentContext.OnBehalfOfAll",
+                  "oldValue": null,
+                  "newValue": "\"True\""
+                },
+                {
+                  "displayName": "ConsentContext.Tags",
+                  "oldValue": null,
+                  "newValue": "\"[]\""
+                },
+                {
+                  "displayName": "ConsentAction.Permissions",
+                  "oldValue": null,
+                  "newValue": "\"[] => [[Id: 00000000-0000-0000-0000-000000000000, ClientId: 77777777-7777-7777-7777-777777777777, PrincipalId: , ResourceId: 33333333-3333-3333-3333-333333333333, ConsentType: AllPrincipals, Scope: Mail.Read, CreatedDateTime: , LastModifiedDateTime ]]; \""
+                },
+                {
+                  "displayName": "ConsentAction.Reason",
+                  "oldValue": null,
+                  "newValue": "\"\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "where Result =~ \"success\""
+      }
+    ]
+  },
+  {
+    "rule": "auth-method-changed-by-admin",
+    "case": "TAP on an HR-named Tier-0 identity is High by object id",
+    "category": null,
+    "operation": "Admin registered security info",
+    "expectInKql": [
+      "let PrivilegedUserIds = dynamic([]); // @@PRIVILEGED_USER_IDS@@",
+      "PrivilegedById or PrivilegedByName"
+    ],
+    "regexChain": [
+      "(?i)admin (?:registered|updated|deleted) (.+?) method"
+    ],
+    "op": "new",
+    "oldText": "",
+    "newText": "Admin registered temporary access pass method for user",
+    "expect": [
+      "temporary access pass"
+    ],
+    "minus": null,
+    "table": "AuditLogs",
+    "joinRows": {
+      "RecentPrivilegedGrants": {
+        "columns": [
+          "GrantUserId",
+          "RecentGrants",
+          "LastGrant"
+        ],
+        "rows": []
+      }
+    },
+    "note": "Authentication Methods records: Category UserManagement, ResultReason 'Admin registered <method> method for user'. verify: the ResultReason wording for a TAP and the LoggedByService value on the first lab TAP. RecentPrivilegedGrants is the rule's own let (a summarize over 2 d of AuditLogs); its rows are given here.",
+    "rows": [
+      {
+        "label": "positive: TAP for helen.carter (HR-named) is High because her object id is on the rendered list",
+        "row": {
+          "Category": "UserManagement",
+          "OperationName": "Admin registered security info",
+          "LoggedByService": "Authentication Methods",
+          "Result": "success",
+          "Identity": "Helpdesk Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "helpdesk.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "198.51.100.20",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            }
+          ],
+          "ResultReason": "Admin registered temporary access pass method for user"
+        },
+        "expect": {
+          "Action": "Registered",
+          "Method": "temporary access pass",
+          "IsTap": true,
+          "TargetUpn": "helen.carter@contosohealthlab.onmicrosoft.com",
+          "PrivilegedById": true,
+          "PrivilegeBasis": "privileged id list",
+          "PrivilegedTarget": true,
+          "Severity": "High"
+        },
+        "lets": {
+          "PrivilegedUserIds": [
+            "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+          ]
+        }
+      },
+      {
+        "label": "contrast: the same TAP with the id list unrendered is Medium - the name fallback cannot see an HR name",
+        "row": {
+          "Category": "UserManagement",
+          "OperationName": "Admin registered security info",
+          "LoggedByService": "Authentication Methods",
+          "Result": "success",
+          "Identity": "Helpdesk Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "helpdesk.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "198.51.100.20",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            }
+          ],
+          "ResultReason": "Admin registered temporary access pass method for user"
+        },
+        "expect": {
+          "PrivilegedTarget": false,
+          "PrivilegeBasis": "none",
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "contrast: a TAP for tier0-admin-01 is High by the naming-convention fallback",
+        "row": {
+          "Category": "UserManagement",
+          "OperationName": "Admin registered security info",
+          "LoggedByService": "Authentication Methods",
+          "Result": "success",
+          "Identity": "Helpdesk Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "helpdesk.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "198.51.100.20",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "tier0-admin-01@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            }
+          ],
+          "ResultReason": "Admin registered temporary access pass method for user"
+        },
+        "expect": {
+          "PrivilegedById": false,
+          "PrivilegeBasis": "naming convention (fallback)",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: a TAP for a user granted a role in the last 2 d is High by grant history",
+        "row": {
+          "Category": "UserManagement",
+          "OperationName": "Admin registered security info",
+          "LoggedByService": "Authentication Methods",
+          "Result": "success",
+          "Identity": "Helpdesk Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "helpdesk.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "198.51.100.20",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            }
+          ],
+          "ResultReason": "Admin registered temporary access pass method for user"
+        },
+        "expect": {
+          "PrivilegedByGrant": true,
+          "PrivilegeBasis": "role or privileged-group grant in the grant history",
+          "RecentGrants": [
+            "role Global Administrator (Add member to role)"
+          ],
+          "Severity": "High"
+        },
+        "joinRows": {
+          "RecentPrivilegedGrants": {
+            "columns": [
+              "GrantUserId",
+              "RecentGrants",
+              "LastGrant"
+            ],
+            "rows": [
+              {
+                "GrantUserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                "RecentGrants": [
+                  "role Global Administrator (Add member to role)"
+                ],
+                "LastGrant": "ago:3h"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "negative: the user registering their own method (self-service) is not an admin change",
+        "row": {
+          "Category": "UserManagement",
+          "OperationName": "User registered security info",
+          "LoggedByService": "Authentication Methods",
+          "Result": "success",
+          "Identity": "Helen Carter",
+          "InitiatedBy": {
+            "user": {
+              "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+              "displayName": null,
+              "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            }
+          ],
+          "ResultReason": "User registered Authenticator App with Notification and Code"
+        },
+        "expect": null,
+        "droppedBy": "OperationName in~ (\"Admin registered security info\""
+      },
+      {
+        "label": "negative: an admin acting on their own account (actor = target) is excluded by design",
+        "row": {
+          "Category": "UserManagement",
+          "OperationName": "Admin registered security info",
+          "LoggedByService": "Authentication Methods",
+          "Result": "success",
+          "Identity": "Helpdesk Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "helpdesk.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "198.51.100.20",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "helpdesk.admin@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": []
+            }
+          ],
+          "ResultReason": "Admin registered temporary access pass method for user"
+        },
+        "expect": null,
+        "droppedBy": "where isempty(ActorObjectId) or ActorObjectId != TargetObjectId"
+      }
+    ]
+  },
+  {
+    "rule": "auth-method-changed-by-admin",
+    "case": "legacy per-user MFA edit (Update user, StrongAuthentication* property)",
+    "category": null,
+    "operation": "Update user",
+    "expectInKql": [
+      "\"legacy per-user MFA (StrongAuthentication*)\""
+    ],
+    "regexChain": null,
+    "op": null,
+    "oldText": null,
+    "newText": null,
+    "expect": null,
+    "minus": null,
+    "table": "AuditLogs",
+    "joinRows": {
+      "RecentPrivilegedGrants": {
+        "columns": [
+          "GrantUserId",
+          "RecentGrants",
+          "LastGrant"
+        ],
+        "rows": []
+      }
+    },
+    "note": "Per-user MFA and phone-method edits made through the legacy MSOnline / admin-portal path are logged as Core Directory 'Update user' with StrongAuthentication* modified properties (StrongAuthenticationRequirement, StrongAuthenticationMethod, StrongAuthenticationUserDetails). verify: the property names on the first lab edit.",
+    "rows": [
+      {
+        "label": "positive: per-user MFA requirement removed for dana.okafor (StrongAuthenticationRequirement)",
+        "row": {
+          "Category": "UserManagement",
+          "OperationName": "Update user",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": [
+                {
+                  "displayName": "StrongAuthenticationRequirement",
+                  "oldValue": "[{\"RelyingParty\":\"*\",\"State\":1}]",
+                  "newValue": "[]"
+                },
+                {
+                  "displayName": "Included Updated Properties",
+                  "oldValue": null,
+                  "newValue": "\"StrongAuthenticationRequirement\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Action": "Updated",
+          "Method": "legacy per-user MFA (StrongAuthentication*)",
+          "IsTap": false,
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "positive: the default MFA method changed on tier0-admin-01 is High (naming fallback)",
+        "row": {
+          "Category": "UserManagement",
+          "OperationName": "Update user",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "tier0-admin-01@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": [
+                {
+                  "displayName": "StrongAuthenticationMethod",
+                  "oldValue": "[{\"MethodType\":6,\"IsDefault\":true}]",
+                  "newValue": "[{\"MethodType\":7,\"IsDefault\":true}]"
+                },
+                {
+                  "displayName": "Included Updated Properties",
+                  "oldValue": null,
+                  "newValue": "\"StrongAuthenticationMethod\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": {
+          "Method": "legacy per-user MFA (StrongAuthentication*)",
+          "PrivilegeBasis": "naming convention (fallback)",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "negative: an 'Update user' that changes only the display name",
+        "row": {
+          "Category": "UserManagement",
+          "OperationName": "Update user",
+          "LoggedByService": "Core Directory",
+          "Result": "success",
+          "Identity": "Mallory Admin",
+          "InitiatedBy": {
+            "user": {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "displayName": null,
+              "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+              "ipAddress": "203.0.113.10",
+              "roles": []
+            }
+          },
+          "TargetResources": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "displayName": null,
+              "type": "User",
+              "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+              "modifiedProperties": [
+                {
+                  "displayName": "DisplayName",
+                  "oldValue": "[\"Dana Okafor\"]",
+                  "newValue": "[\"Dana Okafor-Reyes\"]"
+                },
+                {
+                  "displayName": "Included Updated Properties",
+                  "oldValue": null,
+                  "newValue": "\"DisplayName\""
+                }
+              ]
+            }
+          ]
+        },
+        "expect": null,
+        "droppedBy": "OperationName in~ (\"Admin registered security info\""
+      }
+    ]
+  },
+  {
+    "rule": "tier0-logon-without-checkout",
+    "case": "RID-500 Administrator by SID",
+    "category": null,
+    "operation": null,
+    "expectInKql": [
+      "AccountSid endswith \"-500\", \"BreakGlassAd\""
+    ],
+    "regexChain": null,
+    "op": null,
+    "oldText": null,
+    "newText": null,
+    "expect": null,
+    "minus": null,
+    "table": "SecurityEvent",
+    "joinRows": {
+      "Sessions": {
+        "columns": [
+          "Account",
+          "OutTime",
+          "CheckoutRequestId",
+          "InTime",
+          "SessionEnd"
+        ],
+        "rows": []
+      }
+    },
+    "note": "SecurityEvent rows (Microsoft Learn schema): 4624 names the account in Target*, 4672 in Subject*. Sessions is the rule's let (VaultCheckout_CL check-outs joined to check-ins, summarized); its rows are given here as times relative to the run. Covered is the per-logon judgement before the rule's summarize; the later stage runs on aggregated rows.",
+    "rows": [
+      {
+        "label": "positive: RDP logon to DC01 by the renamed built-in Administrator (SID ends -500)",
+        "row": {
+          "EventID": 4624,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4624 - An account was successfully logged on.",
+          "TargetUserName": "corp-root",
+          "TargetDomainName": "CORP",
+          "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-500",
+          "LogonType": 10,
+          "IpAddress": "10.0.1.50",
+          "WorkstationName": "PAW01",
+          "SubjectUserSid": "S-1-0-0",
+          "SubjectUserName": "-",
+          "SubjectDomainName": "-"
+        },
+        "expect": {
+          "Class": "BreakGlassAd",
+          "Account": "corp-root",
+          "Covered": false
+        }
+      },
+      {
+        "label": "contrast: a vault check-out under the same name does not cover RID 500 (only Vaulted accounts are covered)",
+        "row": {
+          "EventID": 4624,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4624 - An account was successfully logged on.",
+          "TargetUserName": "corp-root",
+          "TargetDomainName": "CORP",
+          "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-500",
+          "LogonType": 10,
+          "IpAddress": "10.0.1.50",
+          "WorkstationName": "PAW01",
+          "SubjectUserSid": "S-1-0-0",
+          "SubjectUserName": "-",
+          "SubjectDomainName": "-"
+        },
+        "expect": {
+          "Class": "BreakGlassAd",
+          "Covered": false
+        },
+        "joinRows": {
+          "Sessions": {
+            "columns": [
+              "Account",
+              "OutTime",
+              "CheckoutRequestId",
+              "InTime",
+              "SessionEnd"
+            ],
+            "rows": [
+              {
+                "Account": "corp-root",
+                "OutTime": "ago:40m",
+                "CheckoutRequestId": "r-out-1",
+                "InTime": null,
+                "SessionEnd": "ago:10m"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "positive (alert stage): the RID-500 verdict, feed healthy or not",
+        "afterSummarize": 2,
+        "rows": [
+          {
+            "Account": "corp-root",
+            "Class": "BreakGlassAd",
+            "Host": "DC01",
+            "SourceIps": [
+              "10.0.1.50",
+              "-"
+            ]
+          }
+        ],
+        "expect": {
+          "Verdict": "RID-500 (AD break-glass) logon on a DC - always reviewed under the AD break-glass procedure",
+          "SourceIp": "10.0.1.50",
+          "SourceIps": [
+            "10.0.1.50"
+          ],
+          "Severity": "High"
+        },
+        "lets": {
+          "FeedLastSeen": "ago:5m"
+        }
+      },
+      {
+        "label": "negative: a user whose SID merely ends in 1500 (admin500) is not RID 500",
+        "row": {
+          "EventID": 4624,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4624 - An account was successfully logged on.",
+          "TargetUserName": "admin500",
+          "TargetDomainName": "CORP",
+          "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1500",
+          "LogonType": 10,
+          "IpAddress": "10.0.1.50",
+          "WorkstationName": "PAW01",
+          "SubjectUserSid": "S-1-0-0",
+          "SubjectUserName": "-",
+          "SubjectDomainName": "-"
+        },
+        "expect": null,
+        "droppedBy": "where isnotempty(Class)"
+      },
+      {
+        "label": "negative: the local Administrator of a member server (FILE01) is not a DC logon",
+        "row": {
+          "EventID": 4624,
+          "Computer": "FILE01.corp.test.local",
+          "Activity": "4624 - An account was successfully logged on.",
+          "TargetUserName": "Administrator",
+          "TargetDomainName": "CORP",
+          "TargetUserSid": "S-1-5-21-4000000004-5000000005-6000000006-500",
+          "LogonType": 10,
+          "IpAddress": "10.0.1.50",
+          "WorkstationName": "PAW01",
+          "SubjectUserSid": "S-1-0-0",
+          "SubjectUserName": "-",
+          "SubjectDomainName": "-"
+        },
+        "expect": null,
+        "droppedBy": "where Host in (DcHosts)"
+      },
+      {
+        "label": "negative: the DC's own machine account",
+        "row": {
+          "EventID": 4624,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4624 - An account was successfully logged on.",
+          "TargetUserName": "DC01$",
+          "TargetDomainName": "CORP",
+          "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1000",
+          "LogonType": 3,
+          "IpAddress": "10.0.1.10",
+          "WorkstationName": "-",
+          "SubjectUserSid": "S-1-0-0",
+          "SubjectUserName": "-",
+          "SubjectDomainName": "-"
+        },
+        "expect": null,
+        "droppedBy": "where not(Account endswith \"$\")"
+      },
+      {
+        "label": "negative: a FAILED logon (4625) is not a logon",
+        "row": {
+          "EventID": 4625,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4625 - An account failed to log on.",
+          "TargetUserName": "corp-root",
+          "TargetDomainName": "CORP",
+          "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-500",
+          "LogonType": 10,
+          "IpAddress": "10.0.1.50",
+          "WorkstationName": "PAW01",
+          "SubjectUserSid": "S-1-0-0",
+          "SubjectUserName": "-",
+          "SubjectDomainName": "-"
+        },
+        "expect": null,
+        "droppedBy": "where EventID in (4624, 4672)"
+      }
+    ]
+  },
+  {
+    "rule": "tier0-logon-without-checkout",
+    "case": "new Domain Admin (4672, not vaulted)",
+    "category": null,
+    "operation": null,
+    "expectInKql": [
+      "EventID == 4672,            \"Unvaulted\""
+    ],
+    "regexChain": null,
+    "op": null,
+    "oldText": null,
+    "newText": null,
+    "expect": null,
+    "minus": null,
+    "table": "SecurityEvent",
+    "joinRows": {
+      "Sessions": {
+        "columns": [
+          "Account",
+          "OutTime",
+          "CheckoutRequestId",
+          "InTime",
+          "SessionEnd"
+        ],
+        "rows": []
+      }
+    },
+    "note": "SecurityEvent rows (Microsoft Learn schema): 4624 names the account in Target*, 4672 in Subject*. Sessions is the rule's let (VaultCheckout_CL check-outs joined to check-ins, summarized); its rows are given here as times relative to the run. Covered is the per-logon judgement before the rule's summarize; the later stage runs on aggregated rows.",
+    "rows": [
+      {
+        "label": "positive: special privileges (4672) for mallory, an account the vault does not manage",
+        "row": {
+          "EventID": 4672,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4672 - Special privileges assigned to new logon.",
+          "SubjectUserName": "mallory",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "PrivilegeList": "SeSecurityPrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeDebugPrivilege"
+        },
+        "expect": {
+          "Class": "Unvaulted",
+          "Account": "mallory",
+          "Covered": false
+        }
+      },
+      {
+        "label": "positive: tier0-admin-01 (vaulted) with no check-out",
+        "row": {
+          "EventID": 4672,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4672 - Special privileges assigned to new logon.",
+          "SubjectUserName": "tier0-admin-01",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201",
+          "PrivilegeList": "SeSecurityPrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeDebugPrivilege"
+        },
+        "expect": {
+          "Class": "Vaulted",
+          "Covered": false
+        }
+      },
+      {
+        "label": "contrast: tier0-admin-01 inside a check-out window is covered (the rule's later where Covered == 0 drops it)",
+        "row": {
+          "EventID": 4672,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4672 - Special privileges assigned to new logon.",
+          "SubjectUserName": "tier0-admin-01",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201",
+          "PrivilegeList": "SeSecurityPrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeDebugPrivilege"
+        },
+        "expect": {
+          "Class": "Vaulted",
+          "Covered": true
+        },
+        "joinRows": {
+          "Sessions": {
+            "columns": [
+              "Account",
+              "OutTime",
+              "CheckoutRequestId",
+              "InTime",
+              "SessionEnd"
+            ],
+            "rows": [
+              {
+                "Account": "tier0-admin-01",
+                "OutTime": "ago:40m",
+                "CheckoutRequestId": "r-out-1",
+                "InTime": "ago:10m",
+                "SessionEnd": "ago:10m"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "contrast: tier0-admin-01 after the check-out was returned is not covered",
+        "row": {
+          "EventID": 4672,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4672 - Special privileges assigned to new logon.",
+          "SubjectUserName": "tier0-admin-01",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1201",
+          "PrivilegeList": "SeSecurityPrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeDebugPrivilege"
+        },
+        "expect": {
+          "Class": "Vaulted",
+          "Covered": false
+        },
+        "joinRows": {
+          "Sessions": {
+            "columns": [
+              "Account",
+              "OutTime",
+              "CheckoutRequestId",
+              "InTime",
+              "SessionEnd"
+            ],
+            "rows": [
+              {
+                "Account": "tier0-admin-01",
+                "OutTime": "ago:100m",
+                "CheckoutRequestId": "r-out-1",
+                "InTime": "ago:45m",
+                "SessionEnd": "ago:45m"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "label": "positive (alert stage): unvaulted Tier-0 account verdict",
+        "afterSummarize": 2,
+        "rows": [
+          {
+            "Account": "mallory",
+            "Class": "Unvaulted",
+            "Host": "DC01",
+            "SourceIps": [
+              "10.0.1.77"
+            ]
+          }
+        ],
+        "expect": {
+          "Verdict": "Account with Tier-0 privileges (4672) on a DC that the PAM vault does not manage - a new Domain Admin or an unvaulted admin",
+          "Severity": "High"
+        },
+        "lets": {
+          "FeedLastSeen": "ago:5m"
+        }
+      },
+      {
+        "label": "positive (alert stage): vaulted, uncovered, feed healthy - used outside PAM",
+        "afterSummarize": 2,
+        "rows": [
+          {
+            "Account": "tier0-admin-01",
+            "Class": "Vaulted",
+            "Host": "DC01",
+            "SourceIps": [
+              "10.0.1.50"
+            ]
+          }
+        ],
+        "expect": {
+          "VaultFeedHealthy": true,
+          "Verdict": "No Vault check-out covers this Tier-0 logon - credential used outside PAM"
+        },
+        "lets": {
+          "FeedLastSeen": "ago:5m"
+        }
+      },
+      {
+        "label": "contrast (alert stage): vaulted, uncovered, feed 2 h stale - says check the feed first",
+        "afterSummarize": 2,
+        "rows": [
+          {
+            "Account": "tier0-admin-01",
+            "Class": "Vaulted",
+            "Host": "DC01",
+            "SourceIps": [
+              "10.0.1.50"
+            ]
+          }
+        ],
+        "expect": {
+          "VaultFeedHealthy": false,
+          "Verdict": "No check-out found AND the Vault feed is stale - check ingest-vault-audit.sh before assuming misuse"
+        },
+        "lets": {
+          "FeedLastSeen": "ago:2h"
+        }
+      },
+      {
+        "label": "contrast (alert stage): vaulted, uncovered, feed never seen",
+        "afterSummarize": 2,
+        "rows": [
+          {
+            "Account": "tier0-admin-01",
+            "Class": "Vaulted",
+            "Host": "DC01",
+            "SourceIps": [
+              "10.0.1.50"
+            ]
+          }
+        ],
+        "expect": {
+          "VaultFeedHealthy": false,
+          "Verdict": "No check-out found AND the Vault feed is stale - check ingest-vault-audit.sh before assuming misuse"
+        },
+        "lets": {
+          "FeedLastSeen": null
+        }
+      },
+      {
+        "label": "negative: a plain logon (4624, no special privileges) by mallory",
+        "row": {
+          "EventID": 4624,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4624 - An account was successfully logged on.",
+          "TargetUserName": "mallory",
+          "TargetDomainName": "CORP",
+          "TargetUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "LogonType": 3,
+          "IpAddress": "10.0.1.50",
+          "WorkstationName": "PAW01",
+          "SubjectUserSid": "S-1-0-0",
+          "SubjectUserName": "-",
+          "SubjectDomainName": "-"
+        },
+        "expect": null,
+        "droppedBy": "where isnotempty(Class)"
+      },
+      {
+        "label": "negative: SYSTEM's 4672 on the DC",
+        "row": {
+          "EventID": 4672,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4672 - Special privileges assigned to new logon.",
+          "SubjectUserName": "SYSTEM",
+          "SubjectDomainName": "NT AUTHORITY",
+          "SubjectUserSid": "S-1-5-18",
+          "PrivilegeList": "SeSecurityPrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeDebugPrivilege"
+        },
+        "expect": null,
+        "droppedBy": "where AccountSid !in (\"S-1-5-18\""
+      },
+      {
+        "label": "negative: the allow-listed Vault rotator service account",
+        "row": {
+          "EventID": 4672,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4672 - Special privileges assigned to new logon.",
+          "SubjectUserName": "svc-vault-rotator",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1150",
+          "PrivilegeList": "SeSecurityPrivilege\r\n\t\t\tSeBackupPrivilege\r\n\t\t\tSeRestorePrivilege\r\n\t\t\tSeDebugPrivilege"
+        },
+        "expect": null,
+        "droppedBy": "where Account !in (PrivilegedServiceAllowList)"
+      }
+    ]
+  },
+  {
+    "rule": "ad-privileged-group-change",
+    "case": "4728 add to Domain Admins (RID 512)",
+    "category": null,
+    "operation": null,
+    "expectInKql": [
+      "\"512\"",
+      "EventID in (4728, 4732, 4756)"
+    ],
+    "regexChain": null,
+    "op": null,
+    "oldText": null,
+    "newText": null,
+    "expect": null,
+    "minus": null,
+    "table": "SecurityEvent",
+    "note": "SecurityEvent 4728 / 4732 / 4756: the group in TargetUserName / TargetSid, the member in MemberName / MemberSid.",
+    "rows": [
+      {
+        "label": "positive: mallory added to Domain Admins (4728, RID 512)",
+        "row": {
+          "EventID": 4728,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4728 - A member was added to a security-enabled global group.",
+          "TargetUserName": "Domain Admins",
+          "TargetDomainName": "CORP",
+          "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-512",
+          "MemberName": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+          "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "SubjectUserName": "helpdesk-adm",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+          "PrivilegeList": "-"
+        },
+        "expect": {
+          "GroupTier": "tier0",
+          "GroupName": "Domain Admins",
+          "NewMember": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+          "Account": "helpdesk-adm",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "positive: BUILTIN\\Administrators on the DC (4732, S-1-5-32-544)",
+        "row": {
+          "EventID": 4732,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4732 - A member was added to a security-enabled local group.",
+          "TargetUserName": "Administrators",
+          "TargetDomainName": "Builtin",
+          "TargetSid": "S-1-5-32-544",
+          "MemberName": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+          "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "SubjectUserName": "helpdesk-adm",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+          "PrivilegeList": "-"
+        },
+        "expect": {
+          "GroupTier": "tier0",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "positive: Enterprise Admins (4756, RID 519)",
+        "row": {
+          "EventID": 4756,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4756 - A member was added to a security-enabled universal group.",
+          "TargetUserName": "Enterprise Admins",
+          "TargetDomainName": "CORP",
+          "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-519",
+          "MemberName": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+          "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "SubjectUserName": "helpdesk-adm",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+          "PrivilegeList": "-"
+        },
+        "expect": {
+          "GroupTier": "tier0",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "positive: DnsAdmins by name (its RID is not fixed)",
+        "row": {
+          "EventID": 4732,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4732 - A member was added to a security-enabled local group.",
+          "TargetUserName": "DnsAdmins",
+          "TargetDomainName": "CORP",
+          "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-1101",
+          "MemberName": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+          "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "SubjectUserName": "helpdesk-adm",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+          "PrivilegeList": "-"
+        },
+        "expect": {
+          "GroupTier": "tier0",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast: Tier1-Server-Admins is Medium",
+        "row": {
+          "EventID": 4728,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4728 - A member was added to a security-enabled global group.",
+          "TargetUserName": "Tier1-Server-Admins",
+          "TargetDomainName": "CORP",
+          "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-1110",
+          "MemberName": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+          "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "SubjectUserName": "helpdesk-adm",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+          "PrivilegeList": "-"
+        },
+        "expect": {
+          "GroupTier": "tier1",
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "negative: Domain Users (RID 513)",
+        "row": {
+          "EventID": 4728,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4728 - A member was added to a security-enabled global group.",
+          "TargetUserName": "Domain Users",
+          "TargetDomainName": "CORP",
+          "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-513",
+          "MemberName": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+          "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "SubjectUserName": "helpdesk-adm",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+          "PrivilegeList": "-"
+        },
+        "expect": null,
+        "droppedBy": "where isnotempty(GroupTier)"
+      },
+      {
+        "label": "negative: a group only NAMED Domain Admins (RID 1200) - the SID decides",
+        "row": {
+          "EventID": 4728,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4728 - A member was added to a security-enabled global group.",
+          "TargetUserName": "Domain Admins",
+          "TargetDomainName": "CORP",
+          "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-1200",
+          "MemberName": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+          "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "SubjectUserName": "helpdesk-adm",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+          "PrivilegeList": "-"
+        },
+        "expect": null,
+        "droppedBy": "where isnotempty(GroupTier)"
+      },
+      {
+        "label": "negative: a member server's local Administrators (FILE01)",
+        "row": {
+          "EventID": 4732,
+          "Computer": "FILE01.corp.test.local",
+          "Activity": "4732 - A member was added to a security-enabled local group.",
+          "TargetUserName": "Administrators",
+          "TargetDomainName": "Builtin",
+          "TargetSid": "S-1-5-32-544",
+          "MemberName": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+          "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "SubjectUserName": "helpdesk-adm",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+          "PrivilegeList": "-"
+        },
+        "expect": null,
+        "droppedBy": "where Host in (DcHosts)"
+      },
+      {
+        "label": "negative: a member REMOVED (4729)",
+        "row": {
+          "EventID": 4729,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4729 - A member was removed from a security-enabled global group.",
+          "TargetUserName": "Domain Admins",
+          "TargetDomainName": "CORP",
+          "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-512",
+          "MemberName": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+          "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "SubjectUserName": "helpdesk-adm",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+          "PrivilegeList": "-"
+        },
+        "expect": null,
+        "droppedBy": "where EventID in (4728, 4732, 4756)"
+      }
+    ]
+  },
+  {
+    "rule": "kerberoast-rc4-service-ticket",
+    "case": "RC4 ticket for a user SPN",
+    "category": null,
+    "operation": null,
+    "expectInKql": [
+      "TicketEncryptionType =~ \"0x17\""
+    ],
+    "regexChain": [
+      "Name=\"TicketEncryptionType\">([^<]+)<"
+    ],
+    "op": "new",
+    "oldText": "",
+    "newText": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"TargetDomainName\">CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">svc-sql01</Data><Data Name=\"ServiceSid\">S-1-5-21-1000000001-2000000002-3000000003-1110</Data><Data Name=\"TicketOptions\">0x40810000</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"IpAddress\">::ffff:10.0.1.20</Data><Data Name=\"IpPort\">49823</Data><Data Name=\"Status\">0x0</Data><Data Name=\"LogonGuid\">{00000000-0000-0000-0000-000000000000}</Data><Data Name=\"TransmittedServices\">-</Data></EventData>",
+    "expect": [
+      "0x17"
+    ],
+    "minus": null,
+    "table": "SecurityEvent",
+    "note": "TicketEncryptionType is NOT a SecurityEvent column (Microsoft Learn schema): it is only in the EventData XML, which this row carries. verify: EventData's exact XML (namespace, Data Name casing) on the first DC01 4769 via AMA.",
+    "rows": [
+      {
+        "label": "positive: alice gets an RC4 (0x17) ticket for svc-sql01",
+        "row": {
+          "EventID": 4769,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4769 - A Kerberos service ticket was requested.",
+          "TargetUserName": "alice@CORP.TEST.LOCAL",
+          "TargetDomainName": "CORP.TEST.LOCAL",
+          "ServiceName": "svc-sql01",
+          "IpAddress": "::ffff:10.0.1.20",
+          "IpPort": "49823",
+          "Status": "0x0",
+          "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"TargetDomainName\">CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">svc-sql01</Data><Data Name=\"ServiceSid\">S-1-5-21-1000000001-2000000002-3000000003-1110</Data><Data Name=\"TicketOptions\">0x40810000</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"IpAddress\">::ffff:10.0.1.20</Data><Data Name=\"IpPort\">49823</Data><Data Name=\"Status\">0x0</Data><Data Name=\"LogonGuid\">{00000000-0000-0000-0000-000000000000}</Data><Data Name=\"TransmittedServices\">-</Data></EventData>"
+        },
+        "expect": {
+          "Service": "svc-sql01",
+          "Requester": "alice",
+          "RequesterRealm": "CORP.TEST.LOCAL",
+          "SourceIp": "10.0.1.20",
+          "TicketEncryptionType": "0x17"
+        }
+      },
+      {
+        "label": "positive (alert stage): one RC4 ticket for the Tier-0 SPN svc-legacy-da is High",
+        "afterSummarize": 1,
+        "rows": [
+          {
+            "Requester": "alice",
+            "RequesterRealm": "CORP.TEST.LOCAL",
+            "Host": "DC01",
+            "Services": [
+              "svc-legacy-da"
+            ],
+            "ServiceCount": 1,
+            "Tickets": 1,
+            "SourceIps": [
+              "10.0.1.20"
+            ]
+          }
+        ],
+        "expect": {
+          "Tier0Roasted": true,
+          "Account": "alice",
+          "SourceIp": "10.0.1.20",
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "positive (alert stage): RC4 tickets for 3 services from one requester (a sweep) are High",
+        "afterSummarize": 1,
+        "rows": [
+          {
+            "Requester": "alice",
+            "RequesterRealm": "CORP.TEST.LOCAL",
+            "Host": "DC01",
+            "Services": [
+              "svc-sql01",
+              "svc-iis-app",
+              "svc-backup"
+            ],
+            "ServiceCount": 3,
+            "Tickets": 3,
+            "SourceIps": [
+              "10.0.1.20"
+            ]
+          }
+        ],
+        "expect": {
+          "Tier0Roasted": false,
+          "Severity": "High"
+        }
+      },
+      {
+        "label": "contrast (alert stage): a single RC4 ticket for an ordinary SPN is Medium",
+        "afterSummarize": 1,
+        "rows": [
+          {
+            "Requester": "alice",
+            "RequesterRealm": "CORP.TEST.LOCAL",
+            "Host": "DC01",
+            "Services": [
+              "svc-sql01"
+            ],
+            "ServiceCount": 1,
+            "Tickets": 1,
+            "SourceIps": [
+              "10.0.1.20"
+            ]
+          }
+        ],
+        "expect": {
+          "Tier0Roasted": false,
+          "Severity": "Medium"
+        }
+      },
+      {
+        "label": "negative: an AES256 (0x12) ticket",
+        "row": {
+          "EventID": 4769,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4769 - A Kerberos service ticket was requested.",
+          "TargetUserName": "alice@CORP.TEST.LOCAL",
+          "TargetDomainName": "CORP.TEST.LOCAL",
+          "ServiceName": "svc-sql01",
+          "IpAddress": "::ffff:10.0.1.20",
+          "IpPort": "49823",
+          "Status": "0x0",
+          "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"TargetDomainName\">CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">svc-sql01</Data><Data Name=\"ServiceSid\">S-1-5-21-1000000001-2000000002-3000000003-1110</Data><Data Name=\"TicketOptions\">0x40810000</Data><Data Name=\"TicketEncryptionType\">0x12</Data><Data Name=\"IpAddress\">::ffff:10.0.1.20</Data><Data Name=\"IpPort\">49823</Data><Data Name=\"Status\">0x0</Data><Data Name=\"LogonGuid\">{00000000-0000-0000-0000-000000000000}</Data><Data Name=\"TransmittedServices\">-</Data></EventData>"
+        },
+        "expect": null,
+        "droppedBy": "where TicketEncryptionType =~ \"0x17\""
+      },
+      {
+        "label": "negative: RC4 for a computer account's SPN (FILE01$ - random key)",
+        "row": {
+          "EventID": 4769,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4769 - A Kerberos service ticket was requested.",
+          "TargetUserName": "alice@CORP.TEST.LOCAL",
+          "TargetDomainName": "CORP.TEST.LOCAL",
+          "ServiceName": "FILE01$",
+          "IpAddress": "::ffff:10.0.1.20",
+          "IpPort": "49823",
+          "Status": "0x0",
+          "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"TargetDomainName\">CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">FILE01$</Data><Data Name=\"ServiceSid\">S-1-5-21-1000000001-2000000002-3000000003-1110</Data><Data Name=\"TicketOptions\">0x40810000</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"IpAddress\">::ffff:10.0.1.20</Data><Data Name=\"IpPort\">49823</Data><Data Name=\"Status\">0x0</Data><Data Name=\"LogonGuid\">{00000000-0000-0000-0000-000000000000}</Data><Data Name=\"TransmittedServices\">-</Data></EventData>"
+        },
+        "expect": null,
+        "droppedBy": "where not(Service endswith \"$\") and not(Service startswith \"krbtgt\")"
+      },
+      {
+        "label": "negative: a krbtgt ticket",
+        "row": {
+          "EventID": 4769,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4769 - A Kerberos service ticket was requested.",
+          "TargetUserName": "alice@CORP.TEST.LOCAL",
+          "TargetDomainName": "CORP.TEST.LOCAL",
+          "ServiceName": "krbtgt",
+          "IpAddress": "::ffff:10.0.1.20",
+          "IpPort": "49823",
+          "Status": "0x0",
+          "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"TargetDomainName\">CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">krbtgt</Data><Data Name=\"ServiceSid\">S-1-5-21-1000000001-2000000002-3000000003-1110</Data><Data Name=\"TicketOptions\">0x40810000</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"IpAddress\">::ffff:10.0.1.20</Data><Data Name=\"IpPort\">49823</Data><Data Name=\"Status\">0x0</Data><Data Name=\"LogonGuid\">{00000000-0000-0000-0000-000000000000}</Data><Data Name=\"TransmittedServices\">-</Data></EventData>"
+        },
+        "expect": null,
+        "droppedBy": "where not(Service endswith \"$\") and not(Service startswith \"krbtgt\")"
+      },
+      {
+        "label": "negative: a request the KDC refused (Status 0xe)",
+        "row": {
+          "EventID": 4769,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4769 - A Kerberos service ticket was requested.",
+          "TargetUserName": "alice@CORP.TEST.LOCAL",
+          "TargetDomainName": "CORP.TEST.LOCAL",
+          "ServiceName": "svc-sql01",
+          "IpAddress": "::ffff:10.0.1.20",
+          "IpPort": "49823",
+          "Status": "0xe",
+          "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">alice@CORP.TEST.LOCAL</Data><Data Name=\"TargetDomainName\">CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">svc-sql01</Data><Data Name=\"ServiceSid\">S-1-5-21-1000000001-2000000002-3000000003-1110</Data><Data Name=\"TicketOptions\">0x40810000</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"IpAddress\">::ffff:10.0.1.20</Data><Data Name=\"IpPort\">49823</Data><Data Name=\"Status\">0xe</Data><Data Name=\"LogonGuid\">{00000000-0000-0000-0000-000000000000}</Data><Data Name=\"TransmittedServices\">-</Data></EventData>"
+        },
+        "expect": null,
+        "droppedBy": "where Status =~ \"0x0\""
+      },
+      {
+        "label": "negative: a computer account asking (WS01$)",
+        "row": {
+          "EventID": 4769,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4769 - A Kerberos service ticket was requested.",
+          "TargetUserName": "WS01$@CORP.TEST.LOCAL",
+          "TargetDomainName": "CORP.TEST.LOCAL",
+          "ServiceName": "svc-sql01",
+          "IpAddress": "::ffff:10.0.1.20",
+          "IpPort": "49823",
+          "Status": "0x0",
+          "EventData": "<EventData xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><Data Name=\"TargetUserName\">WS01$@CORP.TEST.LOCAL</Data><Data Name=\"TargetDomainName\">CORP.TEST.LOCAL</Data><Data Name=\"ServiceName\">svc-sql01</Data><Data Name=\"ServiceSid\">S-1-5-21-1000000001-2000000002-3000000003-1110</Data><Data Name=\"TicketOptions\">0x40810000</Data><Data Name=\"TicketEncryptionType\">0x17</Data><Data Name=\"IpAddress\">::ffff:10.0.1.20</Data><Data Name=\"IpPort\">49823</Data><Data Name=\"Status\">0x0</Data><Data Name=\"LogonGuid\">{00000000-0000-0000-0000-000000000000}</Data><Data Name=\"TransmittedServices\">-</Data></EventData>"
+        },
+        "expect": null,
+        "droppedBy": "where not(Requester endswith \"$\")"
+      }
+    ]
+  },
+  {
+    "rule": "dcsync-replication-request",
+    "case": "Get-Changes-All by a non-DC account",
+    "category": null,
+    "operation": null,
+    "expectInKql": [
+      "\"1131f6ad-9c07-11d1-f79f-00c04fc2dcd2\"",
+      "not(Account endswith \"$\")"
+    ],
+    "regexChain": [
+      "([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+    ],
+    "op": "new",
+    "oldText": "",
+    "newText": "%%7688\r\n\t\t{1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n",
+    "expect": [
+      "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2",
+      "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
+    ],
+    "minus": null,
+    "table": "SecurityEvent",
+    "note": "4662 Properties lists the control-access right GUIDs. verify: real DCSync events also list the domainDNS object-class GUID (left out of this fixture) and the exact Properties layout via AMA.",
+    "rows": [
+      {
+        "label": "positive: mallory uses DS-Replication-Get-Changes-All on the domain",
+        "row": {
+          "EventID": 4662,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4662 - An operation was performed on an object.",
+          "SubjectUserName": "mallory",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "ObjectServer": "DS",
+          "OperationType": "Object Access",
+          "AccessMask": "0x100",
+          "Properties": "%%7688\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n"
+        },
+        "expect": {
+          "Account": "mallory",
+          "RightsUsed": [
+            "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
+          ]
+        }
+      },
+      {
+        "label": "positive: both replication rights in one request",
+        "row": {
+          "EventID": 4662,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4662 - An operation was performed on an object.",
+          "SubjectUserName": "mallory",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "ObjectServer": "DS",
+          "OperationType": "Object Access",
+          "AccessMask": "0x100",
+          "Properties": "%%7688\r\n\t\t{1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n"
+        },
+        "expect": {
+          "RightsUsed": [
+            "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2",
+            "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
+          ]
+        }
+      },
+      {
+        "label": "negative: DC-to-DC replication by the DC's machine account",
+        "row": {
+          "EventID": 4662,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4662 - An operation was performed on an object.",
+          "SubjectUserName": "DC01$",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1000",
+          "ObjectServer": "DS",
+          "OperationType": "Object Access",
+          "AccessMask": "0x100",
+          "Properties": "%%7688\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n"
+        },
+        "expect": null,
+        "droppedBy": "where not(Account endswith \"$\")"
+      },
+      {
+        "label": "negative: a property READ (AccessMask 0x10), not a control-access right",
+        "row": {
+          "EventID": 4662,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4662 - An operation was performed on an object.",
+          "SubjectUserName": "mallory",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "ObjectServer": "DS",
+          "OperationType": "Object Access",
+          "AccessMask": "0x10",
+          "Properties": "%%7688\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n"
+        },
+        "expect": null,
+        "droppedBy": "where AccessMask =~ \"0x100\""
+      },
+      {
+        "label": "negative: a different control-access right (Reset Password)",
+        "row": {
+          "EventID": 4662,
+          "Computer": "DC01.corp.test.local",
+          "Activity": "4662 - An operation was performed on an object.",
+          "SubjectUserName": "mallory",
+          "SubjectDomainName": "CORP",
+          "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+          "ObjectServer": "DS",
+          "OperationType": "Object Access",
+          "AccessMask": "0x100",
+          "Properties": "%%7688\r\n\t\t{00299570-246d-11d0-a768-00aa006e0529}\r\n"
+        },
+        "expect": null,
+        "droppedBy": "where Properties has_any (ReplicationGuids)"
+      }
+    ]
+  }
+]

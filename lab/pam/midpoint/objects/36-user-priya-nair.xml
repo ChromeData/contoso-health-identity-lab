@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Mock HR 100205: LEAVER (endDate 2026-10-17), disabled by the leaver path. Out of campaign scope on purpose: reviews catch people who are still employed (ADR 0012), and the leaver path removes the rest. -->
+<user xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+      oid="c0471e00-0000-4000-8000-000000000307">
+    <name>priya.nair</name>
+    <description>Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).</description>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000103" type="OrgType"/>
+    </assignment>
+    <assignment>
+        <description>Requested 2022-01: invoice processing.</description>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000204" type="RoleType"/>
+    </assignment>
+    <activation>
+        <administrativeStatus>disabled</administrativeStatus>
+    </activation>
+    <fullName>Priya Nair</fullName>
+    <givenName>Priya</givenName>
+    <familyName>Nair</familyName>
+    <employeeNumber>100205</employeeNumber>
+    <organizationalUnit>Billing</organizationalUnit>
+    <title>Billing Specialist</title>
+</user>

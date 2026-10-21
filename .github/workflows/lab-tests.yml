@@ -1,0 +1,142 @@
+# =============================================================================
+# lab-tests.yml  —  Contoso Health Identity Platform (lab/)
+# -----------------------------------------------------------------------------
+# The offline test suites, on every pull request and on main. NO cloud
+# credentials, NO OIDC token, NO tenant: every Terraform provider is mocked
+# (terraform test with mock_provider) and every Graph / az call in the
+# PowerShell suites is a Pester mock. What this proves is that the code does
+# what its comments say; whether Entra accepts each call is a tenant-time
+# check (the "verify:" notes in each file).
+#
+# Why a separate workflow from terraform-plan.yml: that one needs the PLAN
+# identity and a real tenant; this one must stay green and meaningful before
+# any tenant exists, and must never be handed a credential.
+#
+# Supply chain: actions pinned to full commit SHAs (same pins and rationale as
+# terraform-plan.yml); PowerShell modules pinned to exact versions; the one
+# downloaded fixture (CISA's ScubaGear sample) is verified against pinned
+# SHA-256 hashes before any test reads it.
+# =============================================================================
+
+name: lab-tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lab-tests-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Terraform: fmt, then init (no backend) + validate in every root and module,
+  # and terraform test wherever a tests/ folder exists (mocked providers).
+  # ---------------------------------------------------------------------------
+  terraform-test:
+    name: terraform validate + test (mocked)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.16.5"  # the CLI the committed lock files and mocks were built with
+          terraform_wrapper: false
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive lab/terraform
+
+      - name: validate + test every root and module
+        # Roots verify providers against their committed lock file
+        # (-lockfile=readonly); child modules have none (gitignored).
+        # envs/dev's tests run with the committed lab.tfvars, like CI's plan.
+        # ${arr[@]+"${arr[@]}"}: empty arrays stay safe under `set -u` on any
+        # bash (the same loop is run locally on macOS bash 3.2).
+        run: |
+          set -uo pipefail
+          fail=0
+          dirs="lab/terraform/envs/dev lab/terraform/envs/bootstrap lab/terraform/aws lab/terraform/k8s/platform lab/terraform/k8s/identity lab/terraform/k8s/aks-mapping"
+          for m in lab/terraform/modules/*/; do dirs="$dirs ${m%/}"; done
+          for d in $dirs; do
+            echo "::group::$d"
+            lock=()
+            [ -f "$d/.terraform.lock.hcl" ] && lock=(-lockfile=readonly)
+            if ! terraform -chdir="$d" init -backend=false -input=false -no-color ${lock[@]+"${lock[@]}"}; then
+              echo "::error::init failed in $d"; fail=1; echo "::endgroup::"; continue
+            fi
+            terraform -chdir="$d" validate -no-color || { echo "::error::validate failed in $d"; fail=1; }
+            if compgen -G "$d/tests/*.tftest.hcl" > /dev/null; then
+              vf=()
+              [ -f "$d/lab.tfvars" ] && vf=(-var-file=lab.tfvars)
+              terraform -chdir="$d" test -no-color ${vf[@]+"${vf[@]}"} || { echo "::error::terraform test failed in $d"; fail=1; }
+            fi
+            echo "::endgroup::"
+          done
+          exit "$fail"
+
+  # ---------------------------------------------------------------------------
+  # PowerShell: PSScriptAnalyzer (errors fail) + every Pester suite, the ITDR
+  # suite, and the shell tests that need no containers.
+  # ---------------------------------------------------------------------------
+  powershell-test:
+    name: Pester + PSScriptAnalyzer + shell tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install pinned PowerShell modules
+        # The Graph modules are loaded only so Pester mocks copy the REAL
+        # cmdlet signatures (a call with a wrong parameter name fails a test).
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+          foreach ($m in 'Microsoft.Graph.Authentication', 'Microsoft.Graph.Users', 'Microsoft.Graph.Users.Actions',
+                         'Microsoft.Graph.Groups', 'Microsoft.Graph.Identity.Governance', 'Microsoft.Graph.Identity.DirectoryManagement',
+                         'Microsoft.Graph.Applications', 'Microsoft.Graph.Identity.SignIns', 'Microsoft.Graph.Reports') {
+              Install-Module $m -RequiredVersion 2.41.2 -Scope CurrentUser -Force
+          }
+
+      - name: PyYAML (ScubaGear config YAML check)
+        run: sudo apt-get install -y --no-install-recommends python3-yaml
+
+      - name: Fetch CISA ScubaGear v1.8.0 sample (SHA-256 pinned)
+        shell: pwsh
+        run: ./lab/scripts/powershell/tests/fixtures/Get-ScubaSample.ps1
+
+      - name: Lab PowerShell suite (analyzer + Pester)
+        shell: pwsh
+        run: ./lab/scripts/powershell/tests/Invoke-LabTests.ps1 -CI
+
+      - name: ITDR Pester suite
+        shell: pwsh
+        run: |
+          Import-Module Pester -RequiredVersion 5.7.1
+          $c = New-PesterConfiguration
+          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1')
+          $c.Run.Exit = $true
+          $c.Output.Verbosity = 'Normal'
+          Invoke-Pester -Configuration $c
+
+      - name: Shell tests (no containers)
+        run: |
+          set -euo pipefail
+          bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
+          (cd lab/splunk && ./render-savedsearches.sh --check)

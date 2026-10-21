@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+# =============================================================================
+# vault-ha.sh - Vault HA for the PAM stand-in: a 3-node Raft cluster with
+# transit auto-unseal (CyberArk: Vault HA cluster / Primary + DR Vault).
+# A separate compose project (docker-compose.ha.yml); the single-node lab
+# Vault that the PAM scripts use is not touched.
+#
+#   up        unsealer (init + unseal, transit key "autounseal", a periodic
+#             orphan token limited to encrypt/decrypt on that key), then
+#             vault-1/2/3: init once with RECOVERY keys (auto-unseal means no
+#             unseal keys exist), the others join through retry_join and
+#             unseal themselves. Waits for 3 voters + autopilot healthy.
+#   status    peers, leader, versions, autopilot health, failure tolerance
+#   failover  kill the leader, time until a new leader accepts a write,
+#             restart the old one and time its rejoin (all PASS/FAIL-able)
+#   upgrade [--to IMAGE]
+#             rolling upgrade, the runbook in README "Upgrade runbook":
+#             snapshot first, followers one at a time, the leader last after
+#             `operator step-down`; each node must be unsealed, a voter and
+#             autopilot-healthy before the next. Without --to it re-deploys
+#             the current image (a rehearsal of the exact procedure).
+#   down [--volumes]   stop; --volumes also deletes the data AND .secrets/ha
+#
+# LAB ONLY: 1 recovery share, 1 unsealer key share, HTTP on the compose
+# network. Production: TLS everywhere, recovery keys 3-of-5 to custodians,
+# seal "azurekeyvault" with a managed identity (README "HA/DR").
+# =============================================================================
+source "$(dirname "$0")/lib.sh"
+# shellcheck source=ha/ha-lib.sh
+source "$PAM_DIR/ha/ha-lib.sh"
+need docker; need jq; need perl
+
+ensure_files() {
+  mkdir -p "$HA_DIR/snapshots" && chmod 700 "$HA_DIR" "$HA_DIR/snapshots"
+  [[ -s "$HA_DIR/ha.env" ]] || printf 'VAULT_1_IMAGE=hashicorp/vault:2.1.1\nVAULT_2_IMAGE=hashicorp/vault:2.1.1\nVAULT_3_IMAGE=hashicorp/vault:2.1.1\n' > "$HA_DIR/ha.env"
+}
+
+unsealer_cli() { ha exec -T -e VAULT_TOKEN vault-unsealer vault "$@"; }
+
+unsealer_up() {
+  ha up -d vault-unsealer >/dev/null 2>&1 || ha up -d vault-unsealer
+  local rc
+  for _ in $(seq 1 30); do
+    rc=0; VAULT_TOKEN="" unsealer_cli status >/dev/null 2>&1 </dev/null || rc=$?
+    [[ $rc -eq 0 || $rc -eq 2 ]] && break
+    sleep 1
+  done
+  if [[ "$(VAULT_TOKEN="" unsealer_cli status -format=json </dev/null 2>/dev/null | jq -r .initialized)" != true ]]; then
+    log "Initialising the unsealer (lab: 1 key share)"
+    local tmp
+    tmp=$(mktemp "$HA_DIR/unsealer-init.XXXXXX")
+    if ! VAULT_TOKEN="" unsealer_cli operator init -key-shares=1 -key-threshold=1 -format=json </dev/null > "$tmp" \
+       || ! jq -e '.root_token' "$tmp" >/dev/null; then
+      rm -f "$tmp"; die "unsealer init failed"
+    fi
+    mv "$tmp" "$HA_DIR/unsealer-init.json"
+  fi
+  if [[ "$(VAULT_TOKEN="" unsealer_cli status -format=json </dev/null 2>/dev/null | jq -r .sealed)" == true ]]; then
+    log "Unsealing the unsealer"
+    # key=- : the key is read from stdin, never in argv.
+    jq -j '.unseal_keys_b64[0]' "$HA_DIR/unsealer-init.json" \
+      | VAULT_TOKEN="" unsealer_cli write sys/unseal key=- >/dev/null
+  fi
+  export VAULT_TOKEN; VAULT_TOKEN=$(jq -r .root_token "$HA_DIR/unsealer-init.json")
+  if ! unsealer_cli secrets list -format=json </dev/null | jq -e 'has("transit/")' >/dev/null; then
+    unsealer_cli secrets enable transit </dev/null >/dev/null
+  fi
+  unsealer_cli read transit/keys/autounseal </dev/null >/dev/null 2>&1 \
+    || unsealer_cli write -f transit/keys/autounseal </dev/null >/dev/null
+  # Exactly what the transit seal needs (Vault docs, transit seal): update on
+  # encrypt/ and decrypt/ for this one key.
+  unsealer_cli policy write autounseal - >/dev/null <<'HCL'
+path "transit/encrypt/autounseal" { capabilities = ["update"] }
+path "transit/decrypt/autounseal" { capabilities = ["update"] }
+HCL
+  # The seal token: orphan (survives its parent), periodic (renewed by the
+  # cluster, no max TTL). Re-minted only if the current one stopped working.
+  local cur=""
+  [[ -s "$HA_DIR/seal.hcl" ]] && cur=$(sed -n 's/^ *token *= *"\(.*\)"$/\1/p' "$HA_DIR/seal.hcl")
+  if [[ -z "$cur" ]] || ! VAULT_TOKEN="$cur" unsealer_cli token lookup </dev/null >/dev/null 2>&1; then
+    log "Minting the transit seal token (orphan, periodic 768h, policy autounseal)"
+    local seal_tok
+    seal_tok=$(unsealer_cli token create -orphan -period=768h -policy=autounseal -field=token </dev/null)
+    mkdir -p "$HA_DIR"
+    # 644 inside .secrets/ (0700 on the host): the vault user in the node
+    # containers must read it also where bind mounts keep host modes (native
+    # Linux). Lab-only token, useless without network access to the unsealer.
+    cat > "$HA_DIR/seal.hcl.tmp" <<HCL
+# Generated by vault-ha.sh - transit auto-unseal (stand-in for seal "azurekeyvault").
+seal "transit" {
+  address         = "http://vault-unsealer:8200"
+  token           = "$seal_tok"
+  key_name        = "autounseal"
+  mount_path      = "transit/"
+  disable_renewal = "false"
+}
+HCL
+    chmod 644 "$HA_DIR/seal.hcl.tmp" && mv "$HA_DIR/seal.hcl.tmp" "$HA_DIR/seal.hcl"
+    chmod 755 "$HA_DIR"
+    seal_tok=""
+    # Running nodes still hold the old token: recreate them to pick it up.
+    for n in "${HA_NODES[@]}"; do ha_running "$n" && ha up -d --force-recreate --no-deps "$n" >/dev/null 2>&1; done
+  fi
+  chmod 755 "$HA_DIR"   # traversable for the bind mount; .secrets/ itself stays 0700
+  unset VAULT_TOKEN
+}
+
+cluster_up() {
+  ha up -d "${HA_NODES[@]}" >/dev/null 2>&1 || ha up -d "${HA_NODES[@]}"
+  export VAULT_TOKEN=""
+  ha_wait 60 "vault-1 API" ha_api_up vault-1
+  if ! ha_initialized vault-1; then
+    log "Initialising the cluster on vault-1 (auto-unseal: RECOVERY keys, lab 1 share)"
+    local tmp
+    tmp=$(mktemp "$HA_DIR/init.XXXXXX")
+    if ! ha_cli vault-1 operator init -recovery-shares=1 -recovery-threshold=1 -format=json </dev/null > "$tmp" \
+       || ! jq -e '.root_token' "$tmp" >/dev/null; then
+      rm -f "$tmp"; die "cluster init failed (ha logs vault-1)"
+    fi
+    mv "$tmp" "$HA_DIR/init.json"
+  fi
+  export VAULT_TOKEN; VAULT_TOKEN=$(ha_root)
+  ha_wait 120 "3 unsealed voters, autopilot healthy" ha_healthy
+  local n
+  n=$(ha_any_node)
+  if ! ha_cli "$n" secrets list -format=json </dev/null | jq -e 'has("ha-test/")' >/dev/null; then
+    ha_cli "$n" secrets enable -path=ha-test -version=2 kv </dev/null >/dev/null
+  fi
+}
+
+status() {
+  export VAULT_TOKEN; VAULT_TOKEN=$(ha_root)
+  local n
+  for n in "${HA_NODES[@]}"; do
+    if ha_running "$n"; then
+      printf '  %-8s %-8s sealed=%s version=%s\n' "$n" running "$(ha_status "$n" | jq -r .sealed)" "$(ha_version "$n")"
+    else
+      printf '  %-8s stopped\n' "$n"
+    fi
+  done
+  ha_peers | jq -r '.[] | "  peer \(.node_id) leader=\(.leader) voter=\(.voter)"'
+  n=$(ha_any_node) && ha_cli "$n" operator raft autopilot state -format=json </dev/null \
+    | jq -r '"  autopilot healthy=\(.Healthy) failure_tolerance=\(.FailureTolerance) leader=\(.Leader)"'
+}
+
+write_probe() { # write_probe NODE KEY : a KV write through NODE (standbys forward to the leader)
+  ha_cli "$1" kv put "ha-test/$2" at="$(date -u +%FT%TZ)" </dev/null >/dev/null 2>&1
+}
+
+failover() {
+  export VAULT_TOKEN; VAULT_TOKEN=$(ha_root)
+  ha_healthy || die "cluster not healthy - ./vault-ha.sh up first"
+  local old new t0 survivor took rejoin
+  old=$(ha_leader)
+  [[ -n "$old" ]] || die "no leader found"
+  for n in "${HA_NODES[@]}"; do [[ "$n" != "$old" ]] && { survivor="$n"; break; }; done
+  write_probe "$survivor" before-failover || die "write before failover failed"
+  # SIGKILL, not stop: a crash gives the leader no chance to hand over
+  # leadership gracefully, so this measures a real election timeout.
+  log "Leader is $old - killing it (SIGKILL: simulated crash)"
+  t0=$(now_ms)
+  ha kill -s SIGKILL "$old" >/dev/null 2>&1
+  new_leader() { new=$(ha_leader); [[ -n "$new" && "$new" != "$old" ]] && write_probe "$survivor" after-failover; }
+  ha_wait 60 "a new leader that accepts writes" new_leader
+  took=$(secs_since "$t0")
+  log "FAILOVER: new leader ${new} accepted a write ${took}s after $old was killed"
+  ha_cli "$survivor" kv get ha-test/before-failover </dev/null >/dev/null || die "data written before the failover is missing"
+  t0=$(now_ms)
+  ha start "$old" >/dev/null 2>&1
+  ha_wait 120 "$old to rejoin (unsealed voter, autopilot healthy)" ha_healthy
+  rejoin=$(secs_since "$t0")
+  log "REJOIN: $old auto-unsealed and is a healthy voter again after ${rejoin}s (leader stays $new)"
+  printf '%s\n' "$(jq -nc --arg o "$old" --arg n "$new" --arg f "$took" --arg r "$rejoin" \
+    '{old_leader: $o, new_leader: $n, failover_seconds: ($f | tonumber), rejoin_seconds: ($r | tonumber)}')" > "$HA_DIR/last-failover.json"
+}
+
+upgrade() {
+  local to="" n leader t0 cur img var
+  [[ "${1:-}" == --to ]] && to="${2:-}"
+  export VAULT_TOKEN; VAULT_TOKEN=$(ha_root)
+  ha_healthy || die "cluster not healthy - fix that before upgrading"
+  leader=$(ha_leader)
+  out_dir
+  ha_snapshot "$leader" "$HA_DIR/snapshots/pre-upgrade-$(stamp).snap"
+  log "Pre-upgrade snapshot saved (the rollback path: restore it on the old version)"
+  # Followers first, the leader last: only one leader election, at the end.
+  local order=()
+  for n in "${HA_NODES[@]}"; do [[ "$n" != "$leader" ]] && order+=("$n"); done
+  order+=("$leader")
+  for n in "${order[@]}"; do
+    var="VAULT_${n#vault-}_IMAGE"
+    cur=$(sed -n "s/^${var}=//p" "$HA_DIR/ha.env")
+    img="${to:-$cur}"
+    if [[ "$n" == "$(ha_leader)" ]]; then
+      log "$n is the leader: step-down first, so the election happens on our schedule"
+      ha_cli "$n" operator step-down </dev/null >/dev/null
+      not_leader() { [[ -n "$(ha_leader)" && "$(ha_leader)" != "$n" ]]; }
+      ha_wait 60 "a new leader other than $n" not_leader
+    fi
+    sed -i.bak "s|^${var}=.*|${var}=${img}|" "$HA_DIR/ha.env" && rm -f "$HA_DIR/ha.env.bak"
+    t0=$(now_ms)
+    log "Replacing $n ($cur -> $img)"
+    ha up -d --force-recreate --no-deps "$n" >/dev/null 2>&1
+    ha_wait 180 "$n back as an unsealed, healthy voter" ha_healthy
+    log "$n done in $(secs_since "$t0")s, version $(ha_version "$n")"
+  done
+  status
+}
+
+case "${1:-}" in
+  up)       ensure_files; unsealer_up; cluster_up; status
+            log "HA cluster up: API on 127.0.0.1:8210-8212 (root token: jq -r .root_token $HA_DIR/init.json)" ;;
+  status)   [[ -s "$HA_DIR/init.json" ]] || die "not initialised - ./vault-ha.sh up"; status ;;
+  failover) failover ;;
+  upgrade)  shift; upgrade "$@" ;;
+  down)
+    if [[ "${2:-}" == --volumes ]]; then
+      [[ -s "$HA_DIR/ha.env" ]] || ensure_files
+      ha down -v >/dev/null 2>&1 || true
+      rm -rf "$HA_DIR"
+      log "HA cluster removed with its data and .secrets/ha"
+    else
+      ha down >/dev/null 2>&1 || true
+      log "HA cluster stopped (data kept; ./vault-ha.sh up resumes - nodes unseal themselves)"
+    fi ;;
+  *) die "usage: $0 up | status | failover | upgrade [--to IMAGE] | down [--volumes]" ;;
+esac

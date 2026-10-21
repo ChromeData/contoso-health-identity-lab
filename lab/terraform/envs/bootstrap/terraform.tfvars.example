@@ -1,0 +1,40 @@
+# =============================================================================
+# envs/bootstrap :: terraform.tfvars.example
+# -----------------------------------------------------------------------------
+# Copy to terraform.tfvars (gitignored) and fill in. Applied locally only.
+# =============================================================================
+
+subscription_id = "00000000-0000-0000-0000-000000000000"
+tenant_id       = "11111111-1111-1111-1111-111111111111"
+
+# The PUBLIC lab repo. The OIDC subjects are built from these - a typo here
+# means every pipeline login fails with AADSTS70021 (no matching federated
+# identity record).
+github_owner          = "your-github-user"
+github_repo           = "contoso-health-identity-lab"
+# Immutable numeric ids, readable only after the public repo exists:
+#   gh api repos/OWNER/REPO --jq '.owner.id, .id'
+# GitHub.com repos created after 2026-07-15 emit
+# repo:OWNER@OWNER-ID/REPO@REPO-ID subjects; a wrong id also means AADSTS70021.
+github_owner_id       = "<numeric>"
+github_repo_id        = "<numeric>"
+prod_environment_name = "prod"
+
+tfstate_resource_group_name  = "rg-identity-lab-tfstate"
+tfstate_storage_account_name = "stidlabtfstate7f3a"
+tfstate_container_name       = "tfstate"
+
+# Set after creating the Azure OpenAI account, then re-apply.
+azure_openai_resource_id = ""
+
+# Second bootstrap run, after envs/dev created the workspace (needs P1/P2):
+#   terraform -chdir=../dev output -raw log_analytics_workspace_id
+log_analytics_workspace_id = ""
+
+# Opt-in widenings - each a deliberate human apply (see variables.tf):
+#   enable_app_management_roles: before envs/dev enable_sso_apps (Tier-0 role
+#     AppRoleAssignment.ReadWrite.All - record it in the risk register).
+#   enable_identity_protection_logs: once the E5 (P2) licences are assigned,
+#     before envs/dev enable_itdr_detections' identity_risk rule.
+enable_app_management_roles     = false
+enable_identity_protection_logs = false

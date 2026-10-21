@@ -1,0 +1,188 @@
+---
+config:
+  layout: elk
+  elk:
+    mergeEdges: true
+    nodePlacementStrategy: BRANDES_KOEPF
+  flowchart:
+    wrappingWidth: 460
+  themeVariables:
+    fontSize: 16px
+  themeCSS: >-
+    .cluster-label foreignObject { overflow: visible; }
+    #my-svg-ITDR .cluster-label div { transform: translateX(-300px); }
+    #my-svg-PAM .cluster-label div { transform: translateX(-330px); }
+    #my-svg-APPS .cluster-label div { transform: translateX(-300px); }
+    #my-svg-ONPREM .cluster-label div { transform: translateX(-78px); }
+    #my-svg-EVIDENCE .cluster-label div { transform: translateX(-70px); }
+---
+%% Source of lab/docs/architecture.{svg,png}. Render: ./render-architecture.sh
+%% Layout: top-down in three bands. Inputs on top (HR, on-prem AD, delivery, device),
+%% Microsoft Entra ID in the middle (the core, thick blue border), what Entra drives
+%% underneath (apps, detection + response, evidence), PAM stand-ins below it on the left.
+%% ELK places the boxes. The invisible links (~~~) only tile the key, CA, PIM and PAM
+%% boxes into compact rows, and the LDAPS / edge labels change the placement:
+%% re-render and look after any edit.
+%% themeCSS above slides five box titles sideways, off the arrow that enters
+%% the box (#my-svg-* is mermaid-cli's default SVG id). Re-check after a layout change.
+%% Legibility: keep fontSize 16px (32 px in the 2x PNG). Trace it on video in 16:9
+%% crops of the 2x PNG, each <= 3400 px wide (labels >= 18 px at 1080p). The whole
+%% Entra box fits one such crop.
+%% STATUS, last line of every box, never more than the repo proves:
+%%   RAN · harness = executed end to end on a local harness; hashed run record in
+%%                   lab/evidence/, except boxes marked "log not in repo"
+%%   BUILT         = code + offline tests (mocked Terraform, Pester); never applied.
+%%                   A box whose code has no test says "untested".
+%%   DESIGNED      = runbook or portal steps only
+%%   RAN · tenant  = nothing yet: no tenant exists
+%% Fill colour repeats the status (green / amber / white); dashed border = the box
+%% is or holds a stand-in, and its "stand-in:" line names what it replaces.
+%% Re-label a box only when its capture row exists in lab/evidence/capture-log.csv
+%% (evidence-capture-plan.md).
+%% Node ids are stable on purpose: external references depend on them.
+flowchart TB
+  subgraph KEY["Status key · as of 2026-10-20 · RAN · tenant: nothing yet"]
+    direction LR
+    K1["<b>RAN · harness</b><br/>executed locally, record in repo"]
+    K2["<b>BUILT</b><br/>code + offline tests, never applied"]
+    K3["<b>DESIGNED</b><br/>runbook or portal steps only"]
+    K4["dashed border = stand-in<br/>named for what it replaces"]
+  end
+  K1 ~~~ K3
+  K2 ~~~ K4
+
+  HR["<b>HR system of record</b> · owner: HR<br/>hr_feed.csv → API-driven inbound<br/>mass-change guard<br/><b>stand-in:</b> Workday / SuccessFactors<br/><b>BUILT</b> · ADR-0006"]
+
+  subgraph ONPREM["On-prem AD · DC01 on Azure · owner: IAM Eng"]
+    direction TB
+    AGENT["Entra provisioning agent<br/><b>DESIGNED</b>"]
+    AD["AD DS · OU per department<br/>OU=Disabled for leavers<br/><b>BUILT</b> · ADR-0013 · untested"]
+    ADCS["AD CS → LDAPS<br/><b>BUILT</b> · untested"]
+  end
+
+  INTUNE["Intune · compliant device<br/><b>stand-in:</b> Windows 11 Azure VM<br/>= the corporate laptop<br/><b>BUILT</b> · script untested"]
+
+  subgraph CICD["Delivery · GitHub Actions · owner: IAM Eng"]
+    direction TB
+    PR["PR checks · plan · Checkov<br/>TruffleHog · mocked tests<br/><b>BUILT</b> · not yet run on GitHub"]
+    APPLY["prod reviewer gate → OIDC apply<br/>no stored credentials<br/><b>BUILT</b> · ADR-0004 · ADR-0005"]
+  end
+
+  KV["Key Vault · private endpoint<br/>DC secrets written by the VM identity<br/><b>BUILT</b>"]
+
+  %% Optional segment (frozen): built and destroyed per run by lab/k8s/ci/pipeline.sh.
+  %% Its Vault runs inside the cluster, not the PAM Docker Vault.
+  K8S["Kubernetes workload identity · optional<br/>kind, built + destroyed per run<br/>SA token → Vault · no K8s Secret<br/><b>stand-in:</b> AKS + Entra Workload ID<br/><b>RAN · harness</b> · log not in repo<br/>CI not run · ADR-0010"]
+
+  subgraph ENTRA["MICROSOFT ENTRA ID · P2 + ID Governance · owner: IAM Eng"]
+    direction TB
+    subgraph IGA["Lifecycle + governance"]
+      direction TB
+      SYNC["Cloud Sync<br/><b>DESIGNED</b> · ADR-0001"]
+      SOD["SoD: 9 rules, preventive + detective<br/>risk-tiered reviews: T1 quarterly<br/>T2 half-yearly · T3 none (no lockout)<br/>privileged review · review KPIs<br/><b>BUILT</b> · ADR-0012"]
+      BIRTH["Birthright, no approval<br/>automatic assignment<br/>from HR attributes<br/><b>BUILT</b> · ADR-0012"]
+      LCW["Lifecycle Workflows<br/>joiner · mover · leaver<br/>leaver flags NHIs they own<br/><b>BUILT</b> · ADR-0018"]
+      AP["Access packages · approval<br/>180-day expiry<br/>B2B guests: sponsor, 90 days<br/><b>BUILT</b> · ADR-0012"]
+    end
+    subgraph CAX["Conditional Access as code · report-only first"]
+      direction TB
+      CABASE["CA001–CA005 baseline<br/>MFA · admin phishing-resistant<br/>legacy auth · countries<br/>admin portals: compliant device<br/><b>BUILT</b> · ADR-0003"]
+      CARISK["Risk-based access<br/>CA006 user risk High:<br/>MFA + password change<br/>CA007 sign-in risk High: block<br/><b>BUILT</b> · ADR-0015"]
+      CAPR["Phishing-resistant sign-in<br/>CA008 workforce passkeys (pilot)<br/>CA009 register security info:<br/>TAP or phishing-resistant<br/>CA010 block device code flow<br/><b>BUILT</b> · ADR-0016"]
+      CASESS["Admin + clinical sessions<br/>CA020 admin sign-in frequency<br/>CA021 PIM step-up (auth context)<br/>CA022 PAM broker · CA011 token pilot<br/>CA023 protected actions: CA edits<br/>CA060 shared clinical workstations<br/><b>BUILT</b> · ADR-0014 · ADR-0020"]
+    end
+    subgraph PRIV["Privileged + non-human access"]
+      direction TB
+      PIM["PIM for Groups<br/>Tier 0: approval, 4 h · Tier 1: 8 h<br/>approver groups · Azure RG eligible<br/>shadow-admin finder<br/><b>BUILT</b> · ADR-0002 · ADR-0020"]
+      HDAU["Help desk scoped to<br/>a workforce AU<br/>VIPs in a restricted AU<br/><b>BUILT</b> · ADR-0020"]
+      BG["Break-glass ×2<br/>excluded · alerted<br/>drill scripted<br/><b>BUILT</b> · ADR-0003"]
+      NHI["NHI governance<br/>inventory + owners · app policy<br/>admin consent workflow<br/>Agent ID, identity only<br/><b>BUILT</b> · ADR-0018"]
+    end
+  end
+  CABASE ~~~ CARISK
+  CAPR ~~~ CASESS
+  BIRTH ~~~ SOD
+  AP ~~~ PIM
+  SOD ~~~ HDAU
+  CARISK ~~~ BG
+  CASESS ~~~ NHI
+
+  subgraph APPS["Applications · owner: App Owner"]
+    direction TB
+    SSO["SSO + SCIM as code<br/>AWS IAM Identity Center: SAML + SCIM<br/>Clinical Portal + guacamole-psm: OIDC<br/><b>BUILT</b>"]
+    SNOW["ServiceNow<br/>incidents + change tickets<br/>SAML SSO as code<br/><b>stand-in:</b> developer instance<br/><b>BUILT</b>"]
+    OKTA["Okta · acquired clinic<br/>Entra as IdP · staged cut-over<br/><b>stand-in:</b> Integrator Free org<br/><b>DESIGNED</b>"]
+  end
+
+  subgraph PAM["PAM + IGA stand-ins · local Docker · owner: IAM Eng"]
+    direction TB
+    VAULT["Vault · discover → onboard →<br/>dependency-gated rotate → reconcile<br/>check-out needs an approved change<br/><b>stand-in:</b> CyberArk Vault + CPM<br/><b>RAN · harness</b>: Samba AD for DC01,<br/>mock ServiceNow for the PDI · ADR-0007"]
+    GUAC["Guacamole · per-person operators<br/>recorded SSH · RDP needs DC01<br/>Vault SSH CA, 10-minute certificates<br/>Entra OIDC + CA022 sign-in: <b>BUILT</b><br/><b>stand-in:</b> CyberArk PSM / PSMP<br/><b>RAN · harness</b> · ADR-0007"]
+    HA["Vault Raft ×3 + auto-unseal<br/>failover · timed DR drill · upgrade<br/><b>stand-in:</b> CyberArk Vault HA / DR<br/><b>RAN · harness</b> · ADR-0019"]
+    DYN["Dynamic DB credentials<br/>a 1-hour Postgres login per request<br/><b>stand-in:</b> CyberArk ZSP database access<br/><b>RAN · harness</b> · ADR-0007"]
+    CONJUR["Conjur OSS · workload secrets<br/><b>stand-in:</b> CyberArk Secrets Manager<br/><b>RAN · harness</b> · ADR-0007"]
+    MID["midPoint · certification campaign<br/>detective SoD · remediation<br/><b>stand-in:</b> SailPoint / Saviynt<br/><b>RAN · harness</b> · ADR-0008"]
+  end
+  HA ~~~ DYN
+  MID ~~~ CONJUR
+
+  subgraph ITDR["Identity threat detection + response · owner: SOC"]
+    direction TB
+    FEED["Vault audit → VaultCheckout_CL<br/><b>stand-in:</b> CyberArk PTA syslog → AMA<br/><b>RAN · harness</b> · log not in repo"]
+    LA["Sentinel + Log Analytics<br/>Entra logs + DC01 security events<br/>22 rules: 5 core + 17 ITDR<br/>consent · app credential · CA tampering<br/>role outside PIM · device code<br/>Kerberoast · DCSync · unvaulted Tier 0<br/><b>stand-in:</b> these AD rules =<br/>Defender for Identity (MDI)<br/><b>BUILT</b>"]
+    PB["Notify playbook<br/>Teams card + ServiceNow incident<br/><b>BUILT</b>"]
+    CONTAIN["Containment on a High incident<br/>Teams approval by a listed approver<br/>revoke · confirm compromised<br/>cloud-only: disable (opt-in role)<br/>synced: flagged; a person disables in AD<br/><b>stand-in:</b> AD script = MDI response<br/><b>BUILT</b> · ADR-0017"]
+    SPLUNK["Splunk replay · 2nd SIEM<br/><b>stand-in:</b> Event Hub + Splunk Add-on<br/><b>BUILT</b>"]
+  end
+
+  subgraph EVIDENCE["Evidence · consumer: Audit"]
+    direction TB
+    EVID["Evidence pack<br/>SHA-256 manifests · SOX / HIPAA<br/><b>BUILT</b>"]
+    KPI["KPI snapshots · review KPIs<br/>ScubaGear + Zero Trust<br/>before / after<br/><b>BUILT</b> · no numbers yet"]
+    WORM["WORM evidence store<br/>immutable versions<br/>writers can't delete<br/><b>BUILT</b>"]
+  end
+
+  HR -->|"1 · hire / change / leave"| AGENT
+  AGENT --> AD
+  AD --> SYNC
+  SYNC --> BIRTH --> AP
+  SYNC --> LCW --> AP
+  AP -->|"App-* groups"| APPS
+  IGA -.->|"federation"| OKTA
+  INTUNE -->|"compliant device"| CABASE
+  ADCS -->|"LDAPS"| VAULT --> GUAC
+  NHI -.->|"owners · app policy · consent"| SSO
+  ENTRA -->|"sign-in · audit · risk logs"| LA
+  FEED --> LA
+  LA --> PB
+  LA --> CONTAIN
+  LA -.-> SPLUNK
+  PR --> APPLY
+  PR -.->|"k8s identity pipeline"| K8S
+  APPLY -->|"terraform apply"| ENTRA
+  APPLY --> KV
+  ENTRA -->|"export"| EVID
+  EVID -->|"hashes + raw reports"| WORM
+  KPI --> WORM
+
+  classDef ran fill:#e3f3e0,stroke:#2e7d32,stroke-width:2px,color:#1b1b1b;
+  classDef built fill:#fdf1d6,stroke:#a86b00,stroke-width:2px,color:#1b1b1b;
+  classDef designed fill:#ffffff,stroke:#7a7a7a,stroke-width:2px,color:#1b1b1b;
+  classDef standin stroke-dasharray:9 6,stroke-width:3px;
+
+  class K1,VAULT,GUAC,HA,DYN,CONJUR,MID,FEED,K8S ran;
+  class K2,HR,AD,ADCS,INTUNE,PR,APPLY,KV,LCW,BIRTH,AP,SOD,CABASE,CARISK,CAPR,CASESS,PIM,HDAU,BG,NHI,SSO,SNOW,LA,PB,CONTAIN,SPLUNK,EVID,KPI,WORM built;
+  class K3,K4,AGENT,SYNC,OKTA designed;
+  class K4,HR,INTUNE,SNOW,OKTA,VAULT,GUAC,HA,DYN,CONJUR,MID,FEED,LA,CONTAIN,SPLUNK,K8S standin;
+
+  style ENTRA fill:#eaf3fc,stroke:#0f6cbd,stroke-width:5px,color:#0b3d73;
+  style IGA fill:#f6fafe,stroke:#0f6cbd,stroke-width:1px;
+  style CAX fill:#f6fafe,stroke:#0f6cbd,stroke-width:1px;
+  style PRIV fill:#f6fafe,stroke:#0f6cbd,stroke-width:1px;
+  style ONPREM fill:#f7f7f7,stroke:#9a9a9a;
+  style CICD fill:#f7f7f7,stroke:#9a9a9a;
+  style APPS fill:#f7f7f7,stroke:#9a9a9a;
+  style PAM fill:#f7f7f7,stroke:#9a9a9a;
+  style ITDR fill:#f7f7f7,stroke:#9a9a9a;
+  style EVIDENCE fill:#f7f7f7,stroke:#9a9a9a;
+  style KEY fill:#ffffff,stroke:#9a9a9a;

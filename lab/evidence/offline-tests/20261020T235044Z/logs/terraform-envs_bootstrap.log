@@ -1,0 +1,29 @@
+$ terraform -chdir=lab/terraform/envs/bootstrap init -backend=false -input=false -no-color -lockfile=readonly
+Initializing modules...
+- entra_diagnostics in ../../modules/entra-diagnostics
+- pipeline_identity in ../../modules/pipeline-identity
+
+Initializing provider plugins...
+- Reusing previous version of hashicorp/azurerm from the dependency lock file
+- Reusing previous version of hashicorp/azuread from the dependency lock file
+- Installing hashicorp/azurerm v4.81.0...
+- Installed hashicorp/azurerm v4.81.0 (signed by HashiCorp)
+- Installing hashicorp/azuread v3.10.0...
+- Installed hashicorp/azuread v3.10.0 (signed by HashiCorp)
+
+Terraform has been successfully initialized!
+exit=0
+$ terraform -chdir=lab/terraform/envs/bootstrap validate -no-color
+Success! The configuration is valid.
+
+exit=0
+$ terraform -chdir=lab/terraform/envs/bootstrap test -no-color 
+tests/optin.tftest.hcl... in progress
+  run "defaults_add_nothing"... pass
+  run "app_management_roles_opt_in"... pass
+  run "identity_protection_logs_opt_in"... pass
+tests/optin.tftest.hcl... tearing down
+tests/optin.tftest.hcl... pass
+
+Success! 3 passed, 0 failed.
+exit=0

@@ -1,0 +1,42 @@
+[15:26:23Z] midPoint certification campaign run 20261020T152623Z
+[15:26:23Z] midPoint 4.10.4 answering at http://127.0.0.1:8082/midpoint (REST, as administrator)
+[15:26:23Z] 1. Baseline: importing the Contoso dataset (PUT, fixed OIDs)
+[15:26:23Z]    10-org-contoso-health.xml -> HTTP 201
+[15:26:23Z]    11-org-nursing.xml -> HTTP 201
+[15:26:24Z]    12-org-billing.xml -> HTTP 201
+[15:26:24Z]    20-role-nurse.xml -> HTTP 201
+[15:26:24Z]    21-role-icu-nurse.xml -> HTTP 201
+[15:26:24Z]    22-role-pharmacist.xml -> HTTP 201
+[15:26:24Z]    23-role-ap-clerk.xml -> HTTP 201
+[15:26:24Z]    30-user-helen-carter.xml -> HTTP 201
+[15:26:24Z]    31-user-grace-mwangi.xml -> HTTP 201
+[15:26:24Z]    32-user-daniel-osei.xml -> HTTP 201
+[15:26:24Z]    33-user-marcus-bello.xml -> HTTP 201
+[15:26:24Z]    34-user-dana-okafor.xml -> HTTP 201
+[15:26:25Z]    35-user-sofia-reyes.xml -> HTTP 201
+[15:26:25Z]    36-user-priya-nair.xml -> HTTP 201
+[15:26:25Z]    37-user-access-governance-lead.xml -> HTTP 201
+[15:26:25Z] 2. Detective SoD: exclusion-violation marks on marcus.bello before the review
+[15:26:25Z]    marked: Nurse + Pharmacist on marcus.bello; no other user marked
+[15:26:25Z] 3. Certification definition (PUT, keeping lastCampaignIdUsed)
+[15:26:25Z]    'Contoso T2 requestable-access review' (campaigns created so far: 8)
+[15:26:25Z] 4. Create the campaign and open stage 1 (task: campaign-creation handler)
+[15:26:28Z]    'Contoso T2 requestable-access review 9' db5f38a0-1617-4f75-89d0-a9d021e646e7: state inReviewStage, stage 1, 7 case(s)
+[15:26:28Z] 5. Reviewer decisions (rpc/executeScript -> record-decisions.groovy)
+   probe: dana.okafor deciding marcus.bello / ICU Nurse (assigned to grace.mwangi): refused
+   probe: access-governance-lead deciding marcus.bello / Pharmacist (assigned to grace.mwangi): refused
+   marcus.bello / ICU Nurse -> reviewer grace.mwangi: accept [recorded]
+   marcus.bello / Pharmacist -> reviewer grace.mwangi: revoke [recorded]
+   dana.okafor / ICU Nurse -> reviewer grace.mwangi: none [left-unanswered]
+   sofia.reyes / ICU Nurse -> reviewer grace.mwangi: accept [recorded]
+   grace.mwangi / ICU Nurse -> reviewer helen.carter: accept [recorded]
+   daniel.osei / AP Clerk -> reviewer helen.carter: revoke [recorded]
+   helen.carter / ICU Nurse -> reviewer access-governance-lead: accept [recorded]
+[15:26:28Z] 6. Close review stage 1 (task: certificationCloseCurrentStage)
+[15:26:30Z]    state reviewStageDone
+[15:26:30Z] 7. Remediation (task: certificationRemediation, automated)
+[15:26:33Z]    state closed
+[15:26:33Z] 8. Exporting the result
+[15:26:34Z]    files: summary.json campaign.json decisions.csv decisions-run.json definition.json users-before.json users-after.json tasks.json guids.txt run.log SHA256SUMS
+[15:26:34Z] DONE  campaign 'Contoso T2 requestable-access review 9' closed: 7 cases, 6 decisions by the assigned reviewer (6), 1 unanswered, outcomes {"accept":4,"noResponse":1,"revoke":2}, 3 remediated
+[15:26:34Z] evidence: evidence/midpoint/20261020T152623Z/ (SHA256SUMS written last; full raw API responses in pam/out/midpoint/20261020T152623Z/raw/, gitignored)

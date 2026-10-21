@@ -1,0 +1,209 @@
+// =============================================================================
+// Detection: Authentication method changed by an admin for ANOTHER user
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack)
+// SPL twin:  lab/splunk/detections/auth-method-changed-by-admin.spl (same logic/window)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   An administrator registering, updating or deleting someone else's MFA /
+//   passwordless method: phone, Authenticator, FIDO2 / passkey, Temporary
+//   Access Pass (TAP). This is the account-takeover move that survives a
+//   password reset - an attacker holding Authentication Administrator (or a
+//   helpdesk session) registers THEIR phone or a TAP on the victim, then signs
+//   in as the victim with "MFA satisfied". It is also the legitimate helpdesk
+//   flow (TAP for a new joiner, phone re-registration), so this is a REVIEW
+//   detection, with High reserved for the targets that must never be touched
+//   that way.
+//     "Admin registered security info" / "Admin updated security info" /
+//     "Admin deleted security info"    -> the modern authentication methods
+//     "Update user" whose modified properties mention StrongAuthentication*
+//                                      -> legacy per-user MFA settings
+//   Self-service changes ("User registered security info") are excluded: the
+//   actor must differ from the target.
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : the target is PRIVILEGED - every V3 target of the help-desk
+//            runbook (any admin role, PIM-eligible user, member or owner of
+//            a role-assignable group). Three tests, any one is enough
+//            (PrivilegeBasis says which matched):
+//            1. id list - PrivilegedUserIds, rendered by modules/monitoring:
+//               the break-glass users plus privileged_user_object_ids
+//               (members / eligible members of Break-Glass-Admins,
+//               Privileged-IAM-Admins, the PIM tier groups, and directory-
+//               role holders, from Find-ShadowAdmins.ps1 -PrivilegedIdsPath),
+//               so HR-named Tier-0 identities count.
+//            2. recent grant - the list is a snapshot, so a user granted
+//               privilege after the last export would read Medium. Any of
+//               these to the target in the last GrantHistory (2 days, the
+//               rule's query period) also makes it High: a directory role,
+//               active or eligible, direct or through PIM; or membership
+//               (active or eligible) or ownership of a role-holding /
+//               PIM-governed group (PrivilegedGroupIds, the ids
+//               pim-group-member-added-outside-pim.kql uses, with the same
+//               name fallback). "Make an account eligible, then give it a
+//               TAP" is the takeover chain this closes.
+//            3. naming - bg-admin-NN / tier0-admin-NN, the fallback for
+//               standalone runs with empty lists.
+//            A TAP satisfies MFA for registration and PIM activation, so a
+//            TAP on any such target is the account-takeover path.
+//   Medium : everything else (TAP issuance, phone changes, deletions).
+//   IsTap  : flags TAP issuance - expected in the joiner flow, so check the
+//            HR/joiner ticket before anything else.
+//
+// TABLE / SOURCE
+//   AuditLogs, Category "UserManagement". The method is spelled out in
+//   ResultReason (e.g. "Admin registered temporary access pass method for
+//   user"). verify: ResultReason wording per method type on the first TAP and
+//   FIDO2 registration in the lab tenant.
+//   Grant history: AuditLogs, Category "RoleManagement" / "GroupManagement",
+//   Core Directory ("Add member to role", "Add member to group", "Add owner
+//   to group") and PIM ("Add eligible member to role in PIM completed
+//   (permanent|timebound)", "Add member to role in PIM completed
+//   (permanent|timebound)"; Microsoft Learn audit activity reference).
+//   verify: on the first lab grants, the PIM-for-Groups eligibility activity
+//   string and Category, and which TargetResources entry is the user (type
+//   "User") - the query also reads the Group.ObjectID / Group.DisplayName /
+//   Role.DisplayName modified properties for that reason.
+//
+// LICENSE
+//   AuditLogs export to Log Analytics; no premium licence needed.
+//
+// MITRE ATT&CK
+//   T1556.006 Modify Authentication Process: Multi-Factor Authentication
+//     (CredentialAccess, DefenseEvasion, Persistence)
+//   T1098.005 Account Manipulation: Device Registration (Persistence,
+//     PrivilegeEscalation)
+//
+// FALSE-POSITIVE NOTES
+//   - Joiner TAP issuance and lost-phone tickets (Medium). Expected volume is
+//     small; correlate with the ServiceNow ticket that requested it.
+//   - Bulk changes by a provisioning tool appear with an app actor and no
+//     ActorObjectId; they are kept (the actor still differs from the target).
+//   - A new admin's first TAP right after the PIM eligibility grant is High
+//     by design (recent grant): match it to the V3 ticket and close it.
+//
+// TUNABLE
+//   LookBack 1h (method changes judged). GrantHistory 2d - no longer than
+//   the rule's query period, and 2 days is the Log Analytics alert maximum;
+//   on the Sentinel path alone it could go to 14d. GrantOps lists the grant
+//   operations; PrivilegedGroupNames is the standalone name fallback (the
+//   deployed rule judges groups by PrivilegedGroupIds).
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 2d (1 h of method changes judged, 2 days of
+//   grant history; 2 days is also the Log Analytics alert maximum, so the
+//   same query serves both paths) · one alert per row · Severity column ·
+//   Entities: Account = ActorUpn / ActorObjectId (the ADMIN - who to contain),
+//   IP = ActorIp. The target user is a custom detail, not an entity, so the
+//   containment playbook never acts on the victim by mistake.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; containment card on High (the ADMIN actor).
+//   Removing the rogue method from the target is a manual step (Entra admin
+//   center > user > Authentication methods), recorded in the incident.
+// =============================================================================
+
+let LookBack = 1h;
+// How far back a privileged grant to the target counts (test 2). Must not
+// exceed the rule's query period (2 days in modules/monitoring).
+let GrantHistory = 2d;
+// Privileged targets by OBJECT ID (rendered by Terraform; committed empty, so
+// a standalone run falls back to the grant history and naming).
+let PrivilegedUserIds = dynamic([]); // @@PRIVILEGED_USER_IDS@@
+// Role-holding / PIM-governed groups by object id (rendered by Terraform, as
+// in pim-group-member-added-outside-pim.kql), plus its name fallback for
+// standalone runs (names are renameable, so never the only check).
+let PrivilegedGroupIds = dynamic([]); // @@PRIVILEGED_GROUP_IDS@@
+let PrivilegedGroupNames = dynamic(["Break-Glass-Admins", "Privileged-IAM-Admins", "PIM-Azure-RG-Contributors"]);
+let GrantOps = dynamic(["Add member to role", "Add member to group", "Add owner to group",
+                        "Add eligible member to role in PIM completed (permanent)",
+                        "Add eligible member to role in PIM completed (timebound)",
+                        "Add member to role in PIM completed (permanent)",
+                        "Add member to role in PIM completed (timebound)"]);
+// Users granted privilege in the grant history: any directory role (every
+// admin role is a V3 target), or membership / ownership of a privileged
+// group. A group operation on any other group is ignored. One row per user.
+let RecentPrivilegedGrants = AuditLogs
+    | where TimeGenerated > ago(GrantHistory)
+    | where Category in ("RoleManagement", "GroupManagement")
+    | where Result =~ "success"
+    | where OperationName in~ (GrantOps)
+    | mv-apply gtr = TargetResources on (
+        summarize GrantUserId         = take_anyif(tostring(gtr.id), tostring(gtr.type) =~ "User"),
+                  GroupIdFromTarget   = take_anyif(tostring(gtr.id), tostring(gtr.type) =~ "Group"),
+                  GroupNameFromTarget = take_anyif(tostring(gtr.displayName), tostring(gtr.type) =~ "Group"),
+                  RoleNameFromTarget  = take_anyif(tostring(gtr.displayName), tostring(gtr.type) =~ "Role")
+      )
+    | where isnotempty(GrantUserId)
+    | extend GrantTargetsText = tostring(TargetResources)
+    | extend GrantGroupId   = coalesce(GroupIdFromTarget,
+                                       extract(@'Group\.ObjectID"[^}]*?newValue[^0-9A-Fa-f}]*([0-9A-Fa-f-]{36})', 1, GrantTargetsText))
+    | extend GrantGroupName = coalesce(GroupNameFromTarget,
+                                       extract(@'Group\.DisplayName"[^}]*?newValue"\s*:\s*"(?:\\")?([^"\\]+)', 1, GrantTargetsText))
+    | extend GrantRoleName  = coalesce(RoleNameFromTarget,
+                                       extract(@'Role\.DisplayName"[^}]*?newValue"\s*:\s*"(?:\\")?([^"\\]+)', 1, GrantTargetsText))
+    // A group operation (by name, category or a Group target, so PIM for
+    // Groups counts whichever category it logs under) needs a privileged
+    // group; anything else must be a directory-role operation.
+    | extend IsGroupGrant = OperationName in~ ("Add member to group", "Add owner to group")
+                            or Category == "GroupManagement" or isnotempty(GroupIdFromTarget)
+    | where (not(IsGroupGrant) and Category == "RoleManagement")
+         or (IsGroupGrant and (GrantGroupId in (PrivilegedGroupIds) or GrantGroupName in~ (PrivilegedGroupNames)
+                               or GrantGroupName startswith "PIM-Tier"))
+    | extend Grant = iff(IsGroupGrant,
+                         strcat("group ", coalesce(GrantGroupName, GrantGroupId), " (", OperationName, ")"),
+                         strcat("role ", coalesce(GrantRoleName, "(unnamed)"), " (", OperationName, ")"))
+    | summarize RecentGrants = make_set(Grant, 5), LastGrant = max(TimeGenerated) by GrantUserId;
+AuditLogs
+| where TimeGenerated > ago(LookBack)
+| where Category =~ "UserManagement"
+| where Result =~ "success"
+// contains, not has: has matches whole terms only, and the property names
+// (StrongAuthenticationRequirement, StrongAuthenticationMethod, ...) are each
+// ONE term, so has "StrongAuthentication" never matched them.
+| where OperationName in~ ("Admin registered security info", "Admin updated security info",
+                           "Admin deleted security info")
+     or (OperationName =~ "Update user" and tostring(TargetResources) contains "StrongAuthentication")
+| extend ActorUpn      = tostring(InitiatedBy.user.userPrincipalName)
+| extend ActorObjectId = tostring(InitiatedBy.user.id)
+| extend ActorApp      = tostring(InitiatedBy.app.displayName)
+| extend ActorIp       = iff(isnotempty(tostring(InitiatedBy.user.ipAddress)),
+                             tostring(InitiatedBy.user.ipAddress),
+                             tostring(InitiatedBy.app.ipAddress))
+| extend Actor         = iff(isnotempty(ActorUpn), ActorUpn, ActorApp)
+| mv-apply tr = TargetResources on (
+    where tostring(tr.type) =~ "User"
+    | take 1
+    | extend TargetUpn      = tostring(tr.userPrincipalName),
+             TargetObjectId = tostring(tr.id)
+  )
+// Someone else's methods only: self-service is a different (user) event.
+| where isempty(ActorObjectId) or ActorObjectId != TargetObjectId
+| extend Method = coalesce(
+    extract(@"(?i)admin (?:registered|updated|deleted) (.+?) method", 1, ResultReason),
+    iff(OperationName =~ "Update user", "legacy per-user MFA (StrongAuthentication*)", ""))
+| extend Action = case(
+    OperationName has "registered", "Registered",
+    OperationName has "updated",    "Updated",
+    OperationName has "deleted",    "Deleted",
+    "Updated")
+| extend IsTap = ResultReason has "temporary access pass"
+// Membership-derived ids first, then a privileged grant in the grant
+// history; break-glass and Tier-0 admin NAMING (modules/groups, scripts/dc)
+// as the fallback. Literal regex because `matches regex` takes a constant
+// pattern.
+| extend PrivilegedById   = isnotempty(TargetObjectId) and TargetObjectId in (PrivilegedUserIds)
+| extend PrivilegedByName = TargetUpn matches regex @"(?i)^(bg-admin-[0-9]{2}|tier0-admin-[0-9]{2})@"
+| join kind=leftouter RecentPrivilegedGrants on $left.TargetObjectId == $right.GrantUserId
+// GrantUserId is filled only where the leftouter join matched a grant row.
+| extend PrivilegedByGrant = isnotempty(TargetObjectId) and isnotempty(GrantUserId)
+| extend PrivilegedTarget = PrivilegedById or PrivilegedByName or PrivilegedByGrant
+| extend PrivilegeBasis = case(
+    PrivilegedById,    "privileged id list",
+    PrivilegedByGrant, "role or privileged-group grant in the grant history",
+    PrivilegedByName,  "naming convention (fallback)",
+    "none")
+| extend Severity = iff(PrivilegedTarget, "High", "Medium")
+| project TimeGenerated, Severity, Action, Method, IsTap, TargetUpn, TargetObjectId,
+          PrivilegedTarget, PrivilegedById, PrivilegedByGrant, PrivilegeBasis, RecentGrants, LastGrant,
+          Actor, ActorUpn, ActorObjectId, ActorApp, ActorIp, OperationName, ResultReason, CorrelationId
+| sort by TimeGenerated desc

@@ -1,0 +1,39 @@
+# =============================================================================
+# lab/pam/docker-compose.oidc.yml - TENANT TIME ONLY: per-person Guacamole
+# sign-in through Microsoft Entra ID (OpenID Connect), so the PSM stand-in
+# gets MFA and Conditional Access from Entra instead of local passwords.
+# Off by default: nothing uses this file until you add it explicitly:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.oidc.yml up -d guacamole
+#
+# Needs in .env (no secret: OIDC here is the implicit id_token flow, which
+# has no client secret):
+#   OIDC_TENANT_ID=<directory (tenant) id>   OIDC_CLIENT_ID=<app registration id>
+# Steps, claim mapping and the CA policy: README "Per-person sign-in (Entra
+# OIDC)". verify: variable names against the guacamole/guacamole:1.6.0 image
+# docs (OpenID Connect + "auto-create accounts" sections) before first use.
+# =============================================================================
+services:
+  guacamole:
+    environment:
+      OPENID_ENABLED: "true"
+      # Entra v2.0 endpoints for one tenant (single-tenant app registration).
+      OPENID_AUTHORIZATION_ENDPOINT: https://login.microsoftonline.com/${OIDC_TENANT_ID:?set OIDC_TENANT_ID in .env}/oauth2/v2.0/authorize
+      OPENID_JWKS_ENDPOINT: https://login.microsoftonline.com/${OIDC_TENANT_ID}/discovery/v2.0/keys
+      OPENID_ISSUER: https://login.microsoftonline.com/${OIDC_TENANT_ID}/v2.0
+      OPENID_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID in .env}
+      OPENID_REDIRECT_URI: http://localhost:8081/guacamole/
+      # The Guacamole username = the Entra UPN, which is also the key in
+      # operators.json and the ServiceNow assignee's user_name.
+      OPENID_USERNAME_CLAIM_TYPE: preferred_username
+      OPENID_GROUPS_CLAIM_TYPE: groups
+      OPENID_SCOPE: openid profile email
+      # SSO users get a database record on first sign-in, so per-connection
+      # READ grants (psm-session.sh) have somewhere to live. No password is
+      # stored for them.
+      POSTGRESQL_AUTO_CREATE_ACCOUNTS: "true"
+      # Login page keeps the local form for guacadmin (break-glass + History
+      # playback); people use the SSO link. The form (and /api/tokens) would
+      # accept ANY database password, so lib.sh's OIDC mode (on whenever
+      # OIDC_CLIENT_ID is in .env) leaves no operator with a usable one.
+      EXTENSION_PRIORITY: "*, openid"

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Certification definition (campaign template) for ADR 0012 tier T2,
+  "requestable" access:
+    - Scope: direct assignments of REQUESTABLE business roles held by ENABLED
+      users. Birthright roles (T3, requestable=false), midPoint's own system
+      roles (e.g. Reviewer) and org memberships are out of scope. Leavers are
+      out of scope too: the HR leaver path disables and strips them.
+    - Stage 1: the holder's manager (org manager, never the holder), with
+      the access governance lead as the fallback when nobody else qualifies.
+    - Remediation: automated. "revoke" AND an unanswered item ("noResponse")
+      both remove the assignment: the T2 non-response rule in ADR 0012.
+  run-campaign.sh keeps lastCampaignIdUsed across re-imports, so campaign
+  names ("<name> N") never collide.
+-->
+<accessCertificationDefinition xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+                               xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+                               xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
+                               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                               oid="c0471e00-0000-4000-8000-000000000401">
+    <name>Contoso T2 requestable-access review</name>
+    <description>ADR 0012 tier T2, the branch for requestable access with NO expiry (these role assignments carry no validTo, so the 180-day expiry that normally certifies T2 does not apply): requestable business roles, manager review, unanswered = removed. The halfyearly cadence and mandatory justification are not modelled in this one-off run. Managed by run-campaign.sh.</description>
+    <handlerUri>http://midpoint.evolveum.com/xml/ns/public/certification/handlers-3#direct-assignment</handlerUri>
+    <scopeDefinition xsi:type="c:AccessCertificationAssignmentReviewScopeType">
+        <name>Requestable business roles of enabled users</name>
+        <objectType>c:UserType</objectType>
+        <searchFilter>
+            <q:text>activation/effectiveStatus = "enabled"</q:text>
+        </searchFilter>
+        <itemSelectionExpression>
+            <script>
+                <code>
+                    // Only requestable business roles (ADR 0012 T2). Birthright roles (T3)
+                    // and midPoint's built-in system roles stay out of the campaign.
+                    def ref = assignment?.targetRef
+                    if (ref == null || ref.oid == null) {
+                        return false
+                    }
+                    def role = midpoint.getObject(com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType.class, ref.oid)
+                    def businessRole = role.getArchetypeRef().any { it.oid == '00000000-0000-0000-0000-000000000321' }
+                    return businessRole &amp;&amp; Boolean.TRUE.equals(role.isRequestable())
+                </code>
+            </script>
+        </itemSelectionExpression>
+        <includeAssignments>true</includeAssignments>
+        <includeInducements>false</includeInducements>
+        <includeRoles>true</includeRoles>
+        <includeOrgs>false</includeOrgs>
+        <includeResources>false</includeResources>
+        <includeServices>false</includeServices>
+        <includeUsers>false</includeUsers>
+        <includePolicies>false</includePolicies>
+        <enabledItemsOnly>true</enabledItemsOnly>
+    </scopeDefinition>
+    <ownerRef oid="c0471e00-0000-4000-8000-000000000308" type="UserType"/>
+    <remediationDefinition>
+        <style>automated</style>
+        <revokeOn>revoke</revokeOn>
+        <revokeOn>noResponse</revokeOn>
+    </remediationDefinition>
+    <stageDefinition>
+        <number>1</number>
+        <name>Manager review</name>
+        <description>Can this person still justify this access? If you are unsure, revoke: they can request it again.</description>
+        <duration>P14D</duration>
+        <notifyBeforeDeadline>P7D</notifyBeforeDeadline>
+        <notifyOnlyWhenNoDecision>true</notifyOnlyWhenNoDecision>
+        <reviewerSpecification>
+            <name>Holder's manager, fallback: access governance lead</name>
+            <useObjectManager>
+                <allowSelf>false</allowSelf>
+            </useObjectManager>
+            <defaultReviewerRef oid="c0471e00-0000-4000-8000-000000000308" type="UserType"/>
+        </reviewerSpecification>
+        <outcomeIfNoReviewers>revoke</outcomeIfNoReviewers>
+    </stageDefinition>
+    <reviewStrategy>
+        <outcomeStrategy>oneDenyDenies</outcomeStrategy>
+    </reviewStrategy>
+</accessCertificationDefinition>

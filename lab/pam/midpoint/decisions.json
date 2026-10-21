@@ -1,0 +1,70 @@
+{
+  "_comment": "Reviewer decisions for one run of run-campaign.sh. One entry per case the campaign is expected to contain; record-decisions.groovy fails the run if the assigned reviewer differs from expectedReviewer. response 'none' = deliberately left unanswered (ADR 0012 T2: unanswered = removed). Probes: users who must NOT be able to decide try to anyway, with the same response as the real decision.",
+  "decisions": [
+    {
+      "user": "marcus.bello",
+      "role": "ICU Nurse",
+      "expectedReviewer": "grace.mwangi",
+      "response": "accept",
+      "comment": "Still on the ICU float rota this quarter."
+    },
+    {
+      "user": "marcus.bello",
+      "role": "Pharmacist",
+      "expectedReviewer": "grace.mwangi",
+      "response": "revoke",
+      "comment": "SoD conflict flagged by midPoint: Nurse + Pharmacist (administer vs dispense controlled substances). He is not a pharmacist; the access was copied from a colleague."
+    },
+    {
+      "user": "dana.okafor",
+      "role": "ICU Nurse",
+      "expectedReviewer": "grace.mwangi",
+      "response": "none",
+      "comment": "Deliberately left unanswered to exercise the T2 rule: no response means removed."
+    },
+    {
+      "user": "sofia.reyes",
+      "role": "ICU Nurse",
+      "expectedReviewer": "grace.mwangi",
+      "response": "accept",
+      "comment": "In ICU orientation until 2026-12."
+    },
+    {
+      "user": "grace.mwangi",
+      "role": "ICU Nurse",
+      "expectedReviewer": "helen.carter",
+      "response": "accept",
+      "comment": "Covers ICU charge-nurse shifts."
+    },
+    {
+      "user": "daniel.osei",
+      "role": "AP Clerk",
+      "expectedReviewer": "helen.carter",
+      "response": "revoke",
+      "comment": "Stale: temporary month-end AP cover from 2023-12. The vacancy was filled; he no longer processes invoices."
+    },
+    {
+      "user": "helen.carter",
+      "role": "ICU Nurse",
+      "expectedReviewer": "access-governance-lead",
+      "response": "accept",
+      "comment": "Night-shift escalation cover confirmed with the CNO office."
+    }
+  ],
+  "probes": [
+    {
+      "actor": "dana.okafor",
+      "user": "marcus.bello",
+      "role": "ICU Nurse",
+      "response": "accept",
+      "why": "holds no Reviewer role and is not the assigned reviewer"
+    },
+    {
+      "actor": "access-governance-lead",
+      "user": "marcus.bello",
+      "role": "Pharmacist",
+      "response": "revoke",
+      "why": "holds the Reviewer role but is not the reviewer this item is assigned to"
+    }
+  ]
+}

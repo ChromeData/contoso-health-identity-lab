@@ -1,0 +1,712 @@
+{
+  "schema": "contoso-lab/offline-test-run/v1",
+  "run_utc": "20261020T230108Z",
+  "started_utc": "2026-10-20T23:01:08Z",
+  "offline_suites_done_utc": "2026-10-20T23:06:35Z",
+  "pam_run_started_utc": "2026-10-20T23:06:41Z",
+  "ended_utc": "2026-10-20T23:12:29Z",
+  "tenant": "none: no Microsoft tenant exists; every Graph / Azure / AWS provider is mocked or absent (RAN \u00b7 tenant: none)",
+  "status": "RAN \u00b7 harness (local machine: offline suites + the PAM Docker harness)",
+  "working_tree": "a copy of the author's working tree; code.sha256sums fingerprints every file tested",
+  "code_fingerprint": {
+    "file": "code.sha256sums",
+    "files": 502,
+    "sha256_of_file": "efc532f1ec73d1ac069da4122a1c5deb393280aa8178b6889dbeb72785fee605",
+    "scope": "every git-trackable file under lab/ (except lab/evidence/) and .github/ in the tested copy"
+  },
+  "result": "PASS",
+  "suites": [
+    {
+      "suite": "terraform-fmt",
+      "command": "terraform fmt -check -recursive lab/terraform",
+      "exit": 0,
+      "passed": null,
+      "failed": null,
+      "skipped": null,
+      "seconds": 65,
+      "note": "18 directories",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "terraform-init-validate-test",
+      "command": "per directory: terraform init -backend=false [-lockfile=readonly on the committed root locks]; validate; test [-var-file=lab.tfvars where present]",
+      "exit": 0,
+      "passed": 325,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 65,
+      "note": "per-directory table in terraform.tsv",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "checkov",
+      "command": "checkov -d lab/terraform --framework terraform --skip-download --compact",
+      "exit": 1,
+      "passed": 45,
+      "failed": 8,
+      "skipped": 3,
+      "seconds": 18,
+      "note": "exit 1 = findings (the workflow runs it soft_fail); compared with the documented baseline in results.json",
+      "verdict": "PASS (0 new failures)"
+    },
+    {
+      "suite": "ps-parse",
+      "command": "PowerShell language parser (Parser::ParseFile) on every lab/**/*.ps1",
+      "exit": 0,
+      "passed": 83,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 36,
+      "note": "files parsed",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "ps-analyzer-lab-wide",
+      "command": "Invoke-ScriptAnalyzer (PSScriptAnalyzer 1.25.0, default rules; tests/ files with the three Invoke-LabTests test-only exclusions) on every lab/**/*.ps1",
+      "exit": 0,
+      "passed": null,
+      "failed": 0,
+      "skipped": null,
+      "seconds": 36,
+      "note": "errors=0 warnings=101 information=693",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "pester-lab-5.7.1",
+      "command": "Import-Module Pester -RequiredVersion 5.7.1; ./lab/scripts/powershell/tests/Invoke-LabTests.ps1 -CI",
+      "exit": 0,
+      "passed": 917,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 79,
+      "note": "Invoke-LabTests PSScriptAnalyzer (lab/scripts/powershell): errors=0 warnings=19",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "pester-lab-6.2.0",
+      "command": "Import-Module Pester -RequiredVersion 6.2.0; ./lab/scripts/powershell/tests/Invoke-LabTests.ps1 -CI",
+      "exit": 0,
+      "passed": 917,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 77,
+      "note": "Invoke-LabTests PSScriptAnalyzer (lab/scripts/powershell): errors=0 warnings=19",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "pester-itdr-ci-step",
+      "command": "lab-tests.yml 'ITDR Pester suite' step (Pester 5.7.1): Itdr.Tests.ps1 + lab/pam/test/Get-AccountDependencies.Tests.ps1",
+      "exit": 0,
+      "passed": 292,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 8,
+      "note": "both files of the CI step",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "pester-itdr-only",
+      "command": "Pester 5.7.1: lab/scripts/monitoring/tests/Itdr.Tests.ps1 alone",
+      "exit": 0,
+      "passed": 284,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 8,
+      "note": "the ITDR file on its own",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "shellcheck",
+      "command": "shellcheck -x (all severities, default style level) on 41 lab/**/*.sh files",
+      "exit": 0,
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 19,
+      "note": "passed = files with no finding; failed = findings",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "actionlint",
+      "command": "actionlint -verbose (.github/workflows)",
+      "exit": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 0,
+      "note": "passed = workflow files with 0 errors",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "json-parse",
+      "command": "python3 json.load on every git-trackable *.json (60 files, all under lab/ and .github/)",
+      "exit": 0,
+      "passed": 60,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 0,
+      "note": "files",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "splunk-render-check",
+      "command": "(cd lab/splunk && ./render-savedsearches.sh --check)",
+      "exit": 0,
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 1,
+      "note": "detections in sync",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "ingest-vault-audit-test",
+      "command": "bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh",
+      "exit": 0,
+      "passed": 30,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 1,
+      "note": "assertions",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "kusto-harness-check",
+      "command": "python3 -I lab/monitoring/kusto-harness/harness.py check (offline: schemas, shims, cases; no engine)",
+      "exit": 0,
+      "passed": 223,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 0,
+      "note": "223 cases, 22 rules; validates the case files only, no KQL ran",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "evidence-shasum",
+      "command": "shasum -a 256 -c SHA256SUMS in every lab/evidence record folder",
+      "exit": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 0,
+      "note": "record folders",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "evidence-verifiers",
+      "command": "each harness's --verify on its records (e2e, dr-drill, e2e-scale, e2e-dynamic-db, e2e-midpoint)",
+      "exit": 0,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 7,
+      "note": "records verified offline (no Docker)",
+      "verdict": "PASS"
+    },
+    {
+      "suite": "pam-run-all",
+      "command": "(cd lab/pam && ./test/e2e.sh --cleanup && ./test/run-all.sh)  [no --publish, no --scale]",
+      "exit": 0,
+      "passed": 610,
+      "failed": 0,
+      "skipped": 1,
+      "seconds": 351,
+      "note": "RAN \u00b7 harness (local Docker); run id 20261020T230641Z; cleanup-before exit 0",
+      "verdict": "PASS"
+    }
+  ],
+  "terraform_by_directory": [
+    {
+      "dir": "lab/terraform/envs/dev",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/envs/bootstrap",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/aws",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/k8s/platform",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/k8s/identity",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/k8s/aks-mapping",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/apps",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/conditional-access",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 71,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/dc-vm",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/entitlement",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/entra-diagnostics",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/evidence-store",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/groups",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/intune-vm",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/keyvault",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/monitoring",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/pim",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "dir": "lab/terraform/modules/pipeline-identity",
+      "init_exit": 0,
+      "validate_exit": 0,
+      "test_exit": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "checkov": {
+    "this_run": {
+      "passed": 45,
+      "failed": 8,
+      "skipped": 3
+    },
+    "committed_head": {
+      "passed": 36,
+      "failed": 8,
+      "skipped": 1
+    },
+    "failed_this_run": [
+      [
+        "CKV_AZURE_151",
+        "module.dc_vm.azurerm_windows_virtual_machine.dc"
+      ],
+      [
+        "CKV_AZURE_151",
+        "module.intune_vm.azurerm_windows_virtual_machine.vm"
+      ],
+      [
+        "CKV_AZURE_249",
+        "module.pipeline_identity.azuread_application_federated_identity_credential.apply_prod"
+      ],
+      [
+        "CKV_AZURE_249",
+        "module.pipeline_identity.azuread_application_federated_identity_credential.plan_pr"
+      ],
+      [
+        "CKV_AZURE_251",
+        "module.dc_vm.azurerm_managed_disk.ntds"
+      ],
+      [
+        "CKV_AZURE_50",
+        "module.dc_vm.azurerm_windows_virtual_machine.dc"
+      ],
+      [
+        "CKV_AZURE_50",
+        "module.intune_vm.azurerm_windows_virtual_machine.vm"
+      ],
+      [
+        "CKV_AZURE_93",
+        "module.dc_vm.azurerm_managed_disk.ntds"
+      ]
+    ],
+    "new_vs_committed_head": [],
+    "new_vs_documented_baseline": []
+  },
+  "pam_run_all": {
+    "run_id": "20261020T230641Z",
+    "suites": [
+      {
+        "suite": "dependency-scan",
+        "verdict": "PASS",
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "exit": "0",
+        "seconds": 2,
+        "note": ""
+      },
+      {
+        "suite": "ingest",
+        "verdict": "PASS",
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0,
+        "exit": "0",
+        "seconds": 1,
+        "note": ""
+      },
+      {
+        "suite": "itsm-dual-control",
+        "verdict": "PASS",
+        "passed": 45,
+        "failed": 0,
+        "skipped": 0,
+        "exit": "0",
+        "seconds": 5,
+        "note": ""
+      },
+      {
+        "suite": "recording-format",
+        "verdict": "PASS",
+        "passed": 29,
+        "failed": 0,
+        "skipped": 0,
+        "exit": "0",
+        "seconds": 1,
+        "note": ""
+      },
+      {
+        "suite": "e2e",
+        "verdict": "PASS",
+        "passed": 284,
+        "failed": 0,
+        "skipped": 0,
+        "exit": "0",
+        "seconds": 242,
+        "note": ""
+      },
+      {
+        "suite": "midpoint",
+        "verdict": "PASS",
+        "passed": 91,
+        "failed": 0,
+        "skipped": 0,
+        "exit": "0",
+        "seconds": 27,
+        "note": ""
+      },
+      {
+        "suite": "dynamic-db",
+        "verdict": "PASS",
+        "passed": 60,
+        "failed": 0,
+        "skipped": 0,
+        "exit": "0",
+        "seconds": 28,
+        "note": ""
+      },
+      {
+        "suite": "vault-anomaly",
+        "verdict": "PASS",
+        "passed": 63,
+        "failed": 0,
+        "skipped": 1,
+        "exit": "0",
+        "seconds": 33,
+        "note": ""
+      },
+      {
+        "suite": "scale",
+        "verdict": "NOT-RUN",
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "exit": "-",
+        "seconds": 0,
+        "note": "optional, slow: add --scale"
+      }
+    ],
+    "raw_suite_logs": "not in this record: run-all keeps them in lab/pam/out/test-runs/<id>/ (gitignored; they name lab accounts and operators). logs/pam-run-all.log is run-all's own console output."
+  },
+  "kusto_engine": "NOT RUN (licence acceptance is the operator's); kusto-harness-check validates case files offline only",
+  "tools": {
+    "captured_utc": "2026-10-20T23:01:08Z",
+    "host": "Darwin arm64; macOS 26.5.2 (25F84)",
+    "bash (/bin/bash, runs these suites)": "GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)",
+    "terraform": "Terraform v1.16.5  path=~/.local/bin/terraform",
+    "checkov": "3.3.20  path=/opt/homebrew/bin/checkov",
+    "pwsh": "7.6.1",
+    "PowerShell modules": "Microsoft.Graph.Authentication 2.41.2, Pester 5.7.1, Pester 6.2.0, PSScriptAnalyzer 1.25.0",
+    "shellcheck": "0.11.0",
+    "actionlint": "1.7.12",
+    "python3": "3.13.3  path=/Library/Frameworks/Python.framework/Versions/3.13/bin/python3; PyYAML 6.0.3",
+    "jq": "jq-1.7.1-apple",
+    "git": "git version 2.50.1 (Apple Git-155)",
+    "docker client/server": "29.9.0 / 29.5.2 (linux/arm64)",
+    "colima": "colima version v0.10.3; VM 4 CPU, 8GiB memory, 40GiB disk, aarch64"
+  },
+  "normalisation": {
+    "logs/actionlint.log": {
+      "substitutions": 7,
+      "random_temp_dirs": 0
+    },
+    "logs/checkov.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/evidence-shasum.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/evidence-verifiers.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/ingest-vault-audit-test.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/json-parse.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/kusto-harness-check.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/pam-e2e-cleanup-before.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/pam-run-all.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/pester-itdr-ci-step.log": {
+      "substitutions": 2,
+      "random_temp_dirs": 0
+    },
+    "logs/pester-itdr-only.log": {
+      "substitutions": 1,
+      "random_temp_dirs": 0
+    },
+    "logs/pester-lab-5.7.1.log": {
+      "substitutions": 52,
+      "random_temp_dirs": 7
+    },
+    "logs/pester-lab-6.2.0.log": {
+      "substitutions": 52,
+      "random_temp_dirs": 0
+    },
+    "logs/ps-parse-analyze.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/shellcheck.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/splunk-render-check.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-aws.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-envs_bootstrap.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-envs_dev.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-fmt.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-k8s_aks-mapping.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-k8s_identity.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-k8s_platform.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_apps.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_conditional-access.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_dc-vm.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_entitlement.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_entra-diagnostics.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_evidence-store.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_groups.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_intune-vm.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_keyvault.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_monitoring.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_pim.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "logs/terraform-modules_pipeline-identity.log": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "tool-versions.txt": {
+      "substitutions": 1,
+      "random_temp_dirs": 0
+    },
+    "environment.txt": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "terraform.tsv": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    },
+    "pam-results.tsv": {
+      "substitutions": 0,
+      "random_temp_dirs": 0
+    }
+  },
+  "publication_edits_after_run": {
+    "utc": "2026-10-20T23:45Z",
+    "edits": [
+      "removed each file's sha256 from before path normalisation (it was listed per file under normalisation): with the normalised text it let a reader confirm a guessed local path by re-hashing",
+      "removed the build source's commit id and its count of uncommitted paths (git_commit, working_tree, tools): that commit is not in the published history; code.sha256sums is the fingerprint to check",
+      "replaced the random 32-hex temp names in logs/pester-lab-5.7.1.log (4) and logs/pester-lab-6.2.0.log (4) with tmpid-N, as the run already did for dashed GUIDs",
+      "reworded the json-parse command line and, in README.md, the dating sentence"
+    ],
+    "unchanged": "every count, exit code, verdict and every other log line",
+    "resealed": "SHA256SUMS regenerated after these edits"
+  }
+}

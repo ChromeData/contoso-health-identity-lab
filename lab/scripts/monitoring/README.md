@@ -1,0 +1,298 @@
+# Monitoring scripts: notify, ITDR containment, PAM check-out feed
+
+Identity Threat Detection and Response (ITDR) for the Contoso Health lab:
+eleven detections (KQL for Sentinel / Log Analytics, SPL twins for Splunk), a
+human-approved containment playbook, and the telemetry the hybrid Tier-0
+detections need.
+
+> **Status: built and tested offline only. Nothing here has run against
+> Entra, Azure or a live Sentinel workspace yet.** Every staging flag defaults
+> to `false`; lines marked `verify:` depend on behaviour only the tenant can
+> confirm. The tenant-time steps are listed at the end.
+
+| File | What it does |
+|---|---|
+| `Deploy-Playbook.ps1` | Deploys `lab/monitoring/playbook-notify.json` (Teams card + ServiceNow ticket on every incident). |
+| `Deploy-ContainmentPlaybook.ps1` | Deploys `lab/monitoring/playbook-contain.json` and grants its managed identity exactly the rights it uses. |
+| `Invoke-AdContainment.ps1` | The AD half of containment: disables / re-enables an AD account on DC01 through `az vm run-command`, writes an evidence record. |
+| `ingest-vault-audit.sh` | Ships Vault check-out / check-in evidence (lab/pam audit log) to the `VaultCheckout_CL` table through the Logs Ingestion API. |
+| `tests/` | Offline tests: `Itdr.Tests.ps1` (Pester) and `ingest-vault-audit.test.sh` (stubbed `az`/`curl`, synthetic audit log). |
+
+## Detections
+
+All eleven live in `lab/kql/` with an SPL twin in `lab/splunk/detections/` and
+are deployed by `lab/terraform/modules/monitoring` (`itdr.tf`). Each rule maps
+ONE account entity: the identity containment would act on. Targets and victims
+are custom details, never entities, so an approval can't disable the person
+who was attacked.
+
+| Rule | Source tables | High when | MITRE ATT&CK | Containment subject |
+|---|---|---|---|---|
+| `app-credential-added` | AuditLogs | credential on a service principal object, or a new federated credential, outside the CI identity | T1098.001 | actor |
+| `app-consent-granted` | AuditLogs | tenant-wide grant (admin consent / all users / application permission) of a high-risk scope | T1528, T1098.003 | consenting actor |
+| `ca-policy-changed` | AuditLogs | CA policy deleted, disabled, moved to report-only, or exclusions changed; named location deleted, a country removed or a range newly trusted; authentication strength deleted, given a phishable combination, or its combination configuration (AAGUIDs) changed - outside the CI identity | T1556.009, T1562.001 | actor |
+| `role-assigned-outside-pim` | AuditLogs | any standing role assignment not written by PIM, or a PERMANENT active assignment made in PIM (time-bound active = Medium), outside the CI identity | T1098.003 | actor |
+| `pim-group-member-added-outside-pim` | AuditLogs | a member added directly (or permanently active through PIM) to a role-holding / PIM group - always for Break-Glass-Admins | T1098.003 | actor |
+| `auth-method-changed-by-admin` | AuditLogs | an admin changes the MFA / passwordless methods (TAP included) of a privileged account - by object id (break-glass, PIM-group members, role holders), naming as fallback | T1556.006, T1098.005 | admin actor |
+| `identity-risk` | AADUserRiskEvents, AADRiskyUsers, SigninLogs | open high risk or confirmed compromised (CA006/CA007 did not close it) | T1078.004 | risky user |
+| `tier0-logon-without-checkout` | SecurityEvent (DC01), VaultCheckout_CL | always: a vaulted Tier-0 logon no check-out covers, the RID-500 break-glass Administrator (by SID), or any other account with special privileges (4672) the vault does not manage | T1078.002, T1550.002 | AD account (flagged, not touched) |
+| `ad-privileged-group-change` | SecurityEvent (DC01) | a member added to a Tier-0 AD group (by well-known SID / RID) | T1098.007 | AD actor (flagged) |
+| `kerberoast-rc4-service-ticket` | SecurityEvent (DC01) | RC4 tickets for 3+ user SPNs from one requester, or for a Tier-0 SPN | T1558.003 | requester (flagged) |
+| `dcsync-replication-request` | SecurityEvent (DC01) | always (replication rights used by a non-DC account) | T1003.006 | AD actor (flagged) |
+
+**Written but not deployed yet (six more, catalog only).** `lab/kql` and
+`lab/splunk/detections` also hold `device-code-signin`,
+`security-info-registered-risky`, `sod-violation-granted`,
+`pim-activation-without-auth-context`, `vault-privileged-access-anomaly` and
+`dc-logon-outside-operator-allowlist`. Splunk schedules all of them (its 22
+saved searches); `modules/monitoring` deploys none of them, and `Itdr.Tests.ps1`
+doesn't cover them. Wiring them needs a Sentinel-only switch (two use 14-day
+look-backs the Log Analytics alert path can't run), new `VaultCheckout_CL`
+columns (`Ticket`, `Operator`, `ErrorText`) in the table, DCR and
+`ingest-vault-audit.sh`, and entity + severity mappings. Until then, run them
+by hand in Logs as hunting queries, and never present them as live rules.
+
+Severity is **dynamic**: each query computes a `Severity` column that the
+Sentinel rule uses per alert (one alert per result row). Incidents group per
+identity **and** per severity, so a High alert never hides inside an older
+Medium incident, because containment only triggers on incident creation.
+
+Changes made by the CI apply identity drop to Low/Medium but always alert.
+"CI apply identity" means its IMMUTABLE ids (service principal object id +
+client id, `envs/bootstrap` output `iac_principal_ids`, rendered into the KQL
+by Terraform and into the Splunk lookup `contoso_iac_principals.csv`), never
+its display name: anyone who owns an app can rename it
+`gh-oidc-entra-apply (write)`. An app that carries the name without the id is
+**High** (`IacNameSpoof`). With no ids configured nothing counts as IaC (fail
+closed).
+
+## How the Tier-0 detection gets its evidence
+
+```
+lab/pam Vault (file audit device)
+   └─ ingest-vault-audit.sh  (operator laptop, --follow 60)
+        reads new audit lines (byte offset), keeps check-out/check-in,
+        resolves HMAC'd account names via sys/audit-hash, + 1 heartbeat row
+   └─ Logs Ingestion API  (Entra token from `az login`, no shared key)
+   └─ dce-idlab-itdr ─> dcr-idlab-vault-checkout ─> VaultCheckout_CL
+
+vm-dc01 ─ Azure Monitor Agent ─> dcr-idlab-dc01-security ─> SecurityEvent
+                                   (4624, 4672 + the AD ITDR event set)
+
+tier0-logon-without-checkout.kql: logon NOT inside
+  [check-out - 5m, min(first check-in, check-out + 1h) + 5m]  → High incident
+```
+
+* **Fail-safe.** No evidence means an alert. If the feed is down, every Tier-0
+  logon alerts, and `VaultFeedHealthy` (from the heartbeat rows) tells the
+  analyst which case it is. Logons younger than 15 minutes aren't judged yet,
+  which leaves the feed time to deliver.
+* **HMAC resolution (documented Vault behaviour; verify: against the harness
+  Vault).** The audit device HMACs `service_account_name`, and
+  `sys/audit-hash/file` returns the identical HMAC, so the script maps names
+  back without the mount being reconfigured. The offline test resolves them
+  from a stub (`tests/fixtures/hash-map.json`); no test runs it against a real
+  Vault yet.
+  The cleaner production setting is `vault secrets tune
+  -audit-non-hmac-response-keys=service_account_name
+  -audit-non-hmac-response-keys=check_ins ldap/`, after which names arrive in
+  clear and the script uses them as they are.
+* **Why not the HTTP Data Collector API:** Microsoft retired it in September
+  2026 (verify: retirement notice). The Logs Ingestion API authenticates with
+  Entra, so there's no workspace key to leak.
+* **Stand-in.** This replaces the agent-based path production would use
+  (CyberArk Vault / PTA syslog → AMA (CEF) → Sentinel). The STAND-INS row
+  exists (`lab/docs/STAND-INS.md`); only the spoken line in the verbatim
+  script is pending.
+
+## Containment playbook (Teams approval)
+
+`High` incident from an ITDR rule → automation rule (order 2, after notify) →
+`pb-identity-contain`, for each account entity, one at a time:
+
+1. **No Entra object id** (AD-only account, such as the Tier-0 rule's): no
+   action. The playbook comments "AD disable required" with the exact
+   `Invoke-AdContainment.ps1` command. AD is the authority there.
+2. **Protected account** (a Break-Glass-Admins member's OBJECT ID, baked in
+   at deploy): refused. Automation never locks out break-glass. The
+   `bg-admin-` UPN prefix is only a warning on the card: whoever can rename
+   users could otherwise make a compromised account uncontainable.
+   `Deploy-ContainmentPlaybook.ps1 -VerifyProtectedList` reports drift when
+   the group changes.
+3. **Restricted-management AU member** (the account's
+   `memberOf/microsoft.graph.administrativeUnit` with
+   `isMemberManagementRestricted = true`): no approval card. Graph
+   application permissions don't apply to RMAU members, so the playbook
+   comments *ESCALATED, NOT CONTAINED* and the RMAU-scoped responder (a
+   person holding a role scoped to that AU, such as the VIP-support PIM
+   group) revokes and disables by hand. If that read fails, the playbook
+   records it and continues to the approval.
+4. **Teams adaptive card** to the Identity-SecOps channel: *Contain*, *Revoke
+   sessions only*, *Reject*. No answer in 4 h means no action. The answer
+   counts only if Teams returns the responder's object id and UPN, the id is
+   a member of the containment approver group (`approverObjectIds`, from
+   `-ApproverGroupName ITDR-Containment-Approvers`), and the responder is not
+   the subject (four-eyes). Anything else is ignored and logged - an empty
+   approver list ignores every answer (fail closed).
+5. **Contain:** `revokeSignInSessions`, then Identity Protection
+   `confirmCompromised` (user risk High, so CA006 applies at the next sign-in
+   and the verdict trains ID Protection), then `accountEnabled=false` for
+   cloud-only users. For synced users the playbook only flags the AD disable,
+   because Entra rejects the write and the next sync would undo it.
+6. Every outcome, with the approver's UPN and object id and the HTTP status codes, goes to
+   a Sentinel incident comment and a ServiceNow **work note on the same
+   ticket** notify opened (matched by `correlation_id` = incident name). If
+   that ticket isn't found, a new one is opened.
+
+The playbook never deletes credentials, removes consents or edits role
+assignments. Those are owner decisions with production blast radius, so they
+stay runbook steps.
+
+### Least privilege
+
+| Identity | Permission | Why |
+|---|---|---|
+| Playbook managed identity | Graph `User.Read.All` | read UPN and sync state before acting |
+| | Graph `AdministrativeUnit.Read.All` | read the account's restricted-management AUs, to escalate RMAU members instead of asking for an approval it cannot act on (verify: least privilege for this read) |
+| | Graph `User.RevokeSessions.All` | revoke refresh tokens / session cookies |
+| | Graph `User.EnableDisableAccount.All` | `accountEnabled=false` |
+| | Graph `IdentityRiskyUser.ReadWrite.All` | `confirmCompromised` on Contain (Entra ID P2; 403 without it, logged) |
+| | *Opt-in* `-GrantDisableRole`: Authentication Administrator (tenant or AU-scoped) | Graph treats `accountEnabled` as a **sensitive action**: an app-only caller also needs a directory role that may act on the target. Off by default, so the disable answers 403 until it's granted. Admins stay out of scope: containing an admin needs Privileged Authentication Administrator, which would make this Logic App Tier 0. Granting the role trips `role-assigned-outside-pim` once (expected). |
+| | Microsoft Sentinel Responder (workspace) | incident comments, entity extraction |
+| Azure Security Insights app | Microsoft Sentinel Automation Contributor (RG) | lets automation rules run playbooks |
+| Operator running `ingest-vault-audit.sh` | Monitoring Metrics Publisher on `dcr-idlab-vault-checkout` | Logs Ingestion API. The CI apply identity can't grant it (it isn't on its ABAC-delegable list), so this is a human step |
+| Operator running `Invoke-AdContainment.ps1` | Virtual Machine Contributor on vm-dc01 (run-command) | AD writes happen on the DC as SYSTEM; no domain credential on the laptop |
+
+Secrets: the ServiceNow password comes from Key Vault at deploy time as an ARM
+`securestring` (0600 temp parameter file, deleted), and ServiceNow calls have
+`secureData` on in run history. The Teams connector is OAuth, authorized once
+in the portal, and holds no secret in the template.
+
+## Staging order (flags live in `lab/terraform/envs/dev`)
+
+1. `enable_itdr_detections = true`. This creates only telemetry: the
+   `VaultCheckout_CL` table, the DCE and DCR, and, with `enable_dc`, AMA plus
+   the Security-event DCR on DC01. **No trial starts.** Set
+   `iac_principal_ids` (TF_IAC_PRINCIPAL_IDS) from the bootstrap output, or
+   every CI change alerts as non-IaC.
+2. Bootstrap (human): add `RiskyUsers` and `UserRiskEvents` (and, for
+   workload-identity risk, `RiskyServicePrincipals` and
+   `ServicePrincipalRiskEvents`) to the Entra diagnostic setting. Grant
+   yourself Monitoring Metrics Publisher on the DCR, then run
+   `./ingest-vault-audit.sh --follow 60`.
+3. Wait until the AuditLogs-based tables and `VaultCheckout_CL` have data.
+   Hold back any empty one with `itdr_exclude_rules` (Sentinel rejects rules
+   over never-populated tables). verify: per Microsoft Learn, DC01 Security
+   events reach `SecurityEvent` only once Sentinel and its "Windows Security
+   Events via AMA" connector are on (they land in `Event` before that), so
+   do NOT wait for SecurityEvent here: keep `tier0_logon_without_checkout`,
+   `ad_privileged_group_change`, `kerberoast_rc4_service_ticket` and
+   `dcsync_replication_request` (and `identity_risk` until risk events exist)
+   in `itdr_exclude_rules`.
+4. `enable_sentinel = true` (**starts the 31-day Sentinel trial**). The core
+   rules plus every ITDR rule whose table has data deploy. Enable the
+   connector, wait for DC01 rows in SecurityEvent, then remove those
+   exclusions in a second PR.
+5. `./Deploy-ContainmentPlaybook.ps1 …`, then authorize the Teams connection.
+6. `containment_playbook_id = "<printed id>"` and
+   `enable_itdr_containment = true`.
+
+Inputs and lookups the second-wave rules (`enable_itdr_detections_v2`) need:
+
+- **`operator_ips` is Terraform-owned** (`modules/monitoring/itdr_v2.tf`,
+  built from `operator_ip_ranges` with `ExpiresOn` =
+  `operator_ips_expires_on`). Change the variable, never the watchlist by
+  hand: the next apply would put it back.
+- **`sod_holdings`** (read by `sod-violation-granted` for access granted
+  before its 14-day AuditLogs window) is written by
+  `09-SoD-Report.ps1 -HoldingsSnapshotPath <gitignored path>`. Uploading it
+  as the Sentinel watchlist, and copying it to the Splunk lookup
+  `contoso_sod_holdings.csv`, are tenant-time steps by hand.
+- **`azure_pim_group_ids`** (PIM-Azure-RG-Contributors, passed by
+  `envs/dev`): a direct member add to that group is its intended path, so
+  `pim-group-member-added-outside-pim` reports it as Medium
+  (`AzurePimEligibleMember`), not High.
+
+After the Sentinel trial, the same eleven queries run as Log Analytics alerts
+(`enable_la_alerts`). That path has no containment, because automation rules
+are a Sentinel feature, and the SecurityEvent rules need an Event-table
+variant there (verify above).
+
+## Offline validation (re-runnable)
+
+```bash
+# Terraform module: fmt, validate, 32 mocked runs (flags off = nothing created,
+# columns mapped by Sentinel exist in each .kql, containment gating, DC01 + LA
+# paths, immutable-id rendering, the opt-in alert-added trigger, the
+# operator_ips watchlist)
+cd lab/terraform/modules/monitoring && terraform init -backend=false && terraform validate && terraform test
+
+# Playbooks, detections, IaC-by-id, mocked audit rows, Splunk conf sync, PSScriptAnalyzer
+pwsh -c 'Invoke-Pester ./lab/scripts/monitoring/tests/Itdr.Tests.ps1 -Output Detailed'
+
+# Vault feed transform, offsets, 403 handling (stubbed az/curl; also under macOS bash 3.2)
+lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
+
+# Splunk twins rendered into the app
+lab/splunk/render-savedsearches.sh --check
+```
+
+KQL is checked structurally (brackets, `let` terminators, Severity column,
+entity columns). On top of
+that, `tests/fixtures/itdr-cases.json` holds mocked audit rows: each case's
+operation string must be one the rule and its SPL twin match, the regexes
+that classify a row (hyphenated permissions, removed countries, newly trusted
+ranges, phishable auth-strength combinations) are pulled out of the KQL and
+run on sample text, and `tests/KqlLite.ps1` (a small, deliberately partial
+KQL interpreter) runs each rule's own row-level pipeline over those rows.
+The Kusto-emulator harness (`lab/monitoring/kusto-harness/`) ran all 22
+rules on a real KQL engine on 2026-10-21 (RAN · harness): the Azure Data
+Explorer Kusto emulator in a local container, synthetic tables and events,
+Sentinel's `_GetWatchlist` shimmed. 22/22 rules and 223/223 cases passed,
+and it imported 94 of these fixture rows as engine cases (12 stage-level or
+derived-`let` rows were skipped; see its README). Record:
+`lab/evidence/kusto/20261021T001217Z/`. The emulator is not a Log Analytics
+workspace and not a tenant: scheduling, entity mapping and real log shapes
+get checked in the tenant (the steps below).
+
+## Tenant-time steps and evidence to capture
+
+| # | Step | Evidence |
+|---|---|---|
+| 1 | Run each KQL once in Log Analytics before enabling the rule. Copy real `OperationName` / `ResultReason` / modifiedProperty strings into the queries if Microsoft's differ | query results screenshots |
+| 2 | Generate one event per rule: add an app secret, consent to a test app, set a CA policy to report-only, assign a role outside PIM, issue a TAP to a test user, confirm a test user compromised in ID Protection, log on to DC01 as tier0-admin-01 **without** a check-out | one Sentinel incident per rule, with severity |
+| 3 | Log on with a proper `psm-session.sh checkout` and confirm **no** tier0 alert | the absence, plus the `VaultCheckout_CL` rows |
+| 4 | Stop the ingest script for 30 min and log on: the alert says `VaultFeedHealthy = false` | incident custom details |
+| 5 | Containment drill on a cloud-only test user: Contain → card → 204/204 → comment + ServiceNow work note | card screenshot, incident comment, SNOW ticket |
+| 6 | Same on a synced user: revoke 204 + "AD disable required", then `Invoke-AdContainment.ps1` | evidence JSON in `lab/evidence/out/itdr/` |
+| 7 | Break-glass refusal, self-approval refusal, and an answer from a channel member who is NOT an approver (ignored) | incident comments |
+| 8 | Contain on a test user: `confirmCompromised` 204, user risk High in ID Protection, CA006 prompt at next sign-in | risky-user blade, sign-in log |
+
+## verify: (only the tenant can confirm)
+
+- Sentinel accepts `techniques` with parent IDs only, and the tactic sets
+  chosen for each rule.
+- FederatedIdentityCredentials, consent and grant modifiedProperty names. The
+  `ResultReason` wording for TAP and FIDO2. CA policy JSON keys
+  (`state`, `excludeUsers`, `excludeGroups`) in AuditLogs.
+- That `Microsoft-SecurityEvent` via AMA needs Sentinel + its connector on
+  the workspace (Microsoft Learn says so). Then the post-trial LA path loses
+  DC01 events and the four SecurityEvent rules must read the `Event` table.
+- The AMA extension's current `type_handler_version` (1.0 pinned, minor
+  auto-upgrade).
+- Whether app-only `accountEnabled=false` needs the directory role for
+  non-admin users, and whether `revokeSignInSessions` app-only needs one for
+  any target.
+- Which containment calls a restricted-management AU blocks for an app-only
+  caller, and the AD-disable path (`Invoke-AdContainment.ps1`, then Cloud
+  Sync) for a synced VIP.
+- The Teams *Post adaptive card and wait for a response* action shape, and
+  the `responder.objectId` / `responder.userPrincipalName` fields (taken from
+  Microsoft's Sentinel playbook templates). Without them every answer is
+  ignored (fail closed) - check the first drill.
+- The `PropertyArrayChanged` (Alerts / Added) automation-rule condition used
+  by `containment_on_alert_added`.
+- DC01 audit policy logs Logon and Special Logon success (`auditpol /get
+  /subcategory:"Logon","Special Logon"`).
+- Log Analytics alert window PT3H with frequency PT5M for the Tier-0 rule on
+  the post-trial path.

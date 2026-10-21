@@ -1,0 +1,166 @@
+{
+  "$comment": [
+    "Birthright (ADR 0012 tier T3): HR attributes decide who holds core access, through ONE Entra ID Governance automatic assignment policy per access package.",
+    "Applied by lab/scripts/powershell/post-apply/Set-AutoAssignmentPolicies.ps1 (dry run first: -RenderOnly needs no tenant). Nothing here has run against a tenant.",
+    "Every (department, jobTitle) pair in lab/scripts/mock-hr/hr_feed.csv has a jobProfile below - tests/Set-AutoAssignmentPolicies.Tests.ps1 fails if a persona is added to the feed without one.",
+    "Rules: requestable extras stay request-based (approval + expiry) and live in their OWN package (e.g. 'ICU - Float Access'), never as a second policy on a birthright package; privileged access is NEVER birthright (PIM eligibility only); rules never use memberOf (quarantined from 2026-11-03, Microsoft Learn)."
+  ],
+  "schemaVersion": 1,
+  "adr": "lab/docs/adr/0012-access-review-no-response-and-clinical-lockout.md",
+  "settings": {
+    "matchOn": "jobTitle",
+    "matchOnNote": "jobTitle today, because that is what hr_feed.csv carries. Target state is jobCode (titles are free text, ADR 0012): switch matchOn to jobCode once HR sends a job code and it lands in the attribute below.",
+    "attributes": {
+      "department": "user.department",
+      "jobTitle": "user.jobTitle",
+      "jobCode": "user.extensionAttribute1"
+    },
+    "attributesNote": "verify: extensionAttribute1 is a placeholder for the HR job code. It must be written by HR provisioning only - Microsoft Learn warns that dynamic-rule security depends on who can write the attribute (on-premises SELF write included).",
+    "baseConditions": [
+      "user.accountEnabled -eq true",
+      "user.userType -eq \"Member\"",
+      "user.employeeHireDate -le system.now"
+    ],
+    "baseConditionsNote": "A disabled leaver falls out of scope at once, so 04-Leaver's package removal is not re-added by the policy. Guests are never in scope (they use the B2B catalog). The hire-date gate keeps PHI access from an enabled pre-hire before day one (HIPAA minimum necessary): hr_feed.csv 'joiner' rows are SCIM active=true before their startDate. Microsoft Learn (dynamic membership rules, checked 2026-10-20) documents employeeHireDate (preview) with -le / -ge and system.now. verify: an automatic-assignment policy rule accepts it (same rule syntax per Learn, not confirmed for this property); verify: a user with NO employeeHireDate does not match (fail closed). HR startDate is sent as the SCIM extension hireDate by lab/scripts/mock-hr/Invoke-InboundProvisioning.ps1; the provisioning and Cloud Sync mappings to employeeHireDate are tenant-time steps, and Set-AutoAssignmentPolicies.ps1 refuses to create the policies while no in-scope user carries a hire date.",
+    "requestAccessForAllowedTargets": true,
+    "removeAccessWhenTargetLeavesAllowedTargets": true,
+    "gracePeriodBeforeAccessRemoval": "P3D",
+    "gracePeriodNote": "72 hours (ADR 0012): a mover is not cut off mid-shift. P3D = 72 h; the portal accepts hours or days.",
+    "policyDisplayName": "{package} - birthright (HR attributes)",
+    "policyDescription": "Automatic assignment from HR attributes (ADR 0012 T3). Managed by lab/iga/birthright-rules.json via Set-AutoAssignmentPolicies.ps1 - change the rule file, not the portal.",
+    "maxRuleLength": 3072
+  },
+  "neverBirthright": {
+    "rationale": "Privileged access is granted only as PIM eligibility and certified quarterly (T1). A birthright package that reached a privileged group would be standing privilege handed out by an HR attribute.",
+    "groupNamePatterns": [
+      "^PIM-",
+      "^Privileged-",
+      "^Break-Glass"
+    ],
+    "rejectRoleAssignableGroups": true,
+    "rejectPrivilegedCatalogEntries": true
+  },
+  "jobProfiles": [
+    {
+      "department": "Nursing",
+      "jobTitle": "Registered Nurse",
+      "jobCode": "NUR-RN",
+      "birthright": [
+        "Nurse - Clinical Apps"
+      ],
+      "requestable": [
+        "ICU - Float Access"
+      ],
+      "note": "ICU float shifts are requested through the separate T2 package 'ICU - Float Access' (180-day expiry, manager approval). The ICU birthright package itself has no request path."
+    },
+    {
+      "department": "Nursing",
+      "jobTitle": "Nurse Manager",
+      "jobCode": "NUR-MGR",
+      "birthright": [
+        "Nurse - Clinical Apps"
+      ],
+      "requestable": [
+        "ICU - Float Access"
+      ],
+      "note": "Nurse managers cover clinical shifts, so they keep the clinical bundle and can request ICU float access like any nurse. Their PIM eligibility (Set-PimGroupEligibility.ps1) stays separate and reviewed quarterly."
+    },
+    {
+      "department": "ICU",
+      "jobTitle": "Registered Nurse",
+      "jobCode": "NUR-RN",
+      "birthright": [
+        "ICU - Critical Care Apps"
+      ],
+      "requestable": [],
+      "note": "Mover target (Marcus Bello, Nursing -> ICU): the department change moves him from the Nurse policy to the ICU policy; the 72 h grace keeps the old bundle through his first ICU shifts. A float nurse hired into ICU keeps any 'ICU - Float Access' assignment until it expires or is denied - that removal never touches this birthright package."
+    },
+    {
+      "department": "ICU",
+      "jobTitle": "Nurse Manager",
+      "jobCode": "NUR-MGR",
+      "birthright": [
+        "ICU - Critical Care Apps"
+      ],
+      "requestable": []
+    },
+    {
+      "department": "Radiology",
+      "jobTitle": "Radiologic Technologist",
+      "jobCode": "RAD-TECH",
+      "birthright": [
+        "Radiology - Imaging Apps"
+      ],
+      "requestable": []
+    },
+    {
+      "department": "Radiology",
+      "jobTitle": "Radiology Manager",
+      "jobCode": "RAD-MGR",
+      "birthright": [
+        "Radiology - Imaging Apps"
+      ],
+      "requestable": []
+    },
+    {
+      "department": "Billing",
+      "jobTitle": "Billing Specialist",
+      "jobCode": "BIL-SPEC",
+      "birthright": [
+        "Billing - Charge Entry & Coding Apps"
+      ],
+      "requestable": [],
+      "note": "Payment posting and adjustments are NOT requestable for this profile: SOD-09 (charge entry vs payment posting)."
+    },
+    {
+      "department": "Billing",
+      "jobTitle": "Billing Manager",
+      "jobCode": "BIL-MGR",
+      "birthright": [],
+      "requestable": [
+        "Billing - Payment Posting & Adjustments Apps"
+      ],
+      "note": "Adjustment and write-off authority is discretionary, so a person approves it and re-certifies it every 180 days (T2). No charge-entry birthright, so no SOD-09 conflict."
+    },
+    {
+      "department": "Administration",
+      "jobTitle": "Chief Nursing Officer",
+      "jobCode": "ADM-CNO",
+      "birthright": [],
+      "requestable": [],
+      "note": "Executives do not chart; anything clinical is requested by exception. All-Workforce (dynamic group) is the only baseline."
+    },
+    {
+      "department": "Information Technology",
+      "jobTitle": "IT Director",
+      "jobCode": "IT-DIR",
+      "birthright": [],
+      "requestable": [],
+      "note": "Workforce account only: no privileged birthright (neverBirthright). Admin work is done from a separate cloud-only adm- account in lab/iga/admin-accounts.json that is only ever PIM-eligible (Set-PimGroupEligibility.ps1)."
+    },
+    {
+      "department": "Information Technology",
+      "jobTitle": "IAM Engineer",
+      "jobCode": "IT-IAM",
+      "birthright": [],
+      "requestable": [],
+      "note": "Workforce account only: no privileged birthright (neverBirthright). Admin work is done from a separate cloud-only adm- account in lab/iga/admin-accounts.json that is only ever PIM-eligible (Set-PimGroupEligibility.ps1)."
+    },
+    {
+      "department": "Information Technology",
+      "jobTitle": "Service Desk Analyst",
+      "jobCode": "IT-SD",
+      "birthright": [],
+      "requestable": [],
+      "note": "Workforce account only: no privileged birthright (neverBirthright). Admin work is done from a separate cloud-only adm- account in lab/iga/admin-accounts.json that is only ever PIM-eligible (Set-PimGroupEligibility.ps1)."
+    },
+    {
+      "department": "Information Technology",
+      "jobTitle": "Access Governance Lead",
+      "jobCode": "IT-IGA",
+      "birthright": [],
+      "requestable": [],
+      "note": "Workforce account only: no privileged birthright (neverBirthright). Admin work is done from a separate cloud-only adm- account in lab/iga/admin-accounts.json that is only ever PIM-eligible (Set-PimGroupEligibility.ps1). She is the reviewer of record for privileged reviews and approves from this workforce account, so her adm- account holds no PIM eligibility (SOD-08)."
+    }
+  ]
+}

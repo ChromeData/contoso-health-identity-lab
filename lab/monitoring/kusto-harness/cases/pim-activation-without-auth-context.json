@@ -1,0 +1,131 @@
+{
+  "rule": "pim-activation-without-auth-context",
+  "about": "A Tier-0 PIM activation (PIM-Tier0-Security-Admins / PIM-Tier0-CA-Admins) with no sign-in that satisfied authentication context c1 in the 30 minutes before the request. AuthenticationContextClassReferences is a STRING in both sign-in tables (Learn); its JSON shape [{id, detail}] follows the Graph signIn property (verify: in the tenant). ContextPolicies is committed empty, so only the 'no step-up' verdict can fire here.",
+  "defaults": {
+    "AuditLogs": {
+      "LoggedByService": "PIM", "Category": "GroupManagement", "Result": "success",
+      "CorrelationId": "11111111-1111-1111-1111-111111111111",
+      "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.120"}},
+      "TargetResources": [
+        {"id": "33333333-3333-3333-3333-333333333333", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+        {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Sam Rivera", "type": "User", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com"}]
+    },
+    "SigninLogs": {
+      "UserId": "22222222-2222-2222-2222-222222222222", "UserPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com",
+      "IPAddress": "203.0.113.120", "AppDisplayName": "Azure Portal", "ResultType": "0",
+      "AuthenticationContextClassReferences": "[{\"id\":\"c1\",\"detail\":\"required\"}]",
+      "ConditionalAccessPolicies": [{"id": "44444444-4444-4444-4444-444444444444", "displayName": "CA021 - Tier-0 activation step-up", "result": "success"}],
+      "CorrelationId": "55555555-5555-5555-5555-555555555555", "TimeGenerated": "ago:13m"
+    },
+    "AADNonInteractiveUserSignInLogs": {
+      "UserId": "22222222-2222-2222-2222-222222222222", "UserPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com",
+      "IPAddress": "203.0.113.120", "AppDisplayName": "Azure Portal", "ResultType": "0",
+      "AuthenticationContextClassReferences": "[{\"id\":\"c1\",\"detail\":\"previouslySatisfied\"}]",
+      "ConditionalAccessPolicies": "[{\"id\":\"44444444-4444-4444-4444-444444444444\",\"displayName\":\"CA021 - Tier-0 activation step-up\",\"result\":\"success\"}]",
+      "CorrelationId": "66666666-6666-6666-6666-666666666666", "TimeGenerated": "ago:13m"
+    }
+  },
+  "cases": [
+    {
+      "id": "no-step-up-at-all",
+      "kind": "positive",
+      "label": "Requested and completed activation of PIM-Tier0-Security-Admins with no c1 sign-in",
+      "tables": {"AuditLogs": [
+        {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m"},
+        {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}
+      ]},
+      "expect": [{"Severity": "High", "Verdict": "No sign-in satisfied authentication context c1 before this activation",
+                  "ElevatedTo": "PIM-Tier0-Security-Admins", "StepUpSignIns": 0, "ActorIp": "203.0.113.120",
+                  "UserPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com",
+                  "PolicyCheck": "skipped - set ContextPolicies to the CA policy targeting the context"}],
+      "expectRows": 1
+    },
+    {
+      "id": "step-up-too-early",
+      "kind": "positive",
+      "label": "A c1 sign-in 3 h before the request is outside the 30-minute step-up window",
+      "tables": {
+        "AuditLogs": [
+          {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m"},
+          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}],
+        "SigninLogs": [{"TimeGenerated": "ago:3h"}]
+      },
+      "expect": [{"StepUpSignIns": 0, "Verdict": "No sign-in satisfied authentication context c1 before this activation"}]
+    },
+    {
+      "id": "other-context-and-failed-step-up",
+      "kind": "positive",
+      "label": "A successful c2 sign-in and a FAILED c1 sign-in do not satisfy c1",
+      "tables": {
+        "AuditLogs": [
+          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}],
+        "SigninLogs": [{"AuthenticationContextClassReferences": "[{\"id\":\"c2\",\"detail\":\"required\"}]"},
+                       {"ResultType": "50158"}]
+      },
+      "expect": [{"StepUpSignIns": 0, "ElevatedTo": "PIM-Tier0-Security-Admins"}]
+    },
+    {
+      "id": "ca-admins-group-completed-only",
+      "kind": "positive",
+      "label": "PIM-Tier0-CA-Admins activation with no request record: anchored on the completion",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)",
+        "TimeGenerated": "ago:10m",
+        "TargetResources": [
+          {"id": "77777777-7777-7777-7777-777777777777", "displayName": "PIM-Tier0-CA-Admins", "type": "Group"},
+          {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Sam Rivera", "type": "User", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com"}]
+      }]},
+      "expect": [{"ElevatedTo": "PIM-Tier0-CA-Admins", "StepUpSignIns": 0}]
+    },
+    {
+      "id": "step-up-in-window",
+      "kind": "negative",
+      "label": "A c1 sign-in a minute before the request satisfies the context",
+      "tables": {
+        "AuditLogs": [
+          {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m"},
+          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}],
+        "SigninLogs": [{}]
+      }
+    },
+    {
+      "id": "step-up-non-interactive",
+      "kind": "negative",
+      "label": "The c1 claim on a non-interactive sign-in (string CA list) also counts",
+      "tables": {
+        "AuditLogs": [
+          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}],
+        "AADNonInteractiveUserSignInLogs": [{}]
+      }
+    },
+    {
+      "id": "step-up-with-empty-ca-list",
+      "kind": "negative",
+      "label": "A c1 sign-in whose ConditionalAccessPolicies is [] still counts (relies on mv-apply keeping the row - probe mv-apply-empty-array-summarize)",
+      "tables": {
+        "AuditLogs": [
+          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}],
+        "SigninLogs": [{"ConditionalAccessPolicies": []}]
+      }
+    },
+    {
+      "id": "non-context-group-and-request-only",
+      "kind": "negative",
+      "label": "An activation of a group outside ContextTargets, and a Tier-0 request that never completed",
+      "tables": {"AuditLogs": [
+        {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m",
+         "TargetResources": [
+           {"id": "88888888-8888-8888-8888-888888888888", "displayName": "Privileged-IAM-Admins", "type": "Group"},
+           {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Sam Rivera", "type": "User", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com"}]},
+        {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m"}
+      ]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A completed Tier-0 activation 2 h ago",
+      "tables": {"AuditLogs": [
+        {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:2h"}]}
+    }
+  ]
+}

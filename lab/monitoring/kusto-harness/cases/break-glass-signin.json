@@ -1,0 +1,77 @@
+{
+  "rule": "break-glass-signin",
+  "about": "Any sign-in by bg-admin-NN, in either sign-in table. The non-interactive rows carry LocationDetails as a STRING (Learn: dynamic in SigninLogs, string in AADNonInteractiveUserSignInLogs) - the schema trap the rule's union normalises.",
+  "defaults": {
+    "SigninLogs": {
+      "IPAddress": "198.51.100.20", "AppDisplayName": "Azure Portal", "ClientAppUsed": "Browser",
+      "ResultType": "0", "ResultDescription": "", "ConditionalAccessStatus": "notApplied",
+      "CorrelationId": "11111111-1111-1111-1111-111111111111",
+      "LocationDetails": {"city": "Seattle", "state": "Washington", "countryOrRegion": "US"}
+    },
+    "AADNonInteractiveUserSignInLogs": {
+      "IPAddress": "198.51.100.20", "AppDisplayName": "Azure Portal", "ClientAppUsed": "Mobile Apps and Desktop clients",
+      "ResultType": "0", "ResultDescription": "", "ConditionalAccessStatus": "notApplied",
+      "CorrelationId": "22222222-2222-2222-2222-222222222222",
+      "LocationDetails": "{\"city\":\"Seattle\",\"state\":\"Washington\",\"countryOrRegion\":\"US\"}"
+    }
+  },
+  "cases": [
+    {
+      "id": "interactive-success",
+      "kind": "positive",
+      "label": "bg-admin-01 signs in interactively",
+      "tables": {"SigninLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}]},
+      "expect": [{"SignInType": "interactive", "UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com",
+                  "Country": "US", "ResultType": "0", "IPAddress": "198.51.100.20"}],
+      "expectRows": 1
+    },
+    {
+      "id": "non-interactive-string-location",
+      "kind": "positive",
+      "label": "A non-interactive token use by bg-admin-02: Country still resolves from the STRING LocationDetails",
+      "tables": {"AADNonInteractiveUserSignInLogs": [{"UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com"}]},
+      "expect": [{"SignInType": "non-interactive", "UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "Country": "US"}]
+    },
+    {
+      "id": "failed-attempt-still-alerts",
+      "kind": "positive",
+      "label": "A failed attempt (wrong password / key) is still a break-glass alert",
+      "tables": {"SigninLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "ResultType": "50126",
+                                 "ResultDescription": "Invalid username or password or Invalid on-premise username or password."}]},
+      "expect": [{"ResultType": "50126", "SignInType": "interactive"}]
+    },
+    {
+      "id": "both-tables",
+      "kind": "positive",
+      "label": "One interactive + one non-interactive sign-in: two rows from the union",
+      "tables": {
+        "SigninLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}],
+        "AADNonInteractiveUserSignInLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}]
+      },
+      "expect": [{"SignInType": "interactive"}, {"SignInType": "non-interactive"}],
+      "expectRows": 2
+    },
+    {
+      "id": "ordinary-user",
+      "kind": "negative",
+      "label": "An ordinary user's sign-in",
+      "tables": {"SigninLogs": [{"UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"}]}
+    },
+    {
+      "id": "near-miss-names",
+      "kind": "negative",
+      "label": "Names that only look like the convention (one digit, three digits, prefixed)",
+      "tables": {"SigninLogs": [
+        {"UserPrincipalName": "bg-admin-1@contosohealthlab.onmicrosoft.com"},
+        {"UserPrincipalName": "bg-admin-001@contosohealthlab.onmicrosoft.com"},
+        {"UserPrincipalName": "xbg-admin-01@contosohealthlab.onmicrosoft.com"}
+      ]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A bg-admin sign-in 2 h ago is outside the 1 h look-back",
+      "tables": {"SigninLogs": [{"UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "TimeGenerated": "ago:2h"}]}
+    }
+  ]
+}

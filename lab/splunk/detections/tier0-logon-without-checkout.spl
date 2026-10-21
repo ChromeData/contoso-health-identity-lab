@@ -1,0 +1,93 @@
+index=entra (sourcetype="azure:loganalytics:securityevent" OR sourcetype="azure:loganalytics:vaultcheckout_cl") earliest=-3h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Tier-0 logon on DC01 that PAM does not account for      ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/tier0-logon-without-checkout.kql                  ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over logs REPLAYED from Log       ```
+``` Analytics. NEEDS the replay to carry SecurityEvent and VaultCheckout_CL    ```
+``` (ingest-from-loganalytics.sh allow-list + sourcetypes in app props.conf).  ```
+``` VaultCheckout_CL itself is filled by lab/scripts/monitoring/               ```
+``` ingest-vault-audit.sh (Vault audit log -> Logs Ingestion API).             ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   A 4624 / 4672 for tier0-admin-01/02 on DC01 that no Vault check-out of  ```
+```   the same account covers (check-out minus 5 min .. first check-in, capped ```
+```   at check-out plus 1 h, plus 5 min). Logons younger than 15 min are not   ```
+```   judged yet (ingest delay). Fail-safe: no evidence means an alert, and    ```
+```   VaultFeedHealthy says whether the feed itself is stale. Also (Class):  ```
+```   BreakGlassAd = the RID-500 Administrator by SID, every DC logon; and     ```
+```   Unvaulted = any other account with special privileges (4672) on the DC ```
+```   that the vault does not manage (a new Domain Admin). Machine accounts,  ```
+```   well-known service SIDs and svc-vault-rotator are excluded.            ```
+``` MITRE ATT&CK: T1078.002 Domain Accounts; T1550.002 Pass the Hash.         ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   Sessions = check-outs leftouter-joined to the first check-in after them ```
+```   -> ONE forward pass instead of a join: vault rows are time-shifted by    ```
+```   the grace (check-out 5 min earlier, check-in 5 min later), everything   ```
+```   is sorted by Account and shifted time, and streamstats carries the most ```
+```   recent check-out / check-in (ORIGINAL times) down to each logon. A logon ```
+```   is covered when that check-out exists and the logon is before          ```
+```   min(check-in, check-out + 1 h) + 5 min.                                  ```
+```   toscalar(max vault TimeGenerated)  -> eventstats max(VaultTime)          ```
+```   bin(LogonTime, 10m)                -> floor(epoch / 600) * 600           ```
+```   HONEST DIFFERENCE: KQL tests a logon against EVERY check-out of the      ```
+```   account; SPL only against the latest one before it. The library is      ```
+```   exclusive (one open check-out per account), so they agree unless a      ```
+```   check-out expired without a check-in and was re-checked-out within the  ```
+```   grace - SPL then also alerts (fail-safe direction).                      ```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT3H (vault history needed for the 1 h logon window),     ```
+``` severity High, throttled 1 h per Account.                                   ```
+``` ========================================================================== ```
+``` @stanza Contoso - Tier-0 logon on DC01 without a Vault check-out ```
+``` @conf description = Tier-0 logon on DC01 that PAM does not account for: a vaulted tier0-admin with no Vault check-out, the RID-500 break-glass Administrator, or any other account with special privileges (4672) the vault does not manage. KQL twin: lab/kql/tier0-logon-without-checkout.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -3h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Account ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| eval Kind=if(sourcetype=="azure:loganalytics:vaultcheckout_cl", "vault", "logon")
+| eval Host=upper(mvindex(split(coalesce(Computer, ""), "."), 0))
+| eval Account=lower(case(Kind=="vault", Account, EventID==4672, SubjectUserName, true(), TargetUserName))
+| eval AccountDomain=case(Kind=="vault", null(), EventID==4672, SubjectDomainName, true(), TargetDomainName)
+| eval AccountSid=case(Kind=="vault", null(), EventID==4672, SubjectUserSid, true(), TargetUserSid)
+| eval Class=case(Kind=="vault", null(), in(Account, "tier0-admin-01", "tier0-admin-02"), "Vaulted", match(coalesce(AccountSid, ""), "-500$"), "BreakGlassAd", EventID==4672, "Unvaulted", true(), null())
+| where (Kind=="vault" AND in(Operation, "check-out", "check-in", "heartbeat")) OR (Kind=="logon" AND in(EventID, 4624, 4672) AND in(Host, "DC01") AND isnotnull(Class) AND NOT match(coalesce(Account, ""), "[$]$") AND NOT in(coalesce(AccountSid, ""), "S-1-5-18", "S-1-5-19", "S-1-5-20", "S-1-0-0", "S-1-5-7") AND NOT match(coalesce(AccountSid, ""), "^S-1-5-(90|96)-") AND NOT in(Account, "svc-vault-rotator"))
+| eval VaultTime=if(Kind=="vault", _time, null())
+| eventstats max(VaultTime) AS VaultFeedLastSeenEpoch
+| where Kind=="logon" OR Operation!="heartbeat"
+| eval OrigTime=_time
+| eval OutOrig=if(Kind=="vault" AND Operation=="check-out", OrigTime, null()), InOrig=if(Kind=="vault" AND Operation=="check-in", OrigTime, null())
+| eval _time=case(isnotnull(OutOrig), OrigTime - 300, isnotnull(InOrig), OrigTime + 300, true(), OrigTime)
+| sort 0 Account _time
+| streamstats last(OutOrig) AS LastOut last(InOrig) AS LastIn BY Account
+| where Kind=="logon"
+| where OrigTime>=relative_time(now(), "-75m") AND OrigTime<=relative_time(now(), "-15m")
+| eval SessionEnd=case(isnull(LastOut), null(), isnotnull(LastIn) AND LastIn>=LastOut, min(LastIn, LastOut + 3600), true(), LastOut + 3600)
+| eval Covered=if(Class=="Vaulted" AND isnotnull(SessionEnd) AND OrigTime<=SessionEnd + 300, 1, 0)
+| where Covered==0
+| eval LogonBin=floor(OrigTime / 600) * 600
+| stats max(OrigTime) AS LastLogonEpoch, min(OrigTime) AS FirstLogonEpoch, count AS UncoveredEvents, values(EventID) AS EventIds, values(LogonType) AS LogonTypes, values(IpAddress) AS SourceIps, values(WorkstationName) AS Workstations, first(AccountSid) AS AccountSid, max(LastOut) AS LastCheckoutBeforeEpoch, first(VaultFeedLastSeenEpoch) AS VaultFeedLastSeenEpoch BY Account AccountDomain Host Computer Class LogonBin
+| eval SourceIps=mvfilter(SourceIps!="" AND SourceIps!="-")
+| eval SourceIp=mvindex(SourceIps, 0)
+| eval VaultFeedHealthy=if(isnotnull(VaultFeedLastSeenEpoch) AND VaultFeedLastSeenEpoch > relative_time(now(), "-30m"), "true", "false")
+| eval Verdict=case(Class=="BreakGlassAd", "RID-500 (AD break-glass) logon on a DC - always reviewed under the AD break-glass procedure", Class=="Unvaulted", "Account with Tier-0 privileges (4672) on a DC that the PAM vault does not manage - a new Domain Admin or an unvaulted admin", VaultFeedHealthy=="true", "No Vault check-out covers this Tier-0 logon - credential used outside PAM", true(), "No check-out found AND the Vault feed is stale - check ingest-vault-audit.sh before assuming misuse")
+| eval Severity="High"
+| eval _time=LastLogonEpoch
+| eval TimeGenerated=strftime(LastLogonEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z"), FirstLogon=strftime(FirstLogonEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z"), LastCheckoutBefore=strftime(LastCheckoutBeforeEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z"), VaultFeedLastSeen=strftime(VaultFeedLastSeenEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z")
+| sort 0 - _time
+| table TimeGenerated, Severity, Verdict, Class, Account, AccountDomain, AccountSid, Host, Computer, FirstLogon, UncoveredEvents, EventIds, LogonTypes, SourceIp, SourceIps, Workstations, LastCheckoutBefore, VaultFeedHealthy, VaultFeedLastSeen

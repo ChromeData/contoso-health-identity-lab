@@ -1,0 +1,56 @@
+// =============================================================================
+// shims.kql - the Log Analytics / Microsoft Sentinel names a lab/kql rule calls
+// that an Azure Data Explorer engine (the Kusto emulator) does not have,
+// re-created as the smallest stored functions that let the rules run with
+// their text unchanged. harness.py sends each block below as one management
+// command; a block starts at its //@shim line. Every shim is listed in the run
+// record (results.json "shims", with the sha256 of its body).
+//
+// SHIMMED (1)
+//   _GetWatchlist(alias)  Sentinel built-in. Learn ("Build queries or rules
+//                         with watchlists", ms.date 2026-07-01): returns the
+//                         watchlist's items with SearchKey and every
+//                         watchlist column as a top-level column. Called by
+//                         dc-logon-outside-operator-allowlist.kql
+//                         ('operator_ips') and sod-violation-granted.kql
+//                         ('sod_holdings'), both inside union isfuzzy=true.
+//
+// NOT SHIMMED, because ADX has them with the same meaning: ago(), now(),
+//   column_ifexists(), getschema, toscalar(), ipv4_* functions, datatable.
+//
+// NOT EMULATED (the run record says so; these stay tenant-time checks):
+//   - the scheduled rule's query period (Sentinel / Log Analytics apply the
+//     rule's lookback as an outer time filter; here only the rules' own
+//     ago() filters apply),
+//   - Sentinel refusing a rule whose table has never received data,
+//   - entity mapping, custom details, alert grouping, suppression,
+//   - Sentinel's _GetWatchlist implementation itself (bag_unpack over the
+//     Watchlist table); the variants below model its two edge shapes.
+// =============================================================================
+
+//@shim name=_GetWatchlist variant=default
+// One store table per alias a rule calls (schemas.json "watchlists"); the
+// union carries every alias's columns, so a rule projecting the columns of
+// its own watchlist resolves them. All values are strings, as in Sentinel.
+.create-or-alter function with (folder = "LogAnalyticsShims", docstring = "Harness shim of the Sentinel _GetWatchlist(alias) function: the rows of the Watchlist_<alias> store table, SearchKey plus the watchlist columns as top-level columns")
+_GetWatchlist(alias:string) {
+    union
+        (Watchlist_operator_ips | where alias == "operator_ips"),
+        (Watchlist_sod_holdings | where alias == "sod_holdings")
+}
+
+//@shim name=_GetWatchlist variant=no-items-base-columns
+// A watchlist with no items. Sentinel builds the top-level columns from the
+// items (bag_unpack), so with none there are no watchlist columns at all -
+// only the base ones. A rule that projects ExpiresOn / Name from it then
+// depends on union isfuzzy=true tolerating the unresolved leg. verify: the
+// exact base columns against a Sentinel workspace.
+.create-or-alter function with (folder = "LogAnalyticsShims", docstring = "Harness shim variant: _GetWatchlist for a watchlist with no items (base columns only)")
+_GetWatchlist(alias:string) {
+    datatable(_DTItemId:string, LastUpdatedTimeUTC:datetime, SearchKey:string, WatchlistItem:dynamic)[]
+}
+
+//@shim name=_GetWatchlist variant=absent
+// No _GetWatchlist at all (a Log Analytics workspace without Sentinel): the
+// rule's union isfuzzy=true leg must be dropped, not fail the query.
+.drop function _GetWatchlist ifexists

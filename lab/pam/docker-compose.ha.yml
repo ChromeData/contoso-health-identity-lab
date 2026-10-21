@@ -1,0 +1,90 @@
+# =============================================================================
+# lab/pam/docker-compose.ha.yml - Vault HA: 3-node Raft cluster + transit
+# auto-unseal (LOCAL ONLY, $0). A SEPARATE compose project (contoso-pam-ha):
+# it never touches the single-node lab Vault the PAM scripts use.
+# -----------------------------------------------------------------------------
+# Driven by ./vault-ha.sh (up | status | failover | upgrade | down) and
+# ./dr-drill.sh (timed snapshot -> destroy -> restore, reports RTO/RPO).
+# Always run through those scripts: they pass --env-file .secrets/ha/ha.env
+# (per-node image tags for rolling upgrades) and generate the seal stanza.
+#
+#   vault-unsealer  transit key that wraps the cluster's root key
+#                   (stand-in for Azure Key Vault auto-unseal)
+#   vault-1/2/3     Raft voters; leader elected automatically; API on
+#                   127.0.0.1:8210/8211/8212
+#
+# SECURITY: loopback-only ports; the seal token and init material live in
+# .secrets/ha/ (gitignored). Image tags pinned per node so ./vault-ha.sh
+# upgrade can roll one node at a time.
+# =============================================================================
+
+name: contoso-pam-ha
+
+x-vault-node: &vault-node
+  command: server
+  cap_add: [IPC_LOCK]
+  depends_on: [vault-unsealer]
+  restart: unless-stopped
+
+services:
+  vault-unsealer:
+    image: hashicorp/vault:2.1.1
+    command: server
+    cap_add: [IPC_LOCK]
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+    volumes:
+      - ./ha/unsealer.hcl:/vault/config/vault.hcl:ro
+      - unsealer-data:/vault/file
+    restart: unless-stopped
+
+  vault-1:
+    <<: *vault-node
+    image: ${VAULT_1_IMAGE:-hashicorp/vault:2.1.1}
+    hostname: vault-1
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_RAFT_NODE_ID: vault-1
+      VAULT_API_ADDR: http://vault-1:8200
+      VAULT_CLUSTER_ADDR: http://vault-1:8201
+    ports: ["127.0.0.1:8210:8200"]
+    volumes:
+      - ./ha/vault-node.hcl:/vault/config/vault.hcl:ro
+      - ./.secrets/ha/seal.hcl:/vault/config/seal.hcl:ro
+      - vault-1-data:/vault/file
+
+  vault-2:
+    <<: *vault-node
+    image: ${VAULT_2_IMAGE:-hashicorp/vault:2.1.1}
+    hostname: vault-2
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_RAFT_NODE_ID: vault-2
+      VAULT_API_ADDR: http://vault-2:8200
+      VAULT_CLUSTER_ADDR: http://vault-2:8201
+    ports: ["127.0.0.1:8211:8200"]
+    volumes:
+      - ./ha/vault-node.hcl:/vault/config/vault.hcl:ro
+      - ./.secrets/ha/seal.hcl:/vault/config/seal.hcl:ro
+      - vault-2-data:/vault/file
+
+  vault-3:
+    <<: *vault-node
+    image: ${VAULT_3_IMAGE:-hashicorp/vault:2.1.1}
+    hostname: vault-3
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_RAFT_NODE_ID: vault-3
+      VAULT_API_ADDR: http://vault-3:8200
+      VAULT_CLUSTER_ADDR: http://vault-3:8201
+    ports: ["127.0.0.1:8212:8200"]
+    volumes:
+      - ./ha/vault-node.hcl:/vault/config/vault.hcl:ro
+      - ./.secrets/ha/seal.hcl:/vault/config/seal.hcl:ro
+      - vault-3-data:/vault/file
+
+volumes:
+  unsealer-data:
+  vault-1-data:
+  vault-2-data:
+  vault-3-data:

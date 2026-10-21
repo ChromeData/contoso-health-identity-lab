@@ -1,0 +1,123 @@
+{
+  "run_utc": "20261020T162116Z",
+  "tool": "Evolveum midPoint 4.10.4 (local Docker stand-in for SailPoint / Saviynt; lab/pam/docker-compose.yml)",
+  "driven_by": "lab/pam/midpoint/run-campaign.sh over the midPoint REST API",
+  "tenant": "none: local lab data only (fictional personas from lab/scripts/mock-hr/hr_feed.csv)",
+  "campaign": {
+    "oid": "026a5f5f-ce37-45cd-be39-8e002f3353e9",
+    "name": "Contoso T2 requestable-access review 14",
+    "definition": "c0471e00-0000-4000-8000-000000000401",
+    "state": "closed",
+    "start_utc": "2026-10-20T16:21:21.079Z",
+    "end_utc": "2026-10-20T16:21:26.238Z",
+    "stage": [
+      {
+        "number": 1,
+        "name": "Manager review",
+        "startTimestamp": "2026-10-20T16:21:20.307Z",
+        "deadline": "2026-11-03T23:59:59.999Z",
+        "endTimestamp": "2026-10-20T16:21:23.654Z"
+      }
+    ]
+  },
+  "cases": 7,
+  "work_items": 7,
+  "decisions_recorded": 6,
+  "decided_by_assigned_reviewer": 6,
+  "left_unanswered": 1,
+  "case_outcomes": {
+    "accept": 4,
+    "noResponse": 1,
+    "revoke": 2
+  },
+  "remediated_cases": [
+    {
+      "user": "daniel.osei",
+      "role": "AP Clerk",
+      "outcome": "revoke",
+      "remediedTimestamp": "2026-10-20T16:21:26.058Z"
+    },
+    {
+      "user": "marcus.bello",
+      "role": "Pharmacist",
+      "outcome": "revoke",
+      "remediedTimestamp": "2026-10-20T16:21:26.141Z"
+    },
+    {
+      "user": "dana.okafor",
+      "role": "ICU Nurse",
+      "outcome": "noResponse",
+      "remediedTimestamp": "2026-10-20T16:21:26.199Z"
+    }
+  ],
+  "reviewers": {
+    "access-governance-lead": 1,
+    "grace.mwangi": 4,
+    "helen.carter": 2
+  },
+  "authorization_probes": [
+    {
+      "actor": "dana.okafor",
+      "item": "marcus.bello / ICU Nurse",
+      "assignedReviewer": "grace.mwangi",
+      "status": "refused"
+    },
+    {
+      "actor": "access-governance-lead",
+      "item": "marcus.bello / Pharmacist",
+      "assignedReviewer": "grace.mwangi",
+      "status": "refused"
+    }
+  ],
+  "kpis": {
+    "definitions": "lab/docs/adr/0012-access-review-no-response-and-clinical-lockout.md, How it is measured (written for Entra reviews; applied here to the midPoint campaign)",
+    "completion_pct": 85.7,
+    "completion_target_t2_pct": 95,
+    "revocation_rate_pct": 33.3,
+    "per_reviewer": [
+      {
+        "reviewer": "helen.carter",
+        "items": 2,
+        "decided": 2,
+        "revoked": 1,
+        "median_seconds_between_decisions": 0.039,
+        "eligible": false,
+        "rubber_stamp": false
+      },
+      {
+        "reviewer": "grace.mwangi",
+        "items": 4,
+        "decided": 3,
+        "revoked": 1,
+        "median_seconds_between_decisions": 0.063,
+        "eligible": false,
+        "rubber_stamp": false
+      },
+      {
+        "reviewer": "access-governance-lead",
+        "items": 1,
+        "decided": 1,
+        "revoked": 0,
+        "median_seconds_between_decisions": null,
+        "eligible": false,
+        "rubber_stamp": false
+      }
+    ],
+    "rubber_stamp": {
+      "definition": "reviewers with >= 10 items (the minimum applies to both clauses) who approved all of them, or whose median gap between decisions is < 5 s; same thresholds as 10-Review-KPIs.ps1 (lab/iga/access-catalog.json reviewTiers.rubberStamp)",
+      "min_items": 10,
+      "median_gap_seconds": 5,
+      "target_reviewer_pct": 10,
+      "rate": {
+        "status": "not-measured",
+        "value": null,
+        "unit": "% of reviewers",
+        "numerator": 0,
+        "denominator": 0
+      },
+      "flagged": []
+    },
+    "approve_against_recommendation": "n/a: no recommendation engine configured in this lab",
+    "note": "The rubber-stamp rate is not measurable on this campaign: no reviewer has the minimum number of items, so a median of a few gaps would mean nothing. The decisions are scripted (milliseconds apart), so their timing says nothing about a human reviewer. Completion is below the T2 target because one item was left unanswered on purpose."
+  }
+}

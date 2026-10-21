@@ -1,0 +1,42 @@
+{
+  "$comment": [
+    "Admin accounts (iam-standard: adm-first.last@<tenant>.onmicrosoft.com, cloud-only). One row per person who does admin work; the person's WORKFORCE account comes from HR (lab/scripts/mock-hr/hr_feed.csv, ownerEmployeeId) and never holds a privileged role.",
+    "Created by lab/scripts/powershell/post-apply/New-AdminAccounts.ps1: cloud-only, no known password (a random one is generated and discarded; first sign-in is a one-time TAP, then an issued passkey), no licence or mailbox, manager = the owner's workforce account, member of the standing role-assignable group Admin-Accounts (the admin passkey target). It refuses a synced account and an owner who is missing, disabled or a leaver.",
+    "eligibleFor is what the person SHOULD be eligible for (PIM for Groups, Set-PimGroupEligibility.ps1; Global Administrator, Set-DirectoryRolePimPolicies.ps1). New-AdminAccounts.ps1 does not grant it; Invoke-PostApply.ps1 -PimEligibility does, after review. Nothing here has run against a tenant."
+  ],
+  "schemaVersion": 1,
+  "accounts": [
+    {
+      "adminAccount": "adm-ava.lin",
+      "ownerEmployeeId": "400101",
+      "owner": "Ava Lin",
+      "function": "IAM engineer",
+      "eligibleFor": [
+        "pim-tier0-ca-admins",
+        "pim-tier0-security-admins"
+      ],
+      "globalAdminEligible": true,
+      "note": "Tier-0 identity engineering. Second human path to Global Administrator once the build account is converted (Convert-BuildAccountToEligible.ps1)."
+    },
+    {
+      "adminAccount": "adm-raj.patel",
+      "ownerEmployeeId": "400102",
+      "owner": "Raj Patel",
+      "function": "Service desk analyst",
+      "eligibleFor": [
+        "pim-tier1-helpdesk"
+      ],
+      "globalAdminEligible": false,
+      "note": "Helpdesk and Authentication Administrator scoped to AU-Workforce-Standard (enable_helpdesk_au_scoping); identity proofing per runbooks/help-desk-identity-verification.md."
+    },
+    {
+      "adminAccount": "adm-mei.tanaka",
+      "ownerEmployeeId": "400103",
+      "owner": "Mei Tanaka",
+      "function": "Access governance lead",
+      "eligibleFor": [],
+      "globalAdminEligible": false,
+      "note": "Reviewer of record and PIM approver, acting from her workforce account; this admin account holds no eligibility so she never certifies or approves access she could activate herself (SOD-08). Kept for read-only governance tooling (Global Reader via a later eligibility, if needed)."
+    }
+  ]
+}

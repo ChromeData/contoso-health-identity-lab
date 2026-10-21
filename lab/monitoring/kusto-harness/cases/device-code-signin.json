@@ -1,0 +1,105 @@
+{
+  "rule": "device-code-signin",
+  "about": "Device-code grant (AuthenticationProtocol deviceCode) or a token from a device-code session (OriginalTransferMethod deviceCodeFlow), both sign-in tables. Non-interactive rows carry LocationDetails and ConditionalAccessPolicies as STRINGS (Learn). AppId 04b07795-... is the public Microsoft Azure CLI client.",
+  "defaults": {
+    "SigninLogs": {
+      "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "UserId": "11111111-1111-1111-1111-111111111111",
+      "IPAddress": "203.0.113.80", "AppDisplayName": "Microsoft Azure CLI", "AppId": "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
+      "ResourceDisplayName": "Microsoft Graph", "AuthenticationProtocol": "deviceCode", "OriginalTransferMethod": "none",
+      "ResultType": "0", "ConditionalAccessStatus": "success", "RiskLevelDuringSignIn": "none",
+      "LocationDetails": {"countryOrRegion": "US"},
+      "ConditionalAccessPolicies": [{"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "result": "success"}],
+      "CorrelationId": "33333333-3333-3333-3333-333333333333", "TimeGenerated": "ago:15m"
+    },
+    "AADNonInteractiveUserSignInLogs": {
+      "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "UserId": "11111111-1111-1111-1111-111111111111",
+      "IPAddress": "203.0.113.81", "AppDisplayName": "Microsoft Azure CLI", "AppId": "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
+      "ResourceDisplayName": "Microsoft Graph", "AuthenticationProtocol": "none", "OriginalTransferMethod": "deviceCodeFlow",
+      "ResultType": "0", "ConditionalAccessStatus": "success", "RiskLevelDuringSignIn": "none",
+      "LocationDetails": "{\"countryOrRegion\":\"US\"}",
+      "ConditionalAccessPolicies": "[{\"id\":\"22222222-2222-2222-2222-222222222222\",\"displayName\":\"CA001 - Require MFA for all users\",\"result\":\"success\"}]",
+      "CorrelationId": "44444444-4444-4444-4444-444444444444", "TimeGenerated": "ago:10m"
+    }
+  },
+  "cases": [
+    {
+      "id": "device-code-success-standard-user",
+      "kind": "positive",
+      "label": "A device-code grant that issued tokens to an ordinary user: Medium",
+      "tables": {"SigninLogs": [{}]},
+      "expect": [{"Severity": "Medium", "Outcome": "SUCCEEDED - device-code tokens issued", "Via": "device code grant",
+                  "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "PrivilegedTarget": false,
+                  "MaxSignInRisk": "none", "SignIns": 1, "Successes": 1, "CaBlocks": 0, "Sanctioned": false,
+                  "SignInTypes": ["interactive"], "Countries": ["US"]}]
+    },
+    {
+      "id": "tier0-admin-by-name",
+      "kind": "positive",
+      "label": "tier0-admin-01 completes a device-code sign-in: High by the naming fallback",
+      "tables": {"SigninLogs": [{"UserPrincipalName": "tier0-admin-01@contosohealthlab.onmicrosoft.com", "UserId": "55555555-5555-5555-5555-555555555555"}]},
+      "expect": [{"Severity": "High", "PrivilegedTarget": true, "PrivilegedById": false}]
+    },
+    {
+      "id": "privileged-by-rendered-id",
+      "kind": "positive",
+      "label": "Helen (HR-named) is privileged by object id once PrivilegedUserIds is rendered: High",
+      "lets": {"PrivilegedUserIds": ["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]},
+      "tables": {"SigninLogs": [{"UserPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com", "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}]},
+      "expect": [{"Severity": "High", "PrivilegedTarget": true, "PrivilegedById": true}]
+    },
+    {
+      "id": "medium-risk-success",
+      "kind": "positive",
+      "label": "A medium-risk device-code sign-in that succeeded: High",
+      "tables": {"SigninLogs": [{"RiskLevelDuringSignIn": "medium"}]},
+      "expect": [{"Severity": "High", "MaxSignInRisk": "medium", "PrivilegedTarget": false}]
+    },
+    {
+      "id": "blocked-by-ca010",
+      "kind": "positive",
+      "label": "CA010 blocks the device-code grant: still a row, Low",
+      "tables": {"SigninLogs": [{"ResultType": "53003", "ConditionalAccessStatus": "failure",
+                                 "ConditionalAccessPolicies": [{"id": "66666666-6666-6666-6666-666666666666", "displayName": "CA010 - Block device code flow", "result": "failure"}]}]},
+      "expect": [{"Severity": "Low", "Outcome": "Blocked by CA", "CaBlocks": 1, "Successes": 0, "ErrorCodes": ["53003"]}]
+    },
+    {
+      "id": "token-from-device-code-session",
+      "kind": "positive",
+      "label": "A non-interactive token from a device-code session (string LocationDetails / CA list)",
+      "tables": {"AADNonInteractiveUserSignInLogs": [{}]},
+      "expect": [{"Via": "token from a device-code session", "Severity": "Medium", "SignInTypes": ["non-interactive"],
+                  "Countries": ["US"], "IPAddress": "203.0.113.81"}]
+    },
+    {
+      "id": "report-only-would-block",
+      "kind": "positive",
+      "label": "CA010 in report-only logged reportOnlyFailure but let the sign-in through",
+      "tables": {"SigninLogs": [{"ConditionalAccessPolicies": [
+        {"id": "66666666-6666-6666-6666-666666666666", "displayName": "CA010 - Block device code flow", "result": "reportOnlyFailure"},
+        {"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "result": "success"}]}]},
+      "expect": [{"AnyReportOnlyWouldBlock": 1, "Successes": 1, "Severity": "Medium"}]
+    },
+    {
+      "id": "upn-case-folded",
+      "kind": "positive",
+      "label": "Mixed-case UPN is lower-cased before grouping",
+      "tables": {"SigninLogs": [{"UserPrincipalName": "Dana.Okafor@ContosoHealthLab.onmicrosoft.com"}]},
+      "expect": [{"UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"}]
+    },
+    {
+      "id": "ordinary-browser-and-refresh",
+      "kind": "negative",
+      "label": "An oAuth2 browser sign-in and an ordinary refresh-token sign-in",
+      "tables": {
+        "SigninLogs": [{"AuthenticationProtocol": "oAuth2", "AppDisplayName": "My Apps"}],
+        "AADNonInteractiveUserSignInLogs": [{"OriginalTransferMethod": "none"}]
+      }
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A device-code success 2 h ago",
+      "tables": {"SigninLogs": [{"TimeGenerated": "ago:2h"}]}
+    }
+  ]
+}

@@ -1,0 +1,2179 @@
+[
+  {
+    "oid": "c0471e00-0000-4000-8000-000000000301",
+    "version": "32",
+    "name": "helen.carter",
+    "description": "Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).",
+    "parentOrgRef": [
+      {
+        "oid": "c0471e00-0000-4000-8000-000000000101",
+        "relation": "org:manager",
+        "type": "c:OrgType"
+      },
+      {
+        "oid": "c0471e00-0000-4000-8000-000000000101",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      }
+    ],
+    "assignment": [
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.410Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.376Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.376Z",
+              "@id": "348"
+            }
+          },
+          "@id": 347
+        },
+        "@id": 341,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000101",
+          "relation": "org:manager",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.410Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.376Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.376Z",
+              "@id": "346"
+            }
+          },
+          "@id": 345
+        },
+        "@id": 342,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000101",
+          "relation": "org:default",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.410Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.376Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "certificationFinishedTimestamp": "2026-10-20T16:21:26.238Z",
+            "certificationOutcome": "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+            "certifierRef": {
+              "oid": "c0471e00-0000-4000-8000-000000000308",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "certifierComment": "Night-shift escalation cover confirmed with the CNO office."
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.376Z",
+              "@id": "352"
+            }
+          },
+          "@id": 351
+        },
+        "@id": 343,
+        "description": "Requested 2025-02: night-shift escalation cover for the ICU.",
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000202",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.410Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.376Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.376Z",
+              "@id": "350"
+            }
+          },
+          "@id": 349
+        },
+        "@id": 344,
+        "description": "Built-in midPoint role \"Reviewer\": may record certification decisions.",
+        "targetRef": {
+          "oid": "00000000-0000-0000-0000-00000000000b",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      }
+    ],
+    "iteration": 0,
+    "iterationToken": "",
+    "roleMembershipRef": [
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 353,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.393Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000301",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 354,
+                "segmentOrder": 1,
+                "assignmentId": 344,
+                "targetRef": {
+                  "oid": "00000000-0000-0000-0000-00000000000b",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "00000000-0000-0000-0000-00000000000b",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 359,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.394Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000301",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 360,
+                "segmentOrder": 1,
+                "assignmentId": 342,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000101",
+                  "relation": "org:default",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000101",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 355,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.394Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000301",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 356,
+                "segmentOrder": 1,
+                "assignmentId": 343,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000202",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000202",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 357,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.394Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000301",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 358,
+                "segmentOrder": 1,
+                "assignmentId": 341,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000101",
+                  "relation": "org:manager",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000101",
+        "relation": "org:manager",
+        "type": "c:OrgType"
+      }
+    ],
+    "activation": {
+      "administrativeStatus": "enabled",
+      "effectiveStatus": "enabled",
+      "enableTimestamp": "2026-10-20T16:21:18.383Z"
+    },
+    "fullName": "Helen Carter",
+    "givenName": "Helen",
+    "familyName": "Carter",
+    "title": "Chief Nursing Officer",
+    "employeeNumber": "300001",
+    "organizationalUnit": "Administration"
+  },
+  {
+    "oid": "c0471e00-0000-4000-8000-000000000302",
+    "version": "32",
+    "name": "grace.mwangi",
+    "description": "Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).",
+    "parentOrgRef": [
+      {
+        "oid": "c0471e00-0000-4000-8000-000000000102",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      },
+      {
+        "oid": "c0471e00-0000-4000-8000-000000000102",
+        "relation": "org:manager",
+        "type": "c:OrgType"
+      }
+    ],
+    "assignment": [
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.576Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.544Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.544Z",
+              "@id": "434"
+            }
+          },
+          "@id": 433
+        },
+        "@id": 428,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000102",
+          "relation": "org:default",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.576Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.544Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.544Z",
+              "@id": "440"
+            }
+          },
+          "@id": 439
+        },
+        "@id": 429,
+        "description": "Birthright: Nursing department.",
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000201",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.576Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.544Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.544Z",
+              "@id": "436"
+            }
+          },
+          "@id": 435
+        },
+        "@id": 430,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000102",
+          "relation": "org:manager",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.576Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.544Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.544Z",
+              "@id": "438"
+            }
+          },
+          "@id": 437
+        },
+        "@id": 431,
+        "description": "Built-in midPoint role \"Reviewer\": may record certification decisions.",
+        "targetRef": {
+          "oid": "00000000-0000-0000-0000-00000000000b",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.576Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.544Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "certificationFinishedTimestamp": "2026-10-20T16:21:26.238Z",
+            "certificationOutcome": "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+            "certifierRef": {
+              "oid": "c0471e00-0000-4000-8000-000000000301",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "certifierComment": "Covers ICU charge-nurse shifts."
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.544Z",
+              "@id": "442"
+            }
+          },
+          "@id": 441
+        },
+        "@id": 432,
+        "description": "Requested 2024-06: ICU charge-nurse cover.",
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000202",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      }
+    ],
+    "iteration": 0,
+    "iterationToken": "",
+    "roleMembershipRef": [
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 449,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.564Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000302",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 450,
+                "segmentOrder": 1,
+                "assignmentId": 431,
+                "targetRef": {
+                  "oid": "00000000-0000-0000-0000-00000000000b",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "00000000-0000-0000-0000-00000000000b",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 445,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.564Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000302",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 446,
+                "segmentOrder": 1,
+                "assignmentId": 428,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000102",
+                  "relation": "org:default",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000102",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 451,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.564Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000302",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 452,
+                "segmentOrder": 1,
+                "assignmentId": 429,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000201",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000201",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 443,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.564Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000302",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 444,
+                "segmentOrder": 1,
+                "assignmentId": 432,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000202",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000202",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 447,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.564Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000302",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 448,
+                "segmentOrder": 1,
+                "assignmentId": 430,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000102",
+                  "relation": "org:manager",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000102",
+        "relation": "org:manager",
+        "type": "c:OrgType"
+      }
+    ],
+    "activation": {
+      "administrativeStatus": "enabled",
+      "effectiveStatus": "enabled",
+      "enableTimestamp": "2026-10-20T16:21:18.556Z"
+    },
+    "fullName": "Grace Mwangi",
+    "givenName": "Grace",
+    "familyName": "Mwangi",
+    "title": "Nurse Manager",
+    "employeeNumber": "200015",
+    "organizationalUnit": "Nursing"
+  },
+  {
+    "@metadata": {
+      "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+      "storage": {
+        "modifyTimestamp": "2026-10-20T16:21:26.035Z",
+        "modifierRef": {
+          "oid": "00000000-0000-0000-0000-000000000002",
+          "relation": "org:default",
+          "type": "c:UserType"
+        },
+        "modifyTaskRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000503",
+          "relation": "org:default",
+          "type": "c:TaskType"
+        }
+      },
+      "@id": 458
+    },
+    "oid": "c0471e00-0000-4000-8000-000000000303",
+    "version": "32",
+    "name": "daniel.osei",
+    "description": "Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).",
+    "parentOrgRef": [
+      {
+        "oid": "c0471e00-0000-4000-8000-000000000103",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      },
+      {
+        "oid": "c0471e00-0000-4000-8000-000000000103",
+        "relation": "org:manager",
+        "type": "c:OrgType"
+      }
+    ],
+    "assignment": [
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.708Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.680Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.679Z",
+              "@id": "437"
+            }
+          },
+          "@id": 436
+        },
+        "@id": 432,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000103",
+          "relation": "org:default",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.708Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.680Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.679Z",
+              "@id": "439"
+            }
+          },
+          "@id": 438
+        },
+        "@id": 434,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000103",
+          "relation": "org:manager",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.708Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.680Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.679Z",
+              "@id": "441"
+            }
+          },
+          "@id": 440
+        },
+        "@id": 435,
+        "description": "Built-in midPoint role \"Reviewer\": may record certification decisions.",
+        "targetRef": {
+          "oid": "00000000-0000-0000-0000-00000000000b",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      }
+    ],
+    "iteration": 0,
+    "iterationToken": "",
+    "roleMembershipRef": [
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 454,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.695Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000303",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 455,
+                "segmentOrder": 1,
+                "assignmentId": 435,
+                "targetRef": {
+                  "oid": "00000000-0000-0000-0000-00000000000b",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "00000000-0000-0000-0000-00000000000b",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 452,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.695Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000303",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 453,
+                "segmentOrder": 1,
+                "assignmentId": 432,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000103",
+                  "relation": "org:default",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000103",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 456,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.695Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000303",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 457,
+                "segmentOrder": 1,
+                "assignmentId": 434,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000103",
+                  "relation": "org:manager",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000103",
+        "relation": "org:manager",
+        "type": "c:OrgType"
+      }
+    ],
+    "activation": {
+      "administrativeStatus": "enabled",
+      "effectiveStatus": "enabled",
+      "enableTimestamp": "2026-10-20T16:21:18.688Z"
+    },
+    "fullName": "Daniel Osei",
+    "givenName": "Daniel",
+    "familyName": "Osei",
+    "title": "Billing Manager",
+    "employeeNumber": "200030",
+    "organizationalUnit": "Billing"
+  },
+  {
+    "@metadata": {
+      "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+      "storage": {
+        "modifyTimestamp": "2026-10-20T16:21:26.116Z",
+        "modifierRef": {
+          "oid": "00000000-0000-0000-0000-000000000002",
+          "relation": "org:default",
+          "type": "c:UserType"
+        },
+        "modifyTaskRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000503",
+          "relation": "org:default",
+          "type": "c:TaskType"
+        }
+      },
+      "process": {},
+      "@id": 645
+    },
+    "oid": "c0471e00-0000-4000-8000-000000000304",
+    "version": "65",
+    "name": "marcus.bello",
+    "description": "Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).",
+    "parentOrgRef": {
+      "oid": "c0471e00-0000-4000-8000-000000000102",
+      "relation": "org:default",
+      "type": "c:OrgType"
+    },
+    "assignment": [
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.843Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.805Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.805Z",
+              "@id": "620"
+            }
+          },
+          "@id": 619
+        },
+        "@id": 615,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000102",
+          "relation": "org:default",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.843Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.805Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "certificationFinishedTimestamp": "2026-10-20T16:21:26.238Z",
+            "certificationOutcome": "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+            "certifierRef": {
+              "oid": "c0471e00-0000-4000-8000-000000000302",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "certifierComment": "Still on the ICU float rota this quarter."
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.805Z",
+              "@id": "625"
+            }
+          },
+          "@id": 624
+        },
+        "@id": 617,
+        "description": "Requested 2025-09: ICU float pool.",
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000202",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.843Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+            "modifyTimestamp": "2026-10-20T16:21:26.116Z",
+            "modifierRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "modifyTaskRef": {
+              "oid": "c0471e00-0000-4000-8000-000000000503",
+              "relation": "org:default",
+              "type": "c:TaskType"
+            }
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:18.805Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:18.805Z",
+              "@id": "623"
+            }
+          },
+          "@id": 622
+        },
+        "@id": 621,
+        "description": "Birthright: Nursing department.",
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000201",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      }
+    ],
+    "iteration": 0,
+    "iterationToken": "",
+    "roleMembershipRef": [
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 650,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.831Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000304",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 651,
+                "segmentOrder": 1,
+                "assignmentId": 615,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000102",
+                  "relation": "org:default",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000102",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 648,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.843Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000304",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 649,
+                "segmentOrder": 1,
+                "assignmentId": 621,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000201",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000201",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 646,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:18.831Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000304",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 647,
+                "segmentOrder": 1,
+                "assignmentId": 617,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000202",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000202",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      }
+    ],
+    "activation": {
+      "administrativeStatus": "enabled",
+      "effectiveStatus": "enabled",
+      "enableTimestamp": "2026-10-20T16:21:18.812Z"
+    },
+    "fullName": "Marcus Bello",
+    "givenName": "Marcus",
+    "familyName": "Bello",
+    "title": "Registered Nurse",
+    "employeeNumber": "100310",
+    "organizationalUnit": "Nursing"
+  },
+  {
+    "@metadata": {
+      "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+      "storage": {
+        "modifyTimestamp": "2026-10-20T16:21:26.182Z",
+        "modifierRef": {
+          "oid": "00000000-0000-0000-0000-000000000002",
+          "relation": "org:default",
+          "type": "c:UserType"
+        },
+        "modifyTaskRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000503",
+          "relation": "org:default",
+          "type": "c:TaskType"
+        }
+      },
+      "@id": 345
+    },
+    "oid": "c0471e00-0000-4000-8000-000000000305",
+    "version": "32",
+    "name": "dana.okafor",
+    "description": "Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).",
+    "parentOrgRef": {
+      "oid": "c0471e00-0000-4000-8000-000000000102",
+      "relation": "org:default",
+      "type": "c:OrgType"
+    },
+    "assignment": [
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.038Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:19.014Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:19.014Z",
+              "@id": "330"
+            }
+          },
+          "@id": 329
+        },
+        "@id": 326,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000102",
+          "relation": "org:default",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.038Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:19.014Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:19.014Z",
+              "@id": "332"
+            }
+          },
+          "@id": 331
+        },
+        "@id": 327,
+        "description": "Birthright: Nursing department.",
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000201",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      }
+    ],
+    "iteration": 0,
+    "iterationToken": "",
+    "roleMembershipRef": [
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 343,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.030Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000305",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 344,
+                "segmentOrder": 1,
+                "assignmentId": 326,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000102",
+                  "relation": "org:default",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000102",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 341,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.030Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000305",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 342,
+                "segmentOrder": 1,
+                "assignmentId": 327,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000201",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000201",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      }
+    ],
+    "activation": {
+      "administrativeStatus": "enabled",
+      "effectiveStatus": "enabled",
+      "enableTimestamp": "2026-10-20T16:21:19.021Z"
+    },
+    "fullName": "Dana Okafor",
+    "givenName": "Dana",
+    "familyName": "Okafor",
+    "title": "Registered Nurse",
+    "employeeNumber": "100492",
+    "organizationalUnit": "Nursing"
+  },
+  {
+    "oid": "c0471e00-0000-4000-8000-000000000306",
+    "version": "32",
+    "name": "sofia.reyes",
+    "description": "Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).",
+    "parentOrgRef": {
+      "oid": "c0471e00-0000-4000-8000-000000000102",
+      "relation": "org:default",
+      "type": "c:OrgType"
+    },
+    "assignment": [
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.173Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:19.151Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:19.151Z",
+              "@id": "261"
+            }
+          },
+          "@id": 260
+        },
+        "@id": 257,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000102",
+          "relation": "org:default",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.173Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:19.151Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:19.151Z",
+              "@id": "263"
+            }
+          },
+          "@id": 262
+        },
+        "@id": 258,
+        "description": "Birthright: Nursing department.",
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000201",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.173Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:19.151Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "certificationFinishedTimestamp": "2026-10-20T16:21:26.238Z",
+            "certificationOutcome": "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+            "certifierRef": {
+              "oid": "c0471e00-0000-4000-8000-000000000302",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "certifierComment": "In ICU orientation until 2026-12."
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:19.151Z",
+              "@id": "265"
+            }
+          },
+          "@id": 264
+        },
+        "@id": 259,
+        "description": "Requested 2026-10: ICU orientation rotation.",
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000202",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      }
+    ],
+    "iteration": 0,
+    "iterationToken": "",
+    "roleMembershipRef": [
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 266,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.164Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000306",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 267,
+                "segmentOrder": 1,
+                "assignmentId": 257,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000102",
+                  "relation": "org:default",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000102",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 268,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.164Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000306",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 269,
+                "segmentOrder": 1,
+                "assignmentId": 258,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000201",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000201",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 270,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.164Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000306",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 271,
+                "segmentOrder": 1,
+                "assignmentId": 259,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000202",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000202",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      }
+    ],
+    "activation": {
+      "administrativeStatus": "enabled",
+      "effectiveStatus": "enabled",
+      "enableTimestamp": "2026-10-20T16:21:19.157Z"
+    },
+    "fullName": "Sofia Reyes",
+    "givenName": "Sofia",
+    "familyName": "Reyes",
+    "title": "Registered Nurse",
+    "employeeNumber": "100488",
+    "organizationalUnit": "Nursing"
+  },
+  {
+    "oid": "c0471e00-0000-4000-8000-000000000307",
+    "version": "17",
+    "name": "priya.nair",
+    "description": "Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).",
+    "parentOrgRef": {
+      "oid": "c0471e00-0000-4000-8000-000000000103",
+      "relation": "org:default",
+      "type": "c:OrgType"
+    },
+    "assignment": [
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.300Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:19.270Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:19.270Z",
+              "@id": "175"
+            }
+          },
+          "@id": 174
+        },
+        "@id": 172,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000103",
+          "relation": "org:default",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.300Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:19.270Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:19.270Z",
+              "@id": "177"
+            }
+          },
+          "@id": 176
+        },
+        "@id": 173,
+        "description": "Requested 2022-01: invoice processing.",
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000204",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      }
+    ],
+    "iteration": 0,
+    "iterationToken": "",
+    "roleMembershipRef": [
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 178,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.284Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000307",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 179,
+                "segmentOrder": 1,
+                "assignmentId": 172,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000103",
+                  "relation": "org:default",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000103",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 180,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.285Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000307",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 181,
+                "segmentOrder": 1,
+                "assignmentId": 173,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000204",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000204",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      }
+    ],
+    "activation": {
+      "administrativeStatus": "disabled",
+      "effectiveStatus": "disabled",
+      "disableTimestamp": "2026-10-20T16:21:19.276Z"
+    },
+    "fullName": "Priya Nair",
+    "givenName": "Priya",
+    "familyName": "Nair",
+    "title": "Billing Specialist",
+    "employeeNumber": "100205",
+    "organizationalUnit": "Billing"
+  },
+  {
+    "oid": "c0471e00-0000-4000-8000-000000000308",
+    "version": "17",
+    "name": "access-governance-lead",
+    "description": "Fictional persona. Managed by run-campaign.sh (reset to this baseline on every run).",
+    "parentOrgRef": {
+      "oid": "c0471e00-0000-4000-8000-000000000101",
+      "relation": "org:default",
+      "type": "c:OrgType"
+    },
+    "assignment": [
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.414Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:19.390Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:19.390Z",
+              "@id": "175"
+            }
+          },
+          "@id": 174
+        },
+        "@id": 172,
+        "targetRef": {
+          "oid": "c0471e00-0000-4000-8000-000000000101",
+          "relation": "org:default",
+          "type": "c:OrgType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      },
+      {
+        "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+        "@metadata": {
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.414Z",
+            "creatorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            },
+            "createChannel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process": {
+            "requestTimestamp": "2026-10-20T16:21:19.390Z",
+            "requestorRef": {
+              "oid": "00000000-0000-0000-0000-000000000002",
+              "relation": "org:default",
+              "type": "c:UserType"
+            }
+          },
+          "provenance": {
+            "acquisition": {
+              "actorRef": {
+                "oid": "00000000-0000-0000-0000-000000000002",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "channel": "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp": "2026-10-20T16:21:19.390Z",
+              "@id": "177"
+            }
+          },
+          "@id": 176
+        },
+        "@id": 173,
+        "description": "Built-in midPoint role \"Reviewer\": may record certification decisions.",
+        "targetRef": {
+          "oid": "00000000-0000-0000-0000-00000000000b",
+          "relation": "org:default",
+          "type": "c:RoleType"
+        },
+        "activation": {
+          "effectiveStatus": "enabled"
+        }
+      }
+    ],
+    "iteration": 0,
+    "iterationToken": "",
+    "roleMembershipRef": [
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 180,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.402Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000308",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 181,
+                "segmentOrder": 1,
+                "assignmentId": 173,
+                "targetRef": {
+                  "oid": "00000000-0000-0000-0000-00000000000b",
+                  "relation": "org:default",
+                  "type": "c:RoleType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "00000000-0000-0000-0000-00000000000b",
+        "relation": "org:default",
+        "type": "c:RoleType"
+      },
+      {
+        "@metadata": {
+          "@ns": "http://prism.evolveum.com/xml/ns/public/types-3",
+          "@id": 178,
+          "storage": {
+            "createTimestamp": "2026-10-20T16:21:19.402Z"
+          },
+          "provenance": {
+            "assignmentPath": {
+              "sourceRef": {
+                "oid": "c0471e00-0000-4000-8000-000000000308",
+                "relation": "org:default",
+                "type": "c:UserType"
+              },
+              "segment": {
+                "@id": 179,
+                "segmentOrder": 1,
+                "assignmentId": 172,
+                "targetRef": {
+                  "oid": "c0471e00-0000-4000-8000-000000000101",
+                  "relation": "org:default",
+                  "type": "c:OrgType"
+                },
+                "matchingOrder": true
+              }
+            }
+          }
+        },
+        "oid": "c0471e00-0000-4000-8000-000000000101",
+        "relation": "org:default",
+        "type": "c:OrgType"
+      }
+    ],
+    "activation": {
+      "administrativeStatus": "enabled",
+      "effectiveStatus": "enabled",
+      "enableTimestamp": "2026-10-20T16:21:19.396Z"
+    },
+    "fullName": "Access Governance Lead",
+    "givenName": "Access",
+    "familyName": "Governance Lead",
+    "title": "Access Governance Lead",
+    "employeeNumber": "900001",
+    "organizationalUnit": "Identity Governance"
+  }
+]

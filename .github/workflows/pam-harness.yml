@@ -1,0 +1,110 @@
+# =============================================================================
+# pam-harness.yml  —  Contoso Health Identity Platform (lab/pam)
+# -----------------------------------------------------------------------------
+# The PAM harness's default suites, from a FRESH CLONE on a fresh runner:
+# `cd lab/pam && ./test/run-all.sh`. That means no `.env`, no `.secrets/`, no
+# Docker volumes and no images left over from an earlier run, which is the
+# case a laptop run never covers (every run on the author's laptop reuses the
+# shared stack's containers and its existing `.env`). The run's console
+# output and the per-suite table in the job summary are the evidence, with a
+# GitHub timestamp and a commit anyone can resolve.
+#
+# What it runs (lab/pam/README.md, "Test suites and the runner"): the PAM flow
+# against a Samba AD DC (e2e, with the 3-node HA cluster and the DR drill),
+# the midPoint campaign, dynamic database credentials and the Vault audit
+# feed, all in Docker on the runner; plus the offline suites (dependency-scan
+# Pester tests, the ingest script, dual control against the ServiceNow mock,
+# the recording-format check). The optional 500-account `scale` suite is not
+# run here (add a dispatch input if it is ever wanted).
+#
+# NO CLOUD CREDENTIALS: no id-token: write, no secrets, no repo variables. The
+# harness generates every lab credential (`pam-up.sh` writes `.env` and
+# `.secrets/` on the runner); they live only for this run and are never
+# printed or uploaded. No artifact is uploaded either: the per-suite logs in
+# lab/pam/out/test-runs/ name lab accounts and operators, so only the
+# runner's own console output and the PASS / FAIL counts leave the runner.
+#
+# Not on pull requests, on purpose: a full run takes several minutes and
+# pulls every stand-in image (Vault, Guacamole, Conjur, midPoint, PostgreSQL).
+# It runs on demand and nightly. It is therefore never a required check.
+#
+# Supply chain: actions pinned to full commit SHAs (same pins and rationale as
+# terraform-plan.yml); Pester pinned to the version lab-tests.yml uses. The
+# stand-in images are pinned by version in lab/pam/docker-compose*.yml (the
+# test-only projects by digest); the four local images are built on the
+# runner from lab/pam.
+# =============================================================================
+
+name: pam harness
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "23 5 * * *"       # nightly, 05:23 UTC (off the hour)
+
+# Read-only token, nothing else. Nothing in this run talks to a cloud API.
+permissions:
+  contents: read
+
+concurrency:
+  group: pam-harness-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pam-run-all:
+    name: PAM run-all (fresh clone, local Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Pester (dependency-scan suite)
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+
+      # Proves the "fresh" in fresh clone before anything starts: no generated
+      # credentials, no harness output, no volumes or containers from a run.
+      - name: Fresh state (no .env, no secrets, no volumes)
+        run: |
+          set -euo pipefail
+          for p in lab/pam/.env lab/pam/.secrets lab/pam/out lab/pam/dynamic-db/.secrets; do
+            if [ -e "$p" ]; then echo "::error::$p exists before the run"; exit 1; fi
+          done
+          if docker volume ls --format '{{.Name}}' | grep -E '^contoso-'; then
+            echo "::error::contoso-* Docker volumes exist before the run"; exit 1
+          fi
+          if docker ps -a --format '{{.Names}}' | grep -E '^contoso-'; then
+            echo "::error::contoso-* containers exist before the run"; exit 1
+          fi
+          echo "fresh: no .env, no .secrets/, no out/, no contoso-* volumes or containers"
+          docker version --format 'docker {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})'
+          docker compose version
+
+      - name: run-all (default suites)
+        working-directory: lab/pam
+        run: ./test/run-all.sh
+
+      - name: Per-suite table (job summary)
+        if: ${{ !cancelled() }}
+        working-directory: lab/pam
+        run: |
+          set -uo pipefail
+          d=$(find out/test-runs -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)
+          {
+            echo "## PAM run-all (fresh clone, ${GITHUB_SHA})"
+            echo
+            if [ -n "$d" ] && [ -s "$d/results.tsv" ]; then
+              echo "| suite | verdict | passed | failed | skipped | exit | seconds |"
+              echo "|---|---|---|---|---|---|---|"
+              awk -F'\t' '{ printf "| %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7 }' "$d/results.tsv"
+            else
+              echo "No results.tsv: run-all stopped before its first suite (see the run-all step)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

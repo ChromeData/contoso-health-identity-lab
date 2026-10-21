@@ -1,0 +1,109 @@
+index=entra sourcetype="azure:loganalytics:auditlogs" (Category="UserManagement" OR Category="RoleManagement" OR Category="GroupManagement") earliest=-2d latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Authentication method changed by an admin for ANOTHER user ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/auth-method-changed-by-admin.kql                  ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over Entra AuditLogs REPLAYED     ```
+``` from Log Analytics by lab/splunk/ingest-from-loganalytics.sh.              ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   Admin registered / updated / deleted security info, or legacy per-user   ```
+```   MFA (StrongAuthentication) edits, where the actor is not the target.     ```
+```   High when the target is privileged (every V3 target of the help-desk    ```
+```   runbook), by any one of three tests - PrivilegeBasis says which:        ```
+```   1. its object id is in lookups/contoso_privileged_identities.csv         ```
+```      (break-glass + PIM / role members and eligibles, from Terraform and   ```
+```      Find-ShadowAdmins);                                                   ```
+```   2. it was granted a directory role (active or eligible, direct or PIM), ```
+```      or membership / ownership of a privileged group (lookups/contoso_    ```
+```      privileged_groups.csv, or the Break-Glass-Admins / Privileged-IAM-   ```
+```      Admins / PIM-Azure-RG-Contributors / PIM-Tier* name fallback), in    ```
+```      the last 2 days: the id list is a snapshot, and making an account    ```
+```      eligible and then giving it a TAP is the takeover chain;             ```
+```   3. naming fallback (bg-admin-NN, tier0-admin-NN).                        ```
+```   Else Medium. IsTap flags TAP issuance.                                   ```
+``` MITRE ATT&CK: T1556.006 Multi-Factor Authentication; T1098.005.           ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   Category =~ UserManagement           -> lower(Category)==usermanagement   ```
+```   tostring(TargetResources) contains StrongAuthentication -> like(_raw,...) ```
+```   extract(admin registered (.+?) method) -> rex, lazy group                ```
+```   matches regex (bg|tier0)-admin-NN@  -> match() with [0-9]{2}             ```
+```   PrivilegedUserIds let-list           -> lookup (object_id column)        ```
+```   PrivilegedGroupIds let-list          -> lookup contoso_privileged_groups ```
+```   let RecentPrivilegedGrants (2d) + leftouter join on the target id       ```
+```                                        -> one 2-day search over the three  ```
+```                                           categories; grant rows tagged,   ```
+```                                           eventstats values(Grant) BY the  ```
+```                                           target id, then only the method  ```
+```                                           changes of the last hour kept    ```
+```                                           (no join, no subsearch limits)   ```
+```   coalesce(a, b) (skips empty)        -> if(non-empty a, a, b)              ```
+```                                                                            ```
+``` SCHEDULE: PT5M / P2D (1 h of method changes judged, 2 days of grant       ```
+``` history), base severity Medium (Severity column = dynamic), throttled 1 h ```
+``` per Actor + Severity.                                                       ```
+``` ========================================================================== ```
+``` @stanza Contoso - Authentication method changed by an admin for another user ```
+``` @conf description = An admin registered, updated or deleted another user's MFA or passwordless method (incl. TAP); High for privileged targets (id list, a role or privileged-group grant in the last 2 days, or break-glass / Tier-0 naming). KQL twin: lab/kql/auth-method-changed-by-admin.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -2d ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 4 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Actor,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where lower(Result)=="success"
+| eval OpL=lower(OperationName), CatL=lower(Category)
+| eval IsChange=if(CatL=="usermanagement" AND _time>=relative_time(now(), "-1h") AND (in(OpL, "admin registered security info", "admin updated security info", "admin deleted security info") OR (OpL=="update user" AND like(_raw, "%StrongAuthentication%"))), "true", "false")
+| eval IsGrantOp=if(in(CatL, "rolemanagement", "groupmanagement") AND in(OpL, "add member to role", "add member to group", "add owner to group", "add eligible member to role in pim completed (permanent)", "add eligible member to role in pim completed (timebound)", "add member to role in pim completed (permanent)", "add member to role in pim completed (timebound)"), "true", "false")
+| where IsChange=="true" OR IsGrantOp=="true"
+| spath path=TargetResources{} output=TR
+| eval TR1=mvindex(mvfilter(match(spath(TR, "type"), "(?i)^User$")), 0)
+| eval TargetUpn=spath(TR1, "userPrincipalName"), TargetObjectId=spath(TR1, "id")
+| eval TRGroup=mvindex(mvfilter(match(spath(TR, "type"), "(?i)^Group$")), 0), TRRole=mvindex(mvfilter(match(spath(TR, "type"), "(?i)^Role$")), 0)
+| eval GroupIdFromTarget=spath(TRGroup, "id"), TargetsText=mvjoin(TR, " ")
+| rex field=TargetsText "Group[.]ObjectID[^}]*newValue[^0-9A-Fa-f}]*(?<GroupIdFromProps>[0-9A-Fa-f-]{36})"
+| rex field=TargetsText "Group[.]DisplayName[^}]*newValue[^A-Za-z0-9}]*(?<GroupNameFromProps>[A-Za-z0-9][A-Za-z0-9 _.-]*)"
+| rex field=TargetsText "Role[.]DisplayName[^}]*newValue[^A-Za-z0-9}]*(?<RoleNameFromProps>[A-Za-z0-9][A-Za-z0-9 _.-]*)"
+| eval GrantGroupId=coalesce(GroupIdFromTarget, GroupIdFromProps), GrantGroupName=coalesce(spath(TRGroup, "displayName"), GroupNameFromProps), GrantRoleName=coalesce(spath(TRRole, "displayName"), RoleNameFromProps)
+| lookup contoso_privileged_groups.csv group_id AS GrantGroupId OUTPUT group_id AS GrantPrivGroupHit
+| eval IsGroupGrant=if(in(OpL, "add member to group", "add owner to group") OR CatL=="groupmanagement" OR (isnotnull(GroupIdFromTarget) AND GroupIdFromTarget!=""), "true", "false")
+| eval PrivilegedGrant=if(IsGrantOp=="true" AND ((IsGroupGrant=="false" AND CatL=="rolemanagement") OR (IsGroupGrant=="true" AND (isnotnull(GrantPrivGroupHit) OR in(lower(coalesce(GrantGroupName, "")), "break-glass-admins", "privileged-iam-admins", "pim-azure-rg-contributors") OR match(coalesce(GrantGroupName, ""), "^PIM-Tier")))), "true", "false")
+| eval Grant=case(PrivilegedGrant=="true" AND IsGroupGrant=="true", "group " . coalesce(GrantGroupName, GrantGroupId, "(unnamed)") . " (" . OperationName . ")", PrivilegedGrant=="true", "role " . coalesce(GrantRoleName, "(unnamed)") . " (" . OperationName . ")")
+| eval GrantEpoch=if(isnotnull(Grant), _time, null())
+| eventstats values(Grant) AS RecentGrants, max(GrantEpoch) AS LastGrantEpoch BY TargetObjectId
+| where IsChange=="true"
+| spath path=InitiatedBy.user.userPrincipalName output=ActorUpn
+| spath path=InitiatedBy.user.id output=ActorObjectId
+| spath path=InitiatedBy.app.displayName output=ActorApp
+| spath path=InitiatedBy.user.ipAddress output=ActorUserIp
+| spath path=InitiatedBy.app.ipAddress output=ActorAppIp
+| eval ActorIp=if(isnotnull(ActorUserIp) AND ActorUserIp!="", ActorUserIp, ActorAppIp)
+| eval Actor=if(isnotnull(ActorUpn) AND ActorUpn!="", ActorUpn, ActorApp)
+| where isnull(ActorObjectId) OR ActorObjectId=="" OR ActorObjectId!=TargetObjectId
+| rex field=ResultReason "(?i)admin (registered|updated|deleted) (?<MethodFromReason>.+?) method"
+| eval Method=if(isnotnull(MethodFromReason) AND MethodFromReason!="", MethodFromReason, if(lower(OperationName)=="update user", "legacy per-user MFA (StrongAuthentication*)", ""))
+| eval Action=case(match(OperationName, "(?i)registered"), "Registered", match(OperationName, "(?i)updated"), "Updated", match(OperationName, "(?i)deleted"), "Deleted", true(), "Updated")
+| eval IsTap=if(match(coalesce(ResultReason, ""), "(?i)temporary access pass"), "true", "false")
+| lookup contoso_privileged_identities.csv object_id AS TargetObjectId OUTPUT object_id AS PrivIdHit
+| eval PrivilegedById=if(isnotnull(PrivIdHit), "true", "false")
+| eval LastGrant=if(isnotnull(LastGrantEpoch), strftime(LastGrantEpoch, "%Y-%m-%dT%H:%M:%SZ"), null())
+| eval PrivilegedByGrant=if(isnotnull(TargetObjectId) AND TargetObjectId!="" AND isnotnull(RecentGrants), "true", "false")
+| eval PrivilegedByName=if(match(coalesce(TargetUpn, ""), "(?i)^(bg-admin-[0-9]{2}|tier0-admin-[0-9]{2})@"), "true", "false")
+| eval PrivilegedTarget=if(PrivilegedById=="true" OR PrivilegedByName=="true" OR PrivilegedByGrant=="true", "true", "false")
+| eval PrivilegeBasis=case(PrivilegedById=="true", "privileged id list", PrivilegedByGrant=="true", "role or privileged-group grant in the grant history", PrivilegedByName=="true", "naming convention (fallback)", true(), "none")
+| eval Severity=if(PrivilegedTarget=="true", "High", "Medium")
+| sort 0 - _time
+| table TimeGenerated, Severity, Action, Method, IsTap, TargetUpn, TargetObjectId, PrivilegedTarget, PrivilegedById, PrivilegedByGrant, PrivilegeBasis, RecentGrants, LastGrant, Actor, ActorUpn, ActorObjectId, ActorApp, ActorIp, OperationName, ResultReason, CorrelationId

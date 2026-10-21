@@ -1,0 +1,198 @@
+# =============================================================================
+# nightly-report: a stand-in clinical workload that needs one database
+# password, and gets it with NO static secret in its path. There is no
+# Kubernetes Secret, no env var and no value in this file. (The platform's own
+# bootstrap credential, the dev-mode Vault root token, is accounted for in
+# lab/k8s/README.md section 6.)
+#
+# How the credential arrives (Vault is the labelled stand-in for CyberArk
+# Secrets Manager / Conjur authn-k8s, see lab/docs/STAND-INS.md):
+#   1. The kubelet writes a short-lived service-account token for
+#      clinical-apps/nightly-report into the projected volume "vault-token":
+#      audience "vault", 10 minute lifetime, rotated by the kubelet. It is NOT
+#      the legacy, never-expiring token Secret, and it is useless against the
+#      Kubernetes API itself (wrong audience).
+#   2. The Vault Agent Injector (a mutating webhook installed with the Helm
+#      chart) sees the annotations below and adds two containers:
+#      vault-agent-init (renders the file before the app starts) and the
+#      vault-agent sidecar (keeps it fresh and its Vault token renewed).
+#   3. The agent logs in to Vault's Kubernetes auth method (auth/kubernetes,
+#      role nightly-report) with that token. Vault asks the API server
+#      (TokenReview) whether it is genuine and still valid, then checks the
+#      bound service account, namespace and audience. It returns a Vault token
+#      with ONLY the nightly-report-read policy, valid at most 15 minutes.
+#   4. The agent reads clinical/data/db and writes only the password to
+#      /vault/secrets/db: a memory-backed emptyDir (tmpfs), mode 0400, owned by
+#      the app's uid. Never on the node's disk, never in etcd.
+#   5. Rotation needs no restart: the sidecar re-reads the value every 10 s
+#      and replaces the file (pipeline stage 9 writes a new value and checks
+#      that the SAME pod - same UID, no container restarted - serves it).
+#
+# Admission: the ValidatingAdmissionPolicy clinical-apps-workload-identity
+# (lab/terraform/k8s/identity) checks this Deployment AND the pod it creates,
+# the pod after the injector has added its containers: every image pinned by
+# digest, the nightly-report identity runs only the approved app image plus
+# the Vault Agent image, automountServiceAccountToken is false, and only the
+# release pipeline's group may create a workload that runs as nightly-report
+# or change one that does (judged before and after an update, so moving it
+# to another service account counts). A human deployer can change nothing in
+# this Deployment; it can still delete it (availability, not identity).
+# Changing the app image below means changing that allowlist in Terraform too.
+#
+# Ownership: the namespace (PSA "restricted"), the service account and the
+# Vault role/policy come from Terraform (lab/terraform/k8s/*). This file is
+# applied by lab/k8s/ci/pipeline.sh with `kubectl apply -f lab/k8s/manifests/`
+# (NOT -R: negative/ holds a deliberately rejected pod used only by the test).
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nightly-report
+  namespace: clinical-apps
+  labels:
+    app.kubernetes.io/name: nightly-report
+    app.kubernetes.io/part-of: contoso-health-identity-lab
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nightly-report
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nightly-report
+        app.kubernetes.io/part-of: contoso-health-identity-lab
+      annotations:
+        # --- Vault Agent Injector (vault-k8s 1.7.x, the injector in Helm
+        # chart 0.34.1). Annotation reference: developer.hashicorp.com/vault/docs/platform/k8s/injector/annotations
+        vault.hashicorp.com/agent-inject: "true"
+        # Vault role, and the auth mount it lives on (auth/kubernetes is the
+        # default; spelled out so the coupling to Terraform is visible).
+        vault.hashicorp.com/role: "nightly-report"
+        vault.hashicorp.com/auth-path: "auth/kubernetes"
+        # Log in with the audience-bound projected token below instead of the
+        # default service-account token (which this pod does not have, see
+        # automountServiceAccountToken). The volume is deliberately NOT mounted
+        # into the app container, so the injector mounts it only into its own
+        # containers, at /var/run/secrets/vault.hashicorp.com/serviceaccount
+        # (vault-k8s agent.go serviceaccount(): "fallback to
+        # DefaultServiceAccountMount"). The app never sees a token that can
+        # log in to Vault.
+        vault.hashicorp.com/agent-service-account-token-volume-name: "vault-token"
+        # One secret, rendered as the bare password (no key=value wrapper, no
+        # trailing newline), so the file's sha256 equals the seeded value's
+        # (`printf '%s' "$value" | sha256sum`).
+        vault.hashicorp.com/agent-inject-secret-db: "clinical/data/db"
+        vault.hashicorp.com/agent-inject-template-db: |-
+          {{- with secret "clinical/data/db" -}}{{ .Data.data.password }}{{- end -}}
+        # Owner-read only. Works because the agent runs as the app's uid/gid
+        # (next two lines), so the app (uid 10001) owns the rendered file.
+        # One uid in every container also makes the kubelet write the
+        # projected token 0600 for that uid instead of world-readable 0644
+        # (observed on kindest/node v1.36.4: -rw------- 10001).
+        vault.hashicorp.com/agent-inject-perms-db: "0400"
+        vault.hashicorp.com/agent-run-as-user: "10001"
+        vault.hashicorp.com/agent-run-as-group: "10001"
+        # Init container renders before the app starts; the sidecar then keeps
+        # renewing (the Vault token's TTL is 15 min, the role's max is 15 min,
+        # so the agent re-authenticates with a fresh projected token).
+        vault.hashicorp.com/agent-pre-populate-only: "false"
+        # Rotation without a restart. A KV v2 value has no lease, so nothing
+        # tells the agent it changed: the agent re-reads such "static" secrets
+        # on this interval (default 5m) and rewrites the file (temp file +
+        # rename). vault-k8s v1.7.6 agent-inject/agent/annotations.go maps this
+        # annotation to template_config.static_secret_render_interval.
+        # 10s keeps pipeline stage 9 short; the price is one KV read per pod
+        # every 10 s. Production: minutes, sized to how fast a rotated
+        # credential must be live (verify: Vault Enterprise can instead push
+        # KV changes to the agent - static secret caching + event streams).
+        vault.hashicorp.com/template-static-secret-render-interval: "10s"
+    spec:
+      serviceAccountName: nightly-report
+      # No default token in the pod: the default kube-api-access volume holds
+      # a token whose audience IS the Kubernetes API. This workload never
+      # calls the API, so it gets none (least privilege). The pod spec and
+      # the ServiceAccount (Terraform) both say false.
+      automountServiceAccountToken: false
+      # No environment variables for every Service in the namespace either.
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        # PSA "restricted" (enforced on clinical-apps) needs runAsNonRoot and a
+        # seccomp profile. Set at pod level, so the containers the injector
+        # adds inherit them too (vault-k8s sets non-root, no privilege
+        # escalation, drop ALL and a read-only root on its own containers, but
+        # no seccomp profile).
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nightly-report
+          # Pinned by digest: the multi-arch index of busybox 1.37.0 (covers
+          # linux/amd64 for CI and linux/arm64 for Apple Silicon), resolved
+          # from registry-1.docker.io on 2026-10-19. The tag is informational;
+          # the digest is what the kubelet pulls.
+          image: docker.io/library/busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          # The stand-in "job": report, every 5 minutes, that the credential
+          # is there, without ever printing it. `sleep & wait` + the trap let
+          # SIGTERM stop the pod at once (sh as PID 1 ignores it otherwise).
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              trap 'exit 0' TERM INT
+              while true; do
+                if [ -s /vault/secrets/db ]; then
+                  echo "$(date -u +%H:%M:%SZ) nightly-report: db credential file present (value not printed)"
+                else
+                  echo "$(date -u +%H:%M:%SZ) nightly-report: db credential file MISSING" >&2
+                fi
+                sleep 300 &
+                wait $!
+              done
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+          # Both probes only test that the rendered file exists and is not
+          # empty (`test -s`). The command prints nothing, so the value can
+          # never reach probe events or logs. Not ready = the injector or the
+          # Vault login failed, which fails the pipeline's
+          # `kubectl rollout status`.
+          readinessProbe:
+            exec:
+              command: ["/bin/test", "-s", "/vault/secrets/db"]
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["/bin/test", "-s", "/vault/secrets/db"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 2
+            failureThreshold: 3
+      volumes:
+        # The only credential this pod is given: a projected, audience-bound,
+        # expiring service-account token, for Vault's eyes only.
+        # 600 s is the shortest lifetime the API server allows; the kubelet
+        # refreshes it before expiry (at 80% of its lifetime).
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: vault
+                  expirationSeconds: 600
+                  path: token

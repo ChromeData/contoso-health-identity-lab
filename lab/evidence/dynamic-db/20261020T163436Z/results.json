@@ -1,0 +1,255 @@
+{
+  "schema": "contoso-pam/e2e-dynamic-db/v1",
+  "run_utc": "20261020T163436Z",
+  "tenant": "none: local Docker only (compose project contoso-dyndb, synthetic data)",
+  "images": {
+    "vault": "hashicorp/vault:2.1.1",
+    "postgres": "postgres:16.15"
+  },
+  "requester": "token-e2e-ops-bob",
+  "result": "PASS",
+  "pass": 60,
+  "fail": 0,
+  "checks": [
+    {
+      "status": "PASS",
+      "name": "setup.sh --teardown"
+    },
+    {
+      "status": "PASS",
+      "name": "setup.sh (first run)"
+    },
+    {
+      "status": "PASS",
+      "name": "setup said rotate-root ran and the superuser password was removed"
+    },
+    {
+      "status": "PASS",
+      "name": "setup output contains neither bootstrap password"
+    },
+    {
+      "status": "PASS",
+      "name": "setup.sh (second run)"
+    },
+    {
+      "status": "PASS",
+      "name": "second run keeps Vault's admin password (no re-bootstrap)"
+    },
+    {
+      "status": "PASS",
+      "name": "vault_admin + bootstrap password: rejected by Postgres (rotate-root)"
+    },
+    {
+      "status": "PASS",
+      "name": "postgres superuser + bootstrap password: rejected (PASSWORD NULL)"
+    },
+    {
+      "status": "PASS",
+      "name": "config read shows the admin user (vault_admin) but no password (has password: false)"
+    },
+    {
+      "status": "PASS",
+      "name": "password_authentication = scram-sha-256 (scram-sha-256): Vault sends Postgres verifiers, not plaintext"
+    },
+    {
+      "status": "PASS",
+      "name": "role TTLs: default 3600s, max 14400s (3600,14400)"
+    },
+    {
+      "status": "PASS",
+      "name": "requester token carries only clinical-readonly-requester - no 'default' (it would allow renewing any lease) (clinical-readonly-requester)"
+    },
+    {
+      "status": "PASS",
+      "name": "responder token carries only clinical-db-responder, no 'default' (clinical-db-responder)"
+    },
+    {
+      "status": "PASS",
+      "name": "username names the requester (v-e2e-ops-bob-...)"
+    },
+    {
+      "status": "PASS",
+      "name": "creds #1 log in over the network (current_user = v-e2e-ops-bob-un0i6cucx9wi-1792514086)"
+    },
+    {
+      "status": "PASS",
+      "name": "creds #1 read schema clinical (4 encounters)"
+    },
+    {
+      "status": "PASS",
+      "name": "billing schema: permission denied"
+    },
+    {
+      "status": "PASS",
+      "name": "INSERT into clinical: permission denied"
+    },
+    {
+      "status": "PASS",
+      "name": "CREATE TABLE in clinical: permission denied"
+    },
+    {
+      "status": "PASS",
+      "name": "login: not superuser / createrole / createdb, VALID UNTIL set (false,false,false,true)"
+    },
+    {
+      "status": "PASS",
+      "name": "vault_admin cannot read clinical data nor assume clinical_reader (false,false,false)"
+    },
+    {
+      "status": "PASS",
+      "name": "the login cannot connect to the postgres maintenance database (CONNECT revoked from PUBLIC)"
+    },
+    {
+      "status": "PASS",
+      "name": "the login cannot connect to template1"
+    },
+    {
+      "status": "PASS",
+      "name": "different username"
+    },
+    {
+      "status": "PASS",
+      "name": "different password (compared in memory)"
+    },
+    {
+      "status": "PASS",
+      "name": "different lease"
+    },
+    {
+      "status": "PASS",
+      "name": "password matches the clinical-db policy (32 alphanumerics)"
+    },
+    {
+      "status": "PASS",
+      "name": "lease_duration at issue <= 3600s (3600)"
+    },
+    {
+      "status": "PASS",
+      "name": "lease lookup by the requester: ttl <= 3600s (3598)"
+    },
+    {
+      "status": "PASS",
+      "name": "renew (responder) asking for 8h is capped at the 4h max (14400 s)"
+    },
+    {
+      "status": "PASS",
+      "name": "cannot read database/config/clinical-db"
+    },
+    {
+      "status": "PASS",
+      "name": "cannot request another role's creds"
+    },
+    {
+      "status": "PASS",
+      "name": "cannot look up a lease outside database/creds/clinical-readonly/"
+    },
+    {
+      "status": "PASS",
+      "name": "cannot revoke a lease outside database/creds/clinical-readonly/"
+    },
+    {
+      "status": "PASS",
+      "name": "cannot renew a lease, even its own"
+    },
+    {
+      "status": "PASS",
+      "name": "cannot revoke a single lease, even its own (ends its session with token revoke -self)"
+    },
+    {
+      "status": "PASS",
+      "name": "a second requester cannot revoke the first one's lease"
+    },
+    {
+      "status": "PASS",
+      "name": "a second requester cannot renew the first one's lease"
+    },
+    {
+      "status": "PASS",
+      "name": "the responder cannot issue credentials"
+    },
+    {
+      "status": "PASS",
+      "name": "the responder cannot read database/config/clinical-db"
+    },
+    {
+      "status": "PASS",
+      "name": "a live session of v-e2e-ops-bob-un0i6cucx9wi-1792514086 is open before the revoke"
+    },
+    {
+      "status": "PASS",
+      "name": "responder (security on-call) revokes lease #1"
+    },
+    {
+      "status": "PASS",
+      "name": "the live session was terminated by the revoke (psql exit 2)"
+    },
+    {
+      "status": "PASS",
+      "name": "revoked creds #1 are rejected (same username + password)"
+    },
+    {
+      "status": "PASS",
+      "name": "role v-e2e-ops-bob-un0i6cucx9wi-1792514086 no longer exists"
+    },
+    {
+      "status": "PASS",
+      "name": "creds #2 still work (revocation is per lease)"
+    },
+    {
+      "status": "PASS",
+      "name": "requester token revoke-self"
+    },
+    {
+      "status": "PASS",
+      "name": "creds #2 rejected after the token was revoked"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault audit: creds issues attributed to token-e2e-ops-bob (root token-e2e-ops-bob token-e2e-sec-oncall )"
+    },
+    {
+      "status": "PASS",
+      "name": "Postgres log: connection authorized for v-e2e-ops-bob-un0i6cucx9wi-1792514086 (the DB-side record names the person)"
+    },
+    {
+      "status": "PASS",
+      "name": "Postgres statement audit: v-e2e-ops-bob-un0i6cucx9wi-1792514086's SELECT on clinical.encounters is logged under its name"
+    },
+    {
+      "status": "PASS",
+      "name": "Postgres statement audit: vault_admin's statements (CREATE / ALTER ROLE ... PASSWORD) are not logged"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault audit log: neither generated password in clear"
+    },
+    {
+      "status": "PASS",
+      "name": "Vault audit log: neither bootstrap password in clear"
+    },
+    {
+      "status": "PASS",
+      "name": "Postgres log: neither generated password in clear"
+    },
+    {
+      "status": "PASS",
+      "name": "Postgres log: neither bootstrap password in clear"
+    },
+    {
+      "status": "PASS",
+      "name": "demo.sh --operator e2e-ops-carol"
+    },
+    {
+      "status": "PASS",
+      "name": "demo: the post-revoke login was refused"
+    },
+    {
+      "status": "PASS",
+      "name": "demo: the revoked role is gone"
+    },
+    {
+      "status": "PASS",
+      "name": "demo output has no 32-character password-shaped string"
+    }
+  ]
+}

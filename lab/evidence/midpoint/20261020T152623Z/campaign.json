@@ -1,0 +1,958 @@
+{
+  "accessCertificationCampaign" : {
+    "@metadata" : {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "storage" : {
+        "createTimestamp" : "2026-10-20T15:26:25.903Z"
+      },
+      "@id" : 22
+    },
+    "oid" : "db5f38a0-1617-4f75-89d0-a9d021e646e7",
+    "version" : "20",
+    "name" : "Contoso T2 requestable-access review 9",
+    "description" : "ADR 0012 tier T2: requestable business roles, manager review, unanswered = removed. Managed by run-campaign.sh.",
+    "iteration" : 1,
+    "definitionRef" : {
+      "oid" : "c0471e00-0000-4000-8000-000000000401",
+      "relation" : "org:default",
+      "type" : "c:AccessCertificationDefinitionType"
+    },
+    "ownerRef" : {
+      "oid" : "00000000-0000-0000-0000-000000000002",
+      "relation" : "org:default",
+      "type" : "c:UserType"
+    },
+    "handlerUri" : "http://midpoint.evolveum.com/xml/ns/public/certification/handlers-3#direct-assignment",
+    "scopeDefinition" : {
+      "@type" : "c:AccessCertificationAssignmentReviewScopeType",
+      "name" : "Requestable business roles of enabled users",
+      "objectType" : "c:UserType",
+      "searchFilter" : {
+        "text" : "activation/effectiveStatus = \"enabled\""
+      },
+      "itemSelectionExpression" : {
+        "script" : [ {
+          "code" : "\n                    // Only requestable business roles (ADR 0012 T2). Birthright roles (T3)\n                    // and midPoint's built-in system roles stay out of the campaign.\n                    def ref = assignment?.targetRef\n                    if (ref == null || ref.oid == null) {\n                        return false\n                    }\n                    def role = midpoint.getObject(com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType.class, ref.oid)\n                    def businessRole = role.getArchetypeRef().any { it.oid == '00000000-0000-0000-0000-000000000321' }\n                    return businessRole && Boolean.TRUE.equals(role.isRequestable())\n                "
+        } ]
+      },
+      "includeAssignments" : true,
+      "includeInducements" : false,
+      "includeRoles" : true,
+      "includeOrgs" : false,
+      "includeResources" : false,
+      "includeServices" : false,
+      "includeUsers" : false,
+      "includePolicies" : false,
+      "enabledItemsOnly" : true
+    },
+    "remediationDefinition" : {
+      "style" : "automated",
+      "revokeOn" : [ "revoke", "noResponse" ]
+    },
+    "stageDefinition" : {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "@id" : 21,
+      "number" : 1,
+      "name" : "Manager review",
+      "description" : "Can this person still justify this access? If you are unsure, revoke: they can request it again.",
+      "duration" : "P14D",
+      "notifyBeforeDeadline" : "P7D",
+      "notifyOnlyWhenNoDecision" : true,
+      "reviewerSpecification" : {
+        "name" : "Holder's manager, fallback: access governance lead",
+        "useObjectManager" : {
+          "allowSelf" : false
+        },
+        "defaultReviewerRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000308",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        }
+      },
+      "outcomeIfNoReviewers" : "revoke"
+    },
+    "reviewStrategy" : {
+      "outcomeStrategy" : "oneDenyDenies"
+    },
+    "startTimestamp" : "2026-10-20T15:26:25.976Z",
+    "endTimestamp" : "2026-10-20T15:26:31.084Z",
+    "state" : "closed",
+    "stageNumber" : 2,
+    "stage" : {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "@id" : 458,
+      "iteration" : 1,
+      "number" : 1,
+      "name" : "Manager review",
+      "description" : "Can this person still justify this access? If you are unsure, revoke: they can request it again.",
+      "startTimestamp" : "2026-10-20T15:26:25.914Z",
+      "deadline" : "2026-11-03T23:59:59.999Z",
+      "endTimestamp" : "2026-10-20T15:26:28.644Z"
+    },
+    "case" : [ {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "@type" : "c:AccessCertificationAssignmentCaseType",
+      "@id" : 444,
+      "objectRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000301",
+        "relation" : "org:default",
+        "type" : "c:UserType"
+      },
+      "targetRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000202",
+        "relation" : "org:default",
+        "type" : "c:RoleType"
+      },
+      "activation" : {
+        "effectiveStatus" : "enabled"
+      },
+      "stageNumber" : 1,
+      "iteration" : 1,
+      "workItem" : {
+        "@id" : 445,
+        "stageNumber" : 1,
+        "originalAssigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000308",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "assigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000308",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "performerRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000308",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "output" : {
+          "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+          "comment" : "Night-shift escalation cover confirmed with the CNO office."
+        },
+        "closeTimestamp" : "2026-10-20T15:26:28.644Z",
+        "outputChangeTimestamp" : "2026-10-20T15:26:28.483Z",
+        "iteration" : 1
+      },
+      "currentStageCreateTimestamp" : "2026-10-20T15:26:25.914Z",
+      "currentStageDeadline" : "2026-11-03T23:59:59.999Z",
+      "currentStageOutcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+      "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+      "event" : {
+        "@type" : "c:StageCompletionEventType",
+        "@id" : 662979995,
+        "timestamp" : "2026-10-20T15:26:28.660Z",
+        "stageNumber" : 1,
+        "iteration" : 1,
+        "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept"
+      },
+      "assignment" : {
+        "@metadata" : {
+          "@id" : 251,
+          "storage" : {
+            "createTimestamp" : "2026-10-20T15:26:24.454Z",
+            "creatorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            },
+            "createChannel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process" : {
+            "requestTimestamp" : "2026-10-20T15:26:24.438Z",
+            "requestorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            }
+          },
+          "provenance" : {
+            "acquisition" : {
+              "@id" : 252,
+              "actorRef" : {
+                "oid" : "00000000-0000-0000-0000-000000000002",
+                "relation" : "org:default",
+                "type" : "c:UserType"
+              },
+              "channel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp" : "2026-10-20T15:26:24.438Z"
+            }
+          }
+        },
+        "@id" : 243,
+        "description" : "Requested 2025-02: night-shift escalation cover for the ICU.",
+        "targetRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000202",
+          "relation" : "org:default",
+          "type" : "c:RoleType"
+        },
+        "activation" : {
+          "effectiveStatus" : "enabled"
+        }
+      },
+      "isInducement" : false
+    }, {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "@type" : "c:AccessCertificationAssignmentCaseType",
+      "@id" : 446,
+      "objectRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000302",
+        "relation" : "org:default",
+        "type" : "c:UserType"
+      },
+      "targetRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000202",
+        "relation" : "org:default",
+        "type" : "c:RoleType"
+      },
+      "activation" : {
+        "effectiveStatus" : "enabled"
+      },
+      "stageNumber" : 1,
+      "iteration" : 1,
+      "workItem" : {
+        "@id" : 447,
+        "stageNumber" : 1,
+        "originalAssigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000301",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "assigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000301",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "performerRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000301",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "output" : {
+          "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+          "comment" : "Covers ICU charge-nurse shifts."
+        },
+        "closeTimestamp" : "2026-10-20T15:26:28.644Z",
+        "outputChangeTimestamp" : "2026-10-20T15:26:28.443Z",
+        "iteration" : 1
+      },
+      "currentStageCreateTimestamp" : "2026-10-20T15:26:25.914Z",
+      "currentStageDeadline" : "2026-11-03T23:59:59.999Z",
+      "currentStageOutcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+      "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+      "event" : {
+        "@type" : "c:StageCompletionEventType",
+        "@id" : 662979996,
+        "timestamp" : "2026-10-20T15:26:28.678Z",
+        "stageNumber" : 1,
+        "iteration" : 1,
+        "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept"
+      },
+      "assignment" : {
+        "@metadata" : {
+          "@id" : 316,
+          "storage" : {
+            "createTimestamp" : "2026-10-20T15:26:24.553Z",
+            "creatorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            },
+            "createChannel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process" : {
+            "requestTimestamp" : "2026-10-20T15:26:24.534Z",
+            "requestorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            }
+          },
+          "provenance" : {
+            "acquisition" : {
+              "@id" : 317,
+              "actorRef" : {
+                "oid" : "00000000-0000-0000-0000-000000000002",
+                "relation" : "org:default",
+                "type" : "c:UserType"
+              },
+              "channel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp" : "2026-10-20T15:26:24.534Z"
+            }
+          }
+        },
+        "@id" : 307,
+        "description" : "Requested 2024-06: ICU charge-nurse cover.",
+        "targetRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000202",
+          "relation" : "org:default",
+          "type" : "c:RoleType"
+        },
+        "activation" : {
+          "effectiveStatus" : "enabled"
+        }
+      },
+      "isInducement" : false
+    }, {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "@type" : "c:AccessCertificationAssignmentCaseType",
+      "@id" : 448,
+      "objectRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000303",
+        "relation" : "org:default",
+        "type" : "c:UserType"
+      },
+      "targetRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000204",
+        "relation" : "org:default",
+        "type" : "c:RoleType"
+      },
+      "activation" : {
+        "effectiveStatus" : "enabled"
+      },
+      "stageNumber" : 1,
+      "iteration" : 1,
+      "workItem" : {
+        "@id" : 449,
+        "stageNumber" : 1,
+        "originalAssigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000301",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "assigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000301",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "performerRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000301",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "output" : {
+          "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#revoke",
+          "comment" : "Stale: temporary month-end AP cover from 2023-12. The vacancy was filled; he no longer processes invoices."
+        },
+        "closeTimestamp" : "2026-10-20T15:26:28.644Z",
+        "outputChangeTimestamp" : "2026-10-20T15:26:28.462Z",
+        "iteration" : 1
+      },
+      "currentStageCreateTimestamp" : "2026-10-20T15:26:25.914Z",
+      "currentStageDeadline" : "2026-11-03T23:59:59.999Z",
+      "currentStageOutcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#revoke",
+      "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#revoke",
+      "reviewFinishedTimestamp" : "2026-10-20T15:26:28.644Z",
+      "remediedTimestamp" : "2026-10-20T15:26:30.946Z",
+      "event" : {
+        "@type" : "c:StageCompletionEventType",
+        "@id" : 662979997,
+        "timestamp" : "2026-10-20T15:26:28.691Z",
+        "stageNumber" : 1,
+        "iteration" : 1,
+        "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#revoke"
+      },
+      "assignment" : {
+        "@metadata" : {
+          "@id" : 307,
+          "storage" : {
+            "createTimestamp" : "2026-10-20T15:26:24.649Z",
+            "creatorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            },
+            "createChannel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process" : {
+            "requestTimestamp" : "2026-10-20T15:26:24.634Z",
+            "requestorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            }
+          },
+          "provenance" : {
+            "acquisition" : {
+              "@id" : 308,
+              "actorRef" : {
+                "oid" : "00000000-0000-0000-0000-000000000002",
+                "relation" : "org:default",
+                "type" : "c:UserType"
+              },
+              "channel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp" : "2026-10-20T15:26:24.634Z"
+            }
+          }
+        },
+        "@id" : 298,
+        "description" : "Requested 2023-12 as temporary month-end AP cover during a vacancy. No end date was set.",
+        "targetRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000204",
+          "relation" : "org:default",
+          "type" : "c:RoleType"
+        },
+        "activation" : {
+          "effectiveStatus" : "enabled"
+        }
+      },
+      "isInducement" : false
+    }, {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "@type" : "c:AccessCertificationAssignmentCaseType",
+      "@id" : 450,
+      "objectRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000304",
+        "relation" : "org:default",
+        "type" : "c:UserType"
+      },
+      "targetRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000202",
+        "relation" : "org:default",
+        "type" : "c:RoleType"
+      },
+      "activation" : {
+        "effectiveStatus" : "enabled"
+      },
+      "stageNumber" : 1,
+      "iteration" : 1,
+      "workItem" : {
+        "@id" : 451,
+        "stageNumber" : 1,
+        "originalAssigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "assigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "performerRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "output" : {
+          "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+          "comment" : "Still on the ICU float rota this quarter."
+        },
+        "closeTimestamp" : "2026-10-20T15:26:28.644Z",
+        "outputChangeTimestamp" : "2026-10-20T15:26:28.363Z",
+        "iteration" : 1
+      },
+      "currentStageCreateTimestamp" : "2026-10-20T15:26:25.914Z",
+      "currentStageDeadline" : "2026-11-03T23:59:59.999Z",
+      "currentStageOutcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+      "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+      "event" : {
+        "@type" : "c:StageCompletionEventType",
+        "@id" : 662979998,
+        "timestamp" : "2026-10-20T15:26:28.700Z",
+        "stageNumber" : 1,
+        "iteration" : 1,
+        "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept"
+      },
+      "assignment" : {
+        "@metadata" : {
+          "@id" : 439,
+          "storage" : {
+            "createTimestamp" : "2026-10-20T15:26:24.766Z",
+            "creatorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            },
+            "createChannel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process" : {
+            "requestTimestamp" : "2026-10-20T15:26:24.735Z",
+            "requestorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            }
+          },
+          "provenance" : {
+            "acquisition" : {
+              "@id" : 440,
+              "actorRef" : {
+                "oid" : "00000000-0000-0000-0000-000000000002",
+                "relation" : "org:default",
+                "type" : "c:UserType"
+              },
+              "channel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp" : "2026-10-20T15:26:24.735Z"
+            }
+          }
+        },
+        "@id" : 432,
+        "description" : "Requested 2025-09: ICU float pool.",
+        "targetRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000202",
+          "relation" : "org:default",
+          "type" : "c:RoleType"
+        },
+        "activation" : {
+          "effectiveStatus" : "enabled"
+        }
+      },
+      "isInducement" : false
+    }, {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "@type" : "c:AccessCertificationAssignmentCaseType",
+      "@id" : 452,
+      "objectRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000304",
+        "relation" : "org:default",
+        "type" : "c:UserType"
+      },
+      "targetRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000203",
+        "relation" : "org:default",
+        "type" : "c:RoleType"
+      },
+      "activation" : {
+        "effectiveStatus" : "enabled"
+      },
+      "stageNumber" : 1,
+      "iteration" : 1,
+      "workItem" : {
+        "@id" : 453,
+        "stageNumber" : 1,
+        "originalAssigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "assigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "performerRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "output" : {
+          "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#revoke",
+          "comment" : "SoD conflict flagged by midPoint: Nurse + Pharmacist (administer vs dispense controlled substances). He is not a pharmacist; the access was copied from a colleague."
+        },
+        "closeTimestamp" : "2026-10-20T15:26:28.644Z",
+        "outputChangeTimestamp" : "2026-10-20T15:26:28.385Z",
+        "iteration" : 1
+      },
+      "currentStageCreateTimestamp" : "2026-10-20T15:26:25.914Z",
+      "currentStageDeadline" : "2026-11-03T23:59:59.999Z",
+      "currentStageOutcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#revoke",
+      "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#revoke",
+      "reviewFinishedTimestamp" : "2026-10-20T15:26:28.644Z",
+      "remediedTimestamp" : "2026-10-20T15:26:30.993Z",
+      "event" : {
+        "@type" : "c:StageCompletionEventType",
+        "@id" : 662979999,
+        "timestamp" : "2026-10-20T15:26:28.707Z",
+        "stageNumber" : 1,
+        "iteration" : 1,
+        "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#revoke"
+      },
+      "assignment" : {
+        "@metadata" : {
+          "@id" : 442,
+          "storage" : {
+            "createTimestamp" : "2026-10-20T15:26:24.766Z",
+            "creatorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            },
+            "createChannel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+            "modifyTimestamp" : "2026-10-20T15:26:24.799Z",
+            "modifierRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            },
+            "modifyChannel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process" : {
+            "requestTimestamp" : "2026-10-20T15:26:24.735Z",
+            "requestorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            }
+          },
+          "provenance" : {
+            "acquisition" : {
+              "@id" : 443,
+              "actorRef" : {
+                "oid" : "00000000-0000-0000-0000-000000000002",
+                "relation" : "org:default",
+                "type" : "c:UserType"
+              },
+              "channel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp" : "2026-10-20T15:26:24.735Z"
+            }
+          }
+        },
+        "@id" : 441,
+        "description" : "Requested 2026-08 by copying a colleague in Pharmacy. Conflicts with Nurse (SoD).",
+        "targetRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000203",
+          "relation" : "org:default",
+          "type" : "c:RoleType"
+        },
+        "activation" : {
+          "effectiveStatus" : "enabled"
+        },
+        "policySituation" : "http://midpoint.evolveum.com/xml/ns/public/model/policy/situation#exclusionViolation",
+        "triggeredPolicyRule" : {
+          "ruleName" : "sod-nurse-pharmacist",
+          "assignmentPath" : {
+            "@type" : "c:AssignmentPathType",
+            "segment" : [ {
+              "segmentOrder" : 1,
+              "sourceRef" : {
+                "oid" : "c0471e00-0000-4000-8000-000000000304",
+                "relation" : "org:default",
+                "type" : "c:UserType"
+              },
+              "sourceDisplayName" : "Marcus Bello",
+              "assignmentId" : 441,
+              "targetRef" : {
+                "oid" : "c0471e00-0000-4000-8000-000000000203",
+                "relation" : "org:default",
+                "type" : "c:RoleType"
+              },
+              "targetDisplayName" : "Pharmacy - Controlled Substances Apps",
+              "matchingOrder" : true,
+              "isAssignment" : true
+            }, {
+              "segmentOrder" : 2,
+              "sourceRef" : {
+                "oid" : "c0471e00-0000-4000-8000-000000000203",
+                "relation" : "org:default",
+                "type" : "c:RoleType"
+              },
+              "sourceDisplayName" : "Pharmacy - Controlled Substances Apps",
+              "assignmentId" : 111,
+              "matchingOrder" : false,
+              "isAssignment" : true
+            } ]
+          },
+          "directOwnerRef" : {
+            "@type" : "c:ObjectReferenceType",
+            "oid" : "c0471e00-0000-4000-8000-000000000203",
+            "relation" : "org:default",
+            "type" : "c:RoleType",
+            "targetName" : "Pharmacist"
+          },
+          "directOwnerDisplayName" : "Pharmacy - Controlled Substances Apps",
+          "trigger" : [ {
+            "@type" : "c:EvaluatedExclusionTriggerType",
+            "constraintKind" : "exclusion",
+            "message" : {
+              "@type" : "c:SingleLocalizableMessageType",
+              "key" : "DefaultPolicyConstraint.exclusion",
+              "argument" : [ {
+                "localizable" : {
+                  "@type" : "c:SingleLocalizableMessageType",
+                  "key" : "ObjectSpecification",
+                  "argument" : [ {
+                    "localizable" : {
+                      "@type" : "c:SingleLocalizableMessageType",
+                      "key" : "ObjectType.RoleType",
+                      "fallbackMessage" : "RoleType"
+                    }
+                  }, {
+                    "value" : "Pharmacy - Controlled Substances Apps"
+                  } ]
+                }
+              }, {
+                "localizable" : {
+                  "@type" : "c:SingleLocalizableMessageType",
+                  "key" : "ObjectSpecification",
+                  "argument" : [ {
+                    "localizable" : {
+                      "@type" : "c:SingleLocalizableMessageType",
+                      "key" : "ObjectTypeLowercase.RoleType",
+                      "fallbackMessage" : "RoleType"
+                    }
+                  }, {
+                    "value" : "Nurse - Clinical Apps"
+                  } ]
+                }
+              } ]
+            },
+            "shortMessage" : {
+              "@type" : "c:SingleLocalizableMessageType",
+              "key" : "DefaultPolicyConstraint.Short.exclusion",
+              "argument" : [ {
+                "localizable" : {
+                  "@type" : "c:SingleLocalizableMessageType",
+                  "key" : "ObjectSpecification",
+                  "argument" : [ {
+                    "localizable" : {
+                      "@type" : "c:SingleLocalizableMessageType",
+                      "key" : "ObjectType.RoleType",
+                      "fallbackMessage" : "RoleType"
+                    }
+                  }, {
+                    "value" : "Pharmacy - Controlled Substances Apps"
+                  } ]
+                }
+              }, {
+                "localizable" : {
+                  "@type" : "c:SingleLocalizableMessageType",
+                  "key" : "ObjectSpecification",
+                  "argument" : [ {
+                    "localizable" : {
+                      "@type" : "c:SingleLocalizableMessageType",
+                      "key" : "ObjectTypeLowercase.RoleType",
+                      "fallbackMessage" : "RoleType"
+                    }
+                  }, {
+                    "value" : "Nurse - Clinical Apps"
+                  } ]
+                }
+              } ]
+            },
+            "conflictingObjectRef" : {
+              "@type" : "c:ObjectReferenceType",
+              "oid" : "c0471e00-0000-4000-8000-000000000201",
+              "relation" : "org:default",
+              "type" : "c:RoleType",
+              "targetName" : "Nurse"
+            },
+            "conflictingObjectDisplayName" : "Nurse - Clinical Apps",
+            "conflictingObjectPath" : {
+              "@type" : "c:AssignmentPathType",
+              "segment" : {
+                "segmentOrder" : 1,
+                "sourceRef" : {
+                  "oid" : "c0471e00-0000-4000-8000-000000000304",
+                  "relation" : "org:default",
+                  "type" : "c:UserType"
+                },
+                "sourceDisplayName" : "Marcus Bello",
+                "assignmentId" : 436,
+                "targetRef" : {
+                  "oid" : "c0471e00-0000-4000-8000-000000000201",
+                  "relation" : "org:default",
+                  "type" : "c:RoleType"
+                },
+                "targetDisplayName" : "Nurse - Clinical Apps",
+                "matchingOrder" : true,
+                "isAssignment" : true
+              }
+            }
+          } ]
+        },
+        "effectiveMarkRef" : {
+          "oid" : "00000000-0000-0000-0000-000000000811",
+          "relation" : "org:default",
+          "type" : "c:MarkType"
+        }
+      },
+      "isInducement" : false
+    }, {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "@type" : "c:AccessCertificationAssignmentCaseType",
+      "@id" : 454,
+      "objectRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000305",
+        "relation" : "org:default",
+        "type" : "c:UserType"
+      },
+      "targetRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000202",
+        "relation" : "org:default",
+        "type" : "c:RoleType"
+      },
+      "activation" : {
+        "effectiveStatus" : "enabled"
+      },
+      "stageNumber" : 1,
+      "iteration" : 1,
+      "workItem" : {
+        "@id" : 455,
+        "stageNumber" : 1,
+        "originalAssigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "assigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "closeTimestamp" : "2026-10-20T15:26:28.644Z",
+        "iteration" : 1
+      },
+      "currentStageCreateTimestamp" : "2026-10-20T15:26:25.914Z",
+      "currentStageDeadline" : "2026-11-03T23:59:59.999Z",
+      "currentStageOutcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#noResponse",
+      "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#noResponse",
+      "remediedTimestamp" : "2026-10-20T15:26:31.047Z",
+      "event" : {
+        "@type" : "c:StageCompletionEventType",
+        "@id" : 662980000,
+        "timestamp" : "2026-10-20T15:26:28.714Z",
+        "stageNumber" : 1,
+        "iteration" : 1,
+        "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#noResponse"
+      },
+      "assignment" : {
+        "@metadata" : {
+          "@id" : 233,
+          "storage" : {
+            "createTimestamp" : "2026-10-20T15:26:24.916Z",
+            "creatorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            },
+            "createChannel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process" : {
+            "requestTimestamp" : "2026-10-20T15:26:24.895Z",
+            "requestorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            }
+          },
+          "provenance" : {
+            "acquisition" : {
+              "@id" : 234,
+              "actorRef" : {
+                "oid" : "00000000-0000-0000-0000-000000000002",
+                "relation" : "org:default",
+                "type" : "c:UserType"
+              },
+              "channel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp" : "2026-10-20T15:26:24.895Z"
+            }
+          }
+        },
+        "@id" : 226,
+        "description" : "Requested 2026-10: agency ICU float shifts.",
+        "targetRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000202",
+          "relation" : "org:default",
+          "type" : "c:RoleType"
+        },
+        "activation" : {
+          "effectiveStatus" : "enabled"
+        }
+      },
+      "isInducement" : false
+    }, {
+      "@ns" : "http://prism.evolveum.com/xml/ns/public/types-3",
+      "@type" : "c:AccessCertificationAssignmentCaseType",
+      "@id" : 456,
+      "objectRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000306",
+        "relation" : "org:default",
+        "type" : "c:UserType"
+      },
+      "targetRef" : {
+        "oid" : "c0471e00-0000-4000-8000-000000000202",
+        "relation" : "org:default",
+        "type" : "c:RoleType"
+      },
+      "activation" : {
+        "effectiveStatus" : "enabled"
+      },
+      "stageNumber" : 1,
+      "iteration" : 1,
+      "workItem" : {
+        "@id" : 457,
+        "stageNumber" : 1,
+        "originalAssigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "assigneeRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "performerRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000302",
+          "relation" : "org:default",
+          "type" : "c:UserType"
+        },
+        "output" : {
+          "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+          "comment" : "In ICU orientation until 2026-12."
+        },
+        "closeTimestamp" : "2026-10-20T15:26:28.644Z",
+        "outputChangeTimestamp" : "2026-10-20T15:26:28.411Z",
+        "iteration" : 1
+      },
+      "currentStageCreateTimestamp" : "2026-10-20T15:26:25.914Z",
+      "currentStageDeadline" : "2026-11-03T23:59:59.999Z",
+      "currentStageOutcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+      "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept",
+      "event" : {
+        "@type" : "c:StageCompletionEventType",
+        "@id" : 662980001,
+        "timestamp" : "2026-10-20T15:26:28.720Z",
+        "stageNumber" : 1,
+        "iteration" : 1,
+        "outcome" : "http://midpoint.evolveum.com/xml/ns/public/model/certification/outcome#accept"
+      },
+      "assignment" : {
+        "@metadata" : {
+          "@id" : 189,
+          "storage" : {
+            "createTimestamp" : "2026-10-20T15:26:25.009Z",
+            "creatorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            },
+            "createChannel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest"
+          },
+          "process" : {
+            "requestTimestamp" : "2026-10-20T15:26:24.994Z",
+            "requestorRef" : {
+              "oid" : "00000000-0000-0000-0000-000000000002",
+              "relation" : "org:default",
+              "type" : "c:UserType"
+            }
+          },
+          "provenance" : {
+            "acquisition" : {
+              "@id" : 190,
+              "actorRef" : {
+                "oid" : "00000000-0000-0000-0000-000000000002",
+                "relation" : "org:default",
+                "type" : "c:UserType"
+              },
+              "channel" : "http://midpoint.evolveum.com/xml/ns/public/common/channels-3#rest",
+              "timestamp" : "2026-10-20T15:26:24.994Z"
+            }
+          }
+        },
+        "@id" : 184,
+        "description" : "Requested 2026-10: ICU orientation rotation.",
+        "targetRef" : {
+          "oid" : "c0471e00-0000-4000-8000-000000000202",
+          "relation" : "org:default",
+          "type" : "c:RoleType"
+        },
+        "activation" : {
+          "effectiveStatus" : "enabled"
+        }
+      },
+      "isInducement" : false
+    } ]
+  }
+}

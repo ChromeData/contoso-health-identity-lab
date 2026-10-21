@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<org xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+     xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
+     oid="c0471e00-0000-4000-8000-000000000102">
+    <name>nursing</name>
+    <displayName>Nursing</displayName>
+    <description>Department (mock HR dept "Nursing"). Managed by run-campaign.sh.</description>
+    <assignment>
+        <targetRef oid="c0471e00-0000-4000-8000-000000000101" type="OrgType"/>
+    </assignment>
+</org>

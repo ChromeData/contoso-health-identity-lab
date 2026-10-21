@@ -1,0 +1,91 @@
+index=entra sourcetype="azure:loganalytics:signinlogs" NOT ResultType="0" earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Failed sign-in spike from a single IP (spray / brute force) ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM        ```
+``` KQL twin:        lab/kql/failed-signin-spike.kql (same logic/window/columns)  ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: runs on the Splunk Enterprise 60-day TRIAL (replaces production   ```
+``` Splunk) over Entra logs REPLAYED from Log Analytics by                      ```
+``` lab/splunk/ingest-from-loganalytics.sh (replaces the Splunk Add-on for      ```
+``` Microsoft Azure / Event Hub streaming). Base search is line 1 on purpose:   ```
+``` a comment before the first command breaks a Splunk search.                  ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   10+ failed sign-ins from ONE source IP inside one 10-minute clock bin     ```
+```   (:00, :10, ...).                                                         ```
+```   TargetedUsers >= 5 -> likely password spray; fewer -> likely brute force. ```
+```   This is the rule shown side by side with its KQL on camera (segment 6 of ```
+```   the walkthrough video): 12 wrong passwords for Sofia from one IP, all in ```
+```   one clock bin, must produce 1 row.                                       ```
+```                                                                            ```
+``` TUNABLE THRESHOLDS (identical to the KQL lets)                              ```
+```   FailureThreshold = 10   -> where FailedCount >= 10                        ```
+```   Window           = 10m  -> bin _time span=10m                             ```
+```   Known gap: the bins are tumbling, not sliding. A burst that straddles a  ```
+```   bin boundary splits (9 at 12:09 + 9 at 12:10 = 18 in about a minute)     ```
+```   and fires in neither bin. Change both twins at once (this file and       ```
+```   lab/kql/failed-signin-spike.kql) if you switch to hopping windows.       ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   where TimeGenerated > ago(1h)         -> earliest=-1h latest=now          ```
+```   where ResultType != 0 (string compare) -> NOT ResultType=0 in the base    ```
+```                                            search (keeps rows with no       ```
+```                                            ResultType, as KQL does)         ```
+```   summarize ... by IPAddress, bin(TimeGenerated, Window)                   ```
+```                                         -> bin _time span=10m | stats ... BY IPAddress _time ```
+```   count()                               -> count                            ```
+```   dcount(UserPrincipalName)             -> dc() - EXACT; KQL dcount is an   ```
+```                                            estimate (identical at lab scale) ```
+```   make_set(x, N)                        -> values(x) then mvindex(x, 0, N-1) ```
+```                                            (values() is sorted; make_set is ```
+```                                            unordered - same members)        ```
+```   any(tostring(LocationDetails...))     -> first(GeoCountry) via spath      ```
+```   min/max(TimeGenerated)                -> min/max of the pre-bin _time     ```
+```   iff(TargetedUsers >= 5, ...)          -> eval if(...)                     ```
+```   sort by FailedCount desc              -> sort 0 - FailedCount             ```
+``` Timestamps print with strftime %z; the container runs TZ=UTC so they read  ```
+``` +0000, matching KQL UTC output.                                             ```
+``` Optional noise filter, as in the KQL: add                                   ```
+```   ResultType IN (50126, 50053, 50055, 50056)                               ```
+``` to the base search to keep only credential failures.                       ```
+```                                                                            ```
+``` SCHEDULE: mirrors the Sentinel rule (lab/terraform/modules/monitoring):     ```
+``` PT5M / PT1H, severity Medium, trigger > 0 rows, 1 h grouping by IP entity.  ```
+``` ========================================================================== ```
+``` @stanza Contoso - Failed sign-in spike from one IP (spray or brute force) ```
+``` @conf description = 10+ failed sign-ins from one IP in the same 10-minute clock bin (password spray or brute force). KQL twin: lab/kql/failed-signin-spike.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 4 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = IPAddress ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| spath path=LocationDetails.countryOrRegion output=GeoCountry
+| eval EventTime=_time
+| bin _time span=10m
+| stats count AS FailedCount,
+    dc(UserPrincipalName) AS TargetedUsers,
+    values(UserPrincipalName) AS UserList,
+    values(ResultType) AS ErrorCodes,
+    values(AppDisplayName) AS Apps,
+    first(GeoCountry) AS Country,
+    min(EventTime) AS FirstSeenEpoch,
+    max(EventTime) AS LastSeenEpoch
+    BY IPAddress _time
+| where FailedCount >= 10
+| eval UserList=mvindex(UserList, 0, 24), ErrorCodes=mvindex(ErrorCodes, 0, 9), Apps=mvindex(Apps, 0, 9)
+| eval Pattern=if(TargetedUsers >= 5, "likely password spray", "likely brute force")
+| eval TimeGenerated=strftime(_time, "%Y-%m-%dT%H:%M:%S%z"), FirstSeen=strftime(FirstSeenEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z"), LastSeen=strftime(LastSeenEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z")
+| sort 0 - FailedCount
+| table TimeGenerated, IPAddress, Country, FailedCount, TargetedUsers, Pattern, UserList, ErrorCodes, Apps, FirstSeen, LastSeen

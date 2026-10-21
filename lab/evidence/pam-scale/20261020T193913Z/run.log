@@ -1,0 +1,104 @@
+
+[19:39:13Z] == (a) fresh project contoso-pamscale: Vault 2.1.1 + Samba AD DC + pam-tools (shared stack untouched)
+PASS  images built (samba-ad-test with the bulk seed, pam-tools)
+PASS  samba-dc healthy (LDAPS up, certificate valid for dc01.corp.test.local)
+PASS  Vault initialised and unsealed (API on 127.0.0.1:8240)
+PASS  Vault file audit device on (throughput below includes audit logging)
+PASS  the DC's root CA installed for Vault and pam-tools (vault_install_ca)
+PASS  LDAP secrets engine configured by vault_configure_ad (the vault-onboard-ad.sh code)
+PASS  ldap/config: schema=ad, ldaps://dc01.corp.test.local, bound as svc-vault-rotator, CA-verified (no insecure_tls)
+
+[19:39:23Z] == (b) stage seed: seed-accounts.py --bulk 500 --noise 250 inside the DC
+[19:39:46Z]    stage seed               23.3 s    750 accounts     32.2 accounts/s  (500 PAM-relevant accounts + 250 staff users written to the running DC's directory (sam.ldb: user + group adds, attribute writes))
+PASS  manifest: 500 bulk accounts, 250 staff users
+PASS  mix adds up to 500: svc_spn=180 svc_batch=60 svc_tier1=10 t1_admin=80 t1_nested=20 t0_admin=20 t0_nested=10 stale_priv=40 never_priv=25 orphan_admincount=30 disabled_priv=15 kerberoast_t0=10
+PASS  every category of the mix is present (>= 1 account each)
+PASS  pwdLastSet snapshot: every bulk and staff account is in AD
+PASS  dependency map: a record for every bulk account except the 'no record' ones
+
+[19:39:46Z] == (c) stage discovery: ./discover.sh (read-only bind as svc-pam-discovery, paged LDAPS)
+[19:39:48Z]    stage discovery           2.0 s    515 accounts    259.2 accounts/s  (candidates classified (privileged-group members incl. nested, SPN, adminCount, PAM OUs))
+PASS  all discovered: 515 candidates = 500 bulk + 15 base layout
+PASS  every bulk account discovered (500 of 500)
+PASS  no staff (non-privileged) account discovered (0 of 250)
+PASS  nothing else discovered: the non-bulk candidates are exactly the base layout
+PASS  every bulk account classified as its category calls for (action, tier, Vault target / reason): mismatches 0
+PASS    svc_spn: 180/180 -> static role svc/<sam>
+PASS    svc_batch: 60/60 -> static role svc/<sam>
+PASS    svc_tier1: 10/10 -> static role tier1/<sam>
+PASS    t1_admin: 80/80 -> library tier1-admins
+PASS    t1_nested: 20/20 -> library tier1-admins
+PASS    t0_admin: 20/20 -> library tier0-admins
+PASS    t0_nested: 10/10 -> library tier0-admins
+PASS    stale_priv: 40/40 -> exception: stale privileged account (last logon
+PASS    never_priv: 25/25 -> exception: never logged on
+PASS    orphan_admincount: 30/30 -> exception: orphaned adminCount
+PASS    disabled_priv: 15/15 -> exception: disabled account
+PASS    kerberoast_t0: 10/10 -> exception: Kerberoastable
+PASS  nested groups resolved: every staff account admin through Tier1-App-Admins is in Tier1-Server-Admins' chain
+PASS  discovery report: one CSV row per candidate
+
+[19:39:49Z] == (d) stage onboarding: ./onboard.sh --deps out/pam-scale/deps-onboard.json (a Safe per tier, dependency-gated)
+[19:40:53Z]    stage onboarding         64.1 s    515 accounts      8.0 accounts/s  (every candidate planned; 257 bulk accounts vaulted (static role created + rotated, or added to a library set + new password), 123 held on dependencies, 120 exceptions skipped)
+PASS  onboard.sh (bulk) exits 0
+PASS  all in-scope onboarded: 257 of 257 bulk accounts with clear dependencies in their Vault object (static role / library set)
+PASS  no held or exception account in Vault (0 of 243)
+PASS  Vault holds nothing unexpected: static roles + library members = bulk in-scope + the base layout's
+PASS    static roles svc/*: 138 (rotation_period 720h, Safe svc-static-read)
+PASS    static roles tier1/*: 7 (rotation_period 72h, Safe tier1-static-read)
+PASS    library tier0-admins: 27 bulk + 2 base members
+PASS    library tier1-admins: 85 bulk + 2 base members
+PASS    Safe policy tier0-checkout written
+PASS    Safe policy tier1-checkout written
+PASS    Safe policy tier0-static-read written
+PASS    Safe policy tier1-static-read written
+PASS    Safe policy svc-static-read written
+PASS    Safe policy pam-reconcile written
+PASS  onboarding report: 257 bulk vaulted, 123 held, 120 exceptions (expected 257 / 123 / 120)
+PASS    static role svc/svc-web-001: username, DN and rotation_period as discovered / policy
+PASS  Vault set a new password for every onboarded account: pwdLastSet moved on 257 of 257
+PASS  dependency-blocked accounts untouched: pwdLastSet unchanged on all 123 held
+PASS  exceptions untouched: pwdLastSet unchanged on all 120
+
+[19:40:54Z] == (e) stage rerun: ./onboard.sh again (idempotent - the nightly run after discovery)
+[19:41:19Z]    stage rerun              25.2 s    515 accounts     20.4 accounts/s  (every candidate re-planned against Vault; nothing new to vault)
+PASS  onboard.sh re-run exits 0
+PASS  re-run vaulted nothing new (0 'vaulted' results)
+PASS  re-run recognised every vaulted account as already vaulted (263 incl. the base layout's 6)
+PASS  Vault unchanged by the re-run (same static roles)
+
+[19:41:19Z] == (f) stage dependency check: lib.sh dep_gate over every eligible account, against the re-scan
+[19:41:27Z]    stage dependency check    7.9 s    387 accounts     49.0 accounts/s  (every eligible candidate through dep_gate against the re-scanned map)
+PASS  dependency check: 387 eligible = 253 clear + 90 blocked + 44 unknown (no record)
+PASS  every bulk account's gate result as recorded in the map (incl. 10 vaulted accounts the re-scan blocked): mismatches 0
+
+[19:41:27Z] == (g) stage rotation: ./rotate.sh on 25 vaulted service accounts + the 10 the re-scan blocked
+PASS  rotation sample: 25 accounts across svc+tier1 tiers
+[19:41:46Z]    stage rotation           17.4 s     35 accounts      2.0 accounts/s  (25 of 25 rotated through rotate.sh (gate + Vault rotate-role + LDAPS password reset); 10 of 10 refused by the dependency gate)
+PASS  rotate.sh rotated 25 of 25 sampled accounts
+PASS  rotate.sh REFUSED 10 of 10 accounts the re-scan blocked (unresolved new consumer)
+PASS  rotation: last_vault_rotation moved on 25 of 25
+PASS  rotation within policy: every rotated account's last rotation is inside its tier's rotation_period
+PASS  the new Vault-held password binds as the account (LDAPS) on 25 of 25
+PASS  the previous password is rejected (LDAP 49) on 25 of 25
+PASS  refused accounts NOT rotated: pwdLastSet unchanged on 10 of 10
+PASS  ... and last_vault_rotation unchanged on 10 of 10
+PASS  ... and each refusal audited (rotate-refused in pam-audit.jsonl)
+PASS  only the sample rotated: no other account's pwdLastSet changed during the stage
+
+[19:41:52Z] == (h) stage reconcile: ./reconcile.sh --strict (discovered vs vaulted vs rotated vs exception)
+[19:42:40Z]    stage reconcile          47.8 s    515 accounts     10.8 accounts/s  (every discovered account joined with Vault's inventory and the dependency map)
+PASS  reconcile.sh --strict exits 0 (GAP 0, ORPHAN 0, nothing rotated out of policy)
+PASS  reconcile categories sum: 263 VAULTED + 128 EXCEPTION + 124 HELD + 0 GAP + 0 ORPHAN = 515 rows
+PASS  ... = the 515 discovered accounts (one row each)
+PASS  GAP 0 (nothing eligible left unvaulted without a reason)
+PASS  ORPHAN 0 (nothing in Vault that AD does not have)
+PASS  every bulk account's reconcile status as expected (VAULTED / HELD / EXCEPTION): mismatches 0
+PASS  every VAULTED row rotated within policy (263 of 263)
+PASS  HELD rows carry their unresolved dependencies (or 'no dependency record')
+PASS  report KPI line: GAP 0
+
+[19:42:40Z] == (i) end state: no held or exception account's password changed during the whole run
+PASS  dependency-blocked accounts never rotated: pwdLastSet unchanged since seeding on all 123 held
+PASS  exceptions never touched: pwdLastSet unchanged since seeding on all 120
+PASS  staff accounts never touched: pwdLastSet unchanged on all 250

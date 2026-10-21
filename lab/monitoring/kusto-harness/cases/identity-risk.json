@@ -1,0 +1,81 @@
+{
+  "rule": "identity-risk",
+  "about": "Open medium/high risk from the three ID Protection sources. AADRiskyUsers has no UserId column (Learn): the rule maps Id.",
+  "defaults": {
+    "AADUserRiskEvents": {
+      "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "UserId": "11111111-1111-1111-1111-111111111111",
+      "IpAddress": "203.0.113.40", "RiskDetail": "none", "RiskEventType": "unfamiliarFeatures",
+      "DetectionTimingType": "realtime", "Source": "IdentityProtection",
+      "CorrelationId": "22222222-2222-2222-2222-222222222222", "Id": "33333333-3333-3333-3333-333333333333", "TimeGenerated": "ago:10m"
+    },
+    "AADRiskyUsers": {
+      "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "Id": "11111111-1111-1111-1111-111111111111",
+      "RiskDetail": "none", "IsDeleted": false, "CorrelationId": "44444444-4444-4444-4444-444444444444", "TimeGenerated": "ago:10m"
+    },
+    "SigninLogs": {
+      "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "UserId": "11111111-1111-1111-1111-111111111111",
+      "IPAddress": "203.0.113.41", "AppDisplayName": "Office 365 Exchange Online", "ResultType": "0",
+      "ConditionalAccessStatus": "success", "RiskDetail": "none", "RiskEventTypes_V2": "[\"anonymizedIPAddress\"]",
+      "CorrelationId": "55555555-5555-5555-5555-555555555555", "TimeGenerated": "ago:10m"
+    }
+  },
+  "cases": [
+    {
+      "id": "risk-detection-medium",
+      "kind": "positive",
+      "label": "An open medium risk detection",
+      "tables": {"AADUserRiskEvents": [{"RiskLevel": "medium", "RiskState": "atRisk"}]},
+      "expect": [{"Signal": "RiskDetection", "Severity": "Medium", "RiskLevel": "medium", "IPAddress": "203.0.113.40",
+                  "RiskEventType": "unfamiliarFeatures", "RiskSource": "IdentityProtection"}]
+    },
+    {
+      "id": "risky-user-high",
+      "kind": "positive",
+      "label": "A high-risk user still at risk",
+      "tables": {"AADRiskyUsers": [{"RiskLevel": "high", "RiskState": "atRisk"}]},
+      "expect": [{"Signal": "RiskyUser", "Severity": "High", "UserId": "11111111-1111-1111-1111-111111111111", "IPAddress": ""}]
+    },
+    {
+      "id": "risky-sign-in-high",
+      "kind": "positive",
+      "label": "A high-risk sign-in that succeeded",
+      "tables": {"SigninLogs": [{"RiskLevelDuringSignIn": "high", "RiskState": "atRisk"}]},
+      "expect": [{"Signal": "RiskySignIn", "Severity": "High", "SignInResult": "0", "ConditionalAccessStatus": "success",
+                  "RiskEventType": "[\"anonymizedIPAddress\"]", "DetectionTimingType": "realtime"}]
+    },
+    {
+      "id": "confirmed-compromised-low-level",
+      "kind": "positive",
+      "label": "An admin-confirmed compromise is High even at risk level low",
+      "tables": {"AADRiskyUsers": [{"RiskLevel": "low", "RiskState": "confirmedCompromised", "RiskDetail": "adminConfirmedUserCompromised"}]},
+      "expect": [{"Signal": "RiskyUser", "Severity": "High", "RiskState": "confirmedCompromised"}]
+    },
+    {
+      "id": "low-risk-detection",
+      "kind": "negative",
+      "label": "A low risk detection",
+      "tables": {"AADUserRiskEvents": [{"RiskLevel": "low", "RiskState": "atRisk"}]}
+    },
+    {
+      "id": "remediated-and-dismissed",
+      "kind": "negative",
+      "label": "High risk that CA007 remediated, and a medium sign-in an admin dismissed",
+      "tables": {
+        "AADUserRiskEvents": [{"RiskLevel": "high", "RiskState": "remediated", "RiskDetail": "userPerformedSecuredPasswordChange"}],
+        "SigninLogs": [{"RiskLevelDuringSignIn": "medium", "RiskState": "dismissed"}]
+      }
+    },
+    {
+      "id": "deleted-risky-user",
+      "kind": "negative",
+      "label": "A high-risk user that has been deleted",
+      "tables": {"AADRiskyUsers": [{"RiskLevel": "high", "RiskState": "atRisk", "IsDeleted": true}]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "An open medium detection 2 h ago",
+      "tables": {"AADUserRiskEvents": [{"RiskLevel": "medium", "RiskState": "atRisk", "TimeGenerated": "ago:2h"}]}
+    }
+  ]
+}

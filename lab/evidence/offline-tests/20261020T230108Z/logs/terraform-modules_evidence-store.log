@@ -1,0 +1,31 @@
+$ terraform -chdir=lab/terraform/modules/evidence-store init -backend=false -input=false -no-color 
+Initializing provider plugins...
+- Reusing previous version of hashicorp/azurerm from the dependency lock file
+- Using previously-installed hashicorp/azurerm v4.81.0
+
+Terraform has been successfully initialized!
+exit=0
+$ terraform -chdir=lab/terraform/modules/evidence-store validate -no-color
+Success! The configuration is valid.
+
+exit=0
+$ terraform -chdir=lab/terraform/modules/evidence-store test -no-color 
+tests/worm.tftest.hcl... in progress
+  run "defaults_are_worm_and_entra_only"... pass
+  run "custom_retention_days_flow_through"... pass
+  run "retention_zero_days_is_rejected"... pass
+  run "retention_beyond_azure_max_is_rejected"... pass
+  run "lock_without_acknowledgement_is_rejected"... pass
+  run "lock_with_acknowledgement_plans"... pass
+  run "unknown_state_is_rejected"... pass
+  run "operator_ip_opens_firewall_in_storage_format"... pass
+  run "wide_ip_range_is_rejected"... pass
+  run "slash_31_is_rejected"... pass
+  run "empty_workspace_id_is_rejected"... pass
+  run "private_endpoint_without_subnet_is_rejected"... pass
+  run "writers_are_container_scoped_and_cannot_delete"... pass
+tests/worm.tftest.hcl... tearing down
+tests/worm.tftest.hcl... pass
+
+Success! 13 passed, 0 failed.
+exit=0

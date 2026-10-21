@@ -1,0 +1,61 @@
+# =============================================================================
+# aws :: terraform.tfvars.example
+# -----------------------------------------------------------------------------
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored (see
+# lab/terraform/.gitignore). All values below are placeholders.
+#
+# There are NO credentials in this file and there never should be: the
+# provider authenticates from your AWS CLI profile (`aws sso login`).
+# =============================================================================
+
+# ---- Provider / authentication ----------------------------------------------
+# Created once with:  aws configure sso --profile idlab-admin
+# Refreshed with:     aws sso login --profile idlab-admin
+aws_profile = "idlab-admin"
+
+# The region your IAM Identity Center instance lives in
+# (Identity Center console -> Settings -> Details -> Region).
+aws_region = "us-east-1"
+
+# Wrong-profile guard: the account that holds the Identity Center instance.
+allowed_account_ids = ["123456789012"]
+
+# ---- What gets granted -------------------------------------------------------
+# Empty = the account the profile signs into (single-account lab) - i.e. the
+# Organizations MANAGEMENT account. Fine for this view-only lab grant; in a
+# real org put a MEMBER account id here (README: "The target is the
+# management account").
+target_account_id = ""
+
+# Contract name from modules/groups - leave as is unless you renamed it.
+group_display_name = "App-AWS-IdentityCenter-Users"
+
+# OPTIONAL lineage pin - the Entra object id of App-AWS-IdentityCenter-Users:
+#   terraform -chdir=../envs/dev output -json app_access_group_object_ids | jq -r .aws
+# Set it only after `aws identitystore describe-group` shows that id under
+# ExternalIds (see README, step 4).
+entra_group_object_id = ""
+
+# Matches the 4-hour PIM activation window on the Entra side. PT1H..PT12H.
+session_duration = "PT4H"
+
+# ---- Tags -------------------------------------------------------------------
+tags = {
+  project     = "contoso-health-identity-lab"
+  environment = "dev"
+  managed_by  = "terraform"
+  source_idp  = "entra-id"
+  owner       = "iam-platform-team"
+}
+
+# ---- GitHub Actions OIDC (optional, off by default - github-oidc.tf) --------
+# A READ-ONLY role a workflow of this repo can assume with no AWS key.
+# Same owner/repo ids as envs/bootstrap: gh api repos/OWNER/REPO --jq '.owner.id, .id'
+enable_github_oidc           = false
+github_owner                 = "your-github-user"
+github_owner_id              = "1234567"
+github_repo                  = "contoso-health-identity-lab"
+github_repo_id               = "7654321"
+github_oidc_subject_suffixes = ["pull_request"]
+# Reuse an account's existing GitHub OIDC provider instead of creating one:
+existing_github_oidc_provider_arn = ""

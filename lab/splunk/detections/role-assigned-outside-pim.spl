@@ -1,0 +1,77 @@
+index=entra sourcetype="azure:loganalytics:auditlogs" Category="RoleManagement" earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Directory role assigned outside PIM                       ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/role-assigned-outside-pim.kql (same logic/window) ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over Entra AuditLogs REPLAYED     ```
+``` from Log Analytics by lab/splunk/ingest-from-loganalytics.sh.              ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   A standing (active) role assignment written by Core Directory and NOT by ```
+```   MS-PIM - to a user, service principal or group - or an ACTIVE PIM        ```
+```   assignment (permanent = High, time-bound = Medium). High unless the CI   ```
+```   apply identity made it (Medium), matched by servicePrincipalId / appId  ```
+```   through lookups/contoso_iac_principals.csv; an app only NAMED like it   ```
+```   is High. RoleTier=Tier0 marks control-plane roles.                       ```
+``` MITRE ATT&CK: T1098.003 Additional Cloud Roles.                            ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   OperationName has (outside of PIM)   -> match() (?i) substring            ```
+```   Identity !in (MS-PIM, MS-PIM-Fairfax)-> NOT in(coalesce(Identity,...))     ```
+```   mv-apply tr ... type in~ (...)       -> spath TargetResources{} + mvfilter ```
+```   take_anyif(Role.DisplayName)         -> mvfilter on modifiedProperties{}  ```
+```   RoleName in (Tier0Roles)             -> in() - case-sensitive, as KQL     ```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT1H, base severity High, throttled 1 h per Actor +       ```
+``` Severity.                                                                   ```
+``` ========================================================================== ```
+``` @stanza Contoso - Directory role assigned outside PIM ```
+``` @conf description = Standing Entra role assignment not made by PIM; zero standing admin means every one is a violation unless the CI apply identity made it. KQL twin: lab/kql/role-assigned-outside-pim.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Actor,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where Category=="RoleManagement" AND lower(Result)=="success"
+| eval OpL=lower(OperationName)
+| where match(OperationName, "(?i)Add member to role outside of PIM") OR (lower(LoggedByService)=="core directory" AND in(OpL, "add member to role", "add scoped member to role") AND NOT in(coalesce(Identity, ""), "MS-PIM", "MS-PIM-Fairfax")) OR (lower(LoggedByService)=="pim" AND in(OpL, "add member to role in pim completed (permanent)", "add member to role in pim completed (timebound)"))
+| eval AssignmentPath=case(OpL=="add member to role in pim completed (permanent)", "PimPermanentActive", OpL=="add member to role in pim completed (timebound)", "PimTimeboundActive", true(), "Direct")
+| spath path=InitiatedBy.user.userPrincipalName output=ActorUpn
+| spath path=InitiatedBy.user.id output=ActorObjectId
+| spath path=InitiatedBy.app.displayName output=ActorApp
+| spath path=InitiatedBy.app.servicePrincipalId output=ActorSpId
+| spath path=InitiatedBy.app.appId output=ActorAppId
+| spath path=InitiatedBy.user.ipAddress output=ActorUserIp
+| spath path=InitiatedBy.app.ipAddress output=ActorAppIp
+| eval ActorIp=if(isnotnull(ActorUserIp) AND ActorUserIp!="", ActorUserIp, ActorAppIp)
+| eval Actor=if(isnotnull(ActorUpn) AND ActorUpn!="", ActorUpn, ActorApp)
+| spath path=TargetResources{} output=TR
+| eval TR1=mvindex(mvfilter(match(spath(TR, "type"), "(?i)^(User|ServicePrincipal|Group)$")), 0)
+| eval TRRole=mvindex(mvfilter(match(spath(TR, "type"), "(?i)^Role$")), 0)
+| eval TargetType=spath(TR1, "type"), TargetObjectId=spath(TR1, "id"), TargetUpn=spath(TR1, "userPrincipalName"), TargetDisplay=spath(TR1, "displayName")
+| eval TargetName=if(isnotnull(TargetUpn) AND TargetUpn!="", TargetUpn, TargetDisplay)
+| eval MP=spath(TR1, "modifiedProperties{}")
+| eval MPRole=mvindex(mvfilter(match(spath(MP, "displayName"), "(?i)^Role.DisplayName$")), 0)
+| eval RoleFromProps=trim(spath(MPRole, "newValue"), urldecode("%22"))
+| eval RoleName=if(isnotnull(RoleFromProps) AND RoleFromProps!="", RoleFromProps, spath(TRRole, "displayName"))
+| eval RoleTier=if(in(RoleName, "Global Administrator", "Privileged Role Administrator", "Privileged Authentication Administrator", "Security Administrator", "Conditional Access Administrator", "Application Administrator", "Cloud Application Administrator", "Hybrid Identity Administrator", "Authentication Policy Administrator", "Domain Name Administrator", "External Identity Provider Administrator", "Intune Administrator", "User Administrator", "Authentication Administrator", "Helpdesk Administrator", "Exchange Administrator", "SharePoint Administrator"), "Tier0", "Other")
+| lookup contoso_iac_principals.csv principal_id AS ActorSpId OUTPUT principal_id AS IacBySp
+| lookup contoso_iac_principals.csv principal_id AS ActorAppId OUTPUT principal_id AS IacByApp
+| eval IsIac=if(isnotnull(IacBySp) OR isnotnull(IacByApp), "true", "false")
+| eval IacNameSpoof=if(IsIac=="false" AND lower(coalesce(ActorApp, ""))=="gh-oidc-entra-apply (write)", "true", "false")
+| eval Severity=case(IacNameSpoof=="true", "High", IsIac=="true", "Medium", AssignmentPath=="PimTimeboundActive", "Medium", true(), "High")
+| sort 0 - _time
+| table TimeGenerated, Severity, AssignmentPath, RoleName, RoleTier, TargetType, TargetName, TargetObjectId, Actor, ActorUpn, ActorObjectId, ActorApp, ActorSpId, ActorIp, IsIac, IacNameSpoof, OperationName, CorrelationId

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# =============================================================================
+# test/stub-az/az - a STAND-IN for the Azure CLI, used only by test/e2e.sh so
+# the real ./vault-onboard-ad.sh can run against the Samba AD harness.
+#
+# It answers exactly the three calls vault-onboard-ad.sh makes, from samba-dc:
+#   az vm show -d ... --query publicIps        -> samba-dc's container IP
+#   az vm run-command invoke ... (CA script)   -> its LDAPS root CA inside the
+#                                                 Linux-style "[stdout]" wrapper
+#                                                 (Windows returns stdout alone
+#                                                 in value[0]; vault_install_ca
+#                                                 copes with both)
+#   az keyvault secret show -n svc-vault-rotator -> .secrets/test/ copy
+# Refuses to run unless PAM_E2E_STUB_AZ=1, so it can never pass for the real
+# CLI by accident. Like the real CLI, the secret goes to stdout (a pipe).
+# The CA comes back with CRLF line endings, as Windows PowerShell prints it.
+# PAM_E2E_STUB_KV_DENIED=1: the Key Vault read fails like a real 403 (error on
+# stderr, nothing on stdout, exit 1).
+# =============================================================================
+set -euo pipefail
+[[ "${PAM_E2E_STUB_AZ:-}" == 1 ]] || { echo "stub az: not the Azure CLI (test/e2e.sh only)" >&2; exit 1; }
+
+PAM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$PAM_DIR"
+dc() { docker compose -f docker-compose.yml -f test/docker-compose.samba.yml "$@"; }
+
+case "${1:-} ${2:-}" in
+  "vm show")
+    docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(dc ps -q samba-dc)" ;;
+  "vm run-command")
+    printf 'Enable succeeded: \n[stdout]\n'
+    dc exec -T samba-dc cat /var/lib/samba/private/tls/ca.pem | awk '{ printf "%s\r\n", $0 }'
+    printf '\n[stderr]\n' ;;
+  "keyvault secret")
+    if [[ "${PAM_E2E_STUB_KV_DENIED:-}" == 1 ]]; then
+      echo "ERROR: (Forbidden) stub az: Key Vault read denied (PAM_E2E_STUB_KV_DENIED=1)" >&2; exit 1
+    fi
+    cat .secrets/test/svc-vault-rotator-password; echo ;;
+  *) echo "stub az: unsupported call: $*" >&2; exit 1 ;;
+esac

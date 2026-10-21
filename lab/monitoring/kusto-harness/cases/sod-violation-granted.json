@@ -1,0 +1,203 @@
+{
+  "rule": "sod-violation-granted",
+  "about": "A grant in the last hour that completes a lab/iga/sod-rules.json pair against access held from 14 days of grants or the sod_holdings watchlist. Group adds are Core Directory 'Add member to group' records (group name in Group.DisplayName newValue); access-package grants are 'Fulfill access package assignment' (Learn, entitlement-management-reports: the recipient is the actor). The PIM-for-Groups eligibility case uses the activity string Learn's audit activity reference lists ('Add eligible member to role in PIM completed (permanent)', Category GroupManagement): the rule matches it since CODE-NEEDED-1 was applied, and two negatives keep the Category and 'completed' gates honest. The removal case writes the group name where Entra writes removed values (oldValue): recognised since CODE-NEEDED-3 was applied.",
+  "defaults": {
+    "AuditLogs": {
+      "Result": "success", "CorrelationId": "11111111-1111-1111-1111-111111111111"
+    }
+  },
+  "cases": [
+    {
+      "id": "sod01-group-grant-against-held-group",
+      "kind": "positive",
+      "label": "Nina (All-Nurses for 3 days) is added to App-Pharmacy-Dispensing-Users: SOD-01, High",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:3d", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "iam.admin@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [
+           {"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+            "modifiedProperties": [
+              {"displayName": "Group.ObjectID", "oldValue": null, "newValue": "\"44444444-4444-4444-4444-444444444444\""},
+              {"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"All-Nurses\""}]},
+           {"id": "44444444-4444-4444-4444-444444444444", "type": "Group", "displayName": null, "modifiedProperties": []}]},
+        {"TimeGenerated": "ago:10m", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "iam.admin@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [
+           {"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+            "modifiedProperties": [
+              {"displayName": "Group.ObjectID", "oldValue": null, "newValue": "\"55555555-5555-5555-5555-555555555555\""},
+              {"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"App-Pharmacy-Dispensing-Users\""}]},
+           {"id": "55555555-5555-5555-5555-555555555555", "type": "Group", "displayName": null, "modifiedProperties": []}]}
+      ]},
+      "expect": [{"RuleId": "SOD-01", "Severity": "High", "GrantedName": "App-Pharmacy-Dispensing-Users", "GrantedKind": "Group",
+                  "GrantedSide": "B", "GrantedVia": "Member", "ConflictingAccess": ["All-Nurses"], "Excepted": false,
+                  "UserPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                  "UserId": "33333333-3333-3333-3333-333333333333", "GrantedBy": "iam.admin@contosohealthlab.onmicrosoft.com",
+                  "RuleName": "Medication administration vs controlled-substance dispensing"}],
+      "expectRows": 1
+    },
+    {
+      "id": "sod05-access-package-pair",
+      "kind": "positive",
+      "label": "Frank holds the Vendor Master Data package and is fulfilled Accounts Payable: SOD-05 (recipient = actor)",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:5d", "Category": "EntitlementManagement", "LoggedByService": "Entitlement Management",
+         "OperationName": "Fulfill access package assignment",
+         "InitiatedBy": {"user": {"id": "66666666-6666-6666-6666-666666666666", "userPrincipalName": "frank.li@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [{"id": "77777777-7777-7777-7777-777777777777", "type": "AccessPackage", "displayName": "Finance - Vendor Master Data Apps"}]},
+        {"TimeGenerated": "ago:15m", "Category": "EntitlementManagement", "LoggedByService": "Entitlement Management",
+         "OperationName": "Fulfill access package assignment",
+         "InitiatedBy": {"user": {"id": "66666666-6666-6666-6666-666666666666", "userPrincipalName": "frank.li@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [{"id": "88888888-8888-8888-8888-888888888888", "type": "AccessPackage", "displayName": "Finance - Accounts Payable Apps"}]}
+      ]},
+      "expect": [{"RuleId": "SOD-05", "Severity": "High", "GrantedName": "Finance - Accounts Payable Apps", "GrantedKind": "AccessPackage",
+                  "GrantedSide": "A", "ConflictingAccess": ["Finance - Vendor Master Data Apps"],
+                  "UserId": "66666666-6666-6666-6666-666666666666",
+                  "GrantedBy": "entitlement management (Access Package Activity workbook)"}]
+    },
+    {
+      "id": "sod06-against-watchlist-snapshot",
+      "kind": "positive",
+      "label": "Grace's Payroll Entry access is only in the sod_holdings snapshot (20 days old); Payroll Approval is granted: SOD-06",
+      "watchlists": {"sod_holdings": [{"SearchKey": "99999999-9999-9999-9999-999999999999", "UserPrincipalName": "Grace.Kim@contosohealthlab.onmicrosoft.com",
+                                        "Name": "HR - Payroll Entry Apps", "SnapshotTime": "ago:20d"}]},
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:10m", "Category": "EntitlementManagement", "LoggedByService": "Entitlement Management",
+         "OperationName": "Fulfill access package assignment",
+         "InitiatedBy": {"user": {"id": "99999999-9999-9999-9999-999999999999", "userPrincipalName": "grace.kim@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [{"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "type": "AccessPackage", "displayName": "HR - Payroll Approval Apps"}]}
+      ]},
+      "expect": [{"RuleId": "SOD-06", "Severity": "High", "GrantedName": "HR - Payroll Approval Apps", "ConflictingAccess": ["HR - Payroll Entry Apps"]}]
+    },
+    {
+      "id": "sod07-pim-groups-eligibility-learn-string",
+      "kind": "positive",
+      "label": "Nina (Nurse - Clinical Apps) is made ELIGIBLE for PIM-EHR-AuditLog-Admins, logged with the Learn activity string",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:2d", "Category": "EntitlementManagement", "LoggedByService": "Entitlement Management",
+         "OperationName": "Fulfill access package assignment",
+         "InitiatedBy": {"user": {"id": "33333333-3333-3333-3333-333333333333", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [{"id": "cccccccc-cccc-cccc-cccc-cccccccccccc", "type": "AccessPackage", "displayName": "Nurse - Clinical Apps"}]},
+        {"TimeGenerated": "ago:10m", "Category": "GroupManagement", "LoggedByService": "PIM",
+         "OperationName": "Add eligible member to role in PIM completed (permanent)",
+         "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "iam.admin@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [
+           {"id": "dddddddd-dddd-dddd-dddd-dddddddddddd", "type": "Group", "displayName": "PIM-EHR-AuditLog-Admins"},
+           {"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com", "displayName": "Nina Patel"}]}
+      ]},
+      "expect": [{"RuleId": "SOD-07", "GrantedName": "PIM-EHR-AuditLog-Admins", "GrantedVia": "Eligible", "ConflictingAccess": ["Nurse - Clinical Apps"]}]
+    },
+    {
+      "id": "eligibility-string-under-rolemanagement",
+      "kind": "negative",
+      "label": "The same Learn string under Category RoleManagement (a directory-role eligibility) is not a group holding, even when a target carries a side-B name",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:2d", "Category": "EntitlementManagement", "LoggedByService": "Entitlement Management",
+         "OperationName": "Fulfill access package assignment",
+         "InitiatedBy": {"user": {"id": "33333333-3333-3333-3333-333333333333", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [{"id": "cccccccc-cccc-cccc-cccc-cccccccccccc", "type": "AccessPackage", "displayName": "Nurse - Clinical Apps"}]},
+        {"TimeGenerated": "ago:10m", "Category": "RoleManagement", "LoggedByService": "PIM",
+         "OperationName": "Add eligible member to role in PIM completed (permanent)",
+         "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "iam.admin@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [
+           {"id": "dddddddd-dddd-dddd-dddd-dddddddddddd", "type": "Role", "displayName": "PIM-EHR-AuditLog-Admins"},
+           {"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com", "displayName": "Nina Patel"}]}
+      ]}
+    },
+    {
+      "id": "eligibility-requested-not-completed",
+      "kind": "negative",
+      "label": "PIM-for-Groups eligibility REQUESTED but not completed: not a holding yet",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:2d", "Category": "EntitlementManagement", "LoggedByService": "Entitlement Management",
+         "OperationName": "Fulfill access package assignment",
+         "InitiatedBy": {"user": {"id": "33333333-3333-3333-3333-333333333333", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [{"id": "cccccccc-cccc-cccc-cccc-cccccccccccc", "type": "AccessPackage", "displayName": "Nurse - Clinical Apps"}]},
+        {"TimeGenerated": "ago:10m", "Category": "GroupManagement", "LoggedByService": "PIM",
+         "OperationName": "Add eligible member to role in PIM requested (permanent)",
+         "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "iam.admin@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [
+           {"id": "dddddddd-dddd-dddd-dddd-dddddddddddd", "type": "Group", "displayName": "PIM-EHR-AuditLog-Admins"},
+           {"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com", "displayName": "Nina Patel"}]}
+      ]}
+    },
+    {
+      "id": "grant-with-no-held-counterpart",
+      "kind": "negative",
+      "label": "App-Pharmacy-Dispensing-Users granted to someone holding nothing on the other side",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:10m", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "iam.admin@contosohealthlab.onmicrosoft.com"}},
+         "TargetResources": [
+           {"id": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", "type": "User", "userPrincipalName": "pat.rx@contosohealthlab.onmicrosoft.com",
+            "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"App-Pharmacy-Dispensing-Users\""}]},
+           {"id": "55555555-5555-5555-5555-555555555555", "type": "Group", "displayName": null, "modifiedProperties": []}]}
+      ]}
+    },
+    {
+      "id": "same-side-only",
+      "kind": "negative",
+      "label": "All-Nurses then All-ICU: both side A of SOD-01, no conflict",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:3d", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"All-Nurses\""}]}]},
+        {"TimeGenerated": "ago:10m", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"All-ICU\""}]}]}
+      ]}
+    },
+    {
+      "id": "held-then-removed-group-target-named",
+      "kind": "negative",
+      "label": "All-Nurses removed yesterday (the Group target carries its displayName), then the dispensing group granted: no conflict",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:3d", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"All-Nurses\""}]}]},
+        {"TimeGenerated": "ago:1d", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Remove member from group",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": "\"All-Nurses\"", "newValue": null}]},
+                             {"id": "44444444-4444-4444-4444-444444444444", "type": "Group", "displayName": "All-Nurses", "modifiedProperties": []}]},
+        {"TimeGenerated": "ago:10m", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"App-Pharmacy-Dispensing-Users\""}]}]}
+      ]}
+    },
+    {
+      "id": "held-then-removed-name-in-oldvalue-only",
+      "kind": "negative",
+      "label": "The same removal written the way Entra writes removed values: the group name only in Group.DisplayName oldValue",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:3d", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"All-Nurses\""}]}]},
+        {"TimeGenerated": "ago:1d", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Remove member from group",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.ObjectID", "oldValue": "\"44444444-4444-4444-4444-444444444444\"", "newValue": null},
+                                                     {"displayName": "Group.DisplayName", "oldValue": "\"All-Nurses\"", "newValue": null}]},
+                             {"id": "44444444-4444-4444-4444-444444444444", "type": "Group", "displayName": null, "modifiedProperties": []}]},
+        {"TimeGenerated": "ago:10m", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"App-Pharmacy-Dispensing-Users\""}]}]}
+      ]}
+    },
+    {
+      "id": "grant-outside-lookback-and-failed",
+      "kind": "negative",
+      "label": "The conflicting grant 3 h ago (outside 1 h), and a failed one now",
+      "tables": {"AuditLogs": [
+        {"TimeGenerated": "ago:3d", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"All-Nurses\""}]}]},
+        {"TimeGenerated": "ago:3h", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"App-Pharmacy-Dispensing-Users\""}]}]},
+        {"TimeGenerated": "ago:5m", "Category": "GroupManagement", "LoggedByService": "Core Directory", "OperationName": "Add member to group",
+         "Result": "failure",
+         "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "type": "User", "userPrincipalName": "nina.patel@contosohealthlab.onmicrosoft.com",
+                              "modifiedProperties": [{"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"App-Pharmacy-Dispensing-Users\""}]}]}
+      ]}
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "Dependency map for the Samba test DC (test/e2e.sh). Same format as ../accounts-dependencies.json.",
+    "svc-sql01 has two UNRESOLVED consumers: onboarding must hold it, rotate.sh must refuse it.",
+    "svc-iis-app's only consumer reads the password from Vault: onboarding and rotation may proceed.",
+    "e2e.sh copies this file and adds an unresolved consumer to svc-iis-app to prove rotate.sh refuses.",
+    "tier0-admin-01/02, t1-srvadmin-01/02: [] = reviewed, no run-as use; onboard.sh gates LIBRARY adds too (dependency_check), so a human admin with no record is HELD."
+  ],
+  "accounts": {
+    "svc-backup": [],
+    "svc-sql01": [
+      {
+        "type": "windows-service",
+        "host": "sql01.corp.test.local",
+        "name": "MSSQLSERVER",
+        "owner": "dba-team",
+        "resolved": false
+      },
+      {
+        "type": "scheduled-task",
+        "host": "sql01.corp.test.local",
+        "name": "\\Contoso\\NightlyIndexMaintenance",
+        "owner": "dba-team",
+        "resolved": false
+      }
+    ],
+    "svc-iis-app": [
+      {
+        "type": "iis-app-pool",
+        "host": "app01.corp.test.local",
+        "name": "ClinicalPortal",
+        "owner": "app-team",
+        "resolved": true,
+        "resolution": "app pool reads the password from Vault (Vault Agent template, re-rendered on rotation)"
+      }
+    ],
+    "tier0-admin-01": [],
+    "tier0-admin-02": [],
+    "t1-srvadmin-01": [],
+    "t1-srvadmin-02": []
+  }
+}

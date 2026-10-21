@@ -1,0 +1,86 @@
+index=entra sourcetype="azure:loganalytics:auditlogs" Category="GroupManagement" earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Member added to a role-holding / PIM group outside PIM   ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/pim-group-member-added-outside-pim.kql            ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over Entra AuditLogs REPLAYED     ```
+``` from Log Analytics by lab/splunk/ingest-from-loganalytics.sh.              ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   A direct Add member to group (not written by MS-PIM) or an ACTIVE PIM    ```
+```   for Groups membership on a group that holds a role: Break-Glass-Admins, ```
+```   Privileged-IAM-Admins, the PIM-Tier groups, the Azure PIM group, the    ```
+```   PIM approver groups (contoso_privileged_groups.csv). That               ```
+```   is standing Tier-0 without approval or expiry. High (always for          ```
+```   Break-Glass-Admins); Medium for the CI apply identity or a time-bound   ```
+```   active PIM membership. The Azure PIM group is different: its members    ```
+```   are STANDING by design (the group is ELIGIBLE for the Azure role and    ```
+```   each activation still needs Tier-0 approval), so an add there is        ```
+```   AzurePimEligibleMember, Medium (lookup column azure_pim=true).          ```
+``` MITRE ATT&CK: T1098.003 Additional Cloud Roles.                            ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   PrivilegedGroupIds / BreakGlassGroupIds -> lookup                         ```
+```     contoso_privileged_groups.csv (group_id, breakglass, azure_pim),      ```
+```     filled from the                                                        ```
+```     Terraform outputs at tenant time; the name fallback stays inline      ```
+```   IacPrincipalIds                      -> lookup contoso_iac_principals.csv ```
+```   extract(Group.ObjectID ... newValue) -> rex on the raw TargetResources   ```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT1H, base severity High, throttled 1 h per Actor +       ```
+``` Severity.                                                                   ```
+``` ========================================================================== ```
+``` @stanza Contoso - Member added to a privileged group outside PIM ```
+``` @conf description = Direct or PIM-active permanent membership on a role-holding / PIM-governed group (Break-Glass-Admins, Privileged-IAM-Admins, PIM tiers): standing Tier-0 that bypasses PIM. KQL twin: lab/kql/pim-group-member-added-outside-pim.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Actor,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| where Category=="GroupManagement" AND lower(Result)=="success"
+| eval OpL=lower(OperationName)
+| where (OpL=="add member to group" AND NOT in(coalesce(Identity, ""), "MS-PIM", "MS-PIM-Fairfax")) OR (lower(LoggedByService)=="pim" AND in(OpL, "add member to role in pim completed (permanent)", "add member to role in pim completed (timebound)"))
+| eval AssignmentPath=case(OpL=="add member to role in pim completed (permanent)", "PimPermanentActive", OpL=="add member to role in pim completed (timebound)", "PimTimeboundActive", true(), "Direct")
+| spath path=InitiatedBy.user.userPrincipalName output=ActorUpn
+| spath path=InitiatedBy.user.id output=ActorObjectId
+| spath path=InitiatedBy.app.displayName output=ActorApp
+| spath path=InitiatedBy.app.servicePrincipalId output=ActorSpId
+| spath path=InitiatedBy.app.appId output=ActorAppId
+| spath path=InitiatedBy.user.ipAddress output=ActorUserIp
+| spath path=InitiatedBy.app.ipAddress output=ActorAppIp
+| eval ActorIp=if(isnotnull(ActorUserIp) AND ActorUserIp!="", ActorUserIp, ActorAppIp)
+| eval Actor=if(isnotnull(ActorUpn) AND ActorUpn!="", ActorUpn, ActorApp)
+| spath path=TargetResources{} output=TR
+| eval TRGroup=mvindex(mvfilter(match(spath(TR, "type"), "(?i)^Group$")), 0)
+| eval TRMember=mvindex(mvfilter(match(spath(TR, "type"), "(?i)^(User|ServicePrincipal|Device)$")), 0)
+| eval MemberType=spath(TRMember, "type"), MemberId=spath(TRMember, "id"), MemberUpn=spath(TRMember, "userPrincipalName"), MemberDisplay=spath(TRMember, "displayName")
+| eval MemberName=if(isnotnull(MemberUpn) AND MemberUpn!="", MemberUpn, MemberDisplay)
+| eval TargetsText=mvjoin(TR, " ")
+| rex field=TargetsText "Group[.]ObjectID[^}]*newValue[^0-9A-Fa-f}]*(?<GroupIdFromProps>[0-9A-Fa-f-]{36})"
+| rex field=TargetsText "Group[.]DisplayName[^}]*newValue[^A-Za-z0-9}]*(?<GroupNameFromProps>[A-Za-z0-9][A-Za-z0-9 _.-]*)"
+| eval GroupId=coalesce(spath(TRGroup, "id"), GroupIdFromProps), GroupName=coalesce(spath(TRGroup, "displayName"), GroupNameFromProps)
+| lookup contoso_privileged_groups.csv group_id AS GroupId OUTPUT group_id AS PrivGroupHit, breakglass AS BreakGlassHit, azure_pim AS AzurePimHit
+| eval IsBreakGlassGroup=if(BreakGlassHit=="true" OR lower(coalesce(GroupName, ""))=="break-glass-admins", "true", "false")
+| eval IsAzurePimGroup=if(IsBreakGlassGroup=="false" AND (AzurePimHit=="true" OR (isnull(PrivGroupHit) AND lower(coalesce(GroupName, ""))=="pim-azure-rg-contributors")), "true", "false")
+| eval AssignmentPath=if(IsAzurePimGroup=="true" AND AssignmentPath=="Direct", "AzurePimEligibleMember", AssignmentPath)
+| where isnotnull(PrivGroupHit) OR IsBreakGlassGroup=="true" OR in(lower(coalesce(GroupName, "")), "privileged-iam-admins", "pim-azure-rg-contributors") OR match(coalesce(GroupName, ""), "^PIM-Tier")
+| lookup contoso_iac_principals.csv principal_id AS ActorSpId OUTPUT principal_id AS IacBySp
+| lookup contoso_iac_principals.csv principal_id AS ActorAppId OUTPUT principal_id AS IacByApp
+| eval IsIac=if(isnotnull(IacBySp) OR isnotnull(IacByApp), "true", "false")
+| eval IacNameSpoof=if(IsIac=="false" AND lower(coalesce(ActorApp, ""))=="gh-oidc-entra-apply (write)", "true", "false")
+| eval Severity=case(IacNameSpoof=="true", "High", IsBreakGlassGroup=="true", "High", IsIac=="true", "Medium", AssignmentPath=="PimTimeboundActive", "Medium", AssignmentPath=="AzurePimEligibleMember", "Medium", true(), "High")
+| sort 0 - _time
+| table TimeGenerated, Severity, AssignmentPath, GroupName, GroupId, IsBreakGlassGroup, MemberType, MemberName, MemberId, Actor, ActorUpn, ActorObjectId, ActorApp, ActorSpId, ActorIp, IsIac, IacNameSpoof, OperationName, CorrelationId

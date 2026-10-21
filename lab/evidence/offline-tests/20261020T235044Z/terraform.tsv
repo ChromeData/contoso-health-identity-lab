@@ -1,0 +1,20 @@
+dir	init	validate	test_rc	passed	failed	skipped
+lab/terraform/envs/dev	0	0	0	13	0	0
+lab/terraform/envs/bootstrap	0	0	0	3	0	0
+lab/terraform/aws	0	0	0	7	0	0
+lab/terraform/k8s/platform	0	0	0	5	0	0
+lab/terraform/k8s/identity	0	0	0	11	0	0
+lab/terraform/k8s/aks-mapping	0	0	0	7	0	0
+lab/terraform/modules/apps	0	0	0	31	0	0
+lab/terraform/modules/conditional-access	0	0	0	71	0	0
+lab/terraform/modules/dc-vm	0	0	0	11	0	0
+lab/terraform/modules/entitlement	0	0	0	26	0	0
+lab/terraform/modules/entra-diagnostics	0	0	0	7	0	0
+lab/terraform/modules/evidence-store	0	0	0	13	0	0
+lab/terraform/modules/groups	0	0	0	4	0	0
+lab/terraform/modules/intune-vm	0	0	0	41	0	0
+lab/terraform/modules/keyvault	0	0	0	6	0	0
+lab/terraform/modules/monitoring	0	0	0	32	0	0
+lab/terraform/modules/pim	0	0	0	32	0	0
+lab/terraform/modules/pipeline-identity	0	0	0	5	0	0
+fail=0

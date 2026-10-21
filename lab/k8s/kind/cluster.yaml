@@ -1,0 +1,95 @@
+# =============================================================================
+# kind cluster "contoso-k8s": the local stand-in for AKS (lab/docs/STAND-INS.md).
+# One control-plane node, built from code, thrown away after every run.
+#
+# THIS FILE IS A TEMPLATE. __AUDIT_POLICY_PATH__ must be replaced with the
+# ABSOLUTE path of the audit-policy.yaml next to this file before kind reads
+# it. lab/k8s/ci/pipeline.sh does exactly this:
+#
+#   sed "s|__AUDIT_POLICY_PATH__|${LAB}/k8s/kind/audit-policy.yaml|" \
+#     "${LAB}/k8s/kind/cluster.yaml" > "${TMP}/cluster.yaml"
+#   kind create cluster --config "${TMP}/cluster.yaml"
+#
+# Why a rendered absolute path instead of a relative one:
+#   * extraMounts are bind mounts made by the Docker daemon, and kind resolves a
+#     relative hostPath against its own working directory, which differs between
+#     a human (anywhere in the repo) and CI (repo root).
+#   * Point it at the policy IN THE REPO, never at a copy in $TMPDIR. On macOS
+#     the daemon runs inside the Colima VM, which only sees the folders Colima
+#     shares (by default $HOME; verify: `colima ssh -- ls <path>`). A host path
+#     outside them does not exist in the VM, Docker silently creates an EMPTY
+#     DIRECTORY there, and kube-apiserver then crash-loops because its audit
+#     policy is a directory. The rendered cluster.yaml itself may live anywhere:
+#     only the kind CLI on the host reads it.
+#   * On a Linux runner the daemon is local, so any absolute path works.
+# =============================================================================
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: contoso-k8s
+nodes:
+  - role: control-plane
+    # Pinned by tag AND digest. The digest is the multi-arch index (linux/amd64
+    # for the GitHub runner, linux/arm64 for Apple Silicon), so one pin serves
+    # both. Checked against registry-1.docker.io on 2026-10-19. kind v0.33.0's
+    # own default is v1.37.0; 1.36 is pinned on purpose (verify: the kind
+    # v0.33.0 release notes list v1.36.4 among the images built for it).
+    image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
+    extraPortMappings:
+      # Vault's API: the vault Service is a NodePort on 30820 (Helm values in
+      # lab/terraform/k8s/platform). The Vault Terraform provider and the e2e
+      # test reach it at http://127.0.0.1:18200. The HOST port is bound to
+      # loopback only: this is a dev-mode Vault behind a root token, so it is
+      # never published on the LAN. (NodePort 30820 is still reachable on the
+      # kind node's IP from the local Docker bridge network, and the vault
+      # Service from every pod in the cluster: there is no network policy.)
+      - containerPort: 30820
+        hostPort: 18200
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+    extraMounts:
+      # The audit policy, read-only, into the node container. kube-apiserver
+      # runs as a static pod on that node, so the kubeadm patch below mounts
+      # it a second time, from the node into the API-server pod.
+      - hostPath: __AUDIT_POLICY_PATH__
+        containerPath: /etc/kubernetes/policies/audit-policy.yaml
+        readOnly: true
+    kubeadmConfigPatches:
+      # For Kubernetes >= 1.36 kind generates kubeadm v1beta4 config, where
+      # extraArgs is a LIST of {name, value} (v1beta3 used a map). Setting
+      # apiVersion makes the patch apply only to that document version, and
+      # kind v0.33.0 merges extraArgs by name instead of replacing the list
+      # (pkg/internal/patch/kubeadm_merge.go), so kind's own arguments are
+      # kept. If the node image moves to a version kind renders with another
+      # kubeadm API, this patch stops matching and the e2e audit check fails
+      # loudly, rather than auditing silently switching off.
+      - |
+        apiVersion: kubeadm.k8s.io/v1beta4
+        kind: ClusterConfiguration
+        apiServer:
+          extraArgs:
+            - name: audit-policy-file
+              value: /etc/kubernetes/policies/audit-policy.yaml
+            - name: audit-log-path
+              value: /var/log/kubernetes/audit/audit.log
+            - name: audit-log-format
+              value: json
+            # Bounded disk use if KEEP_CLUSTER=1 keeps the cluster for days.
+            # A pipeline run writes a few MB, far below one rotation.
+            - name: audit-log-maxsize
+              value: "100"
+            - name: audit-log-maxbackup
+              value: "1"
+          extraVolumes:
+            - name: audit-policy
+              hostPath: /etc/kubernetes/policies
+              mountPath: /etc/kubernetes/policies
+              readOnly: true
+              pathType: DirectoryOrCreate
+            # Written by the API server, read by the e2e test through
+            # `docker exec contoso-k8s-control-plane` (it is a file in the
+            # node container, not on the host).
+            - name: audit-logs
+              hostPath: /var/log/kubernetes/audit
+              mountPath: /var/log/kubernetes/audit
+              readOnly: false
+              pathType: DirectoryOrCreate

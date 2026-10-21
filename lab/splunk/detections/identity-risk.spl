@@ -1,0 +1,64 @@
+index=entra (sourcetype="azure:loganalytics:aaduserriskevents" OR sourcetype="azure:loganalytics:aadriskyusers" OR sourcetype="azure:loganalytics:signinlogs") earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Risky user / risky sign-in (ID Protection, medium+ open)  ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/identity-risk.kql (same logic/window/columns)     ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over Entra logs REPLAYED from     ```
+``` Log Analytics. NEEDS the replay to carry AADUserRiskEvents and            ```
+``` AADRiskyUsers (ingest-from-loganalytics.sh allow-list + sourcetypes in     ```
+``` app props.conf); until then only the RiskySignIn branch returns rows.      ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   Open (atRisk / confirmedCompromised) medium or high risk on a user:     ```
+```   RiskDetection (AADUserRiskEvents), RiskyUser (AADRiskyUsers), and       ```
+```   RiskySignIn (SigninLogs RiskLevelDuringSignIn). Remediated, dismissed   ```
+```   or confirmed-safe risk is not alerted (CA006 / an admin closed it).     ```
+```   Severity: High = high or confirmedCompromised, Medium = medium.         ```
+``` MITRE ATT&CK: T1078.004 Valid Accounts: Cloud Accounts.                   ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   union A, B, C (per-table project)  -> one search over 3 sourcetypes +   ```
+```                                         eval Signal / per-signal columns  ```
+```   in~ (case-insensitive)             -> in(lower(x), lowercase values)     ```
+```   coalesce(IsDeleted, false) == false-> coalesce(lower(IsDeleted)) != true ```
+```   tostring(RiskEventTypes_V2)        -> spath RiskEventTypes_V2{} + mvjoin ```
+```                                         (comma-joined, not JSON text)     ```
+```                                                                            ```
+``` SCHEDULE: PT5M / PT1H, base severity High, throttled 1 h per user +        ```
+``` Severity (Sentinel groups per Account + severity).                          ```
+``` ========================================================================== ```
+``` @stanza Contoso - Risky user or risky sign-in (Identity Protection) ```
+``` @conf description = Open medium/high Entra ID Protection risk on a user (risk detection, risky user or risky sign-in) that CA006/CA007 or an admin has not closed. KQL twin: lab/kql/identity-risk.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = UserPrincipalName,Severity ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| eval Signal=case(sourcetype=="azure:loganalytics:aaduserriskevents", "RiskDetection", sourcetype=="azure:loganalytics:aadriskyusers", "RiskyUser", true(), "RiskySignIn")
+| eval RiskLevel=if(Signal=="RiskySignIn", RiskLevelDuringSignIn, RiskLevel)
+| where in(lower(RiskState), "atrisk", "confirmedcompromised")
+| where (Signal!="RiskyUser" AND in(lower(RiskLevel), "medium", "high")) OR (Signal=="RiskyUser" AND (in(lower(RiskLevel), "medium", "high") OR lower(RiskState)=="confirmedcompromised") AND coalesce(lower(IsDeleted), "false")!="true")
+| spath path=RiskEventTypes_V2{} output=RiskEventTypesV2
+| eval UserId=if(Signal=="RiskyUser", Id, UserId)
+| eval IPAddress=case(Signal=="RiskDetection", IpAddress, Signal=="RiskyUser", "", true(), IPAddress)
+| eval RiskEventType=case(Signal=="RiskDetection", RiskEventType, Signal=="RiskyUser", "", true(), mvjoin(RiskEventTypesV2, ","))
+| eval DetectionTimingType=case(Signal=="RiskDetection", DetectionTimingType, Signal=="RiskyUser", "", true(), "realtime")
+| eval RiskSource=case(Signal=="RiskDetection", Source, Signal=="RiskyUser", "IdentityProtection", true(), AppDisplayName)
+| eval SignInResult=if(Signal=="RiskySignIn", ResultType, null())
+| eval ConditionalAccessStatus=if(Signal=="RiskySignIn", ConditionalAccessStatus, null())
+| eval Severity=if(lower(RiskLevel)=="high" OR lower(RiskState)=="confirmedcompromised", "High", "Medium")
+| sort 0 - _time
+| table TimeGenerated, Severity, Signal, UserPrincipalName, UserId, IPAddress, RiskLevel, RiskState, RiskDetail, RiskEventType, DetectionTimingType, RiskSource, SignInResult, ConditionalAccessStatus, CorrelationId

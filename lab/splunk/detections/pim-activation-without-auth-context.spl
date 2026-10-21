@@ -1,0 +1,113 @@
+index=entra ((sourcetype="azure:loganalytics:auditlogs" LoggedByService="PIM") OR ((sourcetype="azure:loganalytics:signinlogs" OR sourcetype="azure:loganalytics:aadnoninteractiveusersigninlogs") ResultType="0" AuthenticationContextClassReferences="*c1*")) earliest=-24h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Tier-0 PIM activation without the expected CA            ```
+```                  authentication context (PREVIEW - see verify items)      ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/pim-activation-without-auth-context.kql           ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL over Entra logs REPLAYED from     ```
+``` Log Analytics by lab/splunk/ingest-from-loganalytics.sh.                   ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   A completed PIM activation of a Tier-0 group (PIM-Tier0-Security-Admins,```
+```   PIM-Tier0-CA-Admins) where no successful sign-in by the same user       ```
+```   carried authentication context c1 in the 30 min before the request (the ```
+```   latest requested event in the 20 h before completion, else the          ```
+```   completion itself). Microsoft Learn: PIM falls back to MFA only when no ```
+```   CA policy targets the context, not when that policy is report-only,     ```
+```   off, or excludes the user. Severity: High for every row.               ```
+``` MITRE ATT&CK: T1078.004 Cloud Accounts; T1556.009 CA Policies.            ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   PimEvents(LookBack, completed / requested) -> one search, Kind = done,   ```
+```                                                 req or step               ```
+```   has PIM activation / completed (terms)  -> match() with non-alphanumeric ```
+```                                              boundaries (pim-activation.spl) ```
+```   mv-apply acr ... id == c1               -> spath input= the context text ```
+```                                              + mvfilter(id == c1)         ```
+```   Requested join + max(RequestTime)       -> streamstats last(request) BY  ```
+```                                              user + target                ```
+```   StepUps join, count in -30m .. +5m      -> streamstats last(step-up) BY  ```
+```                                              user, step-ups shifted 5 min ```
+```                                              earlier, evaluated at the    ```
+```                                              request (or completion)      ```
+```   HONEST DIFFERENCES: (1) SPL sees only the LATEST step-up before the     ```
+```   anchor, so StepUpSignIns is 0 or 1 here (a count in KQL); the verdict ```
+```   is the same. (2) The ContextPolicies enforcement check is not mirrored: ```
+```   ContextPolicies is empty in the KQL too (check skipped), so both fire   ```
+```   only on no step-up. When ContextPolicies is set in the KQL, add the     ```
+```   same test here on spath ConditionalAccessPolicies{} (displayName and    ```
+```   result). (3) The base-search c1 term also matches c10..c19; the        ```
+```   mvfilter on id removes them, as the KQL mv-apply does.                  ```
+``` verify: AuthenticationContextClassReferences reaches Splunk as JSON TEXT ```
+``` (a string field) - if the replay parses it into an array, use spath path=```
+``` AuthenticationContextClassReferences{} instead of spath input=.         ```
+```                                                                            ```
+``` SCHEDULE: PT1H / P1D, severity High, throttled 1 h per user.               ```
+``` ========================================================================== ```
+``` @stanza Contoso - Tier-0 PIM activation without authentication context ```
+``` @conf description = A Tier-0 PIM group activation completed with no sign-in that satisfied authentication context c1 (step-up missing or its CA policy not enforced). KQL twin: lab/kql/pim-activation-without-auth-context.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = 11 * * * * ```
+``` @conf dispatch.earliest_time = -24h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = UserPrincipalName ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| eval IsAudit=if(sourcetype=="azure:loganalytics:auditlogs", 1, 0)
+| eval IsPimAct=if(IsAudit==1 AND LoggedByService=="PIM" AND in(Category, "GroupManagement", "RoleManagement") AND match(ActivityDisplayName, "(?i)(^|[^A-Za-z0-9])PIM activation($|[^A-Za-z0-9])"), 1, 0)
+| eval Kind=case(IsPimAct==1 AND match(ActivityDisplayName, "(?i)(^|[^A-Za-z0-9])completed($|[^A-Za-z0-9])"), "done", IsPimAct==1 AND match(ActivityDisplayName, "(?i)(^|[^A-Za-z0-9])requested($|[^A-Za-z0-9])"), "req", IsAudit==0, "step", true(), null())
+| where isnotnull(Kind)
+| where (Kind=="done" AND _time>=relative_time(now(), "-1h")) OR (Kind=="req" AND _time>=relative_time(now(), "-21h")) OR (Kind=="step" AND _time>=relative_time(now(), "-1290m"))
+| spath path=TargetResources{} output=TR
+| eval TRGroup1=mvindex(mvfilter(spath(TR, "type")=="Group"), 0), TRRole1=mvindex(mvfilter(spath(TR, "type")=="Role"), 0), TRUser1=mvindex(mvfilter(spath(TR, "type")=="User"), 0)
+| eval TargetGroup=spath(TRGroup1, "displayName"), TargetRole=spath(TRRole1, "displayName"), TargetUserId=spath(TRUser1, "id"), TargetUserUpn=spath(TRUser1, "userPrincipalName")
+| eval ElevatedTo=if(isnotnull(TargetGroup) AND TargetGroup!="", TargetGroup, TargetRole)
+| where Kind=="step" OR in(ElevatedTo, "PIM-Tier0-Security-Admins", "PIM-Tier0-CA-Admins")
+| spath path=InitiatedBy.user.id output=ActorId
+| spath path=InitiatedBy.user.userPrincipalName output=ActorUpn
+| spath path=InitiatedBy.user.ipAddress output=ActorIp
+| eval UserKey=if(Kind=="step", UserId, if(isnotnull(TargetUserId) AND TargetUserId!="", TargetUserId, ActorId))
+| eval UserPrincipalName=lower(if(isnotnull(TargetUserUpn) AND TargetUserUpn!="", TargetUserUpn, ActorUpn))
+| spath input=AuthenticationContextClassReferences path={} output=Acr
+| eval AcrMatch=if(Kind=="step", mvfilter(spath(Acr, "id")=="c1"), null())
+| eval ContextDetail=if(Kind=="step", mvjoin(mvdedup(mvmap(AcrMatch, spath(AcrMatch, "detail"))), ","), null())
+| where Kind!="step" OR coalesce(mvcount(AcrMatch), 0) > 0
+| eval StepPack=if(Kind=="step", _time . "|" . coalesce(IPAddress, "") . "|" . coalesce(AppDisplayName, "") . "|" . coalesce(ContextDetail, ""), null())
+| eval SortTime=if(Kind=="step", _time - 300, _time)
+| sort 0 UserKey SortTime
+| streamstats last(StepPack) AS PrevStep BY UserKey
+| eval PrevStepTime=tonumber(mvindex(split(PrevStep, "|"), 0))
+| eval StepOk=if(isnotnull(PrevStepTime) AND PrevStepTime>=_time - 1800, 1, 0)
+| eval ReqPack=if(Kind=="req", _time . "#" . StepOk . "#" . coalesce(PrevStep, ""), null())
+| eval SortTime2=if(Kind=="req", _time - 0.001, _time)
+| sort 0 UserKey ElevatedTo SortTime2
+| streamstats last(ReqPack) AS PrevReq BY UserKey ElevatedTo
+| where Kind=="done"
+| eval ReqTime=tonumber(mvindex(split(PrevReq, "#"), 0))
+| eval UseReq=if(isnotnull(ReqTime) AND ReqTime>=_time - 72000, 1, 0)
+| eval AnchorEpoch=if(UseReq==1, ReqTime, _time)
+| eval FinalStepOk=if(UseReq==1, tonumber(mvindex(split(PrevReq, "#"), 1)), StepOk)
+| eval FinalStep=case(FinalStepOk!=1, null(), UseReq==1, mvindex(split(PrevReq, "#"), 2), true(), PrevStep)
+| eval StepUpSignIns=if(FinalStepOk==1, 1, 0)
+| eval FinalParts=split(FinalStep, "|")
+| eval LastStepUpEpoch=tonumber(mvindex(FinalParts, 0)), StepUpIps=mvindex(FinalParts, 1), StepUpApps=mvindex(FinalParts, 2), ContextDetails=mvindex(FinalParts, 3)
+| eval EnforcedHits=0, ReportOnlyHits=0
+| eval PolicyCheck="skipped - set ContextPolicies to the CA policy targeting the context"
+| eval Verdict=if(StepUpSignIns==0, "No sign-in satisfied authentication context c1 before this activation", "")
+| where Verdict!=""
+| eval Severity="High"
+| eval UserId=UserKey
+| eval TimeGenerated=strftime(_time, "%Y-%m-%dT%H:%M:%S.%3N%z"), RequestTime=if(UseReq==1, strftime(ReqTime, "%Y-%m-%dT%H:%M:%S.%3N%z"), null()), AnchorTime=strftime(AnchorEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z"), LastStepUp=strftime(LastStepUpEpoch, "%Y-%m-%dT%H:%M:%S.%3N%z")
+| sort 0 - _time
+| table TimeGenerated, Severity, Verdict, UserPrincipalName, UserId, ActorIp, ElevatedTo, RequestTime, AnchorTime, StepUpSignIns, EnforcedHits, ReportOnlyHits, ContextDetails, LastStepUp, StepUpIps, StepUpApps, PolicyCheck, ActivityDisplayName, CorrelationId

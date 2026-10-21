@@ -1,0 +1,15 @@
+captured_utc: 2026-10-20T23:01:08Z
+host: Darwin arm64; macOS 26.5.2 (25F84)
+bash (/bin/bash, runs these suites): GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+terraform: Terraform v1.16.5  path=~/.local/bin/terraform
+checkov: 3.3.20  path=/opt/homebrew/bin/checkov
+pwsh: 7.6.1
+PowerShell modules: Microsoft.Graph.Authentication 2.41.2, Pester 5.7.1, Pester 6.2.0, PSScriptAnalyzer 1.25.0
+shellcheck: 0.11.0
+actionlint: 1.7.12
+python3: 3.13.3  path=/Library/Frameworks/Python.framework/Versions/3.13/bin/python3; PyYAML 6.0.3
+jq: jq-1.7.1-apple
+git: git version 2.50.1 (Apple Git-155)
+docker client/server: 29.9.0 / 29.5.2 (linux/arm64)
+colima: colima version v0.10.3; VM 4 CPU, 8GiB memory, 40GiB disk, aarch64
+git commit and status of the tree under test: omitted at publication (code.sha256sums is the fingerprint)

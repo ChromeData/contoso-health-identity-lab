@@ -1,0 +1,71 @@
+index=entra (sourcetype="azure:loganalytics:signinlogs" OR sourcetype="azure:loganalytics:aadnoninteractiveusersigninlogs") UserPrincipalName="bg-admin-*" earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Break-glass (emergency access) account sign-in - ANY sign-in ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM        ```
+``` KQL twin:        lab/kql/break-glass-signin.kql (same logic/window/columns)   ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: runs on the Splunk Enterprise 60-day TRIAL (replaces production   ```
+``` Splunk) over Entra logs REPLAYED from Log Analytics by                      ```
+``` lab/splunk/ingest-from-loganalytics.sh (replaces the Splunk Add-on for      ```
+``` Microsoft Azure / Event Hub streaming).                                     ```
+```                                                                            ```
+``` WHY THE BASE SEARCH IS LINE 1: Splunk breaks a search that starts with a    ```
+``` comment before its first (generating) command, so every .spl file in this  ```
+``` folder opens with its base search and the commentary follows it.           ```
+```                                                                            ```
+``` WHAT IT CATCHES                                                             ```
+```   ANY authentication - success OR failure, interactive OR non-interactive - ```
+```   by an emergency-access account (bg-admin-01 / bg-admin-02). They hold     ```
+```   standing Global Administrator and are excluded from CA and PIM, so every  ```
+```   sign-in is high-signal (threshold = 1 row).                               ```
+```                                                                            ```
+``` KQL -> SPL TRANSLATION                                                      ```
+```   union SigninLogs, AADNonInteractive...  -> two sourcetypes OR-ed in the   ```
+```                                              base search                    ```
+```   extend SignInType = "interactive"/...   -> eval on sourcetype             ```
+```   where TimeGenerated > ago(1h)           -> earliest=-1h latest=now        ```
+```   matches regex @"(?i)^bg-admin-\d{2}@"   -> regex command, same pattern    ```
+```                                              with [0-9] for \d (KQL runs    ```
+```                                              RE2, whose \d is ASCII-only,   ```
+```                                              so the two are equal;          ```
+```                                              no backslash to escape). The   ```
+```                                              bg-admin-* base term is only a ```
+```                                              cheap pre-filter               ```
+```   tostring(LocationDetails.countryOrRegion) -> spath path=...               ```
+```   project ... | sort by TimeGenerated desc -> sort 0 - _time | table ...    ```
+```   (_time IS TimeGenerated: the replay sets the HEC "time" from it.)         ```
+```                                                                            ```
+``` NOTE: AADNonInteractiveUserSignInLogs stores LocationDetails as a STRING    ```
+``` column holding JSON (SigninLogs stores it as dynamic). The replay parses it ```
+``` so both sourcetypes expose the same nested LocationDetails.* path here.     ```
+```                                                                            ```
+``` SCHEDULE: mirrors the Sentinel rule in lab/terraform/modules/monitoring     ```
+``` (frequency PT5M, lookback PT1H, severity High, trigger > 0 rows, 1 h        ```
+``` grouping by the Account + IP entities -> per-result throttle below).        ```
+``` The @stanza / @conf lines are read by render-savedsearches.sh to build      ```
+``` app/contoso_identity/default/savedsearches.conf; Splunk ignores them.       ```
+``` ========================================================================== ```
+``` @stanza Contoso - Break-glass account sign-in (any) ```
+``` @conf description = Any sign-in (interactive or non-interactive, success or failure) by an emergency-access account. Always investigated by a second admin. KQL twin: lab/kql/break-glass-signin.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */5 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = UserPrincipalName,IPAddress ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| regex UserPrincipalName="(?i)^bg-admin-[0-9]{2}@"
+| eval SignInType=if(sourcetype=="azure:loganalytics:signinlogs", "interactive", "non-interactive")
+| spath path=LocationDetails.countryOrRegion output=Country
+| sort 0 - _time
+| table TimeGenerated, SignInType, UserPrincipalName, IPAddress, Country, AppDisplayName, ClientAppUsed, ResultType, ResultDescription, ConditionalAccessStatus, CorrelationId

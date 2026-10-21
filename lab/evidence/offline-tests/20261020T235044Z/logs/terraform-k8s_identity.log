@@ -1,0 +1,33 @@
+$ terraform -chdir=lab/terraform/k8s/identity init -backend=false -input=false -no-color -lockfile=readonly
+Initializing provider plugins...
+- Reusing previous version of hashicorp/vault from the dependency lock file
+- Reusing previous version of hashicorp/kubernetes from the dependency lock file
+- Installing hashicorp/vault v5.12.0...
+- Installed hashicorp/vault v5.12.0 (signed by HashiCorp)
+- Installing hashicorp/kubernetes v3.3.0...
+- Installed hashicorp/kubernetes v3.3.0 (signed by HashiCorp)
+
+Terraform has been successfully initialized!
+exit=0
+$ terraform -chdir=lab/terraform/k8s/identity validate -no-color
+Success! The configuration is valid.
+
+exit=0
+$ terraform -chdir=lab/terraform/k8s/identity test -no-color 
+tests/identity.tftest.hcl... in progress
+  run "vault_role_trusts_only_nightly_report_in_clinical_apps"... pass
+  run "policy_is_read_only_on_exactly_one_path"... pass
+  run "workload_service_accounts_mount_no_api_token"... pass
+  run "human_rbac_has_no_secrets_and_no_cluster_scope"... pass
+  run "app_deployer_cannot_write_pods"... pass
+  run "admission_policy_binds_nightly_report_to_code_and_pipeline"... pass
+  run "tag_only_app_image_is_rejected"... pass
+  run "catch_all_launcher_group_is_rejected"... pass
+  run "weak_root_token_is_rejected"... pass
+  run "non_kind_context_is_rejected"... pass
+  run "plain_http_off_loopback_is_rejected"... pass
+tests/identity.tftest.hcl... tearing down
+tests/identity.tftest.hcl... pass
+
+Success! 11 passed, 0 failed.
+exit=0

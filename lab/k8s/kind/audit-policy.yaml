@@ -1,0 +1,114 @@
+# =============================================================================
+# API-server audit policy for the contoso-k8s kind cluster (mounted by
+# cluster.yaml). This is the "who tried what, and who changed what" evidence.
+# The e2e test (section h) reads it for: the impersonated deployer's
+# FORBIDDEN read of a Secret; the out-of-band RoleBinding edit of the drift
+# drill (pipeline stage 10) and Terraform's revert of it; the write of the
+# ValidatingAdmissionPolicy; and proof that no Secret or token body was
+# logged. Pipeline stage 12 then counts the KV value and the Vault root token
+# in this log (0 expected).
+#
+# Metadata records who (user, groups, and impersonatedUser when someone uses
+# --as / --as-group), what (verb, resource, namespace, name), when, from where
+# (sourceIPs, userAgent) and the outcome (responseStatus.code), but no request
+# or response BODY. RequestResponse adds both bodies. Which resource gets
+# which level, and why (first matching rule wins, so the ORDER below is part
+# of the policy):
+#   None              heartbeat / leader-election / health-probe churn.
+#   Metadata          SECRET-BEARING resources, pinned FIRST so no later rule
+#                     can raise them: Secrets; serviceaccounts/token (the
+#                     TokenRequest RESPONSE is a live, audience-bound JWT, the
+#                     very token Vault accepts); TokenReviews (the REQUEST
+#                     carries the bearer token under review: Vault sends the
+#                     pod's JWT there). At Request or RequestResponse level the
+#                     audit log would become a second secret store, readable
+#                     by whoever reads logs (on AKS: everyone with read on the
+#                     Log Analytics workspace).
+#   RequestResponse   changes worth reconstructing exactly:
+#                     * RBAC objects (Roles, RoleBindings and their cluster
+#                       twins): an investigation sees WHICH subject was added,
+#                       not just "rolebinding patched". RBAC objects hold names
+#                       and rules, never credentials.
+#                     * the ways INTO a running pod (exec, attach,
+#                       port-forward, ephemeral debug containers). For exec /
+#                       attach the command is in the request URI; the streamed
+#                       session itself never reaches the audit log.
+#                     * admission policy and webhook configuration WRITES, so
+#                       a weakened guardrail is on record with its new content.
+#                       Reads of them stay at Metadata (informer churn), and
+#                       so do writes to their /status subresource (a rule's
+#                       resource list does not match subresources): that is
+#                       kube-controller-manager recording type-check results
+#                       after every policy write, not a change to the policy.
+#   Metadata          everything else (impersonation, SubjectAccessReviews,
+#                     pods/log - whose response IS the container's output).
+#
+# On AKS the equivalent is the control plane's diagnostic settings
+# (kube-audit / kube-audit-admin) to Log Analytics, where the lab's other
+# detections already live; there the audit policy itself is Microsoft's, not a
+# file like this one. verify: category names and what kube-audit-admin
+# leaves out, in the AKS docs.
+# =============================================================================
+apiVersion: audit.k8s.io/v1
+kind: Policy
+# RequestReceived is the same event again before the outcome is known; keeping
+# only ResponseStarted/ResponseComplete halves the volume and loses nothing.
+omitStages:
+  - RequestReceived
+# managedFields (server-side-apply bookkeeping) would roughly double every
+# RequestResponse body and add no evidence.
+omitManagedFields: true
+rules:
+  # High-volume, low-value churn: node heartbeats and leader election (leases),
+  # endpoint bookkeeping, and the events stream itself. None of it is a human
+  # or a workload asking for access.
+  - level: None
+    resources:
+      - group: ""
+        resources: ["events", "endpoints"]
+      - group: "events.k8s.io"
+        resources: ["events"]
+      - group: "coordination.k8s.io"
+        resources: ["leases"]
+      - group: "discovery.k8s.io"
+        resources: ["endpointslices"]
+  # Health and version probes (kubelet, kind, kubectl version).
+  - level: None
+    nonResourceURLs:
+      - /healthz*
+      - /livez*
+      - /readyz*
+      - /version
+  # Secret-bearing: Metadata only, whatever the verb or the user (see header).
+  # Never Request / RequestResponse for these.
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["secrets", "serviceaccounts/token"]
+      - group: "authentication.k8s.io"
+        resources: ["tokenreviews"]
+  # Who changed which grant, with the objects themselves.
+  - level: RequestResponse
+    resources:
+      - group: "rbac.authorization.k8s.io"
+        resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+  # Every way into a running pod's processes.
+  - level: RequestResponse
+    resources:
+      - group: ""
+        resources: ["pods/exec", "pods/attach", "pods/portforward", "pods/ephemeralcontainers"]
+  # Admission guardrail changes: the ValidatingAdmissionPolicy + binding and
+  # the webhook configurations (the Vault injector's included).
+  - level: RequestResponse
+    verbs: ["create", "update", "patch", "delete", "deletecollection"]
+    resources:
+      - group: "admissionregistration.k8s.io"
+        resources:
+          - validatingadmissionpolicies
+          - validatingadmissionpolicybindings
+          - mutatingadmissionpolicies
+          - mutatingadmissionpolicybindings
+          - validatingwebhookconfigurations
+          - mutatingwebhookconfigurations
+  # Everything else: metadata only.
+  - level: Metadata

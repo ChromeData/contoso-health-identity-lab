@@ -1,0 +1,103 @@
+{
+  "rule": "blocked-country-signin",
+  "about": "Block list KP IR SY CU, watch list RU CN. Every outcome branch, the Location fallback, and a sign-in whose ConditionalAccessPolicies is an EMPTY array (the rule relies on mv-apply + summarize keeping it - probe mv-apply-empty-array-summarize).",
+  "defaults": {
+    "SigninLogs": {
+      "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "UserDisplayName": "Dana Okafor",
+      "AppDisplayName": "Office 365 Exchange Online", "IPAddress": "203.0.113.150",
+      "RiskLevelDuringSignIn": "none", "ResultDescription": ""
+    }
+  },
+  "cases": [
+    {
+      "id": "success-from-block-list-is-ca-gap",
+      "kind": "positive",
+      "label": "A SUCCESSFUL sign-in from KP that CA004 did not block",
+      "tables": {"SigninLogs": [{
+        "LocationDetails": {"city": "Pyongyang", "countryOrRegion": "KP"}, "Location": "KP",
+        "ResultType": "0", "ConditionalAccessStatus": "success",
+        "ConditionalAccessPolicies": [
+          {"id": "11111111-1111-1111-1111-111111111111", "displayName": "CA004 - Block high-risk countries", "result": "notApplied"},
+          {"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "result": "success"}
+        ]
+      }]},
+      "expect": [{"Country": "KP", "ListType": "block", "Outcome": "SUCCEEDED - CA gap", "Blocked": false, "BlockingPolicies": []}]
+    },
+    {
+      "id": "blocked-by-ca",
+      "kind": "positive",
+      "label": "CA004 blocks a sign-in from IR (still a row, Outcome Blocked by CA)",
+      "tables": {"SigninLogs": [{
+        "LocationDetails": {"countryOrRegion": "IR"}, "Location": "IR",
+        "ResultType": "53003", "ResultDescription": "Access has been blocked by Conditional Access policies.",
+        "ConditionalAccessStatus": "failure",
+        "ConditionalAccessPolicies": [
+          {"id": "11111111-1111-1111-1111-111111111111", "displayName": "CA004 - Block high-risk countries", "result": "failure"},
+          {"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "result": "notApplied"}
+        ]
+      }]},
+      "expect": [{"Country": "IR", "Outcome": "Blocked by CA", "Blocked": true, "BlockingPolicies": ["CA004 - Block high-risk countries"]}]
+    },
+    {
+      "id": "watch-list-success",
+      "kind": "positive",
+      "label": "A successful sign-in from RU (watch list, CA does not block)",
+      "tables": {"SigninLogs": [{
+        "LocationDetails": {"countryOrRegion": "RU"}, "Location": "RU", "ResultType": "0", "ConditionalAccessStatus": "success",
+        "ConditionalAccessPolicies": [{"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "result": "success"}]
+      }]},
+      "expect": [{"Country": "RU", "ListType": "watch", "Outcome": "Succeeded - watch list"}]
+    },
+    {
+      "id": "first-factor-failure-empty-ca-list",
+      "kind": "positive",
+      "label": "A wrong password from SY: CA never ran and ConditionalAccessPolicies is []",
+      "tables": {"SigninLogs": [{
+        "LocationDetails": {"countryOrRegion": "SY"}, "Location": "SY", "ResultType": "50126",
+        "ResultDescription": "Invalid username or password or Invalid on-premise username or password.",
+        "ConditionalAccessStatus": "notApplied", "ConditionalAccessPolicies": []
+      }]},
+      "expect": [{"Country": "SY", "Outcome": "Failed first factor - CA not reached", "Blocked": false, "BlockingPolicies": []}]
+    },
+    {
+      "id": "other-failure-needs-review",
+      "kind": "positive",
+      "label": "An MFA interrupt (50074) from CN: the password may be valid",
+      "tables": {"SigninLogs": [{
+        "LocationDetails": {"countryOrRegion": "CN"}, "Location": "CN", "ResultType": "50074",
+        "ResultDescription": "Strong Authentication is required.", "ConditionalAccessStatus": "notApplied",
+        "ConditionalAccessPolicies": [{"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "result": "notApplied"}]
+      }]},
+      "expect": [{"Country": "CN", "ListType": "watch", "Outcome": "Other failure - review (password may be valid)"}]
+    },
+    {
+      "id": "country-from-location-fallback",
+      "kind": "positive",
+      "label": "LocationDetails has no countryOrRegion: the Location column (CU) decides",
+      "tables": {"SigninLogs": [{
+        "LocationDetails": {}, "Location": "CU", "ResultType": "0", "ConditionalAccessStatus": "success",
+        "ConditionalAccessPolicies": [{"id": "11111111-1111-1111-1111-111111111111", "displayName": "CA004 - Block high-risk countries", "result": "notApplied"}]
+      }]},
+      "expect": [{"Country": "CU", "ListType": "block", "Outcome": "SUCCEEDED - CA gap"}]
+    },
+    {
+      "id": "domestic-sign-in",
+      "kind": "negative",
+      "label": "A US sign-in is on neither list",
+      "tables": {"SigninLogs": [{
+        "LocationDetails": {"countryOrRegion": "US"}, "Location": "US", "ResultType": "0", "ConditionalAccessStatus": "success",
+        "ConditionalAccessPolicies": [{"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "result": "success"}]
+      }]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A KP success 2 h ago is outside the 1 h look-back",
+      "tables": {"SigninLogs": [{
+        "TimeGenerated": "ago:2h", "LocationDetails": {"countryOrRegion": "KP"}, "Location": "KP", "ResultType": "0",
+        "ConditionalAccessStatus": "success",
+        "ConditionalAccessPolicies": [{"id": "11111111-1111-1111-1111-111111111111", "displayName": "CA004 - Block high-risk countries", "result": "notApplied"}]
+      }]}
+    }
+  ]
+}

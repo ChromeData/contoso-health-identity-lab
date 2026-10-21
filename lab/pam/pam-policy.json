@@ -1,0 +1,66 @@
+{
+  "_comment": [
+    "PAM policy for the Vault stand-in: CyberArk's Master Policy + Platforms in one file.",
+    "Read by tools/discover.py (classification), onboard.sh (what to vault, where, which Vault policy),",
+    "rotate.sh (dependency gate) and reconcile.sh (rotated within policy?). No secrets here.",
+    "CyberArk vocabulary: a tier is a Platform (rotation interval, check-out rules); a library set or",
+    "static-role prefix plus its Vault policy is a Safe; 'exclusions' are documented Master Policy exceptions."
+  ],
+  "version": 1,
+  "stale_days": 90,
+  "never_logged_on_grace_days": 30,
+  "service_account_ous": ["OU=ServiceAccounts"],
+  "privileged_account_ous": ["OU=PrivilegedAccounts"],
+  "privileged_groups": [
+    {"cn": "Domain Admins",                     "tier": "tier0"},
+    {"cn": "Enterprise Admins",                 "tier": "tier0"},
+    {"cn": "Schema Admins",                     "tier": "tier0"},
+    {"cn": "Administrators",                    "tier": "tier0"},
+    {"cn": "Account Operators",                 "tier": "tier0"},
+    {"cn": "Backup Operators",                  "tier": "tier0"},
+    {"cn": "Server Operators",                  "tier": "tier0"},
+    {"cn": "Print Operators",                   "tier": "tier0"},
+    {"cn": "DnsAdmins",                         "tier": "tier0"},
+    {"cn": "Group Policy Creator Owners",       "tier": "tier0"},
+    {"cn": "Key Admins",                        "tier": "tier0"},
+    {"cn": "Enterprise Key Admins",             "tier": "tier0"},
+    {"cn": "Tier1-Server-Admins",               "tier": "tier1"}
+  ],
+  "exclusions": {
+    "krbtgt": "KDC account: reset twice with the krbtgt reset procedure (runbook), never vaulted",
+    "Administrator": "RID-500 built-in: break-glass, held offline under dual control, rotated by the break-glass drill",
+    "svc-vault-rotator": "Vault's own bind (reconcile) account: rotated by ldap/rotate-root, never a static role",
+    "svc-pam-discovery": "read-only discovery bind account: credential in Key Vault for discover.sh"
+  },
+  "tiers": {
+    "tier0": {
+      "description": "Domain / forest control (Enterprise Access Model control plane)",
+      "library": "tier0-admins",
+      "static_prefix": "tier0",
+      "rotation_period": "24h",
+      "max_password_age_days": 30,
+      "checkout_ttl": "1h",
+      "require_ticket": true,
+      "approvals_required": 2,
+      "dependency_check": true
+    },
+    "tier1": {
+      "description": "Server and application administration (management plane)",
+      "library": "tier1-admins",
+      "static_prefix": "tier1",
+      "rotation_period": "72h",
+      "max_password_age_days": 30,
+      "checkout_ttl": "2h",
+      "require_ticket": true,
+      "approvals_required": 1,
+      "dependency_check": true
+    },
+    "svc": {
+      "description": "Non-privileged service accounts with SPNs (Kerberoastable: long random passwords, rotated)",
+      "static_prefix": "svc",
+      "rotation_period": "720h",
+      "max_password_age_days": 30,
+      "dependency_check": true
+    }
+  }
+}

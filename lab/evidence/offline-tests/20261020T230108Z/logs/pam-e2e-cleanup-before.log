@@ -1,0 +1,16 @@
+[23:06:38Z] Vault ldap/ mount (test DC config, roles, library) removed
+[23:06:39Z] Vault pam-meta/ (test exception register) removed
+[23:06:39Z] SSH segment removed (ssh-target, Vault ssh-client-signer/, Guacamole connection)
+[23:06:39Z] Removed the harness's tickets from the ITSM mock
+[23:06:39Z] Removing samba-dc and its volume
+[23:06:40Z] Removed Guacamole connection 'DC01 - tier0-admin-01 (recorded)' (pointed at the test DC)
+[23:06:40Z] Removed Guacamole connection 'RDP-TARGET (Linux xrdp stand-in for DC01) - tier0-admin-01 (recorded)' (the RDP stand-in)
+[23:06:40Z] Removed Guacamole connection 'DC01 - tier0-admin-02 (recorded)' (pointed at the test DC)
+[23:06:40Z] rdp-target (the Linux xrdp stand-in) removed
+[23:06:40Z] Recreating the Vault container (DC host mapping cleared)
+ Container contoso-pam-vault-1 Recreate 
+ Container contoso-pam-vault-1 Recreated 
+ Container contoso-pam-vault-1 Starting 
+ Container contoso-pam-vault-1 Started 
+[23:06:41Z] Unsealing Vault
+[23:06:41Z] Cleanup done: DC_FQDN/DC_PUBLIC_IP empty again; the rest of the stack is untouched.
