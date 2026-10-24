@@ -233,6 +233,7 @@ resource "azurerm_storage_account" "evidence" {
 # Private access only; it inherits the account's WORM policy.
 # -----------------------------------------------------------------------------
 resource "azurerm_storage_container" "evidence" {
+  #checkov:skip=CKV2_AZURE_21:Blob read logging is configured: azurerm_monitor_diagnostic_setting.blob sends the allLogs category group (StorageRead, StorageWrite, StorageDelete) of blobServices/default to Log Analytics. CKV2_AZURE_21 passes only when an azurerm_log_analytics_storage_insights resource is attached and does not read diagnostic settings.
   name                  = var.container_name
   storage_account_id    = azurerm_storage_account.evidence.id
   container_access_type = "private"

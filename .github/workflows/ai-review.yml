@@ -23,6 +23,13 @@
 #
 # All third-party actions pinned to full commit SHA (Trivy-2026 rationale — see
 # terraform-plan.yml).
+#
+# NO REVIEWER WIRED = SKIPPED, NOT RED. With neither AZURE_OPENAI_ENDPOINT nor
+# AZURE_OPENAI_DEPLOYMENT set (this public copy: no tenant, no Azure OpenAI
+# resource), the `azure-config` job emits a notice and the review job is
+# skipped by its `if:`. Once either is set, the review runs and first requires
+# BOTH plus the PLAN identity's variables, so it never signs in half-configured
+# (.github/scripts/azure-config.sh). Advisory either way: not a required check.
 # =============================================================================
 
 name: ai-review
@@ -40,12 +47,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Is an Azure OpenAI reviewer wired? run=false (skip + notice) only when
+  # neither of its two variables is set. Names only are printed.
+  azure-config:
+    name: detect Azure config
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - name: Checkout (gate script only)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Azure OpenAI reviewer wired?
+        id: gate
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT }}
+        run: bash .github/scripts/azure-config.sh gate ai-review AZURE_OPENAI_ENDPOINT AZURE_OPENAI_DEPLOYMENT
+
   ai-review:
     name: AI security review (advisory)
+    needs: azure-config
     # Same-repo PRs only. Fork PRs get no OIDC token and a read-only
     # GITHUB_TOKEN, so azure/login and the comment step would fail; this job is
     # advisory and NOT a required check, so skipping forks avoids a red X.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Also skipped when no reviewer is wired (azure-config says run=false).
+    if: github.event.pull_request.head.repo.full_name == github.repository && needs.azure-config.outputs.run == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write          # OIDC token for Entra federation (PLAN app)
@@ -56,6 +89,20 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
+          persist-credentials: false   # nothing here pushes; no token in .git/config
+
+      # All or nothing: never reach azure/login with part of the configuration.
+      - name: Require complete Azure configuration
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT }}
+          AZURE_PLAN_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: >-
+          bash .github/scripts/azure-config.sh require ai-review
+          AZURE_OPENAI_ENDPOINT AZURE_OPENAI_DEPLOYMENT
+          AZURE_PLAN_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID
 
       - name: Azure login (OIDC, PLAN app)
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2

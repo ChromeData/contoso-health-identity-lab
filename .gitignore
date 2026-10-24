@@ -2,6 +2,10 @@
 # audit history. Keep it out of git.
 lab/evidence/out/
 lab/scripts/powershell/out/
+# Invoke-LabDay keeps raw Graph exports beside each capture; only the redacted
+# manifest and hashes may be committed. Each capture folder also writes its own
+# .gitignore; this is the second guard.
+lab/evidence/tenant/**/raw/
 
 # PAM stand-in stack: generated credentials, Vault unseal key / root token,
 # broker tokens, Conjur API keys, generated Guacamole schema.

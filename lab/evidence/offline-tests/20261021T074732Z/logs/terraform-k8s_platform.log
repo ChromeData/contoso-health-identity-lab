@@ -1,0 +1,28 @@
+$ terraform -chdir=lab/terraform/k8s/platform init -backend=false -input=false -no-color -lockfile=readonly
+Initializing provider plugins...
+- terraform.io/builtin/terraform is built in to Terraform
+- Reusing previous version of hashicorp/helm from the dependency lock file
+- Reusing previous version of hashicorp/kubernetes from the dependency lock file
+- Installing hashicorp/helm v3.3.0...
+- Installed hashicorp/helm v3.3.0 (signed by HashiCorp)
+- Installing hashicorp/kubernetes v3.3.0...
+- Installed hashicorp/kubernetes v3.3.0 (signed by HashiCorp)
+
+Terraform has been successfully initialized!
+exit=0
+$ terraform -chdir=lab/terraform/k8s/platform validate -no-color
+Success! The configuration is valid.
+
+exit=0
+$ terraform -chdir=lab/terraform/k8s/platform test -no-color 
+tests/platform.tftest.hcl... in progress
+  run "namespaces_carry_the_pod_security_levels"... pass
+  run "vault_release_is_pinned_and_wired_for_the_lab"... pass
+  run "injector_webhook_fails_closed_and_only_where_opted_in"... pass
+  run "weak_root_token_is_rejected"... pass
+  run "non_kind_context_is_rejected"... pass
+tests/platform.tftest.hcl... tearing down
+tests/platform.tftest.hcl... pass
+
+Success! 5 passed, 0 failed.
+exit=0

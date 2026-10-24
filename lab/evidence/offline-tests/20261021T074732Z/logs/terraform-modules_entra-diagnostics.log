@@ -1,0 +1,31 @@
+$ terraform -chdir=lab/terraform/modules/entra-diagnostics init -backend=false -input=false -no-color 
+Initializing provider plugins...
+- Finding hashicorp/azurerm versions matching "~> 4.0"...
+- Installing hashicorp/azurerm v4.81.0...
+- Installed hashicorp/azurerm v4.81.0 (signed by HashiCorp)
+
+Terraform has created a lock file .terraform.lock.hcl to record the provider
+selections it made above. Include this file in your version control repository
+so that Terraform can guarantee to make the same selections by default when
+you run "terraform init" in the future.
+
+Terraform has been successfully initialized!
+exit=0
+$ terraform -chdir=lab/terraform/modules/entra-diagnostics validate -no-color
+Success! The configuration is valid.
+
+exit=0
+$ terraform -chdir=lab/terraform/modules/entra-diagnostics test -no-color 
+tests/categories.tftest.hcl... in progress
+  run "baseline_exports_user_nhi_and_graph_categories"... pass
+  run "identity_protection_switch_adds_risk_categories"... pass
+  run "extra_categories_path_and_both_switches_deduplicate"... pass
+  run "table_name_instead_of_category_is_rejected"... pass
+  run "case_typo_is_rejected"... pass
+  run "dropping_audit_logs_is_rejected"... pass
+  run "dropping_graph_activity_is_allowed_for_cost"... pass
+tests/categories.tftest.hcl... tearing down
+tests/categories.tftest.hcl... pass
+
+Success! 7 passed, 0 failed.
+exit=0

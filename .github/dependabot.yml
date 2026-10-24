@@ -2,6 +2,20 @@
 # reviewable PRs - never by re-pointing a floating tag (see
 # lab/pipelines/README.md, "SHA-pinning rationale"). Dependabot bumps the
 # full commit SHA *and* the trailing "# vX.Y.Z" comment together.
+#
+# Grouping keeps the queue short: one weekly PR for all action bumps, and
+# grouped provider minor + patch bumps for the Terraform roots.
+#
+# Provider MAJOR versions are never proposed automatically. A major (e.g.
+# azurerm 4 -> 5) changes resource schemas and defaults, and every module pins
+# its providers to the current major (`~> 4.0`), so a root-only bump cannot
+# even `terraform init`: the first azurerm 5 PRs failed lab-tests with "locked
+# provider ... does not match configured version constraint". A major is a
+# planned upgrade: an ADR under lab/docs/adr/, every module's constraint raised
+# in the same PR, the provider's upgrade guide worked through, the mocked tests
+# and a reviewed plan. GitHub documents `ignore` as also shaping security
+# updates, so a fix that ships only in a new major is that same planned
+# upgrade, done by hand.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -31,5 +45,14 @@ updates:
       - "/lab/terraform/k8s/aks-mapping"
     schedule:
       interval: "weekly"
+    groups:
+      terraform-providers:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # Majors need a planned upgrade + ADR (see the header). Minor and patch
+      # releases still arrive, grouped above.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "deps(terraform)"

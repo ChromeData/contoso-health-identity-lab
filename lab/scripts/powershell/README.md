@@ -5,11 +5,12 @@ mover / leaver follow-through, every tenant setting the Terraform providers
 cannot express (`post-apply/`), and the reports, KPIs, drills and evidence
 export an auditor asks for.
 
-**Status: BUILT.** On 2026-10-20 the lab Pester suite passed **917 tests, 0
+**Status: BUILT.** On 2026-10-21 the lab Pester suite passed **1074 tests, 0
 failed, 0 skipped** with every Graph, `az` and Log Analytics call mocked
-(`tests/Invoke-LabTests.ps1`, Pester 5.7.1 and 6.2.0), and PSScriptAnalyzer
-reported **0 errors** and no warning outside test files (warnings are not
-gating). **No script has run against a tenant**
+(`tests/Invoke-LabTests.ps1`, Pester 5.7.1 and 6.2.0; hashed record
+[`offline-tests/20261021T074732Z`](../../evidence/offline-tests/20261021T074732Z/README.md)),
+and PSScriptAnalyzer reported **0 errors** and no warning outside test files
+(warnings are not gating). **No script has run against a tenant**
 (RAN · tenant: nothing). Passing proves the logic does what the comments say;
 whether Graph accepts each call is a tenant-time check, listed in each
 script's `.NOTES` as `verify:`.
@@ -147,6 +148,34 @@ after, drills), follow [`../../docs/evidence-capture-plan.md`](../../docs/eviden
 baseline` come first; `Invoke-BreakGlassDrill.ps1`, the `after` phase and
 `Export-EvidencePack.ps1` come last.
 
+## Invoke-LabDay: one command per trial day
+
+`Invoke-LabDay.ps1` walks one day of the 30-day trial window from a plan kept
+as data (`evidence/LabDayPlan.psd1`, Days 0-29): `00-Preflight.ps1` first,
+then each step in order. A tenant change always goes through the script that
+owns it (its dry run, then your yes, then the script's own confirmations); a
+portal step pauses with the exact console path; wherever an API can read the
+result, read-only captures (Graph GET, Log Analytics queries, ARM reads, the
+pipeline's own run logs) go to `lab/evidence/tenant/<UTC day>/<evidence id>/`
+as private `raw/` exports plus a public-safe `manifest.json`, a `SHA256SUMS`
+and a capture-log row. Progress is kept in the gitignored
+`out/labday/state.json`: after a failure or a `[q]uit`, the same command
+carries on where it stopped. Before the first day, `-NewSettingsFile -Day 0`
+writes the settings template (names and ids, never a secret).
+
+```powershell
+./Invoke-LabDay.ps1 -Day 2 -WhatIf                   # the whole day, printed: nothing runs, nothing is written
+./Invoke-LabDay.ps1 -Day 2                           # run it, in the pwsh session that holds your Graph sign-in
+./Invoke-LabDay.ps1 -Day 2 -Step build-account       # one step: a step id, or an evidence id such as E16b
+./Invoke-LabDay.ps1 -Day 2 -Step E16b -CaptureOnly   # take that capture again; no step runs
+```
+
+**Status: BUILT.** `tests/Invoke-LabDay.Tests.ps1` (151 tests) runs every
+day of the plan against stubs generated from the real scripts' param blocks,
+with every Graph, `az` and `gh` call mocked. Nothing in it has run against a
+tenant (RAN · tenant: nothing yet): each capture recipe's scopes and query
+shape are tenant-time checks (`verify:` in `evidence/LabEvidence.Recipes.ps1`).
+
 ## Tests
 
 ```powershell
@@ -154,7 +183,7 @@ pwsh lab/scripts/powershell/tests/Invoke-LabTests.ps1        # PSScriptAnalyzer 
 pwsh lab/scripts/powershell/tests/Invoke-LabTests.ps1 -CI    # also writes out/testResults.xml (gitignored)
 ```
 
-32 test files in `tests/`, one per script or area (`Reset-DemoState.Tests.ps1`
+33 test files in `tests/`, one per script or area (`Reset-DemoState.Tests.ps1`
 covers [`../demo/`](../demo/)). Two are shared:
 `PostApply.Tests.ps1` checks `Invoke-PostApply.ps1`'s order and the real
 scripts' parameter contracts, and is the only coverage of
@@ -166,7 +195,9 @@ wrong parameter name fails a test. `Invoke-BaselineAssessment.Tests.ps1`
 needs CISA's ScubaGear sample (`tests/fixtures/Get-ScubaSample.ps1`,
 SHA-256 pinned); without it those blocks are skipped, not passed.
 `.github/workflows/lab-tests.yml` runs the same suite on every pull request
-with no credential (configured; not run yet).
+with no credential. On GitHub's runners it passed on the published commit,
+with 917 tests at that commit
+([run](https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/39523030602)).
 
 Write-Host is how these scripts talk to the person running them (colour,
 `-NoNewline`), so `PSAvoidUsingWriteHost` is suppressed - per function, with
@@ -176,8 +207,10 @@ unchanged), and a function that writes to the console carries the attribute
 on its own param block. `ScriptAnalyzerScope.Tests.ps1` refuses a file-level
 suppression, an unjustified one, and a script-level `Write-Host`.
 
-Last run, 2026-10-20 21:43 UTC (author's machine, working tree, Pester 6.2.0
-and again with CI's pin 5.7.1): 917 passed, 0 failed, 0 skipped;
+Last run, 2026-10-21 (hashed record
+[`offline-tests/20261021T074732Z`](../../evidence/offline-tests/20261021T074732Z/README.md):
+author's machine, a copy of the working tree, CI's pin Pester 5.7.1 and again
+with 6.2.0): 1074 passed, 0 failed, 0 skipped;
 PSScriptAnalyzer 0 errors, 19 warnings - all `PSReviewUnusedParameter` on
 mock stubs in `NhiGovernance.Tests.ps1` that mirror real cmdlet parameters
 (was 480, 453 of them outside test files).

@@ -140,3 +140,7 @@ jobs:
           set -euo pipefail
           bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
           (cd lab/splunk && ./render-savedsearches.sh --check)
+          # The skip-or-run gate in front of every Azure sign-in job
+          # (terraform plan / apply, AI review): skips only when nothing is
+          # configured, fails closed on partial settings, never prints a value.
+          bash .github/scripts/azure-config.test.sh

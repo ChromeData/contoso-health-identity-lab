@@ -110,7 +110,7 @@ and is heavily commented inline. Every module carries a
 |--------|---------------|---------|
 | **groups** | `azuread_user` (`bg-admin-01/02` on onmicrosoft.com), `azuread_directory_role_assignment` (Global Admin → Break-Glass-Admins), `azuread_group` (All-Nurses / All-ICU dynamic, Break-Glass-Admins + Privileged-IAM-Admins role-assignable, App-ServiceNow/AWS/Okta/ICU/Pharmacy assigned, CA005-Pilot-CompliantDevice assigned pilot, Admin-Accounts role-assignable and standing with no role (the admin passkey target; `post-apply/New-AdminAccounts.ps1` sets its membership); optional App-Consent-Reviewers (`enable_nhi_governance`) and dynamic All-Workforce = enabled HR-synced members (`enable_phishing_resistant_all_users`)), `random_password` | The identity cast everything else references. Workforce users come from HR, not here. |
 | **conditional-access** | `azuread_conditional_access_policy` ×5 (+8 behind flags), `azuread_named_location`, `azuread_authentication_strength_policy` ×3, `azuread_group` (CA008 pilot), optional `azuread_authentication_strength_policy_fido2_combination_configuration` | CA001 MFA for all, CA002 phishing-resistant for admins, CA003 block legacy auth, CA004 block countries, CA005 *compliant device for the admin portals* (**CA005-Pilot-CompliantDevice only**). Behind flags: **CA006** user risk High → MFA + secure password change and **CA007** sign-in risk High → block (`enable_identity_protection_ca`, P2, [ADR 0015](../docs/adr/0015-risk-based-conditional-access-thresholds.md)); **CA008** phishing-resistant strength for the workforce (`enable_phishing_resistant_all_users`; all users = measure, pilot = enforce; all-users enforcement needs a second key; the rollout needs `admin_fido2_allowed_aaguids` or `accept_admin_synced_passkey_risk`, [ADR 0016](../docs/adr/0016-passkey-profiles-and-phone-method-retirement.md)); **CA009** registering security info needs a one-time TAP or a phishing-resistant method (`enable_registration_ca`); **CA010** block the device code flow (`enable_device_code_block`); **CA020** admin-portal sign-in every 4 h (`enable_admin_session_controls`); **CA022** the PSM app (guacamole-psm) + admin portals need the ADMIN strength (`enable_pam_oidc_app`, was CA009); **CA060** shared clinical workstations (`enable_shared_clinical_ca`, [ADR 0014](../docs/adr/0014-shared-clinical-workstation-authentication.md)). **CA021** (PIM step-up on authentication context `c1`, `enable_pim_auth_context`) is rendered as output `pim_auth_context_requests` and written by `post-apply/Set-AuthContextPolicies.ps1`: the provider can create neither the context nor a policy that targets it. **CA023** (step-up on a second context, `c2`, for the protected actions *update / delete a CA policy or named location*, `enable_protected_actions_ca`) follows the same pattern (output `protected_actions_auth_context_requests`, same script); binding `c2` to the protected actions is a manual step once CA023 is enforced. CA011 (Token Protection) is a Graph script too (`post-apply/Set-TokenProtectionPolicy.ps1`). Per-policy state in `ca_policy_states`, all **report-only** by default; break-glass excluded on every policy ([ADR 0003](../docs/adr/0003-ca-exclusions-and-break-glass.md)). |
-| **pim** | `azuread_directory_role_assignment` (group → role, AU-scoped where set), `azuread_group_role_management_policy`, `azuread_group` (tier, approver and Azure groups), `azuread_administrative_unit`, `azurerm_pim_eligible_role_assignment`, `azurerm_role_management_policy` | Privileged-IAM-Admins (User Administrator): eligible membership, MFA + justification + approval, 4h, eligibility expires after 365 days. `enable_pim_tiers`: **8 Tier-0 groups** (Security, CA, Privileged Role, Privileged Authentication (2h), Hybrid Identity, Application, Cloud Application and Authentication Policy Administrator: MFA (or authentication context `c1` once CA021 is enforced) + justification + ticket + approval by `PIM-Approvers-Tier0`, 4h, eligibility 180 days) and **8 Tier-1 groups** (Intune with approval, Identity Governance + Lifecycle Workflows Administrator with approval, Helpdesk + Authentication Administrator, Groups, Exchange, SharePoint, Teams, License: MFA + justification, 8h, eligibility 365 days). `enable_helpdesk_au_scoping`: the help-desk roles scoped to `AU-Workforce-Standard`. `enable_global_admin_pim_policy`: Global Administrator's own policy (approval, 2h, named eligibility for 180 days), rendered for `post-apply/Set-DirectoryRolePimPolicies.ps1`. `enable_pim_azure_resources`: PIM-Azure-RG-Contributors **eligible** for Contributor on the lab RG (approval, 4h; human applier). Outputs feed the privileged access reviews. [ADR 0020](../docs/adr/0020-pim-activation-design.md); see [`modules/pim/README.md`](modules/pim/README.md). |
+| **pim** | `azuread_directory_role_assignment` (group → role, AU-scoped where set), `azuread_group_role_management_policy`, `azuread_group` (tier, approver and Azure groups), `azuread_administrative_unit`, `azurerm_pim_eligible_role_assignment`, `azurerm_role_management_policy` | Privileged-IAM-Admins (User Administrator): eligible membership, MFA + justification + approval, 4h, eligibility expires after 365 days. `enable_pim_tiers`: **8 Tier-0 groups** (Security, CA, Privileged Role, Privileged Authentication (2h), Hybrid Identity, Application, Cloud Application and Authentication Policy Administrator: MFA (or authentication context `c1` once CA021 is enforced) + justification + ticket + approval by `PIM-Approvers-Tier0`, 4h, eligibility 180 days) and **8 Tier-1 groups** (Intune with approval, Identity Governance + Lifecycle Workflows Administrator with approval, Helpdesk + Authentication Administrator, Groups, Exchange, SharePoint, Teams, License: MFA + justification, 8h, eligibility 365 days). `enable_helpdesk_au_scoping`: the help-desk roles scoped to `AU-Workforce-Standard`. `enable_global_admin_pim_policy`: Global Administrator's own policy (approval, 2h, named eligibility for 180 days), rendered for `post-apply/Set-DirectoryRolePimPolicies.ps1`. `enable_pim_azure_resources`: PIM-Azure-RG-Contributors **eligible** for Contributor on the lab RG (approval, 4h; human applier). Outputs feed the privileged access reviews. [ADR 0002](../docs/adr/0002-pim-for-groups-vs-direct-role-eligibility.md); see [`modules/pim/README.md`](modules/pim/README.md). |
 | **entitlement** | `azuread_access_package_catalog`, `azuread_access_package` ×4, `azuread_access_package_resource_catalog_association`, `azuread_access_package_resource_package_association`, `azuread_access_package_assignment_policy` (request packages only, + `assignment_review_settings` by tier) | Packages from `var.access_packages`, matching `lab/iga/access-catalog.json`: "Nurse – Clinical Apps" and "ICU – Critical Care Apps" are **T3 birthright** (no Terraform policy: their only policy is the HR-attribute automatic assignment from `post-apply/Set-AutoAssignmentPolicies.ps1`); "ICU – Float Access" and "Pharmacy – Controlled Substances Apps" are **T2 requestable** (approval, justification, 180-day expiry). Assigned groups only. Reviews per [ADR 0012](../docs/adr/0012-access-review-no-response-and-clinical-lockout.md), one flag per tier: `enable_access_reviews_privileged` (T1, quarterly, default deny), `enable_access_reviews_requestable` (T2, half-yearly, only on packages that outlive 180 days or allow extension), `enable_access_reviews_inactive`; a birthright clinical package is never reviewed by a person. Standalone review bodies (privileged, inactive-user) are rendered as output `access_review_definitions` for `post-apply/New-AccessReviewDefinitions.ps1`. `enable_b2b_governance`: external "Affiliated Partners" catalog + "Affiliated Physicians" package (connected-org requestors, sponsor approval, 90-day expiry, monthly review); connected org via `post-apply/New-B2BConnectedOrganization.ps1`. See [`modules/entitlement/README.md`](modules/entitlement/README.md). |
 | **pipeline-identity** | `azuread_application` ×2, `azuread_service_principal` ×2, `azuread_application_federated_identity_credential` ×2, `azuread_app_role_assignment` ×N, `data.azuread_service_principal` (Graph) | GitHub-OIDC **plan** (read-only, `pull_request`) and **apply** (write, `environment:prod`) identities. Called only from `envs/bootstrap`. Opt-in extra roles (`extra_*_graph_roles`; bootstrap `enable_app_management_roles` adds the four `modules/apps` needs, incl. Tier-0 `AppRoleAssignment.ReadWrite.All`); a write role can never be added to PLAN. |
 | **dc-vm** | `azurerm_windows_virtual_machine` (Server 2022 Azure Edition, Trusted Launch), `azurerm_managed_disk` (NTDS, caching None), `azurerm_network_security_group`, `azurerm_public_ip`, `azurerm_dev_test_global_vm_shutdown_schedule`, `azurerm_role_assignment` (VM identity → Key Vault Secrets Officer, ABAC-limited to `dc01-dsrm-password` + `svc-vault-rotator` + `svc-pam-discovery`; Key Vault ABAC is preview, verify:) | The on-prem AD for HR → AD → Cloud Sync. Promoted by `lab/scripts/dc/`. |
@@ -315,13 +315,15 @@ What the committed code itself enforces (`validation` / `precondition` /
 (`envs/dev` with `-var-file=lab.tfvars`). Every provider is a
 `mock_provider`, so no tenant, subscription or cloud credential is involved.
 `.github/workflows/lab-tests.yml` runs `validate` in every directory and
-every one of these tests on each pull request (configured; no workflow has
-run yet).
+every one of these tests on each pull request. On GitHub's runners it passed
+on the published commit, with 325 runs at that commit
+([run](https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/39523030602)).
 
-**Last run: 2026-10-20 (evening), HashiCorp Terraform 1.16.5, author's
-machine, a copy of the working tree: 325 runs passed, 0 failed, across 18
-directories** (302 in the Entra / Azure / AWS roots and modules, 23 in the
-three Kubernetes roots), and `validate` passed in all 18.
+**Last run: 2026-10-21, HashiCorp Terraform 1.16.5, author's machine, a copy
+of the working tree: 326 runs passed, 0 failed, across 18 directories** (303
+in the Entra / Azure / AWS roots and modules, 23 in the three Kubernetes
+roots), and `validate` passed in all 18 (hashed record
+[`offline-tests/20261021T074732Z`](../evidence/offline-tests/20261021T074732Z/README.md)).
 
 | Directory | Test file(s) | Runs | What it asserts |
 |---|---|---|---|
@@ -336,7 +338,7 @@ three Kubernetes roots), and `validate` passed in all 18.
 | `modules/evidence-store` | `worm.tftest.hcl` | 13 | WORM and Entra-only by default; retention bounds; lock needs acknowledgement; firewall format; wide ranges refused; writers container-scoped and cannot delete |
 | `modules/groups` | `optional_groups.tftest.hcl` | 4 | Optional groups absent by default; the consent reviewers group is not role-assignable; All-Workforce never matches break-glass or guests; Admin-Accounts is role-assignable with assigned (standing) membership |
 | `modules/intune-vm` | `network_exposure.tftest.hcl`, `vm_identity.tftest.hcl` | 41 | RDP is the only inbound allow and only from the operator entries (up to /24; /23 and wider, any-address, service tags, bare, IPv6 and malformed entries refused); Standard static public IP, no DNS label; size, image SKU, licence and Trusted Launch pinned; OS disk shape; system-assigned identity only; Intune enrolment on by default; one VM Administrator Login assignment per user or group at VM scope, none by default; nightly deallocation; multi-session, Pro and Windows 10 SKUs, bad hostnames, a reserved admin name and non-GUID object ids refused |
-| `modules/keyvault` | `diagnostics.tftest.hcl`, `uami_abac.tftest.hcl` | 6 | Empty workspace id refused; wide IP range refused; the UAMI's read is ABAC-limited to the named secrets and an empty allow-list is refused |
+| `modules/keyvault` | `diagnostics.tftest.hcl`, `private_endpoint_nsg.tftest.hcl`, `uami_abac.tftest.hcl` | 7 | Empty workspace id refused; wide IP range refused; the private-endpoint subnet has its own NSG (no custom rules) with `NetworkSecurityGroupEnabled` endpoint policies, and the vault's private endpoint sits in it; the UAMI's read is ABAC-limited to the named secrets and an empty allow-list is refused |
 | `modules/monitoring` | `itdr.tftest.hcl`, `itdr_v2.tftest.hcl` | 32 | Defaults create nothing; ITDR rules map the `.kql` columns; telemetry before Sentinel; containment only on High ITDR incidents, only with Sentinel and never on the SoD or vault rules; Log Analytics path skips the Sentinel-only rules; DC01 DCR events; ids rendered and display names refused; `operator_ips` watchlist ranges, expiry and owner rules; `vault_feed_v2_columns` |
 | `modules/pim` | `pim.tftest.hcl` | 32 | Defaults keep only the original binding; tier groups and their notifications; one approver warns; the `c1` context replaces MFA only once CA021 is enforced, and the two-apply switchover; Global Administrator refused in a tier group; Tier-0 roles cannot sit in Tier 1; approval cannot be waived on Tier 0; Tier-0 eligibility capped at 180 days; help-desk AU scoping; the Global Administrator policy bodies; Azure PIM shape; Privileged-IAM-Admins can hold neither Global Administrator nor a Tier-0 role |
 | `modules/pipeline-identity` | `plan_roles.tftest.hcl` | 5 | PLAN's opt-in Graph roles are an allow-list of read roles: ReadWrite, Invite, Create, Send and Manage roles refused |
@@ -371,8 +373,11 @@ done
   modules have no lock file. `tofu init` rewrites a root's lock file with
   `registry.opentofu.org` entries, so validate with tofu in a scratch copy (or
   `git checkout` the lock file afterwards) and never commit a tofu-written one.
-- **Checkov.** Run locally with Checkov 3.3.20 on 2026-10-20 (`checkov -d
-  lab/terraform --framework terraform`): **46 passed, 0 failed, 10 skipped**.
+- **Checkov.** Measured on 2026-10-21 (`checkov -d lab/terraform --framework
+  terraform`) with PyPI Checkov 3.3.20, which includes the graph checks:
+  **61 passed, 0 failed, 15 skipped** (hashed record
+  [`offline-tests/20261021T074732Z`](../evidence/offline-tests/20261021T074732Z/README.md),
+  with every skip and its reason in its `checkov-skips.txt`).
   Every skip is an inline `#checkov:skip=<ID>:<reason>` on its resource:
   - `dc-vm` and `intune-vm`: CKV_AZURE_151 (encryption at host: needs the
     `EncryptionAtHost` subscription feature; the disks use platform-managed
@@ -383,19 +388,41 @@ done
     same trade-off as the evidence store);
   - `pipeline-identity`: CKV_AZURE_249 on the two GitHub federated
     credentials (their subjects are pinned to the immutable owner@id/repo@id
-    form, which the check's pattern does not recognise);
-  - `evidence-store` (CKV_AZURE_33, CKV_AZURE_59) and `keyvault`
-    (CKV_AZURE_189), with the reasons in their `main.tf`.
+    form, which the check's pattern does not recognize);
+  - `evidence-store` (CKV_AZURE_33, CKV_AZURE_59 and the graph checks
+    CKV2_AZURE_33 and CKV2_AZURE_1) and `keyvault` (CKV_AZURE_189), with the
+    reasons in their `main.tf`;
+  - new on 2026-10-21: CKV_AZURE_119 on the `dc-vm` and `intune-vm` network
+    interfaces (DC01's public IP admits only RDP and LDAPS from single
+    operator /32 hosts, an accepted, time-boxed lab risk under
+    [ADR 0013](../docs/adr/0013-tier0-domain-controller-exposure.md); the
+    Intune VM stands in for a laptop, and its public IP admits only operator
+    RDP and is its outbound path), and CKV2_AZURE_21 on the evidence
+    container (blob read logging is configured, through a diagnostic setting
+    to Log Analytics, which the check does not read).
 
-  Until 2026-10-20 the first seven were a documented baseline of 8 failed
+  The 2026-10-20 local count (46 passed, 0 failed, 10 skipped) came from a
+  Homebrew build of Checkov that lacked its graph checks, so it never ran
+  the four checks GitHub's Checkov failed on the first Dependabot pull
+  requests (56 passed, 4 failed, 12 skipped). The three new skips cover three
+  of them. The fourth, CKV2_AZURE_31, is fixed: the Key Vault
+  private-endpoint subnet now has a real NSG (`nsg-snet-private-endpoints`,
+  default rules only, with `private_endpoint_network_policies =
+  "NetworkSecurityGroupEnabled"` so the NSG applies to the endpoint; a new
+  test, `modules/keyvault/tests/private_endpoint_nsg.tftest.hcl`, pins both,
+  and passed in `offline-tests/20261021T074732Z`; BUILT, not applied). None
+  of this has re-run on GitHub yet.
+
+  Until 2026-10-20 the first seven skips (CKV_AZURE_151, CKV_AZURE_50,
+  CKV_AZURE_93 and CKV_AZURE_249) were a documented baseline of 8 failed
   checks. The eighth, CKV_AZURE_251, is fixed rather than skipped: the NTDS
   disk now has `public_network_access_enabled = false` and
   `network_access_policy = "DenyAll"` (asserted in `dc-vm`'s tests; BUILT,
   not applied). `terraform-plan.yml` runs Checkov on every PR that touches
   `lab/terraform/**` with `soft_fail: false`, so any new failed check blocks
-  the merge. Version gap: the pinned `checkov-action` runs Checkov **3.3.3**
-  (an image tag the workflow cannot override), not 3.3.20, so CI may report
-  a different set of checks (verify: on the first CI run).
+  the merge. The pinned `checkov-action` runs its image's Checkov (3.3.3, a
+  tag the workflow cannot override), not PyPI 3.3.20. Its result on this tree
+  comes with the next push.
 
 ---
 
@@ -418,7 +445,7 @@ performed by a privileged human.
    empty, role-assignable group, and the just-in-time control is that group's
    PIM-for-Groups activation policy, which the provider fully expresses
    (`azuread_group_role_management_policy`). Global Administrator is the
-   exception (named, direct, expiring eligibility, [ADR 0020](../docs/adr/0020-pim-activation-design.md)):
+   exception (named, direct, expiring eligibility, [ADR 0002](../docs/adr/0002-pim-for-groups-vs-direct-role-eligibility.md)):
    azuread 3.10 has no directory-role policy resource, so `modules/pim`
    renders the rules (output `directory_role_pim_policies`) and
    `post-apply/Set-DirectoryRolePimPolicies.ps1` writes them. The CA021

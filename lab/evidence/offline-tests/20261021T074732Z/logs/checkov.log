@@ -1,0 +1,308 @@
+
+
+       _               _
+   ___| |__   ___  ___| | _______   __
+  / __| '_ \ / _ \/ __| |/ / _ \ \ / /
+ | (__| | | |  __/ (__|   < (_) \ V /
+  \___|_| |_|\___|\___|_|\_\___/ \_/
+
+By Prisma Cloud | version: 3.3.20 
+Update available 3.3.20 -> 3.3.30
+Run pip3 install -U checkov to update 
+
+
+terraform scan results:
+
+Passed checks: 61, Failed checks: 0, Skipped checks: 15
+
+Check: CKV_AWS_274: "Disallow IAM roles, users, and groups from using the AWS AdministratorAccess policy"
+	PASSED for resource: aws_ssoadmin_managed_policy_attachment.view_only
+	File: /aws/main.tf:181-187
+Check: CKV_AWS_41: "Ensure no hard coded AWS access key and secret key exists in provider"
+	PASSED for resource: aws.default
+	File: /aws/providers.tf:23-39
+Check: CKV_AZURE_249: "Ensure Azure GitHub Actions OIDC trust policy is configured securely"
+	PASSED for resource: azuread_application_federated_identity_credential.nightly_report
+	File: /k8s/aks-mapping/main.tf:54-67
+Check: CKV_K8S_41: "Ensure that default service accounts are not actively used"
+	PASSED for resource: kubernetes_service_account_v1.workload["nightly-report"]
+	File: /k8s/identity/main.tf:313-331
+Check: CKV_K8S_21: "The default namespace should not be used"
+	PASSED for resource: kubernetes_service_account_v1.workload["nightly-report"]
+	File: /k8s/identity/main.tf:313-331
+Check: CKV_K8S_49: "Minimize wildcard use in Roles and ClusterRoles"
+	PASSED for resource: kubernetes_role_v1.human["app-deployer"]
+	File: /k8s/identity/main.tf:414-434
+Check: CKV_K8S_21: "The default namespace should not be used"
+	PASSED for resource: kubernetes_role_binding_v1.human["app-deployer"]
+	File: /k8s/identity/main.tf:436-457
+Check: CKV_K8S_42: "Ensure that default service accounts are not actively used"
+	PASSED for resource: kubernetes_role_binding_v1.human["app-deployer"]
+	File: /k8s/identity/main.tf:436-457
+Check: CKV_K8S_41: "Ensure that default service accounts are not actively used"
+	PASSED for resource: kubernetes_service_account_v1.workload["unapproved-job"]
+	File: /k8s/identity/main.tf:313-331
+Check: CKV_K8S_21: "The default namespace should not be used"
+	PASSED for resource: kubernetes_service_account_v1.workload["unapproved-job"]
+	File: /k8s/identity/main.tf:313-331
+Check: CKV_K8S_49: "Minimize wildcard use in Roles and ClusterRoles"
+	PASSED for resource: kubernetes_role_v1.human["auditor"]
+	File: /k8s/identity/main.tf:414-434
+Check: CKV_K8S_21: "The default namespace should not be used"
+	PASSED for resource: kubernetes_role_binding_v1.human["auditor"]
+	File: /k8s/identity/main.tf:436-457
+Check: CKV_K8S_42: "Ensure that default service accounts are not actively used"
+	PASSED for resource: kubernetes_role_binding_v1.human["auditor"]
+	File: /k8s/identity/main.tf:436-457
+Check: CKV_AZURE_77: "Ensure that UDP Services are restricted from the Internet "
+	PASSED for resource: module.dc_vm.azurerm_network_security_group.dc
+	File: /modules/dc-vm/main.tf:60-86
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_10: "Ensure that SSH access is restricted from the internet"
+	PASSED for resource: module.dc_vm.azurerm_network_security_group.dc
+	File: /modules/dc-vm/main.tf:60-86
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_9: "Ensure that RDP access is restricted from the internet"
+	PASSED for resource: module.dc_vm.azurerm_network_security_group.dc
+	File: /modules/dc-vm/main.tf:60-86
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_160: "Ensure that HTTP (port 80) access is restricted from the internet"
+	PASSED for resource: module.dc_vm.azurerm_network_security_group.dc
+	File: /modules/dc-vm/main.tf:60-86
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_118: "Ensure that Network Interfaces disable IP forwarding"
+	PASSED for resource: module.dc_vm.azurerm_network_interface.dc
+	File: /modules/dc-vm/main.tf:102-116
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_92: "Ensure that Virtual Machines use managed disks"
+	PASSED for resource: module.dc_vm.azurerm_windows_virtual_machine.dc
+	File: /modules/dc-vm/main.tf:131-172
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_179: "Ensure VM agent is installed"
+	PASSED for resource: module.dc_vm.azurerm_windows_virtual_machine.dc
+	File: /modules/dc-vm/main.tf:131-172
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_177: "Ensure Windows VM enables automatic updates"
+	PASSED for resource: module.dc_vm.azurerm_windows_virtual_machine.dc
+	File: /modules/dc-vm/main.tf:131-172
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_251: "Ensure Azure Virtual Machine disks are configured without public network access"
+	PASSED for resource: module.dc_vm.azurerm_managed_disk.ntds
+	File: /modules/dc-vm/main.tf:175-190
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_2: "Ensure Azure managed disk has encryption enabled"
+	PASSED for resource: module.dc_vm.azurerm_managed_disk.ntds
+	File: /modules/dc-vm/main.tf:175-190
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_43: "Ensure Storage Accounts adhere to the naming rules"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_35: "Ensure default network access rule for Storage Accounts is set to deny"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_244: "Avoid the use of local users for Azure Storage unless necessary"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_44: "Ensure Storage Account is using the latest version of TLS encryption"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_206: "Ensure that Storage Accounts use replication"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_36: "Ensure 'Trusted Microsoft Services' is enabled for Storage Account access"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_3: "Ensure that 'enable_https_traffic_only' is enabled"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_190: "Ensure that Storage blobs restrict public access"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_34: "Ensure that 'Public access level' is set to Private for blob containers"
+	PASSED for resource: module.evidence_store.azurerm_storage_container.evidence
+	File: /modules/evidence-store/main.tf:235-245
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_77: "Ensure that UDP Services are restricted from the Internet "
+	PASSED for resource: module.intune_vm.azurerm_network_security_group.endpoints
+	File: /modules/intune-vm/main.tf:113-137
+	Calling File: /envs/dev/main.tf:476-490
+Check: CKV_AZURE_10: "Ensure that SSH access is restricted from the internet"
+	PASSED for resource: module.intune_vm.azurerm_network_security_group.endpoints
+	File: /modules/intune-vm/main.tf:113-137
+	Calling File: /envs/dev/main.tf:476-490
+Check: CKV_AZURE_9: "Ensure that RDP access is restricted from the internet"
+	PASSED for resource: module.intune_vm.azurerm_network_security_group.endpoints
+	File: /modules/intune-vm/main.tf:113-137
+	Calling File: /envs/dev/main.tf:476-490
+Check: CKV_AZURE_160: "Ensure that HTTP (port 80) access is restricted from the internet"
+	PASSED for resource: module.intune_vm.azurerm_network_security_group.endpoints
+	File: /modules/intune-vm/main.tf:113-137
+	Calling File: /envs/dev/main.tf:476-490
+Check: CKV_AZURE_118: "Ensure that Network Interfaces disable IP forwarding"
+	PASSED for resource: module.intune_vm.azurerm_network_interface.vm
+	File: /modules/intune-vm/main.tf:153-166
+	Calling File: /envs/dev/main.tf:476-490
+Check: CKV_AZURE_92: "Ensure that Virtual Machines use managed disks"
+	PASSED for resource: module.intune_vm.azurerm_windows_virtual_machine.vm
+	File: /modules/intune-vm/main.tf:181-228
+	Calling File: /envs/dev/main.tf:476-490
+Check: CKV_AZURE_179: "Ensure VM agent is installed"
+	PASSED for resource: module.intune_vm.azurerm_windows_virtual_machine.vm
+	File: /modules/intune-vm/main.tf:181-228
+	Calling File: /envs/dev/main.tf:476-490
+Check: CKV_AZURE_177: "Ensure Windows VM enables automatic updates"
+	PASSED for resource: module.intune_vm.azurerm_windows_virtual_machine.vm
+	File: /modules/intune-vm/main.tf:181-228
+	Calling File: /envs/dev/main.tf:476-490
+Check: CKV_AZURE_183: "Ensure that VNET uses local DNS addresses"
+	PASSED for resource: module.keyvault.azurerm_virtual_network.lab
+	File: /modules/keyvault/main.tf:27-33
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV_AZURE_182: "Ensure that VNET has at least 2 connected DNS Endpoints"
+	PASSED for resource: module.keyvault.azurerm_virtual_network.lab
+	File: /modules/keyvault/main.tf:27-33
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV_AZURE_77: "Ensure that UDP Services are restricted from the Internet "
+	PASSED for resource: module.keyvault.azurerm_network_security_group.private_endpoints
+	File: /modules/keyvault/main.tf:50-55
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV_AZURE_10: "Ensure that SSH access is restricted from the internet"
+	PASSED for resource: module.keyvault.azurerm_network_security_group.private_endpoints
+	File: /modules/keyvault/main.tf:50-55
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV_AZURE_9: "Ensure that RDP access is restricted from the internet"
+	PASSED for resource: module.keyvault.azurerm_network_security_group.private_endpoints
+	File: /modules/keyvault/main.tf:50-55
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV_AZURE_160: "Ensure that HTTP (port 80) access is restricted from the internet"
+	PASSED for resource: module.keyvault.azurerm_network_security_group.private_endpoints
+	File: /modules/keyvault/main.tf:50-55
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV_AZURE_42: "Ensure the key vault is recoverable"
+	PASSED for resource: module.keyvault.azurerm_key_vault.idlab
+	File: /modules/keyvault/main.tf:65-103
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV_AZURE_111: "Ensure that key vault enables soft delete"
+	PASSED for resource: module.keyvault.azurerm_key_vault.idlab
+	File: /modules/keyvault/main.tf:65-103
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV_AZURE_110: "Ensure that key vault enables purge protection"
+	PASSED for resource: module.keyvault.azurerm_key_vault.idlab
+	File: /modules/keyvault/main.tf:65-103
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV_AZURE_109: "Ensure that key vault allows firewall rules settings"
+	PASSED for resource: module.keyvault.azurerm_key_vault.idlab
+	File: /modules/keyvault/main.tf:65-103
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV2_AZURE_41: "Ensure storage account is configured with SAS expiration policy"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+Check: CKV2_AZURE_38: "Ensure soft-delete is enabled on Azure storage account"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+Check: CKV2_AZURE_32: "Ensure private endpoint is configured to key vault"
+	PASSED for resource: module.keyvault.azurerm_key_vault.idlab
+	File: /modules/keyvault/main.tf:65-103
+Check: CKV2_AZURE_8: "Ensure the storage container storing the activity logs is not publicly accessible"
+	PASSED for resource: module.evidence_store.azurerm_storage_container.evidence
+	File: /modules/evidence-store/main.tf:235-245
+Check: CKV2_AZURE_40: "Ensure storage account is not configured with Shared Key authorization"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+Check: CKV2_AZURE_47: "Ensure storage account is configured without blob anonymous access"
+	PASSED for resource: module.evidence_store.azurerm_storage_account.evidence
+	File: /modules/evidence-store/main.tf:128-228
+Check: CKV2_AWS_56: "Ensure AWS Managed IAMFullAccess IAM policy is not used."
+	PASSED for resource: aws_iam_role.github_readonly
+	File: /aws/github-oidc.tf:141-160
+Check: CKV2_AWS_40: "Ensure AWS IAM policy does not allow full IAM privileges"
+	PASSED for resource: aws_iam_role_policy.github_readonly
+	File: /aws/github-oidc.tf:162-168
+Check: CKV2_AZURE_31: "Ensure VNET subnet is configured with a Network Security Group (NSG)"
+	PASSED for resource: module.dc_vm.azurerm_subnet.dc
+	File: /modules/dc-vm/main.tf:53-58
+Check: CKV2_AZURE_31: "Ensure VNET subnet is configured with a Network Security Group (NSG)"
+	PASSED for resource: module.intune_vm.azurerm_subnet.endpoints
+	File: /modules/intune-vm/main.tf:106-111
+Check: CKV2_AZURE_31: "Ensure VNET subnet is configured with a Network Security Group (NSG)"
+	PASSED for resource: module.keyvault.azurerm_subnet.private_endpoints
+	File: /modules/keyvault/main.tf:35-43
+Check: CKV_AZURE_151: "Ensure Windows VM enables encryption"
+	SKIPPED for resource: module.dc_vm.azurerm_windows_virtual_machine.dc
+	Suppress comment: Encryption at host needs the EncryptionAtHost feature registered on the subscription; the lab DC's disks use platform-managed server-side encryption (lab/terraform/README.md, Checkov baseline).
+	File: /modules/dc-vm/main.tf:131-172
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_50: "Ensure Virtual Machine Extensions are not Installed"
+	SKIPPED for resource: module.dc_vm.azurerm_windows_virtual_machine.dc
+	Suppress comment: The forest is built with az vm run-command (lab/scripts/dc/README.md), which runs through the VM agent's extension path; extensions stay allowed.
+	File: /modules/dc-vm/main.tf:131-172
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_93: "Ensure that managed disks use a specific set of disk encryption sets for the customer-managed key encryption"
+	SKIPPED for resource: module.dc_vm.azurerm_managed_disk.ntds
+	Suppress comment: Platform-managed keys by design in the lab; a customer-managed key adds a Key Vault key whose loss makes the DC's NTDS disk unreadable (same trade-off as the evidence store).
+	File: /modules/dc-vm/main.tf:175-190
+	Calling File: /envs/dev/main.tf:456-466
+Check: CKV_AZURE_33: "Ensure Storage logging is enabled for Queue service for read, write and delete requests"
+	SKIPPED for resource: module.evidence_store.azurerm_storage_account.evidence
+	Suppress comment: No queues are used. queue_properties logging is data-plane only, which this module avoids (shared key off, data_plane_available = false); blob access logs go to Log Analytics below.
+	File: /modules/evidence-store/main.tf:128-228
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_59: "Ensure that Storage accounts disallow public access"
+	SKIPPED for resource: module.evidence_store.azurerm_storage_account.evidence
+	Suppress comment: Public access is opened only to allowed_ip_ranges (operator IP) in the lab; empty list = disabled.
+	File: /modules/evidence-store/main.tf:128-228
+	Calling File: /envs/dev/main.tf:633-646
+Check: CKV_AZURE_151: "Ensure Windows VM enables encryption"
+	SKIPPED for resource: module.intune_vm.azurerm_windows_virtual_machine.vm
+	Suppress comment: Encryption at host needs the EncryptionAtHost feature registered on the subscription; the lab endpoint's disks use platform-managed server-side encryption (lab/terraform/README.md, Checkov baseline).
+	File: /modules/intune-vm/main.tf:181-228
+	Calling File: /envs/dev/main.tf:476-490
+Check: CKV_AZURE_50: "Ensure Virtual Machine Extensions are not Installed"
+	SKIPPED for resource: module.intune_vm.azurerm_windows_virtual_machine.vm
+	Suppress comment: The Entra join needs the AADLoginForWindows VM extension (see the identity block below); blocking extensions would make the VM unjoinable.
+	File: /modules/intune-vm/main.tf:181-228
+	Calling File: /envs/dev/main.tf:476-490
+Check: CKV_AZURE_189: "Ensure that Azure Key Vault disables public network access"
+	SKIPPED for resource: module.keyvault.azurerm_key_vault.idlab
+	Suppress comment: Public access is opened only to allowed_ip_ranges (operator IP) in the lab; empty list = disabled.
+	File: /modules/keyvault/main.tf:65-103
+	Calling File: /envs/dev/main.tf:259-270
+Check: CKV_AZURE_249: "Ensure Azure GitHub Actions OIDC trust policy is configured securely"
+	SKIPPED for resource: module.pipeline_identity.azuread_application_federated_identity_credential.plan_pr
+	Suppress comment: The subject is pinned to this repository's pull_request events (local.plan_subject, the immutable owner/repo form); Checkov's subject pattern does not recognise that form.
+	File: /modules/pipeline-identity/main.tf:93-101
+	Calling File: /envs/bootstrap/main.tf:33-45
+Check: CKV_AZURE_249: "Ensure Azure GitHub Actions OIDC trust policy is configured securely"
+	SKIPPED for resource: module.pipeline_identity.azuread_application_federated_identity_credential.apply_prod
+	Suppress comment: The subject is pinned to this repository's prod environment (local.apply_subject, the immutable owner/repo form); Checkov's subject pattern does not recognise that form.
+	File: /modules/pipeline-identity/main.tf:138-146
+	Calling File: /envs/bootstrap/main.tf:33-45
+Check: CKV2_AZURE_33: "Ensure storage account is configured with private endpoint"
+	SKIPPED for resource: module.evidence_store.azurerm_storage_account.evidence
+	Suppress comment: Private endpoint is opt-in (enable_private_endpoint); the lab operator has no VNet-connected workstation.
+	File: /modules/evidence-store/main.tf:128-228
+Check: CKV_AZURE_119: "Ensure that Network Interfaces don't use public IPs"
+	SKIPPED for resource: module.dc_vm.azurerm_network_interface.dc
+	Suppress comment: Accepted, time-boxed lab risk (ADR 0013). DC01's public IP admits only RDP and LDAPS from allowed_ip_ranges (single IPv4 /32 hosts, enforced in variables.tf; empty list = no inbound rule) and is the DC's explicit outbound path. Production: no public IP on a DC.
+	File: /modules/dc-vm/main.tf:102-116
+Check: CKV_AZURE_119: "Ensure that Network Interfaces don't use public IPs"
+	SKIPPED for resource: module.intune_vm.azurerm_network_interface.vm
+	Suppress comment: Lab VM standing in for a corporate laptop. Its public IP carries operator RDP (NSG: TCP 3389 from allowed_ip_ranges only, each no wider than /24; empty list = no inbound rule) and the VM's outbound path to Entra and Intune. In production the compliant device is a physical Intune-managed laptop, not a VM with a public IP.
+	File: /modules/intune-vm/main.tf:153-166
+Check: CKV2_AZURE_1: "Ensure storage for critical data are encrypted with Customer Managed Key"
+	SKIPPED for resource: module.evidence_store.azurerm_storage_account.evidence
+	Suppress comment: Microsoft-managed keys by design; a CMK adds a key whose loss makes WORM evidence unreadable.
+	File: /modules/evidence-store/main.tf:128-228
+Check: CKV2_AZURE_21: "Ensure Storage logging is enabled for Blob service for read requests"
+	SKIPPED for resource: module.evidence_store.azurerm_storage_container.evidence
+	Suppress comment: Blob read logging is configured: azurerm_monitor_diagnostic_setting.blob sends the allLogs category group (StorageRead, StorageWrite, StorageDelete) of blobServices/default to Log Analytics. CKV2_AZURE_21 passes only when an azurerm_log_analytics_storage_insights resource is attached and does not read diagnostic settings.
+	File: /modules/evidence-store/main.tf:235-245
+

@@ -50,11 +50,21 @@ checked offline (`fmt`, `validate`, mocked `terraform test`), **never applied**
 > 2026-10-19/20 (94-96 s, 39/39). A later full, unmodified run is recorded
 > and hashed in
 > [`../evidence/k8s/20261020T202112Z/`](../evidence/k8s/20261020T202112Z/README.md)
-> (12/12 stages, teardown PASS, `K8S E2E PASSED (64/64)`, 135 s).
-> verify: the first run of the `k8s identity pipeline` GitHub Actions job
-> (on ubuntu-latest the preinstalled kind/kubectl are hashed against the
-> linux-amd64 pins, which match the published checksums, and replaced by
-> the verified downloads if they differ).
+> (12/12 stages, teardown PASS, `K8S E2E PASSED (64/64)`, 135 s). That record
+> predates the `nightly-report` NetworkPolicy (section 2; BUILT).
+>
+> On GitHub's runners the `k8s identity pipeline` job has run twice, on
+> Dependabot pull requests on 2026-10-21 (run pages in the
+> [evidence index](../evidence/README.md#runs-on-githubs-runners)). Preflight
+> passed (the preinstalled kind matched its pin; the preinstalled kubectl did
+> not and was replaced by the verified download), and so did the 23 Terraform
+> test runs. Both runs then stopped at stage 3/12, Checkov (CKV2_K8S_6: the
+> `nightly-report` pod had no NetworkPolicy; 88 passed, 1 failed). The policy
+> is now in the tree, and a local Checkov with its graph checks passes with
+> it (89 passed, 0 failed, in the hashed record
+> [`offline-tests/20261021T074732Z`](../evidence/offline-tests/20261021T074732Z/README.md));
+> the job has not re-run, so no kind cluster has been built on a GitHub
+> runner yet.
 
 ---
 
@@ -130,6 +140,7 @@ what is left.
 | Delivery | Vault Agent Injector renders one file to tmpfs; the sidecar renews its login and re-reads the value | [`manifests/nightly-report.yaml`](manifests/nightly-report.yaml) |
 | Who may be the workload | `app-deployer` has no pod or ReplicaSet write verbs; ValidatingAdmissionPolicy `clinical-apps-workload-identity` (four rules, below) | `lab/terraform/k8s/identity` |
 | Admission guardrails | PSA `restricted` on `clinical-apps`, then the policy | `lab/terraform/k8s/platform` + `identity`, [`manifests/negative/`](manifests/negative/privileged-pod.yaml) |
+| Network reach | NetworkPolicy: no ingress; egress only to Vault's server pods (TCP 8200) and cluster DNS (53). **BUILT**: Checkov CKV2_K8S_6 passes with it (`offline-tests/20261021T074732Z`); a full local pipeline run on 2026-10-21 passed 12/12 stages and 64/64 checks with it applied (no hashed record; the hashed run predates the policy); enforcement was checked by hand on a kept kind cluster (Vault 8200 and DNS reachable; the API server, the injector and the internet blocked). No stage asserts that a blocked connection fails | [`manifests/nightly-report-networkpolicy.yaml`](manifests/nightly-report-networkpolicy.yaml) |
 | Rotation without restart | `vault.hashicorp.com/template-static-secret-render-interval: "10s"` | manifest; `ci/pipeline.sh` stage 9 |
 | Drift detection | `terraform plan -detailed-exitcode` after an out-of-band RoleBinding edit; the reviewed plan heals it | `ci/pipeline.sh` stage 10 |
 | No secret in state | Terraform creates the KV mount, never the value; the pipeline writes random values over Vault's API, then counts them in both states (0) | `ci/pipeline.sh` stages 7, 9, 12 |
@@ -445,7 +456,9 @@ the same pattern.
 ## 5. Run it
 
 Prerequisites: Docker (Colima with at least 4 CPU / 8 GiB on a Mac),
-`terraform` 1.16.5, `checkov`, `jq`, `curl`, `openssl`. `kind` v0.33.0 and
+`terraform` 1.16.5, `checkov` (from PyPI, as CI installs it: the Homebrew
+build ships without the graph checks and preflight refuses it), `jq`,
+`curl`, `openssl`. `kind` v0.33.0 and
 `kubectl` v1.37.1 are hashed on every run and replaced by the pinned,
 sha256-verified release builds if missing, at another version or not
 byte-identical to them. Host port `127.0.0.1:18200` must be free. Use a
@@ -459,9 +472,9 @@ STOP_AFTER=3 lab/k8s/ci/pipeline.sh     # static checks only, no cluster
 
 | Stage | What it does |
 |---|---|
-| `[1/12]` preflight | tool versions; kind + kubectl hashed against the pins |
+| `[1/12]` preflight | tool versions; kind + kubectl hashed against the pins; a Checkov without its graph checks is refused |
 | `[2/12]` terraform fmt / validate / test | `platform`, `identity` and `aks-mapping` (mocked providers, 23 test runs) |
-| `[3/12]` checkov | terraform + kubernetes frameworks; any inline skip must give a reason |
+| `[3/12]` checkov | terraform + kubernetes frameworks; any inline skip must give a reason; a scan with no passed checks fails |
 | `[4/12]` kind cluster | `contoso-k8s` with the audit policy |
 | `[5/12]` terraform apply platform | namespaces + PSA labels, Vault + injector (digest-pinned) |
 | `[6/12]` terraform apply identity | Vault KV / policy / role, ServiceAccounts, human RBAC, the admission policy (read back live: `[Deny]`) |
@@ -590,8 +603,15 @@ new value, no trailing newline) or sections (b) and (c) will fail, correctly.
   re-renders the file in the same pod; there is no real database for Vault's
   database secrets engine to rotate against (the Docker PAM stack shows
   rotation against real AD instead), and the app must re-read the file.
-- **No network policy.** Pod-to-pod traffic in the cluster is not restricted;
-  segmentation is a separate control from identity.
+- **One network policy, for one workload, BUILT.** `nightly-report` may
+  reach only Vault's server pods and cluster DNS, and nothing may connect to
+  it. Vault's own pods and `kube-system` are not segmented. No stage or e2e
+  assertion tests that a blocked connection fails: the pipeline shows only
+  that the workload still works with the policy applied (12/12 and 64/64 in
+  one local run on 2026-10-21, no hashed record), and enforcement was checked
+  by hand once, on a kept cluster (section 2's table). It stays BUILT until
+  a record or an automated assertion exists. Segmentation is a separate
+  control from identity.
 - **The audit log stays in the node container** and dies with the cluster; it
   is not shipped to a SIEM here.
 - **etcd encryption at rest** is not configured: the design does not depend on
@@ -609,6 +629,7 @@ lab/k8s/
 ├── manifests/                    ← `kubectl apply -f` (not -R)
 │   ├── nightly-report.yaml       ← Deployment: injector annotations (10 s re-render), projected vault-token,
 │   │                               digest-pinned image, restricted-PSA contexts
+│   ├── nightly-report-networkpolicy.yaml ← no ingress; egress to Vault server pods :8200 + kube-dns :53 only
 │   └── negative/
 │       └── privileged-pod.yaml   ← deliberately insecure; only for `--dry-run=server`; Checkov skips it
 ├── ci/pipeline.sh                ← the one script (CI and humans), 12 stages

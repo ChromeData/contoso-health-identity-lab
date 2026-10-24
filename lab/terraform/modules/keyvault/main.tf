@@ -5,7 +5,8 @@
 #   * RBAC data-plane authorization (NOT legacy access policies)
 #   * Public network access DISABLED unless var.allowed_ip_ranges is set
 #     (lab compromise: operator IP only - see variables.tf)
-#   * Private endpoint + private DNS so the vault resolves privately
+#   * Private endpoint + private DNS so the vault resolves privately; the
+#     endpoint's subnet has an NSG, and network policies let it apply there
 #   * User-assigned managed identity granted "Key Vault Secrets User"
 #   * Audit logs streamed to Log Analytics (loga-idlab)
 #
@@ -36,6 +37,26 @@ resource "azurerm_subnet" "private_endpoints" {
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.lab.name
   address_prefixes     = var.private_endpoint_subnet_prefix
+  # Let the NSG below filter traffic to the private endpoints (the default,
+  # "Disabled", exempts them from NSG rules). NSG only: no route table here.
+  private_endpoint_network_policies = "NetworkSecurityGroupEnabled"
+}
+
+# Every subnet gets an NSG (Checkov CKV2_AZURE_31). No custom rules: the
+# default rules allow traffic from inside the VNet (DC01 in snet-identity
+# reaches the vault this way) and deny inbound from the internet, which is all
+# a private-endpoint subnet needs. tests/private_endpoint_nsg.tftest.hcl pins
+# the attachment and the policy setting above.
+resource "azurerm_network_security_group" "private_endpoints" {
+  name                = "nsg-snet-private-endpoints"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  tags                = var.tags
+}
+
+resource "azurerm_subnet_network_security_group_association" "private_endpoints" {
+  subnet_id                 = azurerm_subnet.private_endpoints.id
+  network_security_group_id = azurerm_network_security_group.private_endpoints.id
 }
 
 # -----------------------------------------------------------------------------

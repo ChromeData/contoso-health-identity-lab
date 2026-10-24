@@ -2,7 +2,7 @@
 # terraform-plan.yml  —  Contoso Health Identity Platform (lab/)
 # -----------------------------------------------------------------------------
 # Runs on every pull request (TruffleHog always; the rest only when the
-# Terraform changed - see the `changes` job). Formats, inits, validates, and plans the Entra ID (azuread) + Azure (azurerm) configuration,
+# Terraform, this workflow or .github/scripts/ changed - see the `changes` job). Formats, inits, validates, and plans the Entra ID (azuread) + Azure (azurerm) configuration,
 # then posts the plan as a PR comment. Security scans (Checkov, TruffleHog) run
 # alongside. Authentication to Entra is GitHub OIDC workload-identity
 # federation against the read-only PLAN app registration — NO stored credential,
@@ -16,6 +16,23 @@
 # SHA is immutable. Bump SHAs deliberately via Dependabot PRs, never blindly.
 # A SHA pins the action's own code, NOT a container image it pulls: TruffleHog's
 # image is pinned by digest below; Checkov's is a tag we cannot override.
+#
+# NO TENANT WIRED = PLAN SKIPPED, NOT RED. This public copy has no Azure
+# variables (no tenant has been wired), so `terraform plan` would fail at
+# azure/login on every PR. The `changes` job asks .github/scripts/azure-config.sh
+# instead: with none of the PLAN lane's variables set, the plan job is skipped
+# by its job-level `if:` and a notice says why. A job skipped by a condition
+# reports "Success", so the required "terraform plan" check is satisfied
+# (GitHub Docs: "Using conditions to control job execution"; "Troubleshooting
+# required status checks"). That is safe only while nothing is wired, so the
+# skip fails closed: it never applies to a fork PR, never once any of the
+# variables is set (the job then requires all of them before it signs in), and
+# never once .github/azure-lane.enabled is committed on the base branch.
+# Checkov and TruffleHog need no tenant: they run whether or not one is wired.
+# While the plan skips, nothing here runs fmt / init / validate / test: that is
+# lab-tests.yml's job, whose two checks ("terraform validate + test (mocked)",
+# "Pester + PSScriptAnalyzer + shell tests") are required on main as well
+# (lab/pipelines/README.md §5 F).
 # =============================================================================
 
 name: terraform-plan
@@ -37,16 +54,18 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Did this PR touch the Terraform? Fail-closed: if this job fails, its output
-  # is empty, which is not 'false', so plan + Checkov still run.
+  # Did this PR touch the Terraform, and is a tenant wired? Fail-closed: if this
+  # job fails, its outputs are empty, which is not 'false', so plan + Checkov
+  # still run.
   # ---------------------------------------------------------------------------
   changes:
-    name: detect terraform changes
+    name: detect terraform changes + Azure config
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
       tf: ${{ steps.diff.outputs.tf }}
+      azure: ${{ steps.azure.outputs.run }}
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -54,6 +73,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # tf=true when the PR touches the Terraform, this workflow, or the
+      # scripts it runs (.github/scripts/: the azure-config gate below), so a
+      # change to the gate alone still gets the plan and Checkov.
       - name: Diff base...head
         id: diff
         env:
@@ -63,11 +85,32 @@ jobs:
           if ! files="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"; then
             echo "::warning::git diff failed; failing closed (tf=true)"
             echo "tf=true" >> "$GITHUB_OUTPUT"
-          elif grep -qE '^(lab/terraform/|\.github/workflows/terraform-plan\.yml$)' <<< "$files"; then
+          elif grep -qE '^(lab/terraform/|\.github/scripts/|\.github/workflows/terraform-plan\.yml$)' <<< "$files"; then
             echo "tf=true" >> "$GITHUB_OUTPUT"
           else
             echo "tf=false" >> "$GITHUB_OUTPUT"
           fi
+
+      # run=false ONLY when none of the PLAN lane's variables is set, this is
+      # not a fork PR (a fork may not see this repo's variables) and the base
+      # branch has no .github/azure-lane.enabled (commit it when wiring the
+      # tenant, so a Dependabot run plans even if it cannot see variables).
+      # Only names are printed; the values are identifiers, not secrets.
+      - name: Azure tenant wired? (PLAN lane)
+        id: azure
+        if: steps.diff.outputs.tf != 'false'
+        env:
+          AZURE_PLAN_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          TFSTATE_RG: ${{ vars.TFSTATE_RG }}
+          TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+          AZURE_GATE_MARKER_REF: ${{ github.event.pull_request.base.sha }}
+          AZURE_GATE_FORCE_RUN: ${{ github.event.pull_request.head.repo.full_name != github.repository && 'fork PR' || '' }}
+        run: >-
+          bash .github/scripts/azure-config.sh gate terraform-plan
+          AZURE_PLAN_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID
+          TFSTATE_RG TFSTATE_STORAGE_ACCOUNT
 
   # ---------------------------------------------------------------------------
   # Plan against Entra/Azure using the read-only PLAN identity, comment to PR.
@@ -75,7 +118,9 @@ jobs:
   terraform-plan:
     name: terraform plan
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.tf != 'false' }}
+    # Skipped (reported as Success) only on an explicit azure == 'false' from
+    # the gate above; an empty output (gate failed or did not run) still runs.
+    if: ${{ !cancelled() && needs.changes.outputs.tf != 'false' && needs.changes.outputs.azure != 'false' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write          # mint the GitHub OIDC token for Entra federation
@@ -163,14 +208,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false   # nothing here pushes; no token in .git/config
 
       # Step-level, not job-level: a skipped job reports Success, which would
-      # let a fork PR pass the required check without a plan.
+      # let a fork PR pass the required check without a plan. (The no-tenant
+      # gate in `changes` never skips a fork PR, so this step still runs.)
       - name: Fork PRs get no OIDC token
         if: github.event.pull_request.head.repo.full_name != github.repository
         run: |
           echo "::error::Fork PRs get no OIDC token, so they cannot plan. A maintainer must push this branch to the base repo and open a same-repo PR."
           exit 1
+
+      # All or nothing: the job only reaches azure/login with every PLAN-lane
+      # variable set. One set and one missing is a misconfiguration, not a
+      # reason to skip.
+      - name: Require complete Azure configuration
+        env:
+          AZURE_PLAN_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          TFSTATE_RG: ${{ vars.TFSTATE_RG }}
+          TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+        run: >-
+          bash .github/scripts/azure-config.sh require terraform-plan
+          AZURE_PLAN_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID
+          TFSTATE_RG TFSTATE_STORAGE_ACCOUNT
 
       # OIDC login to Entra. azure/login exchanges the GitHub OIDC token for an
       # Entra access token for the PLAN app — used by the az CLI and by any
@@ -349,9 +412,17 @@ jobs:
   # the same PR, where a reviewer sees it.
   # The pinned action hard-codes image ghcr.io/bridgecrewio/checkov:3.3.3 (a
   # tag, not a digest) and the workflow cannot override it: accepted residual
-  # risk (verify: re-check the image line on each SHA bump). The local runs
-  # and k8s-identity.yml use Checkov 3.3.20, so CI's 3.3.3 may report a
-  # different set of checks (verify: on the first CI run).
+  # risk (re-check the image line on each SHA bump; the next action release
+  # pulls 3.3.29).
+  # Checked on the first CI runs (2026-10-21): the 3.3.3 image, the 3.3.29
+  # image and Checkov 3.3.20 from PyPI (Python 3.12) report the same result on
+  # lab/terraform - 56 passed, 4 failed, 12 skipped. The same version from
+  # Homebrew (the dev Mac's) reports 0 failed on the same tree, because its
+  # package lacks every JSON-defined graph check (the
+  # */checks/graph_checks/*.json files): CKV_AZURE_119, CKV2_AZURE_21 and
+  # CKV2_AZURE_31 never run there. Run Checkov from PyPI locally
+  # (pip install checkov==3.3.20, as k8s-identity.yml does) to see what this
+  # job sees.
   # ---------------------------------------------------------------------------
   checkov:
     name: checkov (IaC scan)

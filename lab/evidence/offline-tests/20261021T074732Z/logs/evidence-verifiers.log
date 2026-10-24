@@ -1,0 +1,139 @@
+$ (cd lab/pam && test/e2e.sh --verify ../evidence/pam/20261020T184052Z)
+PASS  SHA256SUMS verifies
+PASS  results.json: an all-PASS run
+PASS  no password-shaped string, token or local path
+NOTE  results.json has no code fingerprint (written before records carried one): the script version it proves is not recorded
+[07:54:34Z] E2E VERIFY PASSED (20261020T184052Z)
+exit=0
+$ (cd lab/pam && test/e2e.sh --verify ../evidence/pam/20261020T204851Z)
+PASS  SHA256SUMS verifies
+PASS  results.json: an all-PASS run
+PASS  no password-shaped string, token or local path
+PASS  results.json: code fingerprint present and consistent (81 files in code.sha256sums, sha256 e4242ffde9d477a9...)
+NOTE  lab/pam changed since this record: changed docker-compose.yml itsm-ticket.sh lib.sh operators.json pam-policy.json pam-up.sh psm-session.sh psm-ssh.sh test/e2e.sh test/guac_tunnel.py test/run-all.sh tools/mock_servicenow.py; added rdp-target/Dockerfile rdp-target/entrypoint.sh rdp-target/sesman.ini rdp-target/startwm.sh rdp-target/xrdp-sesman.pam rdp-target/xrdp.ini test/guac_recording.py test/guac_recording.test.py test/itsm-dual-control.test.sh - the record proves the code it names, not this tree
+[07:54:35Z] E2E VERIFY PASSED (20261020T204851Z)
+exit=0
+$ (cd lab/pam && test/e2e.sh --verify ../evidence/pam/20261020T220031Z)
+PASS  SHA256SUMS verifies
+PASS  results.json: an all-PASS run
+PASS  no password-shaped string, token or local path
+PASS  results.json: code fingerprint present and consistent (90 files in code.sha256sums, sha256 06db93b8206da62b...)
+NOTE  lab/pam changed since this record: changed docker-compose.yml test/e2e.sh; added none - the record proves the code it names, not this tree
+[07:54:36Z] E2E VERIFY PASSED (20261020T220031Z)
+exit=0
+$ (cd lab/pam && ./dr-drill.sh --verify ../evidence/pam-dr/20261020T184052Z)
+PASS  SHA256SUMS verifies
+PASS  dr-drill.json: an all-PASS run
+PASS  no password-shaped string, token or local path
+NOTE  dr-drill.json has no code fingerprint (written before records carried one): the script version it proves is not recorded
+[07:54:37Z] DR-DRILL VERIFY PASSED (20261020T184052Z)
+exit=0
+$ (cd lab/pam && ./dr-drill.sh --verify ../evidence/pam-dr/20261020T204851Z)
+PASS  SHA256SUMS verifies
+PASS  dr-drill.json: an all-PASS run
+PASS  no password-shaped string, token or local path
+PASS  dr-drill.json: code fingerprint present and consistent (81 files in code.sha256sums, sha256 e4242ffde9d477a9...)
+NOTE  lab/pam changed since this record: changed docker-compose.yml itsm-ticket.sh lib.sh operators.json pam-policy.json pam-up.sh psm-session.sh psm-ssh.sh test/e2e.sh test/guac_tunnel.py test/run-all.sh tools/mock_servicenow.py; added rdp-target/Dockerfile rdp-target/entrypoint.sh rdp-target/sesman.ini rdp-target/startwm.sh rdp-target/xrdp-sesman.pam rdp-target/xrdp.ini test/guac_recording.py test/guac_recording.test.py test/itsm-dual-control.test.sh - the record proves the code it names, not this tree
+[07:54:38Z] DR-DRILL VERIFY PASSED (20261020T204851Z)
+exit=0
+$ (cd lab/pam && ./dr-drill.sh --verify ../evidence/pam-dr/20261020T220031Z)
+PASS  SHA256SUMS verifies
+PASS  dr-drill.json: an all-PASS run
+PASS  no password-shaped string, token or local path
+PASS  dr-drill.json: code fingerprint present and consistent (90 files in code.sha256sums, sha256 06db93b8206da62b...)
+NOTE  lab/pam changed since this record: changed docker-compose.yml test/e2e.sh; added none - the record proves the code it names, not this tree
+[07:54:39Z] DR-DRILL VERIFY PASSED (20261020T220031Z)
+exit=0
+$ (cd lab/pam && test/e2e-scale.sh --verify ../evidence/pam-scale/20261020T193913Z)
+PASS  SHA256SUMS verifies
+PASS  results.json: an all-PASS run
+PASS  no password-shaped string, token or local path
+NOTE  results.json has no code fingerprint (written before records carried one): the script version it proves is not recorded
+PASS  scale.json: PASS, 7 timed stages, reconcile categories add up to the discovered accounts, GAP 0, ORPHAN 0
+[07:54:39Z] SCALE VERIFY PASSED (20261020T193913Z)
+exit=0
+$ (cd lab/pam && test/e2e-dynamic-db.sh --verify ../evidence/dynamic-db/20261020T163436Z)
+PASS  SHA256SUMS verifies
+PASS  results.json: 60 checks, all PASS
+PASS  no password-shaped string, token or local path
+[07:54:40Z] E2E-DYNAMIC-DB VERIFY PASSED (20261020T163436Z)
+exit=0
+$ (cd lab/pam && test/e2e-midpoint.sh --verify ../evidence/midpoint/20261020T152623Z)
+
+[07:54:40Z] == (c) evidence in 20261020T152623Z
+PASS  SHA256SUMS verifies and covers every file
+PASS  campaign state closed, end timestamp set
+PASS  7 cases (requestable roles of enabled users)
+PASS  leaver priya.nair (disabled) not in scope
+PASS  birthright role Nurse (T3) not in scope
+PASS  midPoint system role Reviewer not in scope
+PASS  6 decisions recorded
+PASS  ... every one by the reviewer midPoint assigned (performerRef = assigneeRef)
+PASS  ... none by the administrator
+PASS  dana.okafor / ICU Nurse left unanswered -> outcome noResponse
+PASS  routing: marcus.bello's items -> grace.mwangi (manager)
+PASS  routing: dana.okafor, sofia.reyes -> grace.mwangi
+PASS  routing: grace.mwangi and daniel.osei (managers) -> helen.carter, never themselves
+PASS  routing: helen.carter (no manager) -> fallback access-governance-lead
+PASS  outcomes: 4 accept
+PASS  outcomes: 2 revoke (SoD conflict + stale grant)
+PASS  outcomes: 1 noResponse
+PASS  remediated: exactly the 2 revoked + the 1 unanswered assignment
+PASS  before: SoD marks on marcus.bello's Nurse + Pharmacist only
+PASS  after: no assignment carries the SoD mark (conflict removed)
+PASS  after (export): marcus.bello lost Pharmacist
+PASS  after (export): daniel.osei lost AP Clerk (stale)
+PASS  after (export): dana.okafor lost ICU Nurse (unanswered, T2 rule)
+PASS  after (export): accepted ICU Nurse kept (marcus, sofia, grace, helen)
+PASS  after (export): birthright Nurse kept (marcus, dana, sofia, grace)
+PASS  after (export): priya.nair's AP Clerk untouched (out of scope; leaver path owns it)
+PASS  both authorization probes refused by midPoint ('not authorized')
+PASS  decisions.csv has one row per work item (7)
+PASS  ADR 0012 KPIs: completion 85.7% (6/7), revocation rate 33.3% (2/6)
+PASS  ADR 0012 KPIs (pre-alignment evidence): rubber_stamp_flagged as that run computed it
+PASS  every GUID in the evidence is explained (guids.txt, no UNKNOWN)
+PASS  no absolute local path in the evidence
+PASS  the midPoint administrator password is not in the evidence
+
+[07:54:40Z] E2E-MIDPOINT VERIFY PASSED (20261020T152623Z)
+exit=0
+$ (cd lab/pam && test/e2e-midpoint.sh --verify ../evidence/midpoint/20261020T162116Z)
+
+[07:54:40Z] == (c) evidence in 20261020T162116Z
+PASS  SHA256SUMS verifies and covers every file
+PASS  campaign state closed, end timestamp set
+PASS  7 cases (requestable roles of enabled users)
+PASS  leaver priya.nair (disabled) not in scope
+PASS  birthright role Nurse (T3) not in scope
+PASS  midPoint system role Reviewer not in scope
+PASS  6 decisions recorded
+PASS  ... every one by the reviewer midPoint assigned (performerRef = assigneeRef)
+PASS  ... none by the administrator
+PASS  dana.okafor / ICU Nurse left unanswered -> outcome noResponse
+PASS  routing: marcus.bello's items -> grace.mwangi (manager)
+PASS  routing: dana.okafor, sofia.reyes -> grace.mwangi
+PASS  routing: grace.mwangi and daniel.osei (managers) -> helen.carter, never themselves
+PASS  routing: helen.carter (no manager) -> fallback access-governance-lead
+PASS  outcomes: 4 accept
+PASS  outcomes: 2 revoke (SoD conflict + stale grant)
+PASS  outcomes: 1 noResponse
+PASS  remediated: exactly the 2 revoked + the 1 unanswered assignment
+PASS  before: SoD marks on marcus.bello's Nurse + Pharmacist only
+PASS  after: no assignment carries the SoD mark (conflict removed)
+PASS  after (export): marcus.bello lost Pharmacist
+PASS  after (export): daniel.osei lost AP Clerk (stale)
+PASS  after (export): dana.okafor lost ICU Nurse (unanswered, T2 rule)
+PASS  after (export): accepted ICU Nurse kept (marcus, sofia, grace, helen)
+PASS  after (export): birthright Nurse kept (marcus, dana, sofia, grace)
+PASS  after (export): priya.nair's AP Clerk untouched (out of scope; leaver path owns it)
+PASS  both authorization probes refused by midPoint ('not authorized')
+PASS  decisions.csv has one row per work item (7)
+PASS  ADR 0012 KPIs: completion 85.7% (6/7), revocation rate 33.3% (2/6)
+PASS  ADR 0012 rubber-stamp: thresholds match access-catalog.json reviewTiers.rubberStamp
+PASS  ADR 0012 rubber-stamp: not measured (0 eligible reviewers), nobody flagged
+PASS  every GUID in the evidence is explained (guids.txt, no UNKNOWN)
+PASS  no absolute local path in the evidence
+PASS  the midPoint administrator password is not in the evidence
+
+[07:54:40Z] E2E-MIDPOINT VERIFY PASSED (20261020T162116Z)
+exit=0

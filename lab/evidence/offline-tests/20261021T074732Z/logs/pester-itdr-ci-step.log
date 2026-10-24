@@ -1,0 +1,8 @@
+
+Starting discovery in 2 files.
+Discovery found 292 tests in 270ms.
+Running tests.
+[+] <repo>/lab/scripts/monitoring/tests/Itdr.Tests.ps1 7.37s (6.48s|648ms)
+[+] <repo>/lab/pam/test/Get-AccountDependencies.Tests.ps1 279ms (252ms|20ms)
+Tests completed in 7.66s
+Tests Passed: 292, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0

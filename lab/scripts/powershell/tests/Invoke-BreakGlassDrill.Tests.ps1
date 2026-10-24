@@ -140,6 +140,9 @@ Describe 'Assessment and record guards' {
         @(Test-PublicRecordSafe -Json '{"ip":"203.0.113.10"}').Count | Should -Be 1
         @(Test-PublicRecordSafe -Json '{"id":"62e90394-69f5-4237-9190-012177145e10"}').Count | Should -Be 1
         @(Test-PublicRecordSafe -Json '{"ip":"2001:db8:0:0:0:0:0:1"}').Count | Should -Be 1
+        # Compressed forms ('::') too: a firewall error quotes the client address this way.
+        @(Test-PublicRecordSafe -Json '{"ip":"2001:db8::7d8e"}').Count | Should -BeGreaterThan 0
+        @(Test-PublicRecordSafe -Json '{"ip":"2001:db8:85a3::8a2e:370:7334"}').Count | Should -BeGreaterThan 0
     }
 }
 

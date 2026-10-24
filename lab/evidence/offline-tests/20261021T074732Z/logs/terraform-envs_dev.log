@@ -1,0 +1,50 @@
+$ terraform -chdir=lab/terraform/envs/dev init -backend=false -input=false -no-color -lockfile=readonly
+Initializing modules...
+- evidence_store in ../../modules/evidence-store
+- keyvault in ../../modules/keyvault
+- dc_vm in ../../modules/dc-vm
+- intune_vm in ../../modules/intune-vm
+- groups in ../../modules/groups
+- apps in ../../modules/apps
+- conditional_access in ../../modules/conditional-access
+- pim in ../../modules/pim
+- entitlement in ../../modules/entitlement
+- monitoring in ../../modules/monitoring
+
+Initializing provider plugins...
+- Reusing previous version of hashicorp/azuread from the dependency lock file
+- Reusing previous version of hashicorp/azurerm from the dependency lock file
+- Reusing previous version of hashicorp/random from the dependency lock file
+- Installing hashicorp/azuread v3.10.0...
+- Installed hashicorp/azuread v3.10.0 (signed by HashiCorp)
+- Installing hashicorp/azurerm v4.81.0...
+- Installed hashicorp/azurerm v4.81.0 (signed by HashiCorp)
+- Installing hashicorp/random v3.9.1...
+- Installed hashicorp/random v3.9.1 (signed by HashiCorp)
+
+Terraform has been successfully initialized!
+exit=0
+$ terraform -chdir=lab/terraform/envs/dev validate -no-color
+Success! The configuration is valid.
+
+exit=0
+$ terraform -chdir=lab/terraform/envs/dev test -no-color -var-file=lab.tfvars
+tests/mock_plan.tftest.hcl... in progress
+  run "plan_lab_tfvars"... pass
+  run "plan_lab_itdr_hold_back"... pass
+  run "plan_lab_itdr_hold_back_la_alerts"... pass
+  run "plan_legacy_flags_on_new_flags_off"... pass
+  run "plan_all_flags_on_sentinel"... pass
+  run "plan_all_flags_on_la_alerts"... pass
+  run "pim_auth_context_refused_while_ca021_report_only"... pass
+  run "pim_auth_context_refused_in_the_same_change_as_ca021_enabled"... pass
+  run "attestation_without_ca021_enabled_is_refused"... pass
+  run "pim_auth_context_allowed_once_ca021_enforced"... pass
+  run "dc_refuses_wider_than_single_host"... pass
+  run "no_dc_keeps_slash24_out_of_the_watchlist"... pass
+  run "flags_without_premium_warn"... pass
+tests/mock_plan.tftest.hcl... tearing down
+tests/mock_plan.tftest.hcl... pass
+
+Success! 13 passed, 0 failed.
+exit=0

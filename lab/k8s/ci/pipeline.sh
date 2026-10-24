@@ -13,13 +13,15 @@
 #
 #   [1/12]  preflight          tool versions; kind + kubectl on PATH must match
 #                              the pinned version AND sha256, else the pinned
-#                              build is downloaded + verified into a temp dir
+#                              build is downloaded + verified into a temp dir;
+#                              a Checkov without its graph checks is refused
 #   [2/12]  terraform static   fmt -check, init (lockfile read-only), validate,
 #                              terraform test (mock providers, no cluster) for
 #                              platform, identity AND aks-mapping (plan-only
 #                              root: never planned against Azure, never applied)
 #   [3/12]  checkov            terraform + kubernetes frameworks; every skip
-#                              must carry an inline justification
+#                              must carry an inline justification; a scan
+#                              with no passed checks (nothing scanned) fails
 #   [4/12]  kind cluster       contoso-k8s from lab/k8s/kind/cluster.yaml
 #   [5/12]  platform apply     namespaces + PSA labels, Vault (Helm, dev mode)
 #   [6/12]  identity apply     Vault KV/policy/k8s auth role, SAs, human RBAC,
@@ -205,6 +207,27 @@ tool_pinned() { # tool_pinned TOOL VERSION PLATFORM : the TOOL on PATH is VERSIO
   log "$tool $ver at $path: sha256 matches the pin"
 }
 
+# Checkov's graph checks (almost every CKV2_* and a few CKV_*, e.g. CKV_AZURE_119)
+# are JSON files inside its package: checkov/<framework>/checks/graph_checks/.
+# A build without them still runs and reports "0 failed". The dev Mac's
+# Homebrew checkov 3.3.20 has none, so CKV2_K8S_6 (a pod that no
+# NetworkPolicy selects) never ran there and first failed in CI; the PyPI
+# wheel ships 196 terraform + 6 kubernetes. Preflight refuses an install with
+# none: the same guard k8s-identity.yml runs after installing Checkov.
+checkov_graph_checks() { # checkov_graph_checks FRAMEWORK -> number of JSON graph checks in the package behind the checkov on PATH; non-zero exit if that package cannot be found
+  local exe line py arg pkg
+  exe=$(command -v checkov) || return 1
+  # pip and Homebrew both name the interpreter on line 1 of the entry script.
+  IFS= read -r line < "$exe" || return 1
+  [[ "$line" == '#!'* ]] || return 1
+  read -r py arg _ <<< "${line#\#!}"
+  if [[ "${py##*/}" == env ]]; then py=$(command -v "$arg") || return 1; fi
+  [[ "${py##*/}" == python* ]] || return 1
+  pkg=$("$py" -c 'import os, checkov; print(os.path.dirname(checkov.__file__))' 2>/dev/null) || return 1
+  [[ -d "$pkg/$1/checks" ]] || return 1
+  find "$pkg/$1/checks" -path '*/graph_checks/*.json' | wc -l | tr -d ' '
+}
+
 install_pinned() { # install_pinned TOOL VERSION PLATFORM URL
   local tool="$1" ver="$2" plat="$3" url="$4" want got
   want=$(pinned_sha256 "$tool" "$plat") || die "no pinned sha256 for $tool on $plat - install $tool $ver yourself"
@@ -257,13 +280,21 @@ preflight() {
   local tfv
   tfv=$(terraform version -json | jq -r .terraform_version)
   [[ "$tfv" == "$TERRAFORM_VERSION" ]] || die "terraform $tfv found, $TERRAFORM_VERSION required (the lock files were generated with it)"
+  local fw ngraph graphs=""
+  for fw in kubernetes terraform; do
+    ngraph=$(checkov_graph_checks "$fw") \
+      || die "cannot find the Python package behind $(command -v checkov) to count its $fw graph checks. Install Checkov from PyPI in a venv and put it first on PATH: python3.12 -m venv DIR && DIR/bin/pip install checkov==3.3.20"
+    [[ "$ngraph" =~ ^[0-9]+$ && "$ngraph" -gt 0 ]] \
+      || die "this Checkov ($(command -v checkov)) has no $fw graph checks (checkov/$fw/checks/graph_checks/*.json), so stage 3 would pass without evaluating them. Install Checkov from PyPI in a venv and put it first on PATH: python3.12 -m venv DIR && DIR/bin/pip install checkov==3.3.20"
+    graphs="$graphs $ngraph $fw,"
+  done
 
   log "bash      $BASH_VERSION"
   log "docker    $(docker version --format '{{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})')"
   log "kind      $(tool_version kind)   ($(command -v kind))"
   log "kubectl   $(tool_version kubectl)   ($(command -v kubectl))"
   log "terraform $tfv"
-  log "checkov   $(checkov --version 2>/dev/null)"
+  log "checkov   $(checkov --version 2>/dev/null)   (graph checks:${graphs%,})"
   log "jq        $(jq --version)"
 
   local f
@@ -347,7 +378,14 @@ run_checkov() {
   local ptf pk8s
   ptf=$(sed -n 's/^Passed checks: \([0-9][0-9]*\), Failed checks: 0.*/\1/p' "$WORK/checkov-tf.log")
   pk8s=$(sed -n 's/^Passed checks: \([0-9][0-9]*\), Failed checks: 0.*/\1/p' "$WORK/checkov-k8s.log")
-  STAGE_NOTE[3]="${ptf:-?} terraform + ${pk8s:-?} k8s passed, 0 failed"
+  # No summary line, or 0 passed, means Checkov scanned nothing (a wrong
+  # directory, no files for the framework, an install without checks): that
+  # is not a pass.
+  [[ "$ptf" =~ ^[1-9][0-9]*$ ]] \
+    || die "Checkov's terraform scan of ${TF_K8S_DIR#"$REPO_ROOT"/} reported no passed checks (nothing scanned?)"
+  [[ "$pk8s" =~ ^[1-9][0-9]*$ ]] \
+    || die "Checkov's kubernetes scan of ${MANIFESTS_DIR#"$REPO_ROOT"/} reported no passed checks (nothing scanned?)"
+  STAGE_NOTE[3]="$ptf terraform + $pk8s k8s passed, 0 failed"
 }
 
 KIND_CONFIG="$WORK/kind-cluster.yaml"

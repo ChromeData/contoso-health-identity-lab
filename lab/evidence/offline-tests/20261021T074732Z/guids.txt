@@ -1,0 +1,7 @@
+# Every GUID-shaped value in this record after path normalisation (dashed, or the
+# 32-hex N form), and what it is. Random temp names in either form were replaced
+# by tmpdir-N / tmpid-N; what is left is a placeholder or a documented id from the
+# code under test (allowlisted in the release gate's GUID list).
+00000000-0000-0000-0000-000000000000  # repeated-digit placeholder (in logs/pester-lab-5.7.1.log, logs/pester-lab-6.2.0.log)
+11111111-2222-3333-4444-555555555555  # Invoke-BaselineAssessment.Tests.ps1 / NhiGovernance.Tests.ps1 scrub fixture (in logs/pester-lab-5.7.1.log, logs/pester-lab-6.2.0.log)
+2af84b1e-32c8-42b7-82bc-daa82404023b  # guestUserRoleId: Restricted Guest User ("restricted access"), Set-ExternalCollaboration.ps1 (in logs/pester-lab-5.7.1.log, logs/pester-lab-6.2.0.log)

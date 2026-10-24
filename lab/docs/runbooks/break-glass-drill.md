@@ -11,25 +11,16 @@
 
 ## Tooling
 
-`Invoke-BreakGlassDrill.ps1` automates the checking parts of this runbook.
-The sign-ins stay manual: a script that could sign in as a standing Global
-Administrator would be the most dangerous file in the repo.
-
-- `-Phase Preflight` is read-only and refuses to start the drill on any
-  FAIL: both accounts exist, are enabled and are in Break-Glass-Admins;
-  every CA policy excludes the group; each account has the expected number
-  of FIDO2 keys and the passkey policy targets the group; the break-glass
-  rule is deployed and enabled; sign-in data reached the workspace in the
-  last 24 hours.
-- `-Phase Verify` reads back from Log Analytics the sign-ins since the drill
-  start, the alerts and incidents the rule raised, and any audit operation
-  the accounts initiated. It re-runs the preflight and writes the drill
-  record.
-- It does **not** check the Teams card, the ServiceNow INC or the Splunk
-  alert. Confirm those by hand and add them to the record.
-- It needs Global Reader and Authentication Administrator (to read FIDO2
-  methods), read-only Graph scopes, and Reader plus Log Analytics Reader
-  (plus Microsoft Sentinel Reader on the Sentinel path) through `az`.
+`Invoke-BreakGlassDrill.ps1` automates the checks; the sign-ins stay manual,
+because a script that could sign in as a standing Global Administrator
+would be the most dangerous file in the repo. `-Phase Preflight` is
+read-only and refuses to start on any FAIL (accounts, group, CA exclusions,
+FIDO2 keys, the alert rule, fresh sign-in data). `-Phase Verify` reads back
+the sign-ins, alerts and any audit operation the accounts initiated, re-runs
+the preflight and writes the drill record. It doesn't check the Teams card,
+the ServiceNow INC or the Splunk alert: confirm those by hand. It needs
+Global Reader, Authentication Administrator (to read FIDO2 methods) and Log
+Analytics Reader.
 
 ## Why
 
