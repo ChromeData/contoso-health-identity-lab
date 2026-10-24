@@ -151,6 +151,7 @@ resource "azurerm_public_ip" "vm" {
 }
 
 resource "azurerm_network_interface" "vm" {
+  #checkov:skip=CKV_AZURE_119:Lab VM standing in for a corporate laptop. Its public IP carries operator RDP (NSG: TCP 3389 from allowed_ip_ranges only, each no wider than /24; empty list = no inbound rule) and the VM's outbound path to Entra and Intune. In production the compliant device is a physical Intune-managed laptop, not a VM with a public IP.
   name                = "nic-${var.vm_name}"
   location            = var.location
   resource_group_name = var.resource_group_name

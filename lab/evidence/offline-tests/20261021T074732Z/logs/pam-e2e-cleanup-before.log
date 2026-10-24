@@ -1,0 +1,1 @@
+ERROR: Vault did not come up (docker compose logs vault)

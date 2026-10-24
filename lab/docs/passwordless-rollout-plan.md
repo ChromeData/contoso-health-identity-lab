@@ -6,106 +6,39 @@ so every KPI is a definition, with values to fill in after each phase.
 
 ## Microsoft's dates set the deadline
 
-Checked on Microsoft Learn on 2026-10-20 (FAQ updated 2026-09-23). These
-dates apply to the public cloud only.
+From Microsoft Learn's SMS and voice retirement FAQ (public cloud; checked
+2026-10-21):
 
-- **Passkeys by default, from 2026-09-01.** Users enabled for SMS or voice
-  are automatically enabled for passkeys. The registration campaign moves to
-  a Microsoft-managed state and nudges them after MFA.
-- **2027-02-01.** Microsoft-provided SMS and voice MFA retire for every user
-  except Global Administrators and external users. Those two groups retire
-  on **2027-07-01**; internal guests keep the February date. A user whose
-  only method is SMS or voice must register a passkey at sign-in before
-  continuing. There is no opt-out for enforcement.
-- **The paid exception.** Contracting a telephony provider through
-  Microsoft Security Store keeps SMS and voice. Configuration is available
-  from 2026-10-30.
+- **Passkeys by default from 2026-09-01:** users enabled for SMS or voice
+  are enabled for passkeys, and the registration campaign nudges them.
+- **2027-02-01:** Microsoft-provided SMS and voice MFA retire for every
+  user except Global Administrators and external users, who follow on
+  **2027-07-01** (internal guests keep the February date). A user whose
+  only method is SMS or voice must register a passkey at sign-in, with no
+  opt-out for enforcement.
+- **The paid exception:** a telephony provider contracted through Microsoft
+  Security Store keeps SMS and voice; its configuration opens 2026-10-30.
 
 **Decision.**
-- **Contoso doesn't let a forced sign-in prompt do the rollout.** Phases 1–3
-  finish before 2027-01-01.
+- **A forced sign-in prompt doesn't do the rollout.** Phases 1–3 finish
+  before 2027-01-01.
 - **Clinicians get keys before the deadline.** Phase 4 has a decision point
-  on 2026-12-01, for any unit that can't make it: buy a telephony-provider
-  bridge for its phone-only clinicians (CISO decision, time-boxed), or
-  accept the blocking prompt.
-- **The tenant does not opt out** of the automatic passkey enablement
-  (`passkeyDynamicMigration`). The registration campaign is set explicitly by
-  script.
-- verify, at the first apply: the passkey and campaign state a tenant
-  created after 2026-09-01 starts with. The script's PLAN mode prints it.
-
-Sources:
-https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sms-voice-retirement-faq,
-https://www.microsoft.com/en-us/security/blog/2026/07/13/microsoft-entra-id-security-updates-passkeys-are-the-default-authentication-method-in-entra-id/
-
-## Tools
-
-- **`lab/scripts/powershell/post-apply/Set-AuthenticationMethodsPolicy.ps1`**
-  sets the authentication methods policy:
-  - two passkey profiles:
-    - **admins:** device-bound, attested, with an optional AAGUID allow-list.
-      Its target (and the registration campaign's) is the `Admin-Accounts`
-      group: standing, role-assignable, holding no role, and never a PIM
-      group. Its members are the cloud-only `adm-` accounts
-      (`New-AdminAccounts.ps1`) and the build account
-      (`Set-AuthenticationMethodsPolicy.ps1 -BuildAccountUpn`)
-    - **workforce:** synced or device-bound, unattested
-  - **What is actually ENFORCED at sign-in.** The profiles control what a
-    person may REGISTER. Whether an admin sign-in demands a device-bound,
-    attested key is decided by the authentication strength CA002 / CA021 / CA022
-    grant with, and the only lever there is the FIDO2 AAGUID allow-list
-    (`admin_fido2_allowed_aaguids`, attestation enforced in the Passkey
-    policy). That means naming - in practice buying - the issued key models.
-    With an empty list, "admins use device-bound keys" is a registration
-    intent only: an admin who is also in All-Workforce could sign in to an
-    admin role with a synced passkey. So the workforce rollout refuses to run
-    without the list (Terraform precondition, and a FAIL in
-    `Set-AuthenticationMethodsPolicy.ps1`) unless the risk acceptance
-    (`accept_admin_synced_passkey_risk`) is recorded. verify: whether
-    authentication strengths can now tell synced from device-bound passkeys
-    without AAGUIDs.
-  - TAP: 60-minute default, 480-minute maximum, one-time use
-  - the registration campaign
-  - SMS and voice disablement, refused while any in-scope user still depends
-    on a phone alone
-- **`lab/scripts/powershell/07-Passwordless-Rollout.ps1`** runs with
-  `-Stage Pilot|Broad`. It sorts users into four groups:
-  - phishing-resistant
-  - phishable MFA only
-  - phone only
-  - nothing
-
-  It also issues TAPs and returns the CA008 READY or NOT READY verdict.
-- **CA policies** (all BUILT in `modules/conditional-access`, each
-  report-only behind its own staging flag; none has run against a tenant).
-  - **CA002** requires phishing-resistant MFA for admins: Microsoft's
-    template list of admin roles plus the lab's tier groups, because
-    role assignments scoped to an administrative unit are invisible to the
-    role condition.
-  - **CA008** applies the workforce strength. It is enforced through its
-    pilot group first. Enforcing it for all users takes a second, separate
-    flag, `ca008_allow_all_users_enforcement`.
-  - **CA009** protects the "Register security information" user action
-    with a custom strength, "Bootstrap and recovery (lab)", modelled on
-    Microsoft's guidance for securing registration: a **one-time** TAP or a
-    phishing-resistant method (`enable_registration_ca`). A stolen password
-    plus SMS can't add a method. Guests are excluded (TAP doesn't work for
-    them). The choice of this strength over Microsoft's built-in MFA
-    strength, which would let password plus push register a passkey, is
-    [ADR 0016](adr/0016-passkey-profiles-and-phone-method-retirement.md). Since 2026-07-06, Microsoft Learn says
-    registration policies also cover Windows Hello for Business and macOS
-    Platform SSO registration, so a password-and-push user setting up
-    Windows Hello needs a TAP: measure that in report-only before enforcing.
-  - **CA010** blocks device code flow for all users
-    (`enable_device_code_block`), with an exception group for devices that
-    genuinely need it.
-  - **CA060** applies the workforce strength on shared clinical
-    workstations (ADR 0014), with sign-in every 8 hours and no persistent
-    browser session (`enable_shared_clinical_ca`).
-- **Graduation** follows
-  [runbooks/graduate-a-ca-policy.md](runbooks/graduate-a-ca-policy.md): at
-  least 14 days in report-only, covering nights and a weekend, and one state
-  change per PR.
+  on 2026-12-01 for any unit that can't make it: a time-boxed telephony
+  bridge for its phone-only clinicians (CISO decision), or the blocking
+  prompt.
+- **The tenant doesn't opt out** of the automatic passkey enablement; the
+  registration campaign is set explicitly by script.
+- **How it's built:** the two passkey profiles, CA009's protected
+  registration and the TAP registration wave are
+  [ADR 0016](adr/0016-passkey-profiles-and-phone-method-retirement.md); the
+  CA policies are listed in the
+  [CA design principles](standards/conditional-access-design-principles.md) §1;
+  shared clinical stations are
+  [ADR 0014](adr/0014-shared-clinical-workstation-authentication.md).
+  `07-Passwordless-Rollout.ps1` sorts each wave into phishing-resistant,
+  phishable MFA only, phone only and nothing, issues the wave's TAPs and
+  returns the CA008 READY or NOT READY verdict. Graduation follows
+  [graduate-a-ca-policy.md](runbooks/graduate-a-ca-policy.md).
 
 ## Phases
 
@@ -127,53 +60,11 @@ https://www.microsoft.com/en-us/security/blog/2026/07/13/microsoft-entra-id-secu
   after `07-Passwordless-Rollout.ps1` reports zero phone-only users in scope.
 - **Phases are sequential.** A phase starts only when the previous phase's
   KPI has a measured value (`roadmap.md`, sequencing rules).
-
 - **Registration is gated before the rollout widens.** CA009 is enforced
   (evidence capture E38b) before phase 2 starts, so every method registered
   from then on was registered with a one-time TAP or an existing
   phishing-resistant method. `security-info-registered-risky.kql` watches
   the same moment from the log side.
-
-## The registration wave: who issues the TAPs
-
-Enforcing CA009 first has a cost. From then on, everyone still on password
-plus push needs a one-time TAP for their first passkey or Windows Hello
-registration: most of phases 2–4, up to roughly 5,000 people less the
-admins and anyone already holding a phishing-resistant method. A help-desk
-TAP is exactly what a social engineer asks for (R14), so the issuing has to
-be designed, not improvised.
-
-| Option | For | Against |
-|---|---|---|
-| **Chosen: enforce CA009 first, issue TAPs in planned batches** | No window in which a stolen password plus push can add a method | Thousands of TAPs; each one is a credential to deliver safely |
-| Enforce CA009 per wave, after the wave has registered | No TAPs for most users | During each wave, password plus push can still register a method (the R14 path). CA009 is one all-users policy in code, so per-wave enforcement would also need a scope change |
-| Built-in MFA strength on registration | No TAPs at all | Password plus push can register a passkey, so CA009 would stop a password-only attacker and nothing more (ADR 0016) |
-
-How the batches run:
-
-- **Volume first.** `07-Passwordless-Rollout.ps1` sorts each wave's group
-  before it starts; its "phishable MFA only", "phone only" and "nothing"
-  counts are the number of TAPs that wave needs (fill after running).
-- **Channel.** Batch TAPs are issued with `07-Passwordless-Rollout.ps1
-  -IssueTapFor <wave list>` (one-time, 480 minutes) and handed over in
-  person at the wave's registration session, or to the line manager, who
-  hands them over in person. Never by phone, chat or email to the user. A
-  person who misses the session goes through the help-desk verification
-  ladder like any other caller.
-- **Every TAP is explainable.** A TAP counts as explained only if it
-  matches the joiner workflow, a wave batch (the script's output, filed
-  with that wave's change ticket) or a service-desk ticket. The measure is the
-  number of unexplained TAPs per week, target 0; each one is investigated as
-  a possible R14 case. `auth-method-changed-by-admin.kql` sees the issuing
-  side.
-
-## Built since the first draft
-
-CA009 (register security info), CA010 (block device code flow) and CA060
-(shared clinical workstations) were "not built" in the first version of this
-plan. They are now code, report-only, and untested against a tenant. Their
-first captures are E20, E20b, E28b, E38b and E50b in
-`evidence-capture-plan.md`.
 
 ## Not built
 

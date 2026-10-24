@@ -5,17 +5,16 @@ written against the lab code; not yet exercised (no tenant deployed).
 
 ## The design you are supporting
 
-| Fact | Source |
-|---|---|
-| Group **Privileged-IAM-Admins** holds **User Administrator** actively; *membership* is the just-in-time part | `lab/terraform/modules/pim/main.tf` |
-| Activation needs MFA, a justification, approval, and lasts at most **PT4H** | same, `activation_rules` |
-| Approvers are the members of a role-assignable approver group per tier (`PIM-Approvers-Tier1` for this group, `PIM-Approvers-Tier0` for Tier 0), filled from `TF_PIM_APPROVER_OBJECT_IDS` | `lab/pipelines/README.md` §5 D, `modules/pim/approvers.tf` |
-| The same pattern covers more roles in tier groups (`enable_pim_tiers`, off by default): eight Tier-0 groups (`PIM-Tier0-*`) need approval and a ticket number and last at most 4 h (Privileged Authentication Administrator 2 h); seven Tier-1 groups (`PIM-Tier1-*`) last at most 8 h, one shift, with no approval except Intune (the standard also wants it on Exchange and SharePoint: exception E10 in `standards/exception-process.md`). Global Administrator is never a tier group: named people are eligible directly on the role (2 h, Tier-0 approval) | `modules/pim/tiers.tf`, `directory-roles.tf`, `variables.tf` |
-| Tier-0 activation can require authentication context **c1** instead of plain MFA (`tier0_activation_auth_context_id`, empty by default). c1 is met only through CA021: the admin phishing-resistant strength, with a fresh sign-in every time. It is switched on only after CA021 is enforced ([graduate-a-ca-policy.md](graduate-a-ca-policy.md), [ADR 0020](../adr/0020-pim-activation-design.md)) | `modules/pim/tiers.tf`, `modules/conditional-access/admins.tf` |
-| Eligibility expires: **P365D** on this group and Tier 1, **P180D** on Tier 0. Renewal goes through L2 like a new grant. A direct *active* assignment (bypassing activation) must expire, shortest choice **P15D** | `modules/pim/main.tf`, `tiers.tf`, `variables.tf` |
-| Who is eligible is set after HR provisioning by `Set-PimGroupEligibility.ps1`. It has no default person: name the IT/IAM engineer's account explicitly (a clinical manager eligible for User Administrator is the SOD-08 conflict) | `lab/scripts/powershell/post-apply/` |
-| User Administrator is in CA002 (phishing-resistant MFA for admins), so an activated user needs FIDO2 / Windows Hello / CBA once CA002 is enforced | `modules/conditional-access/variables.tf` |
-| Every completed activation raises Sentinel "Contoso - PIM activation (just-in-time elevation)", Medium. A member added outside PIM raises a separate ITDR incident | `lab/kql/pim-activation.kql`, `lab/kql/pim-group-member-added-outside-pim.kql`, `modules/monitoring` |
+Role-assignable groups hold the roles; *membership* is the just-in-time
+part, activated through PIM for Groups with MFA and a justification.
+`Privileged-IAM-Admins` (User Administrator): approval, at most 4 h. Eight
+Tier-0 groups: approval and a ticket number, at most 4 h (2 h for
+Privileged Authentication Administrator). Eight Tier-1 groups: one 8-hour
+shift, approval only for Intune and the IGA group. Global Administrator is
+never a group: named people are eligible directly (2 h, Tier-0 approval).
+Eligibility expires (Tier 0 180 days, Tier 1 365 days), and every completed
+activation alerts the SOC (`pim-activation.kql`). Full design and caps:
+[ADR 0002](../adr/0002-pim-for-groups-vs-direct-role-eligibility.md).
 
 No one holds standing admin outside the two break-glass accounts. **Support
 never "fixes" a PIM problem by adding a standing member.**

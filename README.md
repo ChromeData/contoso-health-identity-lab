@@ -1,217 +1,162 @@
 # Contoso Health Identity Platform
 
-**A Microsoft Entra ID IAM / PAM platform as code, tested offline and on local harnesses; tenant run pending.**
-Michael Williams · IAM Analyst — Identity Security & Privileged Access Management · Microsoft SC-300
+[![lab-tests](https://github.com/ChromeData/contoso-health-identity-lab/actions/workflows/lab-tests.yml/badge.svg)](https://github.com/ChromeData/contoso-health-identity-lab/actions/workflows/lab-tests.yml)
 
-![Architecture](lab/docs/architecture.svg)
+Michael Williams · IAM Analyst — Identity Security & Privileged Access Management · Microsoft SC-300 · [LinkedIn](https://www.linkedin.com/in/michael-williams-21938325a/) · open to senior IAM/PAM roles
 
-Contoso Health is a fictional ~5,000-person hospital group. It is hybrid (on-prem
-AD plus Entra ID), regulated (HIPAA, SOX) and has just acquired a clinic that
-runs on Okta. Clinicians cannot be locked out of patient care, so every control
-here is designed around that constraint. This repository is the identity
-platform for that scenario, and it follows one employee, Dana Okafor, from hire
-to departure.
+**Hiring for:** [Senior IAM Engineer (Entra)](#senior-iam-engineer-entra) · [Senior IAM Analyst / IGA](#senior-iam-analyst--iga) · [Senior PAM Engineer](#senior-pam-engineer) (four stops each)
 
-A narrated walkthrough will be recorded after the tenant run and linked here.
+I'm an IAM Analyst (SC-300) moving into senior IAM/PAM work. This lab shows
+how I'd design, ship and evidence identity for a 5,000-person hospital on
+Microsoft Entra, and the [18 decisions](lab/docs/adr/README.md) behind it.
 
-> **Status (2026-10-21): nothing has run against a Microsoft tenant yet** - no
-> tenant exists. Every tenant feature sits behind a staging flag that defaults
-> to off, and anything only a live tenant can confirm is marked `verify:` in
-> the code. What has run, on the author's machine on 2026-10-20 and 21 (UTC):
+Contoso Health is fictional: hybrid (on-prem AD plus Entra ID), regulated
+(HIPAA, SOX), and it has just bought a clinic that runs Okta. Clinicians
+can't be locked out of patient care, so every control is designed around
+that. Three calls show how I work:
+
+- **Reviews never lock a nurse out.** Unanswered reviews remove privileged
+  and requested access, never a clinician's birthright access: HR attributes
+  certify that, so a manager on leave can't lock a nurse out of the EHR at
+  shift start ([ADR 0012](lab/docs/adr/0012-access-review-no-response-and-clinical-lockout.md)).
+- **Conditional Access is change control.** Every policy ships report-only
+  and is designed to be enforced one per pull request, after at least 14
+  days of sign-in data show what it would block ([runbook](lab/docs/runbooks/graduate-a-ca-policy.md)).
+- **No standing admins.** Every privileged role is just in time through PIM,
+  Tier 0 with approval and a step-up, and break-glass is designed to be the
+  only standing Global Administrator ([ADR 0002](lab/docs/adr/0002-pim-for-groups-vs-direct-role-eligibility.md)).
+
+Okta, Splunk, Kubernetes and midPoint are labeled extensions; Vault and
+Guacamole stand in for CyberArk. The [threat model](lab/docs/threat-model.md)
+maps five public incidents, among them Change Healthcare, Midnight Blizzard
+and Snowflake, to the controls meant to stop each step and the gaps left.
+
+## What has run
+
+> **Nothing has run in a Microsoft tenant yet.** No tenant exists, and that
+> run is next. Every tenant feature sits behind a staging flag that is off by
+> default, and anything only a live tenant can confirm is marked `verify:` in
+> the code.
 >
-> - **Offline checks (the evidence for BUILT):** `terraform validate` passes
->   in all 18 Terraform directories, and 325 mocked `terraform test` runs pass
->   across all 18 (302 in the Entra / Azure / AWS roots and modules, 23 in
->   the three Kubernetes roots). The lab's Pester suite passes 917 tests
->   with every Graph call mocked, and the ITDR suite 284. PSScriptAnalyzer
->   reports 0 errors, `shellcheck -x` reports no findings on all 41 shell
->   scripts, actionlint is clean on all 6 workflows, and Checkov reports 0
->   failed checks (each accepted finding is skipped inline, with its reason,
->   on the resource).
-> - **Local harnesses (RAN · harness):** one runner (`lab/pam/test/run-all.sh`,
->   run `20261021T000019Z`) ran eight PAM suites: 610 checks passed, 0
->   failed, 1 skipped. 498 of them ran end to end in Docker: the PAM flow against a Samba AD
->   domain controller (284/284, including Tier-0 dual control and a recorded RDP
->   session to a Linux xrdp stand-in for the domain controller), the midPoint
->   certification campaign (91/91), dynamic database credentials (60/60) and the
->   Vault audit feed for the PAM anomaly detection (63 passed, 1 skipped: no
->   local Splunk). The other 112 are offline unit and fixture tests: dual
->   control against a local ServiceNow mock (45), the session-recording format
->   check (29), the audit ingest script (30) and the dependency-scan matching
->   logic (8; the scan itself has never run on a Windows host). The optional
->   `--scale` suite put 500 synthetic privileged accounts through the same
->   discovery, onboarding, rotation and reconciliation scripts (79/79, GAP
->   0). The Kubernetes segment passed 12/12 pipeline stages and 64/64
->   end-to-end checks on a throwaway kind cluster. The 22 KQL detections ran
->   on the Azure Data Explorer Kusto emulator, a local KQL engine, against
->   synthetic tables and events: 22/22 rules and 223/223 cases passed
->   (`lab/evidence/kusto/20261021T001217Z/`). Sentinel's `_GetWatchlist` is
->   shimmed there. **The emulator is not a Log Analytics workspace and not a
->   tenant**: no rule has been scheduled in Sentinel or fired.
-> - **Not run:** no SPL search has run on Splunk: the Splunk container is
->   BUILT and has never been started. No GitHub workflow has run yet.
->
-> Hashed run records (a `SHA256SUMS` file each) are in
-> [`lab/evidence/`](lab/evidence/), with an index of what each one shows,
-> how to re-check it and what it does not prove: the midPoint campaign,
-> dynamic database credentials, the PAM flow (`pam/`), the DR drill's
-> RTO/RPO report (`pam-dr/`), the 500-account run (`pam-scale/`), the
-> Kubernetes run (`k8s/`), the KQL detections on the Kusto emulator
-> (`kusto/`) and one run of every offline check plus the PAM
-> runner's default suites (`offline-tests/20261020T235044Z/`). The counts
-> above come from that last record, except the 500-account, Kubernetes and
-> Kusto runs, which have their own; the PAM flow's own detail is in `pam/20261020T220031Z/`.
-> For the PAM suites other than the flow, the record holds the counts and
-> the runner's console output; per-suite logs are not published (they name
-> lab accounts), so re-run the suites to check them. What the tenant run
-> will capture, and on which day, is in
-> [`lab/docs/evidence-capture-plan.md`](lab/docs/evidence-capture-plan.md).
+> **Status key:** **RAN · harness** = ran end to end on my laptop or a GitHub
+> runner against stand-ins, with synthetic data · **BUILT** = passes offline
+> tests with every cloud call mocked, never applied · **DESIGNED** =
+> documented only · **RAN · tenant** = none yet
 
----
+| What | Measured result | Status | Record |
+|---|---|---|---|
+| The Microsoft core as code | 326 `terraform test` runs in 18 directories (303 for Entra, Azure and AWS) and 1074 Pester tests, 0 failed. GitHub's runners passed the same suites on the published commit (325 and 917 tests at that commit: [run](https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/39523030602)) and run them on every pull request. These mocked tests fail the build if any of the 16 Conditional Access policies loses its break-glass exclusion, a policy behind a staging flag would start enforced, a Tier-0 PIM group loses approval or expiry, or a clinical birthright package could get an expiry or a review that removes it | BUILT | [`offline-tests/20261021T074732Z`](lab/evidence/offline-tests/20261021T074732Z/README.md) |
+| 22 identity detections, written in KQL for Sentinel | 22/22 rules and 223/223 cases (131 must fire, 92 must not) on synthetic events, run on the Azure Data Explorer Kusto emulator: a local KQL engine standing in for Sentinel, not Sentinel and not a tenant | RAN · harness | [`kusto/20261021T001217Z`](lab/evidence/kusto/20261021T001217Z/) |
+| An access review run to closure in midPoint (standing in for SailPoint), decisions scripted | 7 items of requestable access: 4 accepted, 2 revoked (one an SoD conflict), 1 left unanswered on purpose and removed. A script records each decision as the assigned reviewer; nobody signed in. Completion 85.7% against a 95% target, missed by design so the KPI shows it | RAN · harness | [`midpoint/20261020T162116Z`](lab/evidence/midpoint/20261020T162116Z/) |
+| Privileged access end to end, against a Samba AD domain controller (standing in for DC01) | 284/284 checks: discovery, onboarding, dependency-gated rotation, reconciliation, ticket-gated check-out against a ServiceNow mock with two approvers for Tier 0 (neither of them the requester), recorded SSH, and recorded RDP to a Linux xrdp stand-in for DC01. This flow and the other PAM suites (610 passed, 0 failed, 1 skipped) also pass nightly from a fresh clone on GitHub's runners ([latest run](https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/39937464414)): containers on a runner, not a tenant | RAN · harness | [`pam/20261020T220031Z`](lab/evidence/pam/20261020T220031Z/) |
+| 500 privileged accounts through discovery and onboarding | 79/79 checks. 515 accounts discovered in 2.0 s; onboarding vaulted 257 of the 500 and held or excepted the rest. Reconciliation: 263 vaulted (6 from the base layout), 128 documented exceptions, 124 held on unresolved dependencies, gap 0. The 25 rotated accounts were bind-tested; the bind check over every vaulted account (`--verify`) was not run. Five pipeline stages, 139 s in total, one laptop. Synthetic accounts, fixed seed | RAN · harness | [`pam-scale/20261020T193913Z`](lab/evidence/pam-scale/20261020T193913Z/) |
+| Vault disaster recovery | All three nodes and their disks destroyed, rebuilt and restored: RTO 42.1 s against a 300 s target, RPO 2.2 s (set by the drill's own pause). A rehearsal cluster holding test markers, not the credential vault | RAN · harness | [`pam-dr/20261020T220031Z`](lab/evidence/pam-dr/20261020T220031Z/) |
+| Database access nobody holds | 60/60 checks: a new login per request, read-only on one schema, a 1-hour lease; revoking the lease ends a live session. One synthetic database | RAN · harness | [`dynamic-db/20261020T163436Z`](lab/evidence/dynamic-db/20261020T163436Z/) |
 
-## Start here
+**On GitHub.** The first Dependabot pull requests found two real problems,
+both Checkov graph checks the local build lacked: the kind pipeline stopped
+at its Checkov stage (CKV2_K8S_6: the nightly-report pod had no
+NetworkPolicy), and the IaC scan reported 4 failed checks (56 passed, 12
+skipped). Both are fixed in this commit, and a local Checkov with its graph
+checks now reports 0 failed on both
+([`offline-tests/20261021T074732Z`](lab/evidence/offline-tests/20261021T074732Z/README.md));
+neither workflow has re-run on GitHub. Every run, red ones included, is
+listed in the [evidence index](lab/evidence/README.md#runs-on-githubs-runners).
 
-| Read | Why |
-|---|---|
-| [Target state](lab/docs/target-state.md) | Where the platform is going, mapped to Microsoft's Enterprise Access Model, with what exists today against each layer |
-| [Architecture decision records](lab/docs/adr/README.md) | 20 decisions, each with the options rejected, what it costs and what would change it |
-| [CISO brief](lab/docs/ciso-brief.md) | The ask: licensing, the open risk acceptance, named owners |
-| [Threat model](lab/docs/threat-model.md) | Public identity incidents, step by step, against the control and detection meant to stop each step, and the gap left |
-| [Break-glass drill runbook](lab/docs/runbooks/break-glass-drill.md) | How the emergency-access accounts are proven every quarter (not yet run: no tenant) |
+## The realistic core
 
-Also: [roadmap](lab/docs/roadmap.md), [risk register](lab/docs/risk-register.md),
-[vendor evaluation](lab/docs/vendor-evaluation.md),
-[passwordless rollout plan](lab/docs/passwordless-rollout-plan.md),
-[Okta migration runbook](lab/docs/okta-migration-runbook.md),
-[standards](lab/docs/standards/) (IAM, privileged access, NHI, CA design
-principles, app onboarding intake, exceptions, RACI) and
-[runbooks](lab/docs/runbooks/) (break-glass drill, compromised identity, CA
-graduation and change review, PIM activation support, JML exceptions,
-help-desk identity verification, onboarding an engineer).
+What a Microsoft-first hospital of this size actually runs, and what I built
+for each piece:
 
-**Who owns what in the scenario:** HR owns the source of truth for every
-workforce identity, IAM owns the platform and its policies, the SOC owns
-detection and response, and audit consumes the evidence pack. The RACI is in
-[`lab/docs/standards/raci.md`](lab/docs/standards/raci.md).
+| Piece | What it does for Contoso | Status |
+|---|---|---|
+| **Entra ID** | Workforce sign-in and SSO (SAML and OIDC apps as Terraform), a phased passkey rollout, separate cloud-only admin accounts | BUILT |
+| **AD + Cloud Sync** | HR is the source of truth: HR feed → API-driven inbound provisioning to on-prem AD (mass-change guard) → Cloud Sync → Entra; the domain controller build is code | BUILT: HR inbound provisioning to AD, DC build. DESIGNED: Cloud Sync ([ADR 0001](lab/docs/adr/0001-cloud-sync-vs-connect-sync.md)) |
+| **Intune** | Device trust: admin portals only from a managed, compliant device (CA005, pilot group first) | BUILT |
+| **Conditional Access** | 16 policies (13 in Terraform, 3 by Graph script): baseline, risk-based, phishing-resistant, shared clinical workstations. All report-only, designed to be enforced one per pull request; break-glass is excluded from every one, and a test checks it | BUILT |
+| **PIM** | Tier 0 (approval, 4 hours, step-up) and Tier 1 (8 hours) through PIM for Groups, Global Administrator eligible per named person, PIM for Azure resources, quarterly reviews of who is eligible | BUILT |
+| **ID Governance** | Birthright access from HR attributes, Lifecycle Workflows for joiner, mover and leaver, access packages with 180-day expiry, risk-tiered reviews, nine SoD rules, guests with sponsors and expiry | BUILT |
+| **Sentinel** | 22 KQL detections, including the AD plane (Kerberoasting, DCSync, Tier-0 logons PAM cannot account for); containment asks a named approver first | BUILT; rules RAN · harness on the Kusto emulator |
+| **One PAM pattern** | Discovery and onboarding of privileged AD accounts, rotation on check-in, ticket-gated check-out with Tier-0 dual control, recorded sessions, 1-hour database logins, on named stand-ins for CyberArk | RAN · harness |
+| **ServiceNow** | Single sign-on from Entra; privileged check-out needs an approved change | SSO BUILT (flag off); the change gate RAN · harness against a ServiceNow mock |
+| **AWS** | IAM Identity Center federated from Entra (SAML + SCIM), one permission set for a human to apply | BUILT |
 
-## What it demonstrates
+All of it ships through one GitHub pipeline that holds no cloud credential:
+OIDC, read-only on pull requests, write only behind a reviewer-gated
+environment ([ADR 0004](lab/docs/adr/0004-pipeline-workload-identity-federation.md)).
+The [architecture map](lab/docs/architecture.md) shows how the pieces
+connect, with each box's status ([full-size diagram](lab/docs/architecture.svg)).
 
-Status words, used the same way everywhere in this repository:
+## Extended on purpose
 
-| Status | Meaning |
-|---|---|
-| **RAN · tenant** | Executed against a real Microsoft tenant, with evidence. **Nothing yet.** |
-| **RAN · harness** | Executed end to end in a local harness (Docker, kind), checks passing |
-| **BUILT** | Code that passes offline checks (validate, lint, mocked tests), behind a staging flag that is off, never applied |
-| **DESIGNED** | Documented (ADR, runbook, plan), not built |
+No single company runs all of this. Each extension answers teams that run
+something other than Microsoft:
 
-| Capability | Status | What it does | Decisions | Where |
-|---|---|---|---|---|
-| **Joiner / mover / leaver** | BUILT | HR feed → API-driven inbound provisioning **to on-prem AD** → Cloud Sync → Entra, with a mass-change guard. Birthright access from HR attributes (automatic assignment policies), Lifecycle Workflows (joiner, leaver, opt-in mover), requestable access packages with 180-day expiry. The leaver revokes sessions, removes access and hands over the workload identities the person owned; SaaS accounts are disabled by SCIM on the next provisioning cycle (or on demand). | ADR 0001, 0006 | [`lab/scripts`](lab/scripts), [`lab/iga`](lab/iga), [`modules/entitlement`](lab/terraform/modules/entitlement) |
-| **Hybrid AD (DC01)** | BUILT | Domain controller VM (NSG limited to the operator, auto-shutdown) and its promotion scripts, including the Vault rotation account's delegated rights | ADR 0013 | [`modules/dc-vm`](lab/terraform/modules/dc-vm), [`lab/scripts/dc`](lab/scripts/dc) |
-| **SSO + provisioning** | BUILT: AWS IAM Identity Center SAML + SCIM (created stopped), ServiceNow SAML (flag off), Clinical Portal OIDC, PAM broker sign-in. DESIGNED: ServiceNow provisioning, Okta coexistence | Apps as Terraform with one group assignment each; the AWS permission set is a separate, human-applied root. Moving existing apps off AD FS or Okta is a per-app runbook (ADR 0009 and the Okta runbook, both DESIGNED). | — | [`modules/apps`](lab/terraform/modules/apps), [`lab/terraform/aws`](lab/terraform/aws), [`okta-migration-runbook.md`](lab/docs/okta-migration-runbook.md) |
-| **Conditional Access as code** | BUILT | Every policy starts report-only and is graduated one per PR. Terraform creates 13: CA001–CA005 baseline, CA006/CA007 risk-based (High only), CA008 phishing-resistant workforce, CA009 security-info registration, CA010 device-code block, CA020 admin sign-in frequency, CA022 PAM broker + admin portals, CA060 shared clinical workstations. Three more are Graph scripts because the provider cannot express them: CA021, the PIM step-up on authentication context `c1`, and CA023, a step-up on context `c2` for protected actions (changing CA policies or named locations), both rendered by Terraform and written by script; and CA011, a Token Protection pilot. Passkey profiles, TAP and SMS/voice retirement are a desired-state script. Break-glass is excluded from every policy, and a test proves it. | ADR 0003, 0014, 0015, 0016 | [`modules/conditional-access`](lab/terraform/modules/conditional-access), [`passwordless-rollout-plan.md`](lab/docs/passwordless-rollout-plan.md) |
-| **Zero standing admin (PIM)** | BUILT | PIM for Groups in tiers: 8 Tier-0 groups (approval by an approver group, 4 h, eligibility expires in 180 days; a step-up on authentication context `c1` once CA021 is enforced) and 8 Tier-1 groups (8 h, 365 days; Intune and IGA administration also need approval); Global Administrator eligible per named person (2 h); help desk scoped to an administrative unit; PIM for Azure resources; quarterly default-deny reviews of eligible members. Admin work uses separate cloud-only `adm-` accounts with no licence or mailbox, created from a reviewed register. Designed so break-glass is the only standing Global Administrator: the build account keeps its standing role until the last, opt-in post-apply step converts it to eligible. | ADR 0002, 0020 | [`modules/pim`](lab/terraform/modules/pim) |
-| **IGA** | BUILT (Entra). RAN · harness: midPoint campaign, 91/91 | Risk-tiered certification (birthright clinical access is never removed because a reviewer stayed silent), nine SoD rules (preventive links + a detective report), review KPIs, B2B guests with sponsors and expiry. midPoint, the SailPoint stand-in, runs a certification campaign end to end: reviewer routing, decisions, a deliberate no-response, automated remediation, hashed evidence. | ADR 0008, 0012 | [`lab/iga`](lab/iga), [`modules/entitlement`](lab/terraform/modules/entitlement), [`lab/pam/midpoint`](lab/pam/midpoint) |
-| **Non-human identity governance** | BUILT | NHI inventory against OWASP's NHI Top 10, shadow-admin path finder, app management and consent policies, a leaver hand-off that never gives a Tier-0 app to a manager, and an Entra Agent ID with a human sponsor (identity only: no permission, nothing calls it yet) | ADR 0018 | [`lab/scripts/powershell`](lab/scripts/powershell) |
-| **Identity threat detection and response** | BUILT. RAN · harness: the 22 KQL rules on the Kusto emulator (223 cases); the Vault audit feed, 63 checks | 22 KQL detections, deployable by Terraform behind flags, each with an SPL twin shipped as a Splunk app (never run on Splunk): 5 core, 11 ITDR (credentials and consent on workload identities, CA tampering, roles and privileged groups changed outside PIM, admin MFA changes, identity risk, and the AD plane: Tier-0 logons PAM cannot account for, privileged AD group changes, Kerberoasting, DCSync) and 6 more (device-code phishing, risky MFA registration, DC logon outside the operator allow-list, PAM vault misuse, SoD pair completed, PIM activation without step-up). The CI identity is recognised by immutable id only. Containment asks a named approver in Teams first. The harness drives real Vault audit events into the detection's table shape. All 22 KQL rules ran on a local KQL engine, the Azure Data Explorer Kusto emulator, against synthetic events (22/22 rules, 223/223 cases; [`lab/evidence/kusto`](lab/evidence/kusto)); that is not a Log Analytics workspace or a tenant, so no rule has been scheduled in Sentinel or fired. | ADR 0017 | [`lab/kql`](lab/kql), [`modules/monitoring`](lab/terraform/modules/monitoring), [`lab/monitoring`](lab/monitoring), [`lab/splunk`](lab/splunk) |
-| **PAM** | RAN · harness: Samba AD DC, 284/284; 500-account scale run, 79/79; dynamic database credentials, 60/60 | Vault discovers, onboards (dependency-gated), rotates and reconciles accounts in an AD-compatible directory (a Samba AD DC in the harness; DC01, Windows Server, at tenant time), 500 synthetic ones in the scale run (reconciliation GAP 0); exclusive, ticket-gated check-out for one named person, with two distinct approvers for Tier 0, neither the requester (dual control); Guacamole records SSH sessions (with an SSH CA) and RDP sessions with injected credentials, the RDP target in the harness being a Linux xrdp stand-in for the domain controller; a separate 3-node rehearsal cluster with a timed DR drill (test data, not the credential vault; restoring rotated credentials is not drilled); 1-hour database logins nobody holds standing. Tenant-time pieces are BUILT, not run: a Windows RDP session on DC01, the Windows dependency scan on DC01 and member servers, Entra sign-in to the broker, ServiceNow change validation against a real instance. | ADR 0007, 0019 | [`lab/pam`](lab/pam) |
-| **Workload identity on Kubernetes** | RAN · harness: kind cluster, 64/64. AKS mapping: BUILT | A pod gets its database password with no Kubernetes Secret, env var or manifest value; an admission policy binds the identity to one image digest. The Entra Workload ID equivalent is tested offline and never applied. | ADR 0010 | [`lab/k8s`](lab/k8s), [`lab/terraform/k8s`](lab/terraform/k8s) |
-| **Pipeline with no stored credentials** | BUILT (no workflow has run yet) | GitHub OIDC with two identities: read-only on PRs, write only behind a reviewer-gated environment. No PR can change the pipeline's own identities; a human applies those (the apply identity is still Tier 0, a recorded risk acceptance). TruffleHog, plan, Checkov (a failed check blocks the merge) and an AI review on PRs; offline test suites, and a nightly PAM harness run from a fresh clone, with no credential; actions SHA-pinned. | ADR 0004, 0005 | [`.github/workflows`](.github/workflows), [`lab/pipelines`](lab/pipelines) |
-| **Measurement and audit evidence** | BUILT | KPIs measured by script before and after (standing admins, phishing-resistant coverage, HR-to-disable minutes, NHI findings), CISA ScubaGear and Microsoft's Zero Trust Assessment before / after, break-glass and CA-restore drill scripts, and one command that exports a SHA-256-manifested evidence pack mapped to HIPAA / SOX controls into WORM storage | — | [`lab/scripts/powershell`](lab/scripts/powershell), [`modules/evidence-store`](lab/terraform/modules/evidence-store), [`lab/evidence`](lab/evidence) |
-| **Out of scope, on purpose** | DESIGNED | Global Secure Access, Verified ID and CIEM: why not now, and what would change that | ADR 0011 | [`lab/docs/adr`](lab/docs/adr/README.md) |
+| Extension | Why it is here | Status |
+|---|---|---|
+| **Okta coexistence** | Acquisitions are a common way for a Microsoft shop to get a second identity provider. A runbook moves the clinic's apps to Entra one at a time | DESIGNED: a runbook, no Okta code |
+| **Splunk as a second SIEM** | Some SOCs run Splunk instead of, or next to, Sentinel; every KQL rule has an SPL twin | BUILT, never started: no SPL search has run |
+| **Conjur OSS** | CyberArk's open-source secrets manager, standing in for Conjur Enterprise for application secrets | RAN · harness: one check in the PAM flow record ([`pam/20261020T220031Z`](lab/evidence/pam/20261020T220031Z/)): the approved job reads its secret, an unapproved one gets 403 |
+| **Kubernetes workload identity** | A pod gets its database password with no Kubernetes Secret, environment variable or manifest value. kind stands in for AKS, where this maps to Entra Workload ID | RAN · harness: [12/12 stages, 64/64 checks](lab/evidence/k8s/20261020T202112Z/README.md) on a throwaway kind cluster. The AKS mapping is BUILT, never applied |
+| **midPoint** | Open-source IGA standing in for SailPoint or Saviynt, for apps Entra does not govern, such as EHR roles ([ADR 0008](lab/docs/adr/0008-iga-entra-id-governance-midpoint-vs-sailpoint-saviynt.md) says when Contoso would buy one) | RAN · harness: the review above |
+| **Other stand-ins** | A Samba AD domain controller (for DC01), a Linux RDP target (for an RDP session to DC01) and a ServiceNow mock (for a ServiceNow instance) let the PAM flow run end to end with no license and no tenant; the mock HR feed (for Workday) drives the joiner flow, which needs the tenant's provisioning API | RAN · harness (Samba AD, RDP target, ServiceNow mock); mock HR feed BUILT |
 
-No row is RAN · tenant. Tenant KPI values, Entra review outcomes and
-break-glass drill times will be added only from the tenant run; until then
-the documents use placeholders such as `<measured: HR-to-disable minutes>`.
+CyberArk, SailPoint and Saviynt sell only to organizations and I hold no
+license. [`STAND-INS.md`](lab/docs/STAND-INS.md) names every stand-in, what
+it replaces, and what it can and cannot show.
 
-## Real products, and the stand-ins
+## Pick your path
 
-Apart from the stand-ins below, everything is the real Microsoft, AWS and
-ServiceNow product, on free or trial licensing (Okta appears only as a
-migration design; nothing of it is built). CyberArk, SailPoint and Saviynt are licensed to organisations and the
-author holds no licence, so a named stand-in does the same job and is said to
-be one:
+### Senior IAM Engineer (Entra)
 
-| Stand-in here | Replaces |
-|---|---|
-| HashiCorp Vault (LDAP secrets engine, exclusive library check-out) | CyberArk Digital Vault + CPM |
-| Apache Guacamole (recorded RDP / SSH, injected credentials) + Vault SSH CA | CyberArk PSM and PSM for SSH |
-| CyberArk Conjur OSS | Conjur Enterprise / CyberArk Secrets Manager |
-| Vault database secrets engine | CyberArk zero-standing-privilege database access |
-| Vault Raft cluster with a transit auto-unseal | CyberArk Vault HA / DR Vault; Azure Key Vault auto-unseal in production |
-| Samba AD domain controller (harness only) | DC01, the lab's Windows Server domain controller in Azure |
-| Linux xrdp container, AD logon by Kerberos (harness only) | An RDP session to DC01 |
-| Mock ServiceNow Table API: changes and their approvals (harness only) | A ServiceNow developer instance at tenant time |
-| Evolveum midPoint | SailPoint / Saviynt |
-| Mock HR feed (CSV + script calling the real Entra inbound provisioning API) | Workday |
-| kind cluster with Vault Kubernetes auth | AKS with Entra Workload ID or CyberArk Secrets Manager |
-| Splunk Enterprise trial in a container, fed by a replay script (BUILT, never started) | Production Splunk, fed by the Azure add-on or Event Hub |
+1. [Target state](lab/docs/target-state.md): target, today and gap for each layer of Microsoft's Enterprise Access Model.
+2. [Graduating a Conditional Access policy](lab/docs/runbooks/graduate-a-ca-policy.md) and the [policy list](lab/docs/standards/conditional-access-design-principles.md): report-only, measure, fix, then enforce one per pull request.
+3. [ADR 0002: PIM design](lab/docs/adr/0002-pim-for-groups-vs-direct-role-eligibility.md): tiers, approvers, expiry and step-up, with the options rejected. Code in [`modules/pim`](lab/terraform/modules/pim/README.md).
+4. [ADR 0004: pipeline identity](lab/docs/adr/0004-pipeline-workload-identity-federation.md) and a [green `lab-tests` run on `main`](https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/39523030602): OIDC, plan and apply split, no stored credential.
 
-The full register, with what each stand-in can and cannot show, is in
-[`lab/docs/STAND-INS.md`](lab/docs/STAND-INS.md).
+### Senior IAM Analyst / IGA
+
+1. [ADR 0012: review tiers and clinical lockout](lab/docs/adr/0012-access-review-no-response-and-clinical-lockout.md) and the [midPoint review's decisions](lab/evidence/midpoint/20261020T162116Z/decisions.csv): who reviews what, and what happens when a reviewer stays silent.
+2. [Vendor evaluation](lab/docs/vendor-evaluation.md): the IGA matrix, and when Contoso would buy SailPoint or Saviynt.
+3. [Application onboarding intake](lab/docs/standards/app-onboarding-intake.md): how an app enters governance, with AWS as the worked example.
+4. [Help-desk identity verification](lab/docs/runbooks/help-desk-identity-verification.md): the verification ladder before a password reset, MFA reset or Temporary Access Pass.
+
+### Senior PAM Engineer
+
+1. [ADR 0007: PAM stand-ins vs. CyberArk](lab/docs/adr/0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md): CyberArk's vocabulary (Safe, Platform, Master Policy, CPM, PSM) mapped to what runs here, gaps included.
+2. [`lab/pam`](lab/pam/README.md) and the PAM flow's [reconciliation report](lab/evidence/pam/20261020T220031Z/reconcile.md): discovery to reconciliation, ticket-gated check-out with dual control, recorded sessions.
+3. [ADR 0019: vault HA and DR](lab/docs/adr/0019-pam-vault-high-availability-and-dr.md) and the [DR drill report](lab/evidence/pam-dr/20261020T220031Z/dr-drill.md): the measured RTO and RPO, and what the drill does not cover.
+4. [The 500-account reconciliation report](lab/evidence/pam-scale/20261020T193913Z/reconcile.md): onboarding at scale, every exception and held account, gap 0.
+
+Everything else, including a 20-minute reading order with swaps for the PAM
+and IGA tracks, the status of every capability and the build order, is in
+[`lab/docs/README.md`](lab/docs/README.md).
+
+## Check a record yourself
+
+Inside any record folder, `shasum -a 256 -c SHA256SUMS` (Linux:
+`sha256sum -c SHA256SUMS`) must end every line in `OK`. A hash shows that
+the files still match what the run wrote, not when or where it ran. The
+stronger check is to run it again; no command needs a tenant or a cloud
+credential. Both are in the [evidence index](lab/evidence/README.md#re-checking-a-record),
+with what each record does **not** prove.
 
 ## Repository map
 
 ```
-.github/                 workflows (plan · apply · AI review · offline lab tests · k8s identity · PAM harness) + Dependabot
-lab/terraform/           envs/bootstrap (human-applied trust anchor) · envs/dev (CI-applied) · aws/ · k8s/ · modules/
-lab/scripts/             mock HR + JML lifecycle, post-apply Graph steps (one orchestrator), NHI / shadow-admin /
-                         KPI / assessment scripts, drills, DC build, Intune, ITDR containment + vault feed, demo reset
-lab/iga/                 access catalog, birthright rules, SoD rules (SOD-01 to SOD-09)
-lab/kql/                 22 detections (the source for Sentinel rules, Log Analytics alerts and the SPL twins)
-lab/splunk/              second SIEM (BUILT, never started): compose, replay ingest, 22 SPL detections
-lab/monitoring/          Sentinel playbooks (ARM): notify, approval-gated containment; the KQL emulator harness (ran 22/22)
-lab/pam/                 Vault · Guacamole · Conjur · midPoint (Docker, loopback-only), dynamic DB credentials,
-                         HA/DR, and the harnesses with one runner (test/run-all.sh)
-lab/k8s/                 kind cluster + audit policy, workload manifests, the one pipeline script, e2e tests
-lab/pipelines/           how the pipeline is wired and what a human must configure
-lab/evidence/            hashed run records (midPoint campaign, dynamic DB, PAM flow, DR drill, 500-account
-                         scale run, Kubernetes run, offline test runs), their index, and the drill log (empty
-                         until the tenant run)
-lab/docs/                architecture, ADRs, target state, roadmap, risk register, CISO brief, threat model,
-                         vendor evaluation, standards, runbooks, evidence capture plan, stand-ins
+.github/          six workflows (plan, apply, AI review, lab tests, k8s identity, PAM harness) + Dependabot
+lab/terraform/    envs/bootstrap (human-applied) · envs/dev (CI-applied) · aws/ · k8s/ · modules/
+lab/scripts/      mock HR + JML, post-apply Graph steps, NHI / KPI / assessment scripts, drills, DC build
+lab/iga/          access catalog, birthright and SoD rules
+lab/kql/          22 detections (Sentinel rules, Log Analytics alerts, SPL twins)
+lab/splunk/       second SIEM (BUILT, never started)
+lab/monitoring/   Sentinel playbooks; the KQL emulator harness
+lab/pam/          Vault · Guacamole · Conjur · midPoint (Docker, loopback-only), HA/DR, harnesses
+lab/k8s/          kind cluster, manifests, the pipeline script, e2e tests
+lab/pipelines/    how the pipeline is wired, and what a human must configure
+lab/evidence/     hashed run records, their index, the drill log (empty until the tenant run)
+lab/docs/         architecture, decisions, target state, roadmap, risks, threat model, standards, runbooks
 ```
-
-## Run the checks yourself
-
-None of these needs a tenant or a cloud credential.
-
-```bash
-# Terraform: validate + mocked tests (HashiCorp Terraform 1.16.5, not tofu)
-cd lab/terraform/modules/pim && terraform init -backend=false && terraform test
-
-# PowerShell: PSScriptAnalyzer + every Pester suite, Graph mocked
-pwsh lab/scripts/powershell/tests/Invoke-LabTests.ps1
-
-# PAM: every harness from one entry point (Docker; about 6 minutes once the images are pulled; --scale adds the 500-account run)
-cd lab/pam && ./test/run-all.sh
-```
-
-`.github/workflows/lab-tests.yml` runs the Terraform and PowerShell checks on
-every pull request with no credential, and `pam-harness.yml` runs the PAM
-runner from a fresh clone on demand and nightly (both configured; no workflow
-has run yet). Details are
-in each folder's README. The Kubernetes segment is optional and
-self-contained (nothing in it talks to Azure or Entra):
-`bash lab/k8s/ci/pipeline.sh` builds a kind cluster, tests it and deletes it;
-design and limits are in [`lab/k8s/README.md`](lab/k8s/README.md).
-
-## Build order (the short version)
-
-1. **Bootstrap** (human, local): state storage, then `lab/terraform/envs/bootstrap`
-   (OIDC identities, their RBAC, Entra diagnostics), then admin consent.
-2. **Pipeline:** `lab/terraform/envs/dev` through PRs. Staging flags in
-   [`lab.tfvars`](lab/terraform/envs/dev/lab.tfvars) keep the free tier, the
-   premium tier, the DC and Sentinel apart, so no trial clock starts early.
-3. **Post-apply:** `lab/scripts/powershell/post-apply/Invoke-PostApply.ps1`
-   runs the tenant settings Terraform cannot express, in dependency order,
-   dry-run by default, with the break-glass check as a gate.
-4. **DC01:** [`lab/scripts/dc`](lab/scripts/dc). **PAM:** [`lab/pam`](lab/pam).
-
-Details: [`lab/terraform/README.md`](lab/terraform/README.md),
-[`lab/scripts/powershell/README.md`](lab/scripts/powershell/README.md) and
-[`lab/pipelines/README.md`](lab/pipelines/README.md).
 
 ## Safety
 
@@ -220,8 +165,8 @@ Kubernetes job needs no cloud credentials at all). Tenant identifiers live in
 GitHub variables; the operator's IP and email are masked GitHub secrets.
 Generated credentials, Terraform state, harness logs and tenant evidence
 exports are gitignored; the hashed run records in `lab/evidence/` hold
-synthetic lab accounts only, no secret. All people and organisations are fictional. See
-[`SECURITY.md`](SECURITY.md).
+synthetic lab accounts only, no secret. All people and organizations are
+fictional. See [`SECURITY.md`](SECURITY.md).
 
 ## License
 

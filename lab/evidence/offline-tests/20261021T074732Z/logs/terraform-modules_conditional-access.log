@@ -1,0 +1,110 @@
+$ terraform -chdir=lab/terraform/modules/conditional-access init -backend=false -input=false -no-color 
+Initializing provider plugins...
+- Finding hashicorp/azuread versions matching "~> 3.10"...
+- Installing hashicorp/azuread v3.10.0...
+- Installed hashicorp/azuread v3.10.0 (signed by HashiCorp)
+
+Terraform has created a lock file .terraform.lock.hcl to record the provider
+selections it made above. Include this file in your version control repository
+so that Terraform can guarantee to make the same selections by default when
+you run "terraform init" in the future.
+
+Terraform has been successfully initialized!
+exit=0
+$ terraform -chdir=lab/terraform/modules/conditional-access validate -no-color
+Success! The configuration is valid.
+
+exit=0
+$ terraform -chdir=lab/terraform/modules/conditional-access test -no-color 
+tests/ca002_ca020_ca021_admins.tftest.hcl... in progress
+  run "ca002_default_roles_template_plus_lab_extras_no_groups"... pass
+  run "ca002_includes_admin_groups_next_to_roles"... pass
+  run "ca002_cannot_drop_a_template_role"... pass
+  run "ca002_can_be_widened"... pass
+  run "ca020_off_by_default"... pass
+  run "ca020_session_only_report_only_4h_on_admin_portals"... pass
+  run "ca020_longer_than_4h_is_refused"... pass
+  run "ca020_without_key_is_refused"... pass
+  run "ca021_off_renders_nothing"... pass
+  run "ca021_renders_report_only_auth_context_policy"... pass
+  run "ca021_without_key_is_refused"... pass
+  run "pim_context_while_ca021_report_only_is_refused"... pass
+  run "pim_context_without_ca021_is_refused"... pass
+  run "pim_context_on_a_different_context_is_refused"... pass
+  run "pim_context_in_the_same_change_as_ca021_enabled_is_refused"... pass
+  run "declared_enabled_without_attestation_is_not_ready"... pass
+  run "attestation_without_ca021_enabled_is_refused"... pass
+  run "pim_context_after_ca021_enforced_plans"... pass
+  run "auth_context_id_outside_graph_range_is_refused"... pass
+  run "ca021_render_contract_with_the_post_apply_script_tests"... pass
+  run "ca023_off_renders_nothing"... pass
+  run "ca023_renders_report_only_protected_actions_policy"... pass
+  run "ca023_without_key_is_refused"... pass
+  run "ca023_cannot_share_the_pim_context"... pass
+tests/ca002_ca020_ca021_admins.tftest.hcl... tearing down
+tests/ca002_ca020_ca021_admins.tftest.hcl... pass
+tests/ca004.tftest.hcl... in progress
+  run "ca004_location_is_bare_guid"... pass
+tests/ca004.tftest.hcl... tearing down
+tests/ca004.tftest.hcl... pass
+tests/ca006_ca007_risk.tftest.hcl... in progress
+  run "flags_off_creates_no_risk_policies"... pass
+  run "risk_policies_report_only_with_safe_shape"... pass
+  run "risk_states_follow_policy_states_map"... pass
+  run "five_key_map_ok_while_flag_off"... pass
+  run "flag_on_without_state_keys_is_refused"... pass
+  run "unknown_state_key_is_refused"... pass
+  run "ca007_medium_test_knob_renames_policy"... pass
+  run "ca007_levels_without_high_are_refused"... pass
+tests/ca006_ca007_risk.tftest.hcl... tearing down
+tests/ca006_ca007_risk.tftest.hcl... pass
+tests/ca008_phishing_resistant.tftest.hcl... in progress
+  run "flag_off_creates_nothing"... pass
+  run "default_measures_all_users_report_only"... pass
+  run "pilot_scope_targets_module_group_only"... pass
+  run "supplied_pilot_group_is_used_and_not_created"... pass
+  run "empty_string_pilot_means_module_group"... pass
+  run "pilot_enforcement_is_allowed"... pass
+  run "all_users_enforcement_without_ack_is_refused"... pass
+  run "all_users_enforcement_with_ack_is_allowed"... pass
+  run "flag_on_without_ca008_key_is_refused"... pass
+  run "phishable_workforce_combination_is_refused"... pass
+  run "phishable_admin_combination_is_refused"... pass
+  run "admin_aaguid_restriction_uses_bare_object_id"... pass
+  run "admin_aaguid_restriction_needs_fido2"... pass
+  run "break_glass_excluded_from_every_policy"... pass
+  run "workforce_rollout_without_admin_aaguids_is_refused"... pass
+  run "workforce_rollout_with_recorded_risk_acceptance_plans"... pass
+  run "ca022_off_by_default"... pass
+  run "ca022_targets_the_psm_app_and_admin_portals_with_the_admin_strength"... pass
+  run "ca022_without_key_is_refused"... pass
+tests/ca008_phishing_resistant.tftest.hcl... tearing down
+tests/ca008_phishing_resistant.tftest.hcl... pass
+tests/ca009_ca010_baseline.tftest.hcl... in progress
+  run "new_flags_off_create_nothing"... pass
+  run "ca009_report_only_user_action_bootstrap_strength"... pass
+  run "ca009_without_key_is_refused"... pass
+  run "ca009_multi_use_tap_is_refused"... pass
+  run "ca009_phishable_combination_is_refused"... pass
+  run "ca009_enforcement_is_a_single_state_flip"... pass
+  run "ca010_report_only_blocks_device_code_for_all"... pass
+  run "ca010_exception_group_is_added_next_to_break_glass"... pass
+  run "ca010_without_key_is_refused"... pass
+  run "ca010_excluding_all_applications_is_refused"... pass
+  run "policy_states_unknown_key_is_refused"... pass
+  run "policy_states_default_covers_every_new_key_report_only"... pass
+tests/ca009_ca010_baseline.tftest.hcl... tearing down
+tests/ca009_ca010_baseline.tftest.hcl... pass
+tests/ca060_clinical.tftest.hcl... in progress
+  run "ca060_off_by_default"... pass
+  run "ca060_report_only_device_filter_workforce_strength_session"... pass
+  run "ca060_custom_profile_name_flows_into_the_rule"... pass
+  run "ca060_profile_name_injection_is_refused"... pass
+  run "ca060_without_workforce_strength_is_refused"... pass
+  run "ca060_without_clinical_groups_is_refused"... pass
+  run "ca060_without_key_is_refused"... pass
+tests/ca060_clinical.tftest.hcl... tearing down
+tests/ca060_clinical.tftest.hcl... pass
+
+Success! 71 passed, 0 failed.
+exit=0

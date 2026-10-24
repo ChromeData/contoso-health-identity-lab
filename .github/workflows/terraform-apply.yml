@@ -20,6 +20,18 @@
 #
 # All third-party actions pinned to full commit SHA (see terraform-plan.yml for
 # the Trivy-2026 supply-chain rationale).
+#
+# NO TENANT WIRED = SKIPPED, NOT PAUSED. With none of the APPLY lane's
+# variables set (this public copy: no tenant), the `azure-config` job emits a
+# notice and the apply job is skipped by its `if:` before it ever asks the
+# prod reviewer, so a merge does not leave a run "Waiting" for an approval
+# that could only end at a failed azure/login. Once any of the variables is
+# set, the apply runs (reviewer-gated as before) and first requires all of
+# them (.github/scripts/azure-config.sh). If the gate job itself fails, the
+# apply does not run and the run is red: for a write path, "fail closed" means
+# no apply.
+# The ARM_* / TF_VAR_* settings below are job-scoped (they were workflow-level),
+# so the gate job never receives the TF_* privacy secrets.
 # =============================================================================
 
 name: terraform-apply
@@ -48,92 +60,48 @@ concurrency:
   group: tf-apply-prod
   cancel-in-progress: false
 
-env:
-  TF_WORKING_DIR: lab/terraform/envs/dev
-  ARM_USE_OIDC: "true"
-  ARM_CLIENT_ID: ${{ vars.AZURE_APPLY_CLIENT_ID }}     # APPLY app (write)
-  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-  # Tenant identifiers (NOT secrets) come from repo Variables; policy knobs come
-  # from the committed lab.tfvars so every flag / CA-state change is a
-  # reviewable diff. List-typed vars fall back to '[]' when unset.
-  TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-  TF_VAR_tenant_id: ${{ vars.AZURE_TENANT_ID }}
-  TF_VAR_key_vault_name: ${{ vars.TF_KEY_VAULT_NAME || 'kv-idlab' }}
-  TF_VAR_onmicrosoft_domain: ${{ vars.TF_ONMICROSOFT_DOMAIN }}
-  TF_VAR_pim_approver_object_ids: ${{ vars.TF_PIM_APPROVER_OBJECT_IDS || '[]' }}
-  # PRIVACY, not credentials: GitHub masks *secrets* in public run logs but
-  # prints *variables* in every step's env header. Your home IP and email are
-  # therefore stored as repository SECRETS purely so they are masked.
-  TF_VAR_operator_ip_ranges: ${{ secrets.TF_OPERATOR_IP_RANGES || '[]' }}
-  TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
-  TF_VAR_sentinel_playbook_id: ${{ vars.TF_SENTINEL_PLAYBOOK_ID }}
-  TF_VAR_key_vault_secrets_officer_ids: ${{ vars.TF_KV_SECRETS_OFFICER_IDS || '[]' }}
-  TF_VAR_access_review_fallback_group_object_id: ${{ vars.TF_ACCESS_REVIEW_FALLBACK_GROUP_OBJECT_ID }}
-  # Access-package approver group (also the review fallback above when that is
-  # unset). A group id, so a Variable; unset = '' = requestor's manager. Set
-  # here, not only in a local terraform.tfvars, or this apply moves approval
-  # back to the manager.
-  TF_VAR_entitlement_approver_group_object_id: ${{ vars.TF_ENTITLEMENT_APPROVER_GROUP_OBJECT_ID }}
-  TF_VAR_intune_vm_admin_login_object_ids: ${{ vars.TF_INTUNE_VM_ADMIN_LOGIN_OBJECT_IDS || '[]' }}
-  # Senior-scope extensions (all staging flags live in lab.tfvars). Tenant
-  # identifiers come from Variables; owner ids and the certificate mailbox
-  # are SECRETS so the env header masks them, AND sensitive Terraform
-  # variables: masking covers only the whole secret string (not each id
-  # of a JSON list) and never the PR comment. aws_scim_credentials is
-  # NEVER passed here: it is written once by a local seeding apply.
-  TF_VAR_pim_tier0_approver_object_ids: ${{ vars.TF_PIM_TIER0_APPROVER_OBJECT_IDS || '[]' }}
-  TF_VAR_privileged_review_reviewer_group_object_id: ${{ vars.TF_PRIVILEGED_REVIEW_REVIEWER_GROUP_OBJECT_ID }}
-  TF_VAR_b2b_connected_organization_id: ${{ vars.TF_B2B_CONNECTED_ORGANIZATION_ID }}
-  TF_VAR_ca008_pilot_group_object_id: ${{ vars.TF_CA008_PILOT_GROUP_OBJECT_ID }}
-  TF_VAR_aws_saml_entity_id: ${{ vars.TF_AWS_SAML_ENTITY_ID }}
-  TF_VAR_aws_saml_acs_urls: ${{ vars.TF_AWS_SAML_ACS_URLS || '[]' }}
-  TF_VAR_aws_access_portal_url: ${{ vars.TF_AWS_ACCESS_PORTAL_URL }}
-  TF_VAR_aws_scim_template_id: ${{ vars.TF_AWS_SCIM_TEMPLATE_ID }}
-  TF_VAR_app_owner_object_ids: ${{ secrets.TF_APP_OWNER_OBJECT_IDS || '[]' }}
-  TF_VAR_saml_cert_notification_emails: ${{ secrets.TF_SAML_CERT_NOTIFICATION_EMAILS || '[]' }}
-  TF_VAR_containment_playbook_id: ${{ vars.TF_CONTAINMENT_PLAYBOOK_ID }}
-  # PIM notification mailbox (modules/pim): a SECRET for the same reason as
-  # the alert email. Unset = '' = tenant-default PIM notifications.
-  TF_VAR_pim_alert_mailbox: ${{ secrets.TF_PIM_ALERT_MAILBOX }}
-  # CA010-Exclusion-<reason> groups, excluded next to break-glass (group ids,
-  # so a Variable). Unset = none. Set here, not only in a local
-  # terraform.tfvars, or this apply removes the exception.
-  TF_VAR_ca010_exception_group_object_ids: ${{ vars.TF_CA010_EXCEPTION_GROUP_OBJECT_IDS || '[]' }}
-  # ServiceNow SAML app (enable_servicenow_sso in lab.tfvars): the instance
-  # URL and, once the IdP record exists, its sys_id. Identifiers (like the AWS
-  # portal URL), so Variables. Unset = '': nothing plans while the flag is
-  # off, and the plan refuses the flag without the URL.
-  TF_VAR_servicenow_instance_url: ${{ vars.TF_SERVICENOW_INSTANCE_URL }}
-  TF_VAR_servicenow_sso_sys_id: ${{ vars.TF_SERVICENOW_SSO_SYS_ID }}
-  # ITDR: the APPLY identity by immutable id (envs/bootstrap output
-  # iac_principal_ids) and extra privileged users - JSON lists of GUIDs.
-  TF_VAR_iac_principal_ids: ${{ vars.TF_IAC_PRINCIPAL_IDS || '[]' }}
-  TF_VAR_privileged_user_object_ids: ${{ vars.TF_PRIVILEGED_USER_OBJECT_IDS || '[]' }}
-  TF_VAR_evidence_storage_account_name: ${{ vars.TF_EVIDENCE_STORAGE_ACCOUNT_NAME || 'stidlabevidence' }}
-  # TF_B2B_CONNECTED_ORGANIZATION (an object) is passed on the plan step, not
-  # here: see that step.
-  # POLICY KNOBS ARE NOT TF_VAR_ HERE, on purpose: itdr_exclude_rules (set in
-  # lab.tfvars) and evidence_immutability_days / _state / _lock_acknowledged
-  # (added to lab.tfvars in the Day 28 lock PR) reach this apply through
-  # -var-file=lab.tfvars. -var-file outranks TF_VAR_, so a
-  # TF_VAR_itdr_exclude_rules would be silently ignored; and a repo Variable
-  # for the evidence_immutability_* trio would let a settings change, with no
-  # PR and no review, Lock the WORM store irreversibly.
-  # Gated apply: refuse to CREATE the AWS SCIM credential empty (PR plans
-  # only warn - they can never hold the token). modules/apps README.
-  TF_VAR_require_scim_credentials: "true"
-
 jobs:
+  # Is a tenant wired for the APPLY identity? run=false (skip + notice) only
+  # when none of these variables is set. Names only are printed.
+  azure-config:
+    name: detect Azure config
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - name: Checkout (gate script only)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Azure tenant wired? (APPLY lane)
+        id: gate
+        env:
+          AZURE_APPLY_CLIENT_ID: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          TFSTATE_RG: ${{ vars.TFSTATE_RG }}
+          TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+        run: >-
+          bash .github/scripts/azure-config.sh gate terraform-apply
+          AZURE_APPLY_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID
+          TFSTATE_RG TFSTATE_STORAGE_ACCOUNT
+
   terraform-apply:
     name: terraform apply (prod, reviewer-gated)
+    needs: azure-config
     runs-on: ubuntu-latest
     # Defence in depth only: a dispatched run executes the chosen branch's own
     # copy of this file, so a branch can delete this line. The real control is
     # the prod environment's deployment-branch policy (main only, see
     # lab/pipelines/README.md §5E), because the APPLY subject
     # `environment:prod` carries no branch ref.
-    if: github.ref == 'refs/heads/main'
+    # The implicit success() also means: no apply if the gate job failed.
+    if: github.ref == 'refs/heads/main' && needs.azure-config.outputs.run == 'true'
     # The required-reviewer gate is configured on this Environment in repo
     # Settings -> Environments -> prod. The run pauses here until approved.
     environment:
@@ -141,9 +109,99 @@ jobs:
     permissions:
       id-token: write          # OIDC token for Entra federation (APPLY app)
       contents: read
+    env:
+      TF_WORKING_DIR: lab/terraform/envs/dev
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_APPLY_CLIENT_ID }}     # APPLY app (write)
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      # Tenant identifiers (NOT secrets) come from repo Variables; policy knobs come
+      # from the committed lab.tfvars so every flag / CA-state change is a
+      # reviewable diff. List-typed vars fall back to '[]' when unset.
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      TF_VAR_key_vault_name: ${{ vars.TF_KEY_VAULT_NAME || 'kv-idlab' }}
+      TF_VAR_onmicrosoft_domain: ${{ vars.TF_ONMICROSOFT_DOMAIN }}
+      TF_VAR_pim_approver_object_ids: ${{ vars.TF_PIM_APPROVER_OBJECT_IDS || '[]' }}
+      # PRIVACY, not credentials: GitHub masks *secrets* in public run logs but
+      # prints *variables* in every step's env header. Your home IP and email are
+      # therefore stored as repository SECRETS purely so they are masked.
+      TF_VAR_operator_ip_ranges: ${{ secrets.TF_OPERATOR_IP_RANGES || '[]' }}
+      TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+      TF_VAR_sentinel_playbook_id: ${{ vars.TF_SENTINEL_PLAYBOOK_ID }}
+      TF_VAR_key_vault_secrets_officer_ids: ${{ vars.TF_KV_SECRETS_OFFICER_IDS || '[]' }}
+      TF_VAR_access_review_fallback_group_object_id: ${{ vars.TF_ACCESS_REVIEW_FALLBACK_GROUP_OBJECT_ID }}
+      # Access-package approver group (also the review fallback above when that is
+      # unset). A group id, so a Variable; unset = '' = requestor's manager. Set
+      # here, not only in a local terraform.tfvars, or this apply moves approval
+      # back to the manager.
+      TF_VAR_entitlement_approver_group_object_id: ${{ vars.TF_ENTITLEMENT_APPROVER_GROUP_OBJECT_ID }}
+      TF_VAR_intune_vm_admin_login_object_ids: ${{ vars.TF_INTUNE_VM_ADMIN_LOGIN_OBJECT_IDS || '[]' }}
+      # Senior-scope extensions (all staging flags live in lab.tfvars). Tenant
+      # identifiers come from Variables; owner ids and the certificate mailbox
+      # are SECRETS so the env header masks them, AND sensitive Terraform
+      # variables: masking covers only the whole secret string (not each id
+      # of a JSON list) and never the PR comment. aws_scim_credentials is
+      # NEVER passed here: it is written once by a local seeding apply.
+      TF_VAR_pim_tier0_approver_object_ids: ${{ vars.TF_PIM_TIER0_APPROVER_OBJECT_IDS || '[]' }}
+      TF_VAR_privileged_review_reviewer_group_object_id: ${{ vars.TF_PRIVILEGED_REVIEW_REVIEWER_GROUP_OBJECT_ID }}
+      TF_VAR_b2b_connected_organization_id: ${{ vars.TF_B2B_CONNECTED_ORGANIZATION_ID }}
+      TF_VAR_ca008_pilot_group_object_id: ${{ vars.TF_CA008_PILOT_GROUP_OBJECT_ID }}
+      TF_VAR_aws_saml_entity_id: ${{ vars.TF_AWS_SAML_ENTITY_ID }}
+      TF_VAR_aws_saml_acs_urls: ${{ vars.TF_AWS_SAML_ACS_URLS || '[]' }}
+      TF_VAR_aws_access_portal_url: ${{ vars.TF_AWS_ACCESS_PORTAL_URL }}
+      TF_VAR_aws_scim_template_id: ${{ vars.TF_AWS_SCIM_TEMPLATE_ID }}
+      TF_VAR_app_owner_object_ids: ${{ secrets.TF_APP_OWNER_OBJECT_IDS || '[]' }}
+      TF_VAR_saml_cert_notification_emails: ${{ secrets.TF_SAML_CERT_NOTIFICATION_EMAILS || '[]' }}
+      TF_VAR_containment_playbook_id: ${{ vars.TF_CONTAINMENT_PLAYBOOK_ID }}
+      # PIM notification mailbox (modules/pim): a SECRET for the same reason as
+      # the alert email. Unset = '' = tenant-default PIM notifications.
+      TF_VAR_pim_alert_mailbox: ${{ secrets.TF_PIM_ALERT_MAILBOX }}
+      # CA010-Exclusion-<reason> groups, excluded next to break-glass (group ids,
+      # so a Variable). Unset = none. Set here, not only in a local
+      # terraform.tfvars, or this apply removes the exception.
+      TF_VAR_ca010_exception_group_object_ids: ${{ vars.TF_CA010_EXCEPTION_GROUP_OBJECT_IDS || '[]' }}
+      # ServiceNow SAML app (enable_servicenow_sso in lab.tfvars): the instance
+      # URL and, once the IdP record exists, its sys_id. Identifiers (like the AWS
+      # portal URL), so Variables. Unset = '': nothing plans while the flag is
+      # off, and the plan refuses the flag without the URL.
+      TF_VAR_servicenow_instance_url: ${{ vars.TF_SERVICENOW_INSTANCE_URL }}
+      TF_VAR_servicenow_sso_sys_id: ${{ vars.TF_SERVICENOW_SSO_SYS_ID }}
+      # ITDR: the APPLY identity by immutable id (envs/bootstrap output
+      # iac_principal_ids) and extra privileged users - JSON lists of GUIDs.
+      TF_VAR_iac_principal_ids: ${{ vars.TF_IAC_PRINCIPAL_IDS || '[]' }}
+      TF_VAR_privileged_user_object_ids: ${{ vars.TF_PRIVILEGED_USER_OBJECT_IDS || '[]' }}
+      TF_VAR_evidence_storage_account_name: ${{ vars.TF_EVIDENCE_STORAGE_ACCOUNT_NAME || 'stidlabevidence' }}
+      # TF_B2B_CONNECTED_ORGANIZATION (an object) is passed on the plan step, not
+      # here: see that step.
+      # POLICY KNOBS ARE NOT TF_VAR_ HERE, on purpose: itdr_exclude_rules (set in
+      # lab.tfvars) and evidence_immutability_days / _state / _lock_acknowledged
+      # (added to lab.tfvars in the Day 28 lock PR) reach this apply through
+      # -var-file=lab.tfvars. -var-file outranks TF_VAR_, so a
+      # TF_VAR_itdr_exclude_rules would be silently ignored; and a repo Variable
+      # for the evidence_immutability_* trio would let a settings change, with no
+      # PR and no review, Lock the WORM store irreversibly.
+      # Gated apply: refuse to CREATE the AWS SCIM credential empty (PR plans
+      # only warn - they can never hold the token). modules/apps README.
+      TF_VAR_require_scim_credentials: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false   # nothing here pushes; no token in .git/config
+
+      # All or nothing: never reach azure/login with part of the configuration.
+      - name: Require complete Azure configuration
+        env:
+          AZURE_APPLY_CLIENT_ID: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          TFSTATE_RG: ${{ vars.TFSTATE_RG }}
+          TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+        run: >-
+          bash .github/scripts/azure-config.sh require terraform-apply
+          AZURE_APPLY_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID
+          TFSTATE_RG TFSTATE_STORAGE_ACCOUNT
 
       - name: Azure login (OIDC, APPLY app)
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2

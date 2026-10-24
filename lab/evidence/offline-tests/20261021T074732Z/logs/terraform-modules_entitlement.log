@@ -1,0 +1,50 @@
+$ terraform -chdir=lab/terraform/modules/entitlement init -backend=false -input=false -no-color 
+Initializing provider plugins...
+- Finding hashicorp/azuread versions matching "~> 3.10"...
+- Installing hashicorp/azuread v3.10.0...
+- Installed hashicorp/azuread v3.10.0 (signed by HashiCorp)
+
+Terraform has created a lock file .terraform.lock.hcl to record the provider
+selections it made above. Include this file in your version control repository
+so that Terraform can guarantee to make the same selections by default when
+you run "terraform init" in the future.
+
+Terraform has been successfully initialized!
+exit=0
+$ terraform -chdir=lab/terraform/modules/entitlement validate -no-color
+Success! The configuration is valid.
+
+exit=0
+$ terraform -chdir=lab/terraform/modules/entitlement test -no-color 
+tests/governance.tftest.hcl... in progress
+  run "defaults_create_nothing_new"... pass
+  run "birthright_packages_have_no_policy_no_expiry"... pass
+  run "defaults_match_iga_catalog"... pass
+  run "t1_flag_never_reviews_clinical_packages"... pass
+  run "t2_flag_reviews_only_long_or_extendable_packages"... pass
+  run "t1_package_reviewed_quarterly_by_governance_group"... pass
+  run "inactive_flag_is_independent"... pass
+  run "reviews_render_deny_by_default"... pass
+  run "pim_body_replaces_same_key_group_review"... pass
+  run "duplicate_review_display_names_are_refused"... pass
+  run "pim_bodies_need_the_t1_flag"... pass
+  run "pim_body_that_keeps_access_on_silence_is_refused"... pass
+  run "deprecated_alias_spares_birthright"... pass
+  run "reviews_without_fallback_fail"... pass
+  run "privileged_reviewer_cannot_review_itself"... pass
+  run "break_glass_is_never_a_review_target_by_name"... pass
+  run "break_glass_is_never_a_review_target_by_id"... pass
+  run "requested_birthright_is_refused"... pass
+  run "automatic_package_with_expiry_is_refused"... pass
+  run "automatic_privileged_package_is_refused"... pass
+  run "extension_without_approval_is_refused"... pass
+  run "privileged_cadence_cannot_be_relaxed"... pass
+  run "sod_pair_of_two_birthright_packages_is_refused"... pass
+  run "b2b_guest_package"... pass
+  run "b2b_specific_org_two_stage"... pass
+  run "b2b_rejects_long_guest_access"... pass
+tests/governance.tftest.hcl... tearing down
+tests/governance.tftest.hcl... pass
+
+Success! 26 passed, 0 failed.
+exit=0

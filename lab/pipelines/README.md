@@ -341,6 +341,39 @@ privacy-only exceptions follow the list):
       `TF_VAR_require_scim_credentials=true` so a CI apply that would create
       it empty fails instead.
 
+**No variables, no Azure jobs: the `azure-config` gate.** Three jobs sign in
+to Azure: `terraform plan`, `terraform apply` and the AI review. A small job
+before each runs [`.github/scripts/azure-config.sh`](../../.github/scripts/azure-config.sh),
+which only checks whether that job's variables are set (it prints names,
+never values):
+
+- **None set** (the state of the public copy, where no tenant is wired): the
+  job is *skipped*, with a notice saying why. A skipped job counts as passed,
+  so the required `terraform plan` check is green instead of red at
+  `azure/login`, and a merge never leaves an apply waiting for a reviewer.
+  The code is still tested before a merge, by the two `lab-tests.yml`
+  required checks (§5 F).
+- **Some set, some missing:** the job runs and fails before it signs in,
+  naming the missing variables. A partly configured job fails; it never skips
+  and never signs in with half the settings.
+- **All set:** the job runs as normal.
+
+| Job | Gated on | Then requires all of |
+|---|---|---|
+| `terraform plan` | `AZURE_PLAN_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `TFSTATE_RG`, `TFSTATE_STORAGE_ACCOUNT` | the same five |
+| `terraform apply` | the same, with `AZURE_APPLY_CLIENT_ID` instead of the PLAN id | the same five |
+| AI review | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT` | those two + `AZURE_PLAN_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` |
+
+Two more rules stop the plan's skip from hiding a broken setup. A **fork PR
+always runs** the plan (and fails, because forks get no OIDC token): a fork's
+run may not see this repo's variables, so "none set" proves nothing there.
+And **`.github/azure-lane.enabled`**: commit this empty file in the PR that
+wires the tenant. Once it is on the base branch, the plan runs on every
+Terraform PR whatever the variables look like, so a run that cannot see them
+(Dependabot's, for example) fails loudly instead of skipping. Only
+`terraform-plan.yml` reads the marker. The gate's own tests
+(`.github/scripts/azure-config.test.sh`) run in `lab-tests.yml`.
+
 **Repository *secrets* (Settings → Secrets and variables → Actions →
 Secrets).** Not credentials: both workflows read them as `secrets.*` only
 because GitHub masks secrets in run logs but prints variables in every step's
@@ -416,9 +449,17 @@ with no PR and no review, lock the WORM store irreversibly.
       required check.) `terraform-plan.yml` has no workflow-level `paths:`
       filter on purpose: GitHub leaves a path-skipped required check *Pending*
       and blocks the merge. It runs on every PR; TruffleHog always scans, and
-      plan + Checkov skip at job level when nothing under `lab/terraform/**`
+      plan + Checkov skip at job level when nothing under `lab/terraform/**`,
+      `.github/scripts/` (the `azure-config` gate) or the workflow itself
       changed (a job skipped by `if:` reports Success). If change detection
       itself fails, they run anyway (fail closed).
+      **The two `lab-tests.yml` checks are not optional.** While no tenant is
+      wired, `terraform plan` skips (§5 D), so none of the three
+      `terraform-plan.yml` checks runs fmt, init, validate or a test: only the
+      `lab-tests.yml` jobs test the code before a merge. The publish script
+      creates the ruleset with all five; a ruleset made with only the first
+      three needs the other two added (Settings → Rules → Rulesets → the `main`
+      ruleset → Require status checks to pass → Add checks).
 - [ ] Outside contributors: a fork PR cannot plan (no OIDC token, §2). Review
       the diff, push the branch into this repo, and merge from a same-repo PR.
 - [ ] (Optional) require branches up to date; block force-push.
@@ -430,8 +471,9 @@ with no PR and no review, lock the WORM store irreversibly.
 - [ ] Open a trivial PR under `lab/terraform/**` → confirm the plan comment, the
       Checkov/TruffleHog checks, and the AI-review comment appear.
 - [ ] Open a docs-only PR (e.g. edit `lab/docs/*.md`) → confirm `terraform plan`
-      and `checkov (IaC scan)` show *Skipped*, `trufflehog (secret scan)` runs,
-      and the PR is mergeable (not stuck on *Pending*).
+      and `checkov (IaC scan)` show *Skipped*, `trufflehog (secret scan)` and
+      the two `lab-tests.yml` checks run, and the PR is mergeable (not stuck on
+      *Pending*).
 - [ ] Merge → confirm `terraform-apply` pauses on the `prod` reviewer gate →
       approve → confirm apply runs with no secret in the logs.
 
@@ -441,13 +483,14 @@ with no PR and no review, lock the WORM store irreversibly.
 
 | Path | Purpose |
 |---|---|
-| `../../.github/workflows/terraform-plan.yml` | every PR: TruffleHog; if `lab/terraform/**` changed, also fmt/init/validate/plan + Checkov |
+| `../../.github/workflows/terraform-plan.yml` | every PR: TruffleHog; if `lab/terraform/**`, `.github/scripts/` or the workflow changed, also fmt/init/validate/plan + Checkov |
 | `../../.github/workflows/terraform-apply.yml` | main: reviewer-gated OIDC apply (a push that touches only `lab/terraform/aws/**` or `lab/terraform/k8s/**` doesn't start it) |
 | `../../.github/workflows/ai-review.yml` | same-repo PR touching `lab/terraform/**`: Azure OpenAI (Entra-auth) security review |
 | `./ai-review/review.py` | stdlib script that calls Azure OpenAI with the Entra bearer token |
+| `../../.github/scripts/azure-config.sh` | the gate in front of plan, apply and AI review: skip when no Azure variable is set, fail when only some are (§5 D) |
 | `../../.github/workflows/k8s-identity.yml` | PR touching `lab/k8s/**` or `lab/terraform/k8s/**` (or manual): runs `../k8s/ci/pipeline.sh` on an ephemeral kind cluster, no cloud credentials (§7) |
 | `../../.github/workflows/lab-tests.yml` | every PR and main, **no credentials**: `terraform fmt`, `init -backend=false` + `validate` in every root and module, every mocked `terraform test`; PSScriptAnalyzer + the Pester suites (`lab/scripts/powershell/tests`, ITDR, PAM dependency scan) with pinned modules; the vault-ingest shell test and the Splunk savedsearches drift check |
-| `../../.github/workflows/pam-harness.yml` | manual and nightly, **no credentials**: `lab/pam/test/run-all.sh` (default suites) from a fresh clone on a fresh runner: no `.env`, no `.secrets/`, no Docker volumes. Its console output and per-suite job summary are the third-party-timestamped run of the PAM harness. BUILT, not run (no workflow has run yet) |
+| `../../.github/workflows/pam-harness.yml` | manual and nightly, **no credentials**: `lab/pam/test/run-all.sh` (default suites) from a fresh clone on a fresh runner: no `.env`, no `.secrets/`, no Docker volumes. Its console output and per-suite job summary are the third-party-timestamped run of the PAM harness. RAN · harness on GitHub's runners: three nightly runs on the published commit, 2026-10-21 to 2026-10-23, each 8/8 suites, 610 passed, 0 failed, 1 skipped (latest [39937464414](https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/39937464414)) |
 
 **Not planned or applied by CI: `lab/terraform/aws/`.** The AWS IAM Identity
 Center root is applied by a human from a short-lived `aws sso login` session.
@@ -489,8 +532,8 @@ a user, `mallory`). `terraform plan -detailed-exitcode` must then exit 2
 
 - **Not a required check.** It is path-filtered (`lab/k8s/**`,
   `lab/terraform/k8s/**`, the workflow itself), and a path-filtered required
-  check stays *Pending* on PRs it skips (§5 F). So the ruleset on `main`
-  keeps its three required checks. To require it, drop
+  check stays *Pending* on PRs it skips (§5 F). So it is not among the five
+  required checks of the ruleset on `main`. To require it, drop
   `paths:` and add job-level change detection as `terraform-plan.yml` does.
 - **Fork PRs** run this workflow in full: with no credentials in the job,
   there is nothing to exfiltrate. (A fork PR that also touches

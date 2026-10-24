@@ -3,10 +3,9 @@
 Just-in-time admin access for Contoso Health: no human holds an admin role at
 rest. It is **activated**, time-boxed, approved where the tier says so, and
 recorded. Decisions: [ADR 0002](../../../docs/adr/0002-pim-for-groups-vs-direct-role-eligibility.md)
-(PIM for Groups as the elevation path) and
-[ADR 0020](../../../docs/adr/0020-pim-activation-design.md) (approver groups,
-eligibility expiry, activation caps, step-up, direct Global Administrator
-eligibility, AU-scoped help desk).
+(PIM for Groups as the elevation path, approver groups, eligibility expiry,
+activation caps, step-up, direct Global Administrator eligibility, AU-scoped
+help desk; ADR 0020 was merged into it).
 
 **Status: BUILT.** `validate` and 32 mocked `terraform test` runs pass
 (HashiCorp Terraform 1.16.5, 2026-10-20). **Nothing has been applied: no
@@ -67,7 +66,7 @@ queue, because an approver who sees every help-desk shift learns to
 rubber-stamp. Two Tier-1 groups are the exception: Intune (it reads LAPS
 passwords and BitLocker keys) and IGA (both of its roles are labelled
 privileged by Microsoft: whoever holds them can change who gets clinical
-access by HR attribute and issue TAPs through a joiner workflow). ADR 0020
+access by HR attribute and issue TAPs through a joiner workflow). ADR 0002
 records both exceptions, with User Administrator. Contributor on the RG is Tier 0 because the RG holds DC01:
 `az vm run-command` runs code as SYSTEM on the domain controller.
 

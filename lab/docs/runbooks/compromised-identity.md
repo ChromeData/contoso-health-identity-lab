@@ -61,8 +61,16 @@ union
 
 Revoking kills refresh tokens and session cookies. Access tokens already issued stay valid until they expire (verify: the current default access-token lifetime, and which apps honour Continuous Access Evaluation).
 
-- **Containment playbook (High ITDR incidents, Sentinel path):** `pb-identity-contain` (`lab/monitoring/playbook-contain.json`) posts a Teams card with *Contain*, *Revoke sessions only* and *Reject*. Only a member of `ITDR-Containment-Approvers` who is not the subject can answer; no answer in 4 hours means no action, and break-glass accounts are refused outright. *Contain* revokes sessions and marks the user confirmed compromised in Identity Protection. It disables a cloud-only account only if the opt-in directory role was granted at deploy time (`-GrantDisableRole`; otherwise the disable returns 403, and admins stay out of its reach). For a synced account it only flags the AD disable: run `lab/scripts/monitoring/Invoke-AdContainment.ps1`, which disables the account on DC01 through `az vm run-command` (step 3). Every outcome is commented on the incident and noted on the ServiceNow ticket. Built and tested offline; never run in a tenant (`lab/scripts/monitoring/README.md`; design in [ADR 0017](../adr/0017-approval-gated-identity-containment.md)).
-- **VIP in a restricted-management AU (RMAU-VIP):** the playbook sends no approval card, because Graph application permissions don't apply to RMAU members. It records *ESCALATED, NOT CONTAINED* on the incident; page the RMAU-scoped responder (the VIP-support PIM group, holding roles scoped to that AU), who revokes sessions and disables the account by hand. For a synced VIP the disable happens in AD (`Invoke-AdContainment.ps1`, step 3). verify: which calls the RMAU blocks.
+- **Containment playbook (High ITDR incidents):** answer the Teams card in
+  `pb-identity-contain` (*Contain*, *Revoke sessions only*, *Reject*; only a
+  listed approver who isn't the subject; no answer in 4 hours means no
+  action). *Contain* revokes sessions and confirms the user compromised; a
+  synced account is only flagged, so continue to step 3. Design and limits:
+  [ADR 0017](../adr/0017-approval-gated-identity-containment.md). Built and
+  tested offline; never run in a tenant.
+- **VIP in a restricted-management AU:** the playbook escalates instead of
+  sending a card; page the RMAU-scoped responder, who revokes and disables by
+  hand.
 - **Portal:** Entra admin center → Users → *user* → **Revoke sessions**.
 - **PowerShell:** `Revoke-MgUserSignInSession -UserId <objectId>`, using the `User.RevokeSessions.All` scope. `lab/scripts/powershell/04-Leaver.ps1` uses the same call.
 - **Graph:** `POST /users/{id}/revokeSignInSessions`.
@@ -115,8 +123,6 @@ Then **revoke sessions again**, because a token minted between the containment s
 | Risk signal | `GET /identityProtection/riskyUsers/{id}` and `riskDetections`. After confirmation, `POST /identityProtection/riskyUsers/confirmCompromised` (Entra ID P2). The playbook's *Contain* does this for you |
 | Mailbox rules and forwarding | Out of the lab's scope. Hand it to the Exchange / M365 admin |
 
-**Lab gap, stated plainly:** the risk-based policies (CA006 user risk, CA007 sign-in risk) and `identity-risk.kql` exist as code but sit behind staging flags, report-only, and have never run in a tenant.
-
 ## 5. Notify
 
 | Who | When | What |
@@ -140,8 +146,4 @@ Then **revoke sessions again**, because a token minted between the containment s
    - a backlog item for that control.
 6. Keep any exported CSVs under the gitignored `lab/evidence/out/`. They contain tenant data and never go in a commit.
 
-**Not built:**
-
-- Containment without a human: the playbook always waits for an approver's answer in Teams, by design.
-- Containment on incidents outside the ITDR rules (`blocked-country-signin.kql` and `failed-signin-spike.kql` only notify).
-- Mailbox investigation.
+**Not built:** containment on incidents outside the ITDR rules (`blocked-country-signin.kql` and `failed-signin-spike.kql` only notify), and mailbox investigation. Containment never runs without an approver's answer, by design.

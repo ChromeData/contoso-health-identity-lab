@@ -1,7 +1,7 @@
 # =============================================================================
 # lab/pam/docker-compose.yml - PAM / IGA stand-ins (LOCAL ONLY, $0)
 # -----------------------------------------------------------------------------
-# Every stand-in, what it replaces, and the on-camera line: lab/docs/STAND-INS.md
+# Every stand-in and what it replaces: lab/docs/STAND-INS.md
 #
 #   vault        HashiCorp Vault Community  -> CyberArk Digital Vault + CPM
 #                (LDAP secrets engine rotates real AD accounts on DC01)

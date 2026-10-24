@@ -41,7 +41,7 @@ config:
 %% (evidence-capture-plan.md).
 %% Node ids are stable on purpose: external references depend on them.
 flowchart TB
-  subgraph KEY["Status key · as of 2026-10-20 · RAN · tenant: nothing yet"]
+  subgraph KEY["Status key · as of 2026-10-21 · RAN · tenant: nothing yet"]
     direction LR
     K1["<b>RAN · harness</b><br/>executed locally, record in repo"]
     K2["<b>BUILT</b><br/>code + offline tests, never applied"]
@@ -64,7 +64,7 @@ flowchart TB
 
   subgraph CICD["Delivery · GitHub Actions · owner: IAM Eng"]
     direction TB
-    PR["PR checks · plan · Checkov<br/>TruffleHog · mocked tests<br/><b>BUILT</b> · not yet run on GitHub"]
+    PR["PR checks · plan · Checkov<br/>TruffleHog · mocked tests<br/><b>BUILT</b> · mocked tests passed on GitHub"]
     APPLY["prod reviewer gate → OIDC apply<br/>no stored credentials<br/><b>BUILT</b> · ADR-0004 · ADR-0005"]
   end
 
@@ -72,7 +72,7 @@ flowchart TB
 
   %% Optional segment (frozen): built and destroyed per run by lab/k8s/ci/pipeline.sh.
   %% Its Vault runs inside the cluster, not the PAM Docker Vault.
-  K8S["Kubernetes workload identity · optional<br/>kind, built + destroyed per run<br/>SA token → Vault · no K8s Secret<br/><b>stand-in:</b> AKS + Entra Workload ID<br/><b>RAN · harness</b> · log not in repo<br/>CI not run · ADR-0010"]
+  K8S["Kubernetes workload identity · optional<br/>kind, built + destroyed per run<br/>SA token → Vault · no K8s Secret<br/><b>stand-in:</b> AKS + Entra Workload ID<br/><b>RAN · harness</b><br/>CI not yet passed · ADR-0011"]
 
   subgraph ENTRA["MICROSOFT ENTRA ID · P2 + ID Governance · owner: IAM Eng"]
     direction TB
@@ -89,12 +89,12 @@ flowchart TB
       CABASE["CA001–CA005 baseline<br/>MFA · admin phishing-resistant<br/>legacy auth · countries<br/>admin portals: compliant device<br/><b>BUILT</b> · ADR-0003"]
       CARISK["Risk-based access<br/>CA006 user risk High:<br/>MFA + password change<br/>CA007 sign-in risk High: block<br/><b>BUILT</b> · ADR-0015"]
       CAPR["Phishing-resistant sign-in<br/>CA008 workforce passkeys (pilot)<br/>CA009 register security info:<br/>TAP or phishing-resistant<br/>CA010 block device code flow<br/><b>BUILT</b> · ADR-0016"]
-      CASESS["Admin + clinical sessions<br/>CA020 admin sign-in frequency<br/>CA021 PIM step-up (auth context)<br/>CA022 PAM broker · CA011 token pilot<br/>CA023 protected actions: CA edits<br/>CA060 shared clinical workstations<br/><b>BUILT</b> · ADR-0014 · ADR-0020"]
+      CASESS["Admin + clinical sessions<br/>CA020 admin sign-in frequency<br/>CA021 PIM step-up (auth context)<br/>CA022 PAM broker · CA011 token pilot<br/>CA023 protected actions: CA edits<br/>CA060 shared clinical workstations<br/><b>BUILT</b> · ADR-0014 · ADR-0002"]
     end
     subgraph PRIV["Privileged + non-human access"]
       direction TB
-      PIM["PIM for Groups<br/>Tier 0: approval, 4 h · Tier 1: 8 h<br/>approver groups · Azure RG eligible<br/>shadow-admin finder<br/><b>BUILT</b> · ADR-0002 · ADR-0020"]
-      HDAU["Help desk scoped to<br/>a workforce AU<br/>VIPs in a restricted AU<br/><b>BUILT</b> · ADR-0020"]
+      PIM["PIM for Groups<br/>Tier 0: approval, 4 h · Tier 1: 8 h<br/>approver groups · Azure RG eligible<br/>shadow-admin finder<br/><b>BUILT</b> · ADR-0002"]
+      HDAU["Help desk scoped to<br/>a workforce AU<br/>VIPs in a restricted AU<br/><b>BUILT</b> · ADR-0002"]
       BG["Break-glass ×2<br/>excluded · alerted<br/>drill scripted<br/><b>BUILT</b> · ADR-0003"]
       NHI["NHI governance<br/>inventory + owners · app policy<br/>admin consent workflow<br/>Agent ID, identity only<br/><b>BUILT</b> · ADR-0018"]
     end

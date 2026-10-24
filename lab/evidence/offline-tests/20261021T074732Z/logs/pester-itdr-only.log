@@ -1,0 +1,7 @@
+
+Starting discovery in 1 files.
+Discovery found 284 tests in 263ms.
+Running tests.
+[+] <repo>/lab/scripts/monitoring/tests/Itdr.Tests.ps1 6.04s (5.24s|554ms)
+Tests completed in 6.05s
+Tests Passed: 284, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0

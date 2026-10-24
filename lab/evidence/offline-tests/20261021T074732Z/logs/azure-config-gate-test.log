@@ -1,0 +1,18 @@
+ok   gate: nothing set -> run=false
+ok   gate: skip prints a notice naming every variable
+ok   gate: skip writes the job summary
+ok   gate: one variable set -> run=true
+ok   gate: prints names, never values
+ok   gate: force (fork PR) -> run=true with nothing set
+ok   gate: marker on base commit -> run=true with nothing set
+ok   gate: base commit without marker -> run=false
+ok   gate: unknown base commit -> run=true (fail closed)
+ok   require: all set -> exit 0
+ok   require: partial -> exit 1
+ok   require: error names the missing variables
+ok   require: never prints a value
+ok   require: nothing set -> exit 1
+ok   rejects a malformed variable name
+ok   rejects an unknown mode
+
+azure-config tests: 16 passed, 0 failed

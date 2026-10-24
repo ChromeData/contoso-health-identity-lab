@@ -6,24 +6,20 @@ source of truth, and the Okta tenant decommissioned. Constraints: nobody loses
 access on day one, every application moves individually with a rollback, and
 every step leaves audit evidence.
 
-**Lab vs. production.** The lab uses an **Okta Integrator Free** org, the
-real Okta product, standing in for the clinic's enterprise Okta tenant. Every
-step below runs for real in the lab, at a scale of 1–3 apps and a handful of
-users. What production adds is called out as **[prod]**.
+**Status: DESIGNED.** Nothing here has run. The runbook is written to run
+in an **Okta Integrator Free** org (the real Okta product, standing in for
+the clinic's enterprise tenant) at a scale of 1–3 apps and a handful of
+users; what production adds is marked **[prod]**.
 
 ---
 
 ## Phase 0 — Inventory and decide (no user impact)
 
-| Inventory item | Where to get it | Lab |
-|---|---|---|
-| Apps in Okta + protocol (SAML / OIDC / SWA / bookmark) | Okta Admin → Applications; Okta API `GET /api/v1/apps` | 1 SAML/bookmark app "Clinic Scheduling (legacy)" |
-| Assignment model per app (groups vs. individuals) | Okta app → Assignments | 1 group |
-| Okta groups and rules | Directory → Groups / Group rules | Clinic-Staff |
-| MFA factors in use | Security → Authenticators | Okta Verify |
-| Okta sign-on and session policies | Security → Authentication policies | default |
-| Any Okta-mastered profile attributes | Directory → Profile editor | none, HR is the source |
-| Inbound federation / SCIM *into* apps from Okta | App → Provisioning | none |
+| Inventory item | Where to get it |
+|---|---|
+| Apps and protocol (SAML / OIDC / SWA / bookmark), assignment model per app | Okta Admin → Applications; `GET /api/v1/apps` |
+| Groups, group rules, MFA factors, sign-on policies | Directory → Groups; Security → Authenticators and Authentication policies |
+| Okta-mastered profile attributes, provisioning *into* apps | Profile editor; each app's Provisioning tab |
 
 **Decisions recorded:** (1) Entra is the target IdP. (2) Coexistence uses
 **Entra as an identity provider for Okta**, so users authenticate once against

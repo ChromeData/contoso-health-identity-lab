@@ -1,0 +1,26 @@
+$ terraform -chdir=lab/terraform/k8s/aks-mapping init -backend=false -input=false -no-color -lockfile=readonly
+Initializing provider plugins...
+- Reusing previous version of hashicorp/azuread from the dependency lock file
+- Installing hashicorp/azuread v3.10.0...
+- Installed hashicorp/azuread v3.10.0 (signed by HashiCorp)
+
+Terraform has been successfully initialized!
+exit=0
+$ terraform -chdir=lab/terraform/k8s/aks-mapping validate -no-color
+Success! The configuration is valid.
+
+exit=0
+$ terraform -chdir=lab/terraform/k8s/aks-mapping test -no-color 
+tests/aks_mapping.tftest.hcl... in progress
+  run "fic_trusts_exactly_nightly_report_for_token_exchange"... pass
+  run "subject_matches_the_vault_role_in_identity"... pass
+  run "plain_http_issuer_is_rejected"... pass
+  run "kind_issuer_is_rejected"... pass
+  run "loopback_issuer_is_rejected"... pass
+  run "private_ip_issuer_is_rejected"... pass
+  run "resource_id_where_object_id_belongs_is_rejected"... pass
+tests/aks_mapping.tftest.hcl... tearing down
+tests/aks_mapping.tftest.hcl... pass
+
+Success! 7 passed, 0 failed.
+exit=0

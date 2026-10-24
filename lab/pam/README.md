@@ -4,7 +4,7 @@ CyberArk, SailPoint and Saviynt are enterprise-licensed, and the author holds
 no licence. This folder runs the closest **real, open-source or community**
 equivalents on your laptop for $0. It is built to run against DC01, the lab's
 AD domain controller in Azure; today it runs against a Samba AD DC harness
-(status below). Every stand-in is named on camera. The exact lines are in
+(status below). Every stand-in, and what it replaces, is listed in
 [`../docs/STAND-INS.md`](../docs/STAND-INS.md).
 
 | Container | Real product | Stands in for | What the demo proves |
@@ -23,9 +23,10 @@ AD domain controller in Azure; today it runs against a Samba AD DC harness
 
 > **Status: RAN · harness.** Every full default run of
 > [`test/run-all.sh`](#test-suites-and-the-runner) on 2026-10-20 (Colima on
-> Apple Silicon, the author's working copy, never yet a fresh clone) passed
-> **8 of 8 suites, 610 checks passed, 0 failed, 1 skipped**. Of the 610,
-> **498 ran end to end in Docker**: the PAM flow against a local Samba AD DC
+> Apple Silicon, the author's working copy, not a fresh clone) passed
+> **8 of 8 suites, 610 checks passed, 0 failed, 1 skipped**; from a fresh
+> clone on GitHub's runners, the nightly runs give the same totals (below).
+> Of the 610, **498 ran end to end in Docker**: the PAM flow against a local Samba AD DC
 > 284/284 (with Tier-0 dual control and a recorded RDP session to the Linux
 > xrdp stand-in), the midPoint campaign 91/91, dynamic database credentials
 > 60/60 and the Vault audit feed for the anomaly detection 63 (+1 SKIP: no
@@ -56,9 +57,14 @@ AD domain controller in Azure; today it runs against a Samba AD DC harness
 > report; RTO 32.5, 40.5 and 42.1 s in its three records, target 300 s, on a
 > separate rehearsal cluster holding test markers, not the vault that holds
 > the AD credentials) and `pam-scale/` (`20261020T193913Z`: 500 accounts,
-> 79/79, GAP 0). No run has yet started from a fresh clone with no `.env`
-> and no volumes; `.github/workflows/pam-harness.yml` does that on a GitHub
-> runner and is BUILT, not run.
+> 79/79, GAP 0). From a fresh clone with no `.env` and no volumes,
+> `.github/workflows/pam-harness.yml` runs the default suites on a GitHub
+> runner every night: three runs so far (2026-10-21 to 2026-10-23, on the
+> published commit), each 8/8 suites, 610 passed, 0 failed, 1 skipped
+> ([latest run](https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/39937464414);
+> all three in the
+> [evidence index](../evidence/README.md#runs-on-githubs-runners)). That is
+> still RAN · harness: containers on a runner, not a tenant.
 >
 > **RAN · tenant: nothing.** Nothing here has run against the Azure DC01,
 > Entra ID or ServiceNow. The `az` calls are exercised through a stub; the
@@ -724,7 +730,7 @@ first when `e2e` or `midpoint` is selected. The `scale` suite is optional
 and off by default (several minutes): it runs only with `--scale` or when
 named in `--only`.
 
-| Suite | Script | What it proves | Needs | Every default run on 2026-10-20 (latest: the newest `../evidence/offline-tests/` record) |
+| Suite | Script | What it proves | Needs | Every default run on 2026-10-20 (latest: the newest `../evidence/offline-tests/` record; the same in the nightly fresh-clone runs on GitHub's runners) |
 |---|---|---|---|---|
 | `dependency-scan` | `test/Get-AccountDependencies.Tests.ps1` (Pester) | The Windows dependency scan's matching logic, offline, on fixtures (the scan itself has never run on a Windows host; rotation is gated on the hand-maintained `accounts-dependencies.json`) | `pwsh` + Pester 5 | 8 passed |
 | `ingest` | `../scripts/monitoring/tests/ingest-vault-audit.test.sh` | The Vault audit → `VaultCheckout_CL` feed script, against fixtures and stubs | `jq` | 30 passed |
@@ -903,7 +909,7 @@ onboarding would skip its first rotation.
 
 ## Verify (definition of done)
 
-- [x] `test/run-all.sh --publish`: 8/8 suites, 610 passed, 0 failed, 1 skipped; record checks 8/8 (2026-10-20 22:00 UTC, run `20261020T220031Z`, Colima, author's working copy). The same totals in every later default run on the current code (latest: the newest `../evidence/offline-tests/` record). Not yet from a fresh clone (`.github/workflows/pam-harness.yml`, BUILT)
+- [x] `test/run-all.sh --publish`: 8/8 suites, 610 passed, 0 failed, 1 skipped; record checks 8/8 (2026-10-20 22:00 UTC, run `20261020T220031Z`, Colima, author's working copy). The same totals in every later default run on the current code (latest: the newest `../evidence/offline-tests/` record). From a fresh clone: `.github/workflows/pam-harness.yml`, nightly on GitHub's runners, the same totals in each of its three runs so far (2026-10-21 to 2026-10-23; latest [39937464414](https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/39937464414))
 - [x] `test/e2e.sh` against the Samba AD harness: 284/284 PASS (same run, incl. Tier-0 dual control, the RDP session to the Linux xrdp stand-in (g4), OIDC mode g3 and the fail-closed policy gates; hashed record `../evidence/pam/20261020T220031Z/` with `rdp-recording.json`; earlier 241/241 records `20261020T184052Z`, `20261020T204851Z` predate dual control and g4)
 - [x] Dual control: `test/itsm-dual-control.test.sh` 45/45 offline; through `psm-session.sh` / `psm-ssh.sh` in e2e: Tier-0 self-approval and single approver refused, two distinct approvers accepted, Tier-1 single approver accepted (same run)
 - [x] Recorded RDP session through Guacamole to `rdp-target` (**Linux xrdp stand-in for DC01**, not Windows): the Vault-injected AD password logs on (Kerberos), the recording passes the format check (`recording-format` 29/29 proves the check) and the History API serves the same bytes; the old password is refused after check-in (same run)

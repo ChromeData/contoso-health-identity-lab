@@ -278,7 +278,7 @@ function Test-PublicRecordSafe {
     # (parity-tested). Emits the offending strings (call it inside @()).
     param([string]$Json)
     $bad = @()
-    foreach ($p in '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+', '\b\d{1,3}(\.\d{1,3}){3}\b', '\b[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}\b', '(?i)onmicrosoft\.com', '(?i)\b[0-9a-f]{1,4}(:[0-9a-f]{0,4}){4,7}\b') {
+    foreach ($p in '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+', '\b\d{1,3}(\.\d{1,3}){3}\b', '\b[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}\b', '(?i)onmicrosoft\.com', '(?i)\b[0-9a-f]{1,4}(:[0-9a-f]{0,4}){4,7}\b', '(?i)(?<![0-9a-f\]]|[0-9a-f]:)(?:(?:[0-9a-f]{1,4}:){1,7}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?|::[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})(?![0-9a-z])') {
         foreach ($m in [regex]::Matches($Json, $p)) { $bad += $m.Value }
     }
     return @($bad | Sort-Object -Unique)

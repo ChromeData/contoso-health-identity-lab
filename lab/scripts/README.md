@@ -205,7 +205,7 @@ script it calls.
 |---|---|
 | `mock-hr/hr_feed.csv` | §2 Joiner — the mock HR record shown for "Dana Okafor — Nurse" |
 | `mock-hr/Invoke-InboundProvisioning.ps1` | §2 Joiner — "Trigger API-driven inbound provisioning" (the Workday/SuccessFactors stand-in) |
-| `mock-hr/README.md` | §2 — stand-in mapping + permissions; the spoken line is STAND-INS.md row 1 |
+| `mock-hr/README.md` | §2 — stand-in mapping + permissions; the stand-in is STAND-INS.md row 1 |
 | `powershell/01-Verify-Baseline.ps1` | §4 break-glass excluded from every CA policy + §5 zero-standing-admin premise |
 | `powershell/post-apply/Set-PimGroupEligibility.ps1` | §5 PIM — makes the manager *eligible* (not active) |
 | `powershell/post-apply/Set-IncompatibleAccessPackages.ps1` | §2 Joiner — the separation-of-duties rule |

@@ -17,7 +17,7 @@
 # STAND-IN: Vault Kubernetes auth stands in for CyberArk Conjur authn-k8s
 # (or Entra Workload ID + Key Vault on AKS); the impersonated groups stand in
 # for Entra groups surfaced through AKS Entra integration.
-# lab/docs/STAND-INS.md has the on-camera lines.
+# lab/docs/STAND-INS.md lists each stand-in and what it replaces.
 #
 # PROVIDERS (checked on the GitHub releases pages, 2026-10-19):
 #   hashicorp/vault      ~> 5.12.0 (5.12.0 released 2026-09-17; 5.13.0 from

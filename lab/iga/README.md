@@ -4,8 +4,10 @@ Code for [ADR 0012](../docs/adr/0012-access-review-no-response-and-clinical-lock
 (risk-tiered certification and clinical lockout). Contoso Health is fictional.
 
 **Status: BUILT.** The four scripts below pass their Pester suites with
-every Graph call mocked (part of the 917 lab tests that passed on
-2026-10-20), and the entitlement module's 26 mocked `terraform test` runs
+every Graph call mocked (part of the 1074 lab tests that passed on
+2026-10-21 in
+[`offline-tests/20261021T074732Z`](../evidence/offline-tests/20261021T074732Z/README.md)),
+and the entitlement module's 26 mocked `terraform test` runs
 check the packages against `access-catalog.json`. **RAN · tenant: nothing.**
 The scripts' `.NOTES` list what was confirmed on Microsoft Learn and what is
 still `verify:`. The local proof of the same certification design is the

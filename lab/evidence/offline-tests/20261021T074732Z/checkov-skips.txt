@@ -1,0 +1,44 @@
+Checkov 3.3.20 on the tested copy (derived from `checkov -d lab/terraform --framework terraform -o json`, same session)
+
+this run:   passed 61, failed 0, skipped 15
+committed HEAD (git archive HEAD lab/terraform, before the inline skips): passed 56, failed 4, skipped 12
+
+failed in this run: 0
+
+failed at HEAD, not failed now: 4
+  CKV2_AZURE_21  module.evidence_store.azurerm_storage_container.evidence
+  CKV2_AZURE_31  module.keyvault.azurerm_subnet.private_endpoints
+  CKV_AZURE_119  module.dc_vm.azurerm_network_interface.dc
+  CKV_AZURE_119  module.intune_vm.azurerm_network_interface.vm
+
+skipped in this run, each by an inline #checkov:skip with this reason:
+  CKV2_AZURE_1  module.evidence_store.azurerm_storage_account.evidence
+      Microsoft-managed keys by design; a CMK adds a key whose loss makes WORM evidence unreadable.
+  CKV2_AZURE_21  module.evidence_store.azurerm_storage_container.evidence
+      Blob read logging is configured: azurerm_monitor_diagnostic_setting.blob sends the allLogs category group (StorageRead, StorageWrite, StorageDelete) of blobServices/default to Log Analytics. CKV2_AZURE_21 passes only when an azurerm_log_analytics_storage_insights resource is attached and does not read diagnostic settings.
+  CKV2_AZURE_33  module.evidence_store.azurerm_storage_account.evidence
+      Private endpoint is opt-in (enable_private_endpoint); the lab operator has no VNet-connected workstation.
+  CKV_AZURE_119  module.dc_vm.azurerm_network_interface.dc
+      Accepted, time-boxed lab risk (ADR 0013). DC01's public IP admits only RDP and LDAPS from allowed_ip_ranges (single IPv4 /32 hosts, enforced in variables.tf; empty list = no inbound rule) and is the DC's explicit outbound path. Production: no public IP on a DC.
+  CKV_AZURE_119  module.intune_vm.azurerm_network_interface.vm
+      Lab VM standing in for a corporate laptop. Its public IP carries operator RDP (NSG: TCP 3389 from allowed_ip_ranges only, each no wider than /24; empty list = no inbound rule) and the VM's outbound path to Entra and Intune. In production the compliant device is a physical Intune-managed laptop, not a VM with a public IP.
+  CKV_AZURE_151  module.dc_vm.azurerm_windows_virtual_machine.dc
+      Encryption at host needs the EncryptionAtHost feature registered on the subscription; the lab DC's disks use platform-managed server-side encryption (lab/terraform/README.md, Checkov baseline).
+  CKV_AZURE_151  module.intune_vm.azurerm_windows_virtual_machine.vm
+      Encryption at host needs the EncryptionAtHost feature registered on the subscription; the lab endpoint's disks use platform-managed server-side encryption (lab/terraform/README.md, Checkov baseline).
+  CKV_AZURE_189  module.keyvault.azurerm_key_vault.idlab
+      Public access is opened only to allowed_ip_ranges (operator IP) in the lab; empty list = disabled.
+  CKV_AZURE_249  module.pipeline_identity.azuread_application_federated_identity_credential.apply_prod
+      The subject is pinned to this repository's prod environment (local.apply_subject, the immutable owner/repo form); Checkov's subject pattern does not recognise that form.
+  CKV_AZURE_249  module.pipeline_identity.azuread_application_federated_identity_credential.plan_pr
+      The subject is pinned to this repository's pull_request events (local.plan_subject, the immutable owner/repo form); Checkov's subject pattern does not recognise that form.
+  CKV_AZURE_33  module.evidence_store.azurerm_storage_account.evidence
+      No queues are used. queue_properties logging is data-plane only, which this module avoids (shared key off, data_plane_available = false); blob access logs go to Log Analytics below.
+  CKV_AZURE_50  module.dc_vm.azurerm_windows_virtual_machine.dc
+      The forest is built with az vm run-command (lab/scripts/dc/README.md), which runs through the VM agent's extension path; extensions stay allowed.
+  CKV_AZURE_50  module.intune_vm.azurerm_windows_virtual_machine.vm
+      The Entra join needs the AADLoginForWindows VM extension (see the identity block below); blocking extensions would make the VM unjoinable.
+  CKV_AZURE_59  module.evidence_store.azurerm_storage_account.evidence
+      Public access is opened only to allowed_ip_ranges (operator IP) in the lab; empty list = disabled.
+  CKV_AZURE_93  module.dc_vm.azurerm_managed_disk.ntds
+      Platform-managed keys by design in the lab; a customer-managed key adds a Key Vault key whose loss makes the DC's NTDS disk unreadable (same trade-off as the evidence store).

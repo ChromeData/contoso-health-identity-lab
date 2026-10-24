@@ -100,6 +100,7 @@ resource "azurerm_public_ip" "dc" {
 }
 
 resource "azurerm_network_interface" "dc" {
+  #checkov:skip=CKV_AZURE_119:Accepted, time-boxed lab risk (ADR 0013). DC01's public IP admits only RDP and LDAPS from allowed_ip_ranges (single IPv4 /32 hosts, enforced in variables.tf; empty list = no inbound rule) and is the DC's explicit outbound path. Production: no public IP on a DC.
   name                = "nic-${var.vm_name}"
   location            = var.location
   resource_group_name = var.resource_group_name

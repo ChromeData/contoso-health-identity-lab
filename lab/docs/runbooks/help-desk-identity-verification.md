@@ -5,7 +5,7 @@
 tenant. The help-desk roles are code only: `PIM-Tier1-Helpdesk` holds
 Helpdesk Administrator and Authentication Administrator, scoped to the
 `AU-Workforce-Standard` administrative unit when `enable_helpdesk_au_scoping`
-is on (`modules/pim/helpdesk.tf`; design in ADR 0020; see *Not built*).
+is on (`modules/pim/helpdesk.tf`; design in ADR 0002; see *Not built*).
 
 ## Why this exists
 
@@ -49,42 +49,26 @@ is on (`modules/pim/helpdesk.tf`; design in ADR 0020; see *Not built*).
 | none | Break-glass (`bg-admin-NN`) | Never through the help desk | [break-glass-drill.md](break-glass-drill.md) custody procedure |
 
 Entra Verified ID Face Check would replace the video check for remote V3. It
-is out of scope under ADR 0011, and remote privileged recovery is that
-ADR's revisit trigger.
+is out of scope under ADR 0011, whose revisit trigger is a need for remote
+identity proofing.
 
-## What each role can and cannot do
+## Who can do what
 
-- **Service desk (V1–V2-C): Authentication Administrator,** eligible through
-  PIM and scoped to an administrative unit of ordinary workforce users. It's
-  a Tier-1 role: activation needs a justification and lasts at most the
-  Tier-1 cap in `modules/pim` (8 hours, one shift; the privileged-access
-  standard's target is 4).
-  - **What it covers:** authentication methods (including TAP) and
-    passwords, for non-admin users only.
-  - **What Microsoft's role tables put out of its reach:** Global
-    Administrators, most admin roles, members and owners of role-assignable
-    groups (so every eligible member of `Privileged-IAM-Admins`), and users
-    in a restricted management administrative unit.
-  - **Not used in this runbook:** its disable, delete and restore rights.
-- **IAM L2 (V3 only): Privileged Authentication Administrator.** It can act
-  on any user, Global Administrators included, so it's Tier 0. It is
-  eligible through PIM (`PIM-Tier0-Privileged-Auth-Admins`), with approval,
-  a ticket number and a 2-hour maximum.
-- **Never a help-desk role: Authentication Policy Administrator,** which
-  changes the methods policy itself.
-- **VIPs with no admin role** aren't covered by that role scoping. Put them
-  in a restricted management administrative unit. That takes Entra ID P1
-  for each AU administrator, and its members drop out of PIM, entitlement
-  management, Lifecycle Workflows and access reviews, so VIP leavers and
-  reviews become manual (Microsoft Learn, restricted management
-  administrative units, checked 2026-10-20).
-- **The help desk never:**
-  - adds a phone method on the caller's word
-  - issues a multi-use TAP
-  - excludes anyone from Conditional Access
-  - touches break-glass
-- **The scripts follow the same split.** `07-Passwordless-Rollout.ps1
-  -IssueTapFor` documents it and refuses break-glass.
+- **Service desk (V1–V2-C):** `PIM-Tier1-Helpdesk` (Helpdesk and
+  Authentication Administrator), eligible through PIM for one 8-hour shift
+  and scoped to an administrative unit of ordinary workforce users. It can
+  reset passwords and methods (including TAP) for non-admins only: never a
+  Global Administrator, most admin roles, a member or owner of a
+  role-assignable group, or a user in a restricted-management AU.
+- **IAM L2 (V3 only):** Privileged Authentication Administrator, Tier 0:
+  eligible through PIM with approval, a ticket number and a 2-hour maximum.
+- **Never a help-desk role:** Authentication Policy Administrator.
+- **The help desk never** adds a phone method on the caller's word, issues
+  a multi-use TAP, excludes anyone from Conditional Access or touches
+  break-glass. `07-Passwordless-Rollout.ps1 -IssueTapFor` refuses
+  break-glass too.
+
+Role design: [ADR 0002](../adr/0002-pim-for-groups-vs-direct-role-eligibility.md).
 
 ## Procedure
 
@@ -136,19 +120,9 @@ Fill these in after running.
 
 ## Not built
 
-- **Code only:** the AU scoping. The provider can't create dynamic AU
-  membership, so filling `AU-Workforce-Standard` is a tenant-time Graph step
-  (`modules/pim/helpdesk.tf`). The restricted management administrative
-  unit for VIPs is a Graph call too, because the provider can't set that
-  property: `post-apply/New-RestrictedAdminUnit.ps1`, never run.
-- **Code only, never applied:** CA002 now lists Microsoft's template admin
-  roles plus the lab's tier extras (Authentication Administrator and
-  Privileged Authentication Administrator included), and can also target
-  the admin groups (`admin_scope_group_object_ids`). Conditional Access
-  doesn't enforce its directory-role condition for
-  administrative-unit-scoped role assignments (a Microsoft Learn warning,
-  checked 2026-10-20), so AU-scoped help-desk admins are covered only
-  through their group. CA002 is report-only, so none of this
-  requires phishing-resistant MFA yet.
-- **Nothing here has run:** no ticket has been matched to an incident, and
-  no QA sample exists.
+- **Code only:** the AU scoping (`modules/pim/helpdesk.tf`; filling
+  `AU-Workforce-Standard` is a tenant-time Graph step) and the VIP
+  restricted-management AU (`post-apply/New-RestrictedAdminUnit.ps1`, never
+  run). CA002 covers the AU-scoped help-desk admins through their group,
+  because CA doesn't evaluate AU-scoped role assignments; it is report-only.
+- **Nothing here has run:** no ticket matched to an incident, no QA sample.

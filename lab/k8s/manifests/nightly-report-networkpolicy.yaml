@@ -1,0 +1,66 @@
+# =============================================================================
+# nightly-report NetworkPolicy: the workload's pod may send traffic to exactly
+# two places, and nothing may connect to it. Identity decides WHO may read the
+# database password (a Vault role bound to one service account); this policy
+# limits WHERE the pod can talk, so a compromised report job cannot reach
+# other pods, the Kubernetes API or the internet.
+#
+#   ingress: none. Nothing connects to the report job. Its probes are exec
+#            probes, which run through the kubelet, not the pod network.
+#   egress:  1. Vault's server pods (namespace vault), TCP 8200: the injected
+#               Vault Agent logs in (auth/kubernetes) and reads
+#               clinical/data/db at vault.vault.svc:8200.
+#            2. Cluster DNS (kube-dns in kube-system), UDP and TCP 53, to
+#               resolve vault.vault.svc.
+#
+# Selectors: the labels the Vault Helm chart (0.34.1) puts on its server pods
+# (app.kubernetes.io/name=vault + component=server; the injector's pods are
+# app.kubernetes.io/name=vault-agent-injector, so they are NOT reachable), the
+# k8s-app=kube-dns label of the cluster DNS pods, and
+# kubernetes.io/metadata.name, which the API server sets on every namespace.
+#
+# Enforcement needs a network plugin that implements NetworkPolicy: kind's
+# default, kindnet, does; on AKS it is Azure CNI powered by Cilium, or Calico.
+# Checkov CKV2_K8S_6 fails any pod that no NetworkPolicy selects. Applied with
+# the Deployment by `kubectl apply -f lab/k8s/manifests/` (pipeline stage 8).
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nightly-report
+  namespace: clinical-apps
+  labels:
+    app.kubernetes.io/name: nightly-report
+    app.kubernetes.io/part-of: contoso-health-identity-lab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nightly-report
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+              component: server
+      ports:
+        - protocol: TCP
+          port: 8200
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
