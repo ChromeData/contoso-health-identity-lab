@@ -38,10 +38,10 @@ enable_access_reviews_inactive    = false
 # enable_helpdesk_au_scoping: AU-Workforce-Standard + help-desk roles scoped
 # to it (needs enable_pim_tiers). enable_global_admin_pim_policy: the GA
 # role's own PIM policy, written by post-apply/Set-DirectoryRolePimPolicies.ps1.
-enable_pim_tiers               = false
+enable_pim_tiers               = true
 enable_pim_azure_resources     = false
-enable_helpdesk_au_scoping     = false
-enable_global_admin_pim_policy = false
+enable_helpdesk_au_scoping     = true
+enable_global_admin_pim_policy = true
 
 # Tier-0 PIM activation step-up on auth context c1 (CA021). The plan refuses
 # the context unless CA021 is DECLARED "enabled" (ca_policy_states) AND
@@ -95,7 +95,7 @@ accept_admin_synced_passkey_risk = false
 enable_registration_ca        = true
 enable_device_code_block      = true
 enable_admin_session_controls = true
-enable_pim_auth_context       = false
+enable_pim_auth_context       = true
 enable_protected_actions_ca   = false
 enable_shared_clinical_ca     = false
 
