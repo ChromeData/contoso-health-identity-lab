@@ -97,8 +97,13 @@ case "$cmd" in
     ( cd "$DEV_DIR" && "$TF" init -reconfigure -input=false \
         -backend-config="resource_group_name=$(ghvar TFSTATE_RG)" \
         -backend-config="storage_account_name=$(ghvar TFSTATE_STORAGE_ACCOUNT)" >/dev/null \
-      && "$TF" output -json ) > "$OUTPUTS"
-    echo "saved ($(wc -c <"$OUTPUTS" | tr -d ' ') bytes)" ;;
+      && "$TF" output -json ) > "$OUTPUTS.tmp"
+    # Drop outputs that are credentials (the post-apply steps never read them)
+    # and keep the file readable by you only.
+    umask 077
+    python3 -c "import json,sys; d=json.load(open(sys.argv[1])); [d.pop(k,None) for k in ('dc_admin_password',)]; json.dump(d,open(sys.argv[2],'w'))" "$OUTPUTS.tmp" "$OUTPUTS"
+    rm -f "$OUTPUTS.tmp"; chmod 600 "$OUTPUTS"
+    echo "saved ($(wc -c <"$OUTPUTS" | tr -d ' ') bytes, credentials removed, readable by you only)" ;;
 
   post)
     stage="${1:?usage: turn.sh post <stage> [go]}"; mode="${2:-}"
