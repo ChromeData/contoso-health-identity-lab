@@ -68,7 +68,33 @@ cleanup_after() {
   esac
 }
 
+# Moving FORWARD: the steps after each stage's apply that Terraform does not do
+# (lab/scripts/powershell/post-apply/Invoke-PostApply.ps1 and friends).
+post_apply_for() {
+  case "$1" in
+    day1)
+      echo "  - day1: Invoke-PostApply.ps1 -Execute -Only baseline (break-glass excluded from every CA policy: the gate)." ;;
+    day2)
+      echo "  - day2: Invoke-PostApply.ps1 -Execute -Only auth-methods,auth-context,directory-role-pim; then the AU-Workforce-Standard membership rule (step helpdesk-au)." ;;
+    day3)
+      echo "  - day3: Invoke-PostApply.ps1 -Execute -Only sod,app-governance,consent (auto-assignment and lifecycle-workflows once HR people exist)." ;;
+    sentinel)
+      echo "  - sentinel: nothing to run; check the analytics rules show Enabled." ;;
+    dc)
+      echo "  - dc: lab/scripts/dc: 01 forest, reboot, 02 configure, 04 Cloud Sync agent; then mock-hr/New-InboundProvisioningApp.ps1." ;;
+  esac
+}
+
 die() { echo "rewind-lab: $*" >&2; exit 1; }
+flags() { grep -E '^[a-z_]+ *= *(true|false)' | sed -E 's/ *= */=/' | sort -t= -k1,1; }
+
+# --where: print the stage origin/main is at (or "none") and exit.
+if [ "${1:-}" = "--where" ]; then
+  cd "$(git rev-parse --show-toplevel)"; git fetch -q origin main
+  now=$(git show origin/main:"$DEV_DIR/lab.tfvars" | flags); at=none
+  for s in "${STAGES[@]}"; do [ "$(git show "$(stage_commit "$s"):$DEV_DIR/lab.tfvars" | flags)" = "$now" ] && at="$s"; done
+  echo "$at"; exit 0
+fi
 
 [ $# -ge 1 ] || die "usage: $0 <p2|day1|day2|day3|sentinel|dc> [--open-pr]"
 TARGET="$1"; OPEN_PR=false
@@ -78,21 +104,22 @@ COMMIT=$(stage_commit "$TARGET") || die "unknown stage '$TARGET' (use: ${STAGES[
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 git fetch -q origin main
-CURRENT=$(git show origin/main:"$DEV_DIR/lab.tfvars")
+# BASE_REF: what "now" is (default origin/main). Override only to test, e.g. BASE_REF=7a868c2.
+BASE_REF="${BASE_REF:-origin/main}"
+CURRENT=$(git show "$BASE_REF":"$DEV_DIR/lab.tfvars")
 WANTED=$(git show "$COMMIT:$DEV_DIR/lab.tfvars")
-[ "$CURRENT" != "$WANTED" ] || die "origin/main is already at stage '$TARGET'."
+[ "$CURRENT" != "$WANTED" ] || die "$BASE_REF is already at stage '$TARGET'."
 
 BRANCH="rewind/${TARGET}-$(date -u +%Y%m%dT%H%M%SZ)"
 WT=$(mktemp -d "${TMPDIR:-/tmp}/rewind-lab.XXXXXX")
 cleanup() { git worktree remove --force "$WT" >/dev/null 2>&1 || true; $OPEN_PR || git branch -D "$BRANCH" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-git worktree add -q -b "$BRANCH" "$WT" origin/main
+git worktree add -q -b "$BRANCH" "$WT" "$BASE_REF"
 ( cd "$WT" && git checkout -q "$COMMIT" -- "${FILES[@]}" )
 
-echo "== Rewind to '$TARGET' (files from $COMMIT) =="
+echo "== Move the lab to stage '$TARGET' (files from $COMMIT) =="
 echo "-- flag changes (lab.tfvars): flag  now -> after --"
-flags() { grep -E '^[a-z_]+ *= *(true|false)' | sed -E 's/ *= */=/' | sort -t= -k1,1; }
 join -t= -a1 -a2 -e absent -o 0,1.2,2.2 <(flags <<<"$CURRENT") <(flags <<<"$WANTED") \
   | awk -F= '$2 != $3 { printf "  %-38s %s -> %s\n", $1, $2, $3 }'
 
@@ -108,34 +135,48 @@ if [ "$rc" -ne 0 ]; then
   die "the mocked test fails for stage '$TARGET' (exit $rc); not opening a PR. Full log: $KEPT"
 fi
 
-echo "-- cleanup Terraform cannot do (do it after the rewind apply) --"
-crossing=false
-for ((i=${#STAGES[@]}-1; i>=0; i--)); do
-  s=${STAGES[$i]}
-  [ "$s" = "$TARGET" ] && break
-  # Only stages that are live on main are crossed.
-  if git merge-base --is-ancestor "$(stage_commit "$s")" origin/main; then cleanup_after "$s"; crossing=true; fi
+# Where is main now? The stage whose flag set equals main's flag set. Git
+# ancestry cannot answer this: after one rewind every stage commit is still an
+# ancestor of main while its flags are off.
+index_of() { local k; for k in "${!STAGES[@]}"; do [ "${STAGES[$k]}" = "$1" ] && { echo "$k"; return; }; done; echo -1; }
+CUR_FLAGS=$(flags <<<"$CURRENT")
+CUR_STAGE=""
+for s in "${STAGES[@]}"; do
+  [ "$(git show "$(stage_commit "$s"):$DEV_DIR/lab.tfvars" | flags)" = "$CUR_FLAGS" ] && CUR_STAGE="$s"
 done
-$crossing || echo "  - none"
+TI=$(index_of "$TARGET")
+if [ -n "$CUR_STAGE" ]; then CI=$(index_of "$CUR_STAGE"); echo "-- main is at stage '$CUR_STAGE' --"
+else CI=$((${#STAGES[@]}-1)); echo "-- main matches no stage exactly (flags edited since); treating it as the newest stage --"; fi
+
+if [ "$TI" -lt "$CI" ]; then
+  DIRECTION=rewind
+  echo "-- cleanup Terraform cannot do (do it after the rewind apply) --"
+  for ((i=CI; i>TI; i--)); do cleanup_after "${STAGES[$i]}"; done
+else
+  DIRECTION=advance
+  echo "-- after the apply, run the steps Terraform does not do --"
+  for ((i=CI+1; i<=TI; i++)); do post_apply_for "${STAGES[$i]}"; done
+fi
 
 if ! $OPEN_PR; then
-  echo "== Dry run only. Re-run with --open-pr to open the rewind PR. =="
+  echo "== Dry run only. Re-run with --open-pr to open the $DIRECTION PR. =="
   exit 0
 fi
 
 (
   cd "$WT"
   git add "${FILES[@]}"
-  git commit -q -m "rewind: lab to stage '$TARGET' ($COMMIT)
+  git commit -q -m "$DIRECTION: lab to stage '$TARGET' ($COMMIT)
 
 Restores lab.tfvars and the stage-pinning mocked test from $COMMIT. Merging
-this destroys what later stages created (reviewer-gated apply).
+this applies the stage through the normal pipeline (a rewind destroys what
+later stages created).
 
 Generated by lab/scripts/demo/rewind-lab.sh"
   git push -q -u origin "$BRANCH"
   gh pr create -R "$REPO_SLUG" --base main --head "$BRANCH" \
-    --title "rewind: lab to stage '$TARGET'" \
-    --body "Restores \`lab.tfvars\` and the mocked test from \`$COMMIT\` (stage **$TARGET**). Merging runs the reviewer-gated apply, which **destroys** everything the later stages created. After the apply, do the cleanup the script printed (objects Terraform does not own).
+    --title "$DIRECTION: lab to stage '$TARGET'" \
+    --body "Restores \`lab.tfvars\` and the mocked test from \`$COMMIT\` (stage **$TARGET**, a **$DIRECTION** from \`${CUR_STAGE:-unknown}\`). Merging runs the apply. A rewind **destroys** what later stages created; an advance builds the stage. After the apply, do the steps the script printed (what Terraform does not own).
 
 Generated by \`lab/scripts/demo/rewind-lab.sh\`."
 )
