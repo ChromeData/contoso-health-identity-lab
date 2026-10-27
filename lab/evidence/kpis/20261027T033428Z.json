@@ -1,0 +1,177 @@
+{
+  "schema": "contoso-identity-kpis/v1",
+  "label": "baseline",
+  "generatedAtUtc": "2026-10-27T03:34:28.9477060Z",
+  "generator": "lab/scripts/powershell/08-Measure-KPIs.ps1",
+  "parameters": {
+    "staleDays": 90,
+    "accessReviewLookbackDays": 90,
+    "hrToDisableLookbackDays": 30,
+    "pamSessionLookbackDays": 30
+  },
+  "kpis": {
+    "admin_standing_users": {
+      "status": "measured",
+      "value": 1,
+      "unit": "users",
+      "note": "break-glass counted apart; privileged = isPrivileged + lab tier map + PIM tier-group roles",
+      "detail": {
+        "breakGlassUsers": 0,
+        "activatedNow": 0,
+        "pimTierGroups": 0,
+        "byTier": {
+          "global_admin": 1,
+          "tier0": 0,
+          "tier1": 0,
+          "other": 0
+        }
+      }
+    },
+    "admin_eligible_only_users": {
+      "status": "measured",
+      "value": 0,
+      "unit": "users",
+      "detail": {
+        "byTier": {
+          "global_admin": 0,
+          "tier0": 0,
+          "tier1": 0,
+          "other": 0
+        }
+      }
+    },
+    "admin_jit_pct": {
+      "status": "measured",
+      "value": 0.0,
+      "unit": "%",
+      "numerator": 0,
+      "denominator": 1
+    },
+    "privileged_service_principals": {
+      "status": "measured",
+      "value": 1,
+      "unit": "service principals",
+      "note": "privileged directory role OR high-privilege Graph application permission (expected: the pipeline APPLY identity)",
+      "detail": {
+        "viaDirectoryRole": 0,
+        "viaGraphApplicationPermission": 1,
+        "viaBoth": 0,
+        "graphPermissionsWatched": 17,
+        "byPermission": {
+          "Group.ReadWrite.All": 1,
+          "Policy.ReadWrite.ConditionalAccess": 1,
+          "RoleManagement.ReadWrite.Directory": 1,
+          "RoleManagementPolicy.ReadWrite.AzureADGroup": 1
+        }
+      }
+    },
+    "phishing_resistant_pct": {
+      "status": "measured",
+      "value": 0.0,
+      "unit": "%",
+      "numerator": 0,
+      "denominator": 1,
+      "note": "synced passkeys count (unattested); break-glass excluded",
+      "detail": {
+        "breakGlassAccounts": 0,
+        "breakGlassWithDeviceBoundKey": 0
+      }
+    },
+    "phishing_resistant_device_bound_pct": {
+      "status": "measured",
+      "value": 0.0,
+      "unit": "%",
+      "numerator": 0,
+      "denominator": 1
+    },
+    "ca_mfa_coverage_pct": {
+      "status": "measured",
+      "value": 0.0,
+      "unit": "%",
+      "numerator": 0,
+      "denominator": 1,
+      "note": "enabled policies requiring MFA/auth strength for all apps, no narrowing condition; break-glass excluded by design",
+      "detail": {
+        "policiesCounted": 0
+      }
+    },
+    "ca_mfa_coverage_incl_report_only_pct": {
+      "status": "measured",
+      "value": 0.0,
+      "unit": "%",
+      "numerator": 0,
+      "denominator": 1
+    },
+    "access_review_completion_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "no review decisions in the window (0 instance(s)) - enable_access_reviews / run a review first"
+    },
+    "access_review_revocation_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "no review decisions in the window (0 instance(s)) - enable_access_reviews / run a review first"
+    },
+    "access_review_revocation_applied_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "no review decisions in the window (0 instance(s)) - enable_access_reviews / run a review first"
+    },
+    "stale_accounts": {
+      "status": "measured",
+      "value": 0,
+      "unit": "accounts",
+      "numerator": 0,
+      "denominator": 1,
+      "note": "pct 0; never signed in: 0; pending first sign-in: 1; stale guests: 0"
+    },
+    "hr_to_disable_minutes": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "pass -InboundProvisioningServicePrincipalId (the inbound provisioning app)"
+    },
+    "nhi_expired_or_orphaned": {
+      "status": "measured",
+      "value": 2,
+      "unit": "NHIs",
+      "denominator": 2,
+      "note": "source: graph (app registrations only)"
+    },
+    "nhi_with_expired_credential": {
+      "status": "measured",
+      "value": 0,
+      "unit": "NHIs",
+      "denominator": 2,
+      "note": "expired credential still attached"
+    },
+    "nhi_orphaned": {
+      "status": "measured",
+      "value": 2,
+      "unit": "NHIs",
+      "denominator": 2,
+      "note": "no accountable owner"
+    },
+    "pam_vaulted_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "no reconcile report: run lab/pam/discover.sh then lab/pam/reconcile.sh"
+    },
+    "pam_rotated_within_policy_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "no reconcile report: run lab/pam/discover.sh then lab/pam/reconcile.sh"
+    },
+    "pam_sessions_recorded_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "Guacamole admin secret not found (lab/pam stack not in use)"
+    }
+  }
+}

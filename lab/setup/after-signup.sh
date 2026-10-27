@@ -196,6 +196,8 @@ if [ -n "${AZURE_OPENAI_ENDPOINT:-}" ]; then
 fi
 setsec TF_OPERATOR_IP_RANGES "[\"${OPERATOR_IP}/32\"]"
 setsec TF_ALERT_EMAIL "$ALERT_EMAIL"
+setsec TF_SAML_CERT_NOTIFICATION_EMAILS "[\"$ALERT_EMAIL\"]"
+setsec TF_PIM_ALERT_MAILBOX "${PIM_ALERT_MAILBOX:-security@$ONMICROSOFT_DOMAIN}"   # an alias on the admin mailbox (Exchange admin > mailbox > Manage email address types)
 setsec TF_APP_OWNER_OBJECT_IDS "[\"$ADMIN_OBJECT_ID\"]"
 note "prod environment: you as required reviewer, main as the only deployment branch"
 if [ "$YES" = 1 ]; then

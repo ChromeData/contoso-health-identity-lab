@@ -28,6 +28,15 @@
 # targets from here; their gates are covered by the module tests, and the
 # root copies (variable validations) are tested below.
 
+# What CI passes through TF_VAR_* (terraform-plan.yml): the tenant ids that
+# lab.tfvars never holds. Synthetic here; from Day 1 (enable_premium in
+# lab.tfvars) every run needs them. A run's own variables block overrides.
+variables {
+  onmicrosoft_domain      = "contosohealthlab.onmicrosoft.com"
+  pim_approver_object_ids = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
+  iac_principal_ids       = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
+}
+
 mock_provider "azurerm" {
   mock_resource "azurerm_key_vault" {
     defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.KeyVault/vaults/kv-idlab" }
@@ -90,26 +99,30 @@ run "plan_lab_tfvars" {
     condition     = output.evidence_storage_account_name != null && output.agent_runtime_uami_principal_id == null
     error_message = "P2: the evidence store exists (enable_evidence_store); the agent runtime identity must not while enable_agent_identity = false"
   }
+  # Day 1 (E12): enable_premium + the report-only CA additions. Every policy
+  # is report-only (ca_policy_states), the apps and governance stay off.
   assert {
-    condition     = output.clinical_portal_client_id == null && output.guacamole_psm_client_id == null && output.ca_policy_display_names == null
-    error_message = "no premium-tier object (apps, CA) may be planned with enable_premium = false"
+    condition     = output.clinical_portal_client_id == null && output.guacamole_psm_client_id == null && output.ca_policy_display_names != null
+    error_message = "Day 1: CA001-CA010 and CA020 exist (enable_premium + the CA flags); no app (enable_sso_apps / enable_pam_oidc_app) may be planned yet"
+  }
+  assert {
+    condition     = alltrue([for k, v in var.ca_policy_states : v == "enabledForReportingButNotEnforced"])
+    error_message = "Day 1: every CA policy in lab.tfvars is report-only; graduation is a later PR with its checklist"
   }
   assert {
     condition = alltrue([
       output.pim_auth_context_requests == null,
-      output.ca_pim_activation_auth_context_ready == null,
-      output.registration_authentication_strength_policy_id == null,
+      output.ca_pim_activation_auth_context_ready == false,
       output.pim_workforce_au_object_id == null,
       output.pim_workforce_au_membership_body == null,
-      output.pim_privileged_role_template_ids == null,
       output.access_review_definitions == null,
       output.package_assignment_model == null,
     ])
-    error_message = "no CA021 body, help-desk AU, PIM tier map or review body may be rendered with lab.tfvars (premium and governance are off)"
+    error_message = "no CA021 body, help-desk AU or review / package body may be rendered with lab.tfvars (auth context, help-desk scoping and governance are off until Day 2-3)"
   }
   assert {
-    condition     = nonsensitive(output.directory_role_pim_policies) == null
-    error_message = "no Global Administrator PIM policy may be rendered with lab.tfvars"
+    condition     = output.pim_privileged_role_template_ids != null && nonsensitive(output.directory_role_pim_policies) != null
+    error_message = "Day 1: modules/pim renders the tier map and the Global Administrator policy body with enable_premium; they are APPLIED only on Day 2 (enable_pim_tiers, Set-DirectoryRolePimPolicies.ps1)"
   }
 }
 
@@ -120,6 +133,9 @@ run "plan_lab_tfvars" {
 run "plan_lab_itdr_hold_back" {
   command = plan
   variables {
+    onmicrosoft_domain        = "contosohealthlab.onmicrosoft.com"
+    pim_approver_object_ids   = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
+    iac_principal_ids         = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
     enable_sentinel           = true
     enable_itdr_detections    = true
     enable_itdr_detections_v2 = true
@@ -150,6 +166,9 @@ run "plan_lab_itdr_hold_back" {
 run "plan_lab_itdr_hold_back_la_alerts" {
   command = plan
   variables {
+    onmicrosoft_domain        = "contosohealthlab.onmicrosoft.com"
+    pim_approver_object_ids   = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
+    iac_principal_ids         = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
     enable_la_alerts          = true
     enable_itdr_detections    = true
     enable_itdr_detections_v2 = true
@@ -517,7 +536,12 @@ run "plan_all_flags_on_la_alerts" {
 run "pim_auth_context_refused_while_ca021_report_only" {
   command = plan
   variables {
-    enable_premium                          = true
+    enable_premium = true
+    # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
+    enable_identity_protection_ca           = false
+    enable_registration_ca                  = false
+    enable_device_code_block                = false
+    enable_admin_session_controls           = false
     enable_pim_tiers                        = true
     enable_pim_auth_context                 = true
     pim_approver_object_ids                 = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
@@ -548,7 +572,12 @@ run "pim_auth_context_refused_while_ca021_report_only" {
 run "pim_auth_context_refused_in_the_same_change_as_ca021_enabled" {
   command = plan
   variables {
-    enable_premium                          = true
+    enable_premium = true
+    # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
+    enable_identity_protection_ca           = false
+    enable_registration_ca                  = false
+    enable_device_code_block                = false
+    enable_admin_session_controls           = false
     enable_pim_tiers                        = true
     enable_pim_auth_context                 = true
     pim_approver_object_ids                 = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
@@ -575,6 +604,11 @@ run "pim_auth_context_refused_in_the_same_change_as_ca021_enabled" {
 run "attestation_without_ca021_enabled_is_refused" {
   command = plan
   variables {
+    # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
+    enable_identity_protection_ca        = false
+    enable_registration_ca               = false
+    enable_device_code_block             = false
+    enable_admin_session_controls        = false
     enable_premium                       = true
     enable_pim_auth_context              = true
     ca021_enforced_in_tenant             = true
@@ -596,6 +630,11 @@ run "attestation_without_ca021_enabled_is_refused" {
 run "pim_auth_context_allowed_once_ca021_enforced" {
   command = plan
   variables {
+    # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
+    enable_identity_protection_ca        = false
+    enable_registration_ca               = false
+    enable_device_code_block             = false
+    enable_admin_session_controls        = false
     enable_premium                       = true
     enable_pim_tiers                     = true
     enable_pim_auth_context              = true
