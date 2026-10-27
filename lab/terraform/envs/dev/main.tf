@@ -472,6 +472,7 @@ module "dc_vm" {
   vnet_name           = module.keyvault.vnet_name
   key_vault_id        = module.keyvault.key_vault_id
   allowed_ip_ranges   = var.operator_ip_ranges
+  vm_size             = var.dc_vm_size
   tags                = var.tags
 }
 
@@ -491,6 +492,7 @@ module "intune_vm" {
   location                    = var.location
   vnet_name                   = module.keyvault.vnet_name
   allowed_ip_ranges           = var.operator_ip_ranges
+  vm_size                     = var.intune_vm_size
   admin_login_user_object_ids = var.intune_vm_admin_login_object_ids
 
   # Static map key so for_each is plannable while the group id is unknown.
