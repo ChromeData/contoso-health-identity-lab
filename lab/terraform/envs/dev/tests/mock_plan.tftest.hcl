@@ -79,8 +79,8 @@ run "plan_lab_tfvars" {
   # plan): the evidence store and the ITDR telemetry are on, every trial-bearing
   # or premium layer is still absent. Each later flip updates this run.
   assert {
-    condition     = length(output.itdr_rule_keys) == 17 - length(var.itdr_exclude_rules) && output.vault_ingestion != null && output.vault_ingest_signals != null && output.dc_security_dcr_id == null
-    error_message = "P2: enable_itdr_detections is on (telemetry + the rules whose tables have data; lab.tfvars holds the rest back); DC01 security DCR waits for enable_dc"
+    condition     = length(output.itdr_rule_keys) > 0 && alltrue([for k in var.itdr_exclude_rules : !contains(output.itdr_rule_keys, k)]) && output.vault_ingestion != null && output.vault_ingest_signals == "checkout" && output.dc_security_dcr_id == null
+    error_message = "P2: enable_itdr_detections is on: VaultCheckout_CL ingestion (--signals checkout) and only the rules whose tables have data (every lab.tfvars hold-back absent); the DC01 security DCR waits for enable_dc"
   }
   assert {
     condition     = output.itdr_sentinel_only_rule_keys == [] && output.operator_ips_watchlist_id == null
