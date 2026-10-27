@@ -901,28 +901,30 @@ variable "tags" {
 }
 
 # ---- VM sizes ---------------------------------------------------------------
-# B-series v1 (Standard_B2s) hit "SkuNotAvailable ... Capacity Restrictions" in
-# eastus2 on 2026-10-27 (the first DC apply). Standard_B2s_v2 is the drop-in
-# both modules document (2 vCPU / 8 GiB, standardBsv2Family quota). Set back to
-# Standard_B2s here if capacity returns and cost matters more.
+# 2026-10-27, eastus2, this (new trial) subscription: Standard_B2s and then
+# Standard_B2s_v2 both failed with "SkuNotAvailable ... Capacity Restrictions",
+# and the regional SKU list offers this subscription no B-series and no D v3-v5
+# at all: only v7 (v6 is NotAvailableForSubscription). Standard_D2als_v7 =
+# 2 vCPU / 4 GiB (B2s's memory), AMD, StandardDalsv7Family quota 4, NVMe-only
+# disks (the modules then set disk_controller_type = "NVMe").
 variable "dc_vm_size" {
   type        = string
-  description = "VM size of DC01 (modules/dc-vm). Default Standard_B2s_v2: B2s had no capacity in eastus2."
-  default     = "Standard_B2s_v2"
+  description = "VM size of DC01 (modules/dc-vm). Default Standard_D2als_v7: the only generation this subscription is offered in eastus2."
+  default     = "Standard_D2als_v7"
 
   validation {
     condition     = can(regex("^Standard_[A-Za-z0-9_]+$", var.dc_vm_size))
-    error_message = "dc_vm_size must be an Azure VM size name such as Standard_B2s_v2."
+    error_message = "dc_vm_size must be an Azure VM size name such as Standard_D2als_v7."
   }
 }
 
 variable "intune_vm_size" {
   type        = string
-  description = "VM size of the Windows 11 Intune VM (modules/intune-vm). Default Standard_B2s_v2, for the same capacity reason as dc_vm_size."
-  default     = "Standard_B2s_v2"
+  description = "VM size of the Windows 11 Intune VM (modules/intune-vm). Default Standard_D2als_v7, for the same reason as dc_vm_size."
+  default     = "Standard_D2als_v7"
 
   validation {
     condition     = can(regex("^Standard_[A-Za-z0-9_]+$", var.intune_vm_size))
-    error_message = "intune_vm_size must be an Azure VM size name such as Standard_B2s_v2."
+    error_message = "intune_vm_size must be an Azure VM size name such as Standard_D2als_v7."
   }
 }
