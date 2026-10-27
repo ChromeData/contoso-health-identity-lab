@@ -173,6 +173,7 @@ run "plan_lab_itdr_hold_back" {
 run "plan_lab_itdr_hold_back_la_alerts" {
   command = plan
   variables {
+    enable_sentinel           = false # pinned: lab.tfvars turns Sentinel on from Day 2; this run is the post-trial Log Analytics path
     onmicrosoft_domain        = "contosohealthlab.onmicrosoft.com"
     pim_approver_object_ids   = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
     iac_principal_ids         = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
