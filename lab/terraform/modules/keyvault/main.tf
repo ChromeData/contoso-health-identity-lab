@@ -38,6 +38,21 @@ resource "azurerm_subnet" "private_endpoints" {
   address_prefixes     = var.private_endpoint_subnet_prefix
 }
 
+# Every subnet carries an NSG. The platform defaults already do the work here
+# (AllowVnetInBound, AllowAzureLoadBalancerInBound, DenyAllInBound): a private
+# endpoint subnet needs nothing from the internet, so no custom rules.
+resource "azurerm_network_security_group" "private_endpoints" {
+  name                = "nsg-snet-private-endpoints"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  tags                = var.tags
+}
+
+resource "azurerm_subnet_network_security_group_association" "private_endpoints" {
+  subnet_id                 = azurerm_subnet.private_endpoints.id
+  network_security_group_id = azurerm_network_security_group.private_endpoints.id
+}
+
 # -----------------------------------------------------------------------------
 # The vault.
 # -----------------------------------------------------------------------------

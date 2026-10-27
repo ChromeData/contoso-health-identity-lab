@@ -178,6 +178,7 @@ setvar() { run gh variable set "$1" --repo "$R" --body "$2"; }
 setsec() { run gh secret set "$1" --repo "$R" --body "$2"; run gh secret set "$1" --repo "$R" --app dependabot --body "$2"; }
 setvar AZURE_TENANT_ID "$TENANT_ID"
 setvar AZURE_SUBSCRIPTION_ID "$AZURE_SUBSCRIPTION_ID"
+setvar TFSTATE_RG "$STATE_RG"; setvar TFSTATE_STORAGE_ACCOUNT "$STATE_SA"
 setvar AZURE_PLAN_CLIENT_ID "$PLAN_CLIENT_ID"
 setvar AZURE_APPLY_CLIENT_ID "$APPLY_CLIENT_ID"
 setvar TF_ONMICROSOFT_DOMAIN "$ONMICROSOFT_DOMAIN"
