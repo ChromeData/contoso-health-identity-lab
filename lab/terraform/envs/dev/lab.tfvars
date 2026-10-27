@@ -135,7 +135,7 @@ enable_agent_identity = false
 # Containment (approval-gated revoke + confirm compromised + disable) needs
 # Sentinel and the deployed playbook (TF_CONTAINMENT_PLAYBOOK_ID);
 # containment_on_alert_added adds the Defender-portal "alert added" trigger.
-enable_itdr_detections     = false
+enable_itdr_detections     = true
 enable_itdr_containment    = false
 containment_on_alert_added = false
 
@@ -180,7 +180,7 @@ itdr_exclude_rules = [
 
 # WORM evidence store (Azure storage cost only). Apply BEFORE Day 0 of the
 # trial window; it starts Unlocked - locking is a separate, deliberate PR.
-enable_evidence_store = false
+enable_evidence_store = true
 
 # Domain controller VM - free tier (no Entra license needed; Azure compute cost).
 enable_dc = false

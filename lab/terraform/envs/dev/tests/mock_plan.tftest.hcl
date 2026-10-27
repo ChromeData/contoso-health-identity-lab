@@ -75,18 +75,20 @@ mock_provider "random" {}
 run "plan_lab_tfvars" {
   command = plan
 
-  # Trials must not start early: every new layer is absent with lab.tfvars.
+  # Trials must not start early. lab.tfvars is at stage P2 (evidence-capture
+  # plan): the evidence store and the ITDR telemetry are on, every trial-bearing
+  # or premium layer is still absent. Each later flip updates this run.
   assert {
-    condition     = output.itdr_rule_keys == [] && output.vault_ingestion == null && output.dc_security_dcr_id == null && output.vault_ingest_signals == null
-    error_message = "ITDR rules / telemetry must not exist while enable_itdr_detections = false"
+    condition     = length(output.itdr_rule_keys) > 0 && alltrue([for k in var.itdr_exclude_rules : !contains(output.itdr_rule_keys, k)]) && output.vault_ingestion != null && output.vault_ingest_signals == "checkout" && output.dc_security_dcr_id == null
+    error_message = "P2: enable_itdr_detections is on: VaultCheckout_CL ingestion (--signals checkout) and only the rules whose tables have data (every lab.tfvars hold-back absent); the DC01 security DCR waits for enable_dc"
   }
   assert {
     condition     = output.itdr_sentinel_only_rule_keys == [] && output.operator_ips_watchlist_id == null
     error_message = "no v2 ITDR rule and no operator_ips watchlist may exist with lab.tfvars"
   }
   assert {
-    condition     = output.evidence_storage_account_name == null && output.agent_runtime_uami_principal_id == null
-    error_message = "evidence store / agent runtime identity must not exist while their flags are false"
+    condition     = output.evidence_storage_account_name != null && output.agent_runtime_uami_principal_id == null
+    error_message = "P2: the evidence store exists (enable_evidence_store); the agent runtime identity must not while enable_agent_identity = false"
   }
   assert {
     condition     = output.clinical_portal_client_id == null && output.guacamole_psm_client_id == null && output.ca_policy_display_names == null
@@ -663,6 +665,7 @@ run "flags_without_premium_warn" {
 
   variables {
     enable_premium                      = false
+    enable_itdr_detections              = false # pinned: lab.tfvars turns it on from P2, this run is about the premium checks
     enable_identity_protection_ca       = true
     enable_phishing_resistant_all_users = true
     enable_registration_ca              = true
