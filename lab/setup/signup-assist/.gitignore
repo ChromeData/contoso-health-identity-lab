@@ -1,0 +1,7 @@
+node_modules/
+browser-profile/
+profile.json
+package-lock.json
+shots/
+*.log
+*.out

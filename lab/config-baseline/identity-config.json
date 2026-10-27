@@ -1,0 +1,8 @@
+{
+  "status": "no-baseline",
+  "schema": "contoso-identity-config/v1",
+  "note": "Placeholder. No Microsoft tenant exists yet, so there is no exported configuration to reconcile against. Compare-IdentityConfig.ps1 reads this status, runs only the intent and unread checks, and reports 'no baseline yet'. Replace this file with the first reviewed tenant export (Export-IdentityConfig.ps1 -Public) - see README.md in this folder. Tracked as exception E11 (closed by evidence capture E59).",
+  "generatedAtUtc": null,
+  "public": true,
+  "sections": null
+}

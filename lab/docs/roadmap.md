@@ -34,11 +34,16 @@ report-only, capturing evidence, then enforcing in waves.
 | Passwordless tooling; B2B guest governance; SSO + SCIM to AWS; CA restore and break-glass drill scripts | BUILT | `post-apply/Set-AuthenticationMethodsPolicy.ps1`, `07-Passwordless-Rollout.ps1`, `modules/entitlement/b2b.tf`, `modules/apps`, `Invoke-CaRestoreDrill.ps1`, `Invoke-BreakGlassDrill.ps1` |
 | Evidence: WORM store, hashed evidence pack, KPI snapshots, ScubaGear/Zero Trust before-and-after | BUILT | `modules/evidence-store`, `Export-EvidencePack.ps1`, `08-Measure-KPIs.ps1`, `Invoke-BaselineAssessment.ps1` |
 
+| Configuration drift: nightly read-only reconcile against the committed baseline, `identity-drift` issue, exceptions with expiry | BUILT (placeholder baseline until E59) | `Export-IdentityConfig.ps1`, `Compare-IdentityConfig.ps1`, `.github/workflows/config-drift.yml`, `lab/config-baseline/`; ADR 0021 |
+| Okta coexistence for the acquired clinic: Entra as Okta's OIDC IdP, routing rule with fallback, one legacy app | BUILT (Entra side behind `enable_okta_federation`; Okta root human-applied) | `modules/apps/okta.tf`, `lab/terraform/okta/`; ADR 0022; `okta-migration-runbook.md` |
+| Executive reporting: the one-page KPI view, the operating model (decision rights, forums, SLAs, what is reported to whom), the tabletop and post-incident report | BUILT (the page); DESIGNED (the model, never operated) | `New-KpiOnePager.ps1`, `standards/iam-operating-model.md`, `runbooks/identity-incident-tabletop.md`, `runbooks/post-incident-report-template.md` |
+
 **Still not built:** the split APPLY identity (ADR 0005, option 3) and a rule
 for APPLY used outside a workflow (R01); daily HR ↔ Entra reconciliation
 (R10); the shared-workstation screen-lock profile (ADR 0014); the guest MFA
 policy (passwordless plan, phase 5); provisioning to ServiceNow (its SAML
-SSO is BUILT behind `enable_servicenow_sso`).
+SSO is BUILT behind `enable_servicenow_sso`); moving the clinic's second and
+later apps off Okta (runbook Phase 2, one PR per app).
 
 ## Phase 1 · Days 0–90 · Apply in report-only, in the capture order
 
@@ -102,7 +107,7 @@ waves, and move every department onto HR-driven access.
 | CA004 and CA005 beyond the pilot; CA022 once the PAM app is in use | BUILT, report-only |
 | Birthright for every clinical department; HR job codes replace job titles in the rules | BUILT for title rules (`lab/iga/birthright-rules.json`); job codes DESIGNED |
 | Joiner and leaver Lifecycle Workflows for all departments | BUILT: `post-apply/New-LifecycleWorkflows.ps1`, `04-Leaver.ps1` |
-| Okta coexistence Phases 0–2: Okta trusts Entra, apps move one at a time | DESIGNED: `lab/docs/okta-migration-runbook.md` |
+| Okta coexistence Phases 0–2: Okta trusts Entra, apps move one at a time | Phase 1 BUILT: `modules/apps/okta.tf` (`enable_okta_federation`), `lab/terraform/okta/` (human-applied), ADR 0022; Phase 2 (each app moves) DESIGNED: `lab/docs/okta-migration-runbook.md` |
 | SSO and SCIM for ServiceNow | AWS IAM Identity Center is BUILT (`modules/apps`, `lab/terraform/aws/`); ServiceNow SAML SSO is BUILT (`modules/apps/servicenow.tf`, `enable_servicenow_sso`, off); provisioning to ServiceNow is DESIGNED |
 | Production PAM for Tier-0 AD accounts | Proposed: SaaS PAM after a two-vendor POC (`vendor-evaluation.md`). The POC acceptance tests come from the local harness (RAN · harness, `lab/pam/test/e2e.sh`): per-person, ticket-gated sessions under dual control, HA failover and a timed DR drill (R06, R09) |
 | Split APPLY: a Tier-0-only pipeline identity with two reviewers for role-bearing resources; alert on APPLY used outside a workflow | Not built; ADR 0005 (option 3), R01 |

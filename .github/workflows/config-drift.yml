@@ -1,0 +1,212 @@
+# =============================================================================
+# config-drift.yml  —  Contoso Health Identity Platform (lab/)
+# -----------------------------------------------------------------------------
+# Nightly reconcile of the tenant configuration against the code. The real-
+# time detections (lab/kql/ca-policy-changed.kql and friends) catch a change
+# as it is made; this job catches what they missed and what nobody acted on:
+#   1. Export-IdentityConfig.ps1 -Public  reads Conditional Access, named
+#      locations, authentication strengths and methods, PIM policies, consent
+#      / app-management / cross-tenant policies and the break-glass exclusion
+#      facts into one normalised, hashed snapshot (no name, UPN, object id or
+#      IP range in it).
+#   2. Compare-IdentityConfig.ps1 diffs it against the committed baseline
+#      (lab/config-baseline/identity-config.json) and the declared intent in
+#      lab/terraform/envs/dev/lab.tfvars, honouring the time-boxed exceptions
+#      in lab/config-baseline/drift-exceptions.json; High / Medium drift
+#      exits non-zero.
+#   3. The snapshot and the findings are uploaded as a run artifact (never
+#      committed: the baseline changes only through a reviewed PR), the
+#      Markdown goes to the job summary, and on drift ONE issue labelled
+#      identity-drift is opened or updated (closed again by a clean run).
+#
+# IDENTITY: the same read-only PLAN app as terraform-plan.yml, over GitHub
+# OIDC (azure/login), NO stored credential, NO secret. The Graph token is
+# minted by `az account get-access-token`, masked, handed to Connect-MgGraph
+# in the same step and never written anywhere. The PLAN app's Graph roles
+# (modules/pipeline-identity plan_graph_roles) cover every section except
+# the directory-role PIM policies: until RoleManagementPolicy.Read.Directory
+# is added through extra_plan_graph_roles (a human bootstrap apply), that
+# section is recorded as failed and reported as a Medium "unread" finding
+# (verify: on the first run).
+#
+# NO BASELINE YET: while lab/config-baseline/identity-config.json is the
+# placeholder, the job succeeds with a notice ("no baseline yet") whatever
+# the compare finds; the summary still shows the intent and unread checks.
+# Once a baseline is committed, drift or a failed export turns the job red
+# and opens the issue.
+#
+# Supply chain: every action pinned to a full commit SHA with the version in
+# a trailing comment (same pins and rationale as terraform-plan.yml);
+# Microsoft.Graph.Authentication pinned to the version lab-tests.yml uses.
+# BUILT: no workflow has run yet (no tenant).
+# =============================================================================
+
+name: config-drift
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "17 4 * * *"       # nightly, 04:17 UTC (off the hour)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: config-drift-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: export + compare (PLAN app, read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      id-token: write          # mint the GitHub OIDC token for Entra federation
+      contents: read           # checkout
+      issues: write            # open / update / close the one identity-drift issue
+    # Same PLAN identity env as terraform-plan.yml: tenant identifiers are
+    # repo Variables, not secrets. No ARM_CLIENT_SECRET is set — its absence
+    # is the point.
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}      # PLAN app (read-only)
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Azure login (OIDC, PLAN app)
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install pinned PowerShell module
+        # Export-IdentityConfig.ps1 uses Invoke-MgGraphRequest only.
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module Microsoft.Graph.Authentication -RequiredVersion 2.41.2 -Scope CurrentUser -Force
+
+      - name: Export tenant configuration (read-only, hashed)
+        id: export
+        # The Graph token lives in this step's memory only: masked, never a
+        # step output, never a file. Exit code captured; the last step decides.
+        # verify: az account get-access-token --resource-type ms-graph returns
+        # an app-only token for the PLAN app after azure/login (OIDC).
+        env:
+          DRIFT_DIR: ${{ runner.temp }}/config-drift
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv
+          if (-not $token) { throw 'No Microsoft Graph token from az (did azure/login succeed?)' }
+          Write-Output "::add-mask::$token"
+          Connect-MgGraph -AccessToken (ConvertTo-SecureString -String $token -AsPlainText -Force) -NoWelcome
+          Remove-Variable token
+          New-Item -ItemType Directory -Path $env:DRIFT_DIR -Force | Out-Null
+          $global:LASTEXITCODE = 0
+          ./lab/scripts/powershell/Export-IdentityConfig.ps1 -Public -Label nightly -OutputDirectory $env:DRIFT_DIR | Out-Null
+          $rc = $LASTEXITCODE
+          Disconnect-MgGraph | Out-Null
+          "export_exit=$rc" >> $env:GITHUB_OUTPUT
+          if ($rc -ne 0) { Write-Output "::warning::Export recorded failed section(s): see the summary. Nothing is reported as empty." }
+          exit 0
+
+      - name: Compare against the baseline and lab.tfvars
+        id: compare
+        if: ${{ !cancelled() }}
+        env:
+          DRIFT_DIR: ${{ runner.temp }}/config-drift
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $snap = @(Get-ChildItem -LiteralPath $env:DRIFT_DIR -Filter '*.json' | Where-Object Name -NotLike 'drift*' | Sort-Object Name) | Select-Object -Last 1
+          if (-not $snap) {
+            Write-Output "::error::No snapshot was written; the export failed before any section."
+            "compare_exit=3" >> $env:GITHUB_OUTPUT
+            "baseline_status=unknown" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          $global:LASTEXITCODE = 0
+          ./lab/scripts/powershell/Compare-IdentityConfig.ps1 -SnapshotPath $snap.FullName `
+            -MarkdownPath (Join-Path $env:DRIFT_DIR 'drift.md') -JsonPath (Join-Path $env:DRIFT_DIR 'drift.json') | Out-Null
+          $rc = $LASTEXITCODE
+          $status = 'unknown'
+          $json = Join-Path $env:DRIFT_DIR 'drift.json'
+          if (Test-Path -LiteralPath $json) { $status = (Get-Content -LiteralPath $json -Raw | ConvertFrom-Json).baseline.status }
+          "compare_exit=$rc" >> $env:GITHUB_OUTPUT
+          "baseline_status=$status" >> $env:GITHUB_OUTPUT
+          $md = Join-Path $env:DRIFT_DIR 'drift.md'
+          if (Test-Path -LiteralPath $md) { Get-Content -LiteralPath $md -Raw | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
+          if ($status -eq 'no-baseline') { Write-Output "::notice::no baseline yet: lab/config-baseline/identity-config.json is the placeholder. Commit the first reviewed export (lab/config-baseline/README.md) to start reconciling." }
+          exit 0
+
+      # The snapshot is evidence for the run, not a commit: the baseline is
+      # changed only through a reviewed pull request. Hashed ids, no names.
+      - name: Upload snapshot + findings
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: config-drift-${{ github.run_id }}
+          path: ${{ runner.temp }}/config-drift
+          if-no-files-found: warn
+          retention-days: 30
+
+      # One issue, labelled identity-drift, opened or updated on drift (only
+      # once a baseline exists) and closed by the next clean run. The body is
+      # the public-safe Markdown the compare wrote.
+      - name: Open, update or close the identity-drift issue
+        if: ${{ !cancelled() && steps.compare.outputs.baseline_status == 'ok' && steps.compare.outputs.compare_exit != '3' }}
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        env:
+          COMPARE_EXIT: ${{ steps.compare.outputs.compare_exit }}
+          EXPORT_EXIT: ${{ steps.export.outputs.export_exit }}
+          DRIFT_MD: ${{ runner.temp }}/config-drift/drift.md
+        with:
+          script: |
+            const fs = require('fs');
+            const label = 'identity-drift';
+            const title = 'Identity configuration drift (nightly reconcile)';
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const drift = process.env.COMPARE_EXIT !== '0' || process.env.EXPORT_EXIT !== '0';
+            let md = '';
+            try { md = fs.readFileSync(process.env.DRIFT_MD, 'utf8'); } catch { md = '(no summary written; see the run log)'; }
+            const MAX = 60000;   // issue body limit is 65536
+            if (md.length > MAX) md = md.slice(0, MAX) + '\n\n... [truncated; the full summary is in the run artifact] ...';
+            const body = [md, '', `_Run: ${runUrl} (commit ${context.sha.slice(0, 7)}). Artifact: snapshot + findings, 30 days._`].join('\n');
+            try { await github.rest.issues.getLabel({ owner, repo, name: label }); }
+            catch (e) {
+              if (e.status !== 404) throw e;
+              await github.rest.issues.createLabel({ owner, repo, name: label, color: 'b60205', description: 'Tenant configuration differs from the code (nightly reconcile)' });
+            }
+            const open = await github.paginate(github.rest.issues.listForRepo, { owner, repo, state: 'open', labels: label, per_page: 100 });
+            const mine = open.find(i => !i.pull_request && i.title === title);
+            if (drift) {
+              if (mine) {
+                await github.rest.issues.update({ owner, repo, issue_number: mine.number, body });
+                core.info(`updated issue #${mine.number}`);
+              } else {
+                const created = await github.rest.issues.create({ owner, repo, title, body, labels: [label] });
+                core.info(`opened issue #${created.data.number}`);
+              }
+            } else if (mine) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: mine.number, body: `Clean on ${new Date().toISOString().slice(0, 10)}: no open High or Medium drift. ${runUrl}` });
+              await github.rest.issues.update({ owner, repo, issue_number: mine.number, state: 'closed', state_reason: 'completed' });
+              core.info(`closed issue #${mine.number}`);
+            }
+
+      - name: Fail job on drift or a failed export (once a baseline exists)
+        if: ${{ !cancelled() && (steps.compare.outputs.compare_exit == '3' || (steps.compare.outputs.baseline_status == 'ok' && (steps.compare.outputs.compare_exit != '0' || steps.export.outputs.export_exit != '0'))) }}
+        env:
+          EXPORT_EXIT: ${{ steps.export.outputs.export_exit || 'not run' }}
+          COMPARE_EXIT: ${{ steps.compare.outputs.compare_exit || 'not run' }}
+          BASELINE: ${{ steps.compare.outputs.baseline_status || 'unknown' }}
+        run: |
+          echo "::error::export_exit=${EXPORT_EXIT} compare_exit=${COMPARE_EXIT} (2 = High, 1 = Medium, 3 = unusable input) baseline=${BASELINE}"
+          exit 1

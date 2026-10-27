@@ -320,6 +320,26 @@ output "pam_operators_group_object_id" {
   value       = one(module.apps[*].pam_operators_group_object_id)
 }
 
+output "okta_idp_client_id" {
+  description = "okta-clinic-idp client id = entra_client_id in lab/terraform/okta (null while enable_okta_federation is off)."
+  value       = one(module.apps[*].okta_idp_client_id)
+}
+
+output "okta_idp_redirect_uri" {
+  description = "The one redirect URI on okta-clinic-idp; must equal lab/terraform/okta output okta_callback_uri (null while off)."
+  value       = one(module.apps[*].okta_idp_redirect_uri)
+}
+
+output "okta_idp_endpoints" {
+  description = "The tenant's v2.0 OIDC endpoints for the Okta root's identity provider (null while off)."
+  value       = one(module.apps[*].okta_idp_endpoints)
+}
+
+output "okta_idp_client_secret_command" {
+  description = "POST-APPLY, a human: mints the bounded client secret for okta-clinic-idp and prints it once for TF_VAR_entra_client_secret in lab/terraform/okta. Terraform never creates it (null while off)."
+  value       = one(module.apps[*].okta_idp_client_secret_command)
+}
+
 output "apps_nhi_inventory" {
   description = "Per-app ownership + credential rows from modules/apps (NHI inventory / evidence pack). Sensitive (owner object ids): terraform output -json apps_nhi_inventory."
   sensitive   = true

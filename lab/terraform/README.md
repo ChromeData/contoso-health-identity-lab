@@ -18,7 +18,8 @@ Every layer sits behind a staging flag that is `false` in `lab.tfvars`
 ([Staging flags](#staging-flags-every-flag-and-its-default)). The GitHub-OIDC
 CI identities live in a separate, human-applied `envs/bootstrap` root, and the
 AWS IAM Identity Center permission set in an equally separate, human-applied
-`aws/` root. Workforce users (Dana Okafor and colleagues) are **not**
+`aws/` root, and the Okta side of the acquired clinic's coexistence (ADR 0022) in
+a third human-applied root, `okta/`. Workforce users (Dana Okafor and colleagues) are **not**
 Terraform's: HR provisioning owns them.
 
 > **Status: BUILT.** Every directory validates and every mocked test passes
@@ -27,7 +28,8 @@ Terraform's: HR provisioning owns them.
 
 Providers: **azuread `~> 3.10`** (Microsoft Graph / Entra) and **azurerm
 `~> 4.0`** (Azure resources), plus **random `~> 3.6`** for initial passwords.
-The separate `aws/` root alone uses **aws `~> 6.0`**.
+The separate `aws/` root alone uses **aws `~> 6.0`**, and the separate `okta/`
+root alone **okta/okta `~> 4.0`** (4.20.0 locked).
 
 > **Placeholders to swap for your tenant:** `onmicrosoft_domain`,
 > `subscription_id`, `tenant_id`, the globally-unique `key_vault_name` and
@@ -75,6 +77,12 @@ lab/terraform/
 │   ├── platform/                     ← stage 1: namespaces + Pod Security labels, Vault Helm release; tests/ (mocked, run by CI)
 │   ├── identity/                     ← stage 2: Vault k8s auth/role/policy, service accounts, group RBAC, admission policy; tests/
 │   └── aks-mapping/                  ← PLAN-ONLY, never applied: Entra federated identity credential (azuread); tests/ (mocked)
+├── okta/                             ← HUMAN-applied, separate product: the Okta side of the clinic coexistence (ADR 0022)
+│   ├── .terraform.lock.hcl           ← okta/okta 4.20.0 hashes (HashiCorp Terraform 1.16.5, 3 platforms) - committed
+│   ├── versions.tf / providers.tf / variables.tf / main.tf / outputs.tf
+│   ├── tests/                        ← mocked terraform test (okta_federation.tftest.hcl)
+│   ├── terraform.tfvars.example      ← copy → terraform.tfvars (gitignored): org, clinic domain, Entra ids (never the secret)
+│   └── README.md                     ← apply order (Entra app first), Integrator Free limits, runbook Phase 1 mapping, verify list
 └── modules/
     ├── dc-vm/                        ← AD DS domain controller VM (NSG operator-IP only, no-cache NTDS disk, auto-shutdown); tests/
     ├── intune-vm/                    ← Windows 11 VM, Entra joined + Intune enrolled (CA005 compliant device); tests/
@@ -91,7 +99,7 @@ lab/terraform/
     ├── entitlement/                  ← catalog, access packages per lab/iga/access-catalog.json, ADR 0012 review tiers;
     │                                   reviews.tf (rendered privileged + inactive bodies); b2b.tf (guest catalog/package); tests/
     ├── apps/                         ← AWS IAM Identity Center SAML (+ staged SCIM), ServiceNow SAML (servicenow.tf),
-    │                                   Clinical Portal OIDC, guacamole-psm; tests/
+    │                                   Clinical Portal OIDC, guacamole-psm, okta-clinic-idp (okta.tf); tests/
     ├── evidence-store/               ← WORM storage account (version-level immutability, Entra-only, delete-denying writers); tests/
     ├── pipeline-identity/            ← 2 GitHub-OIDC apps (plan/apply) + Graph app roles (bootstrap only); tests/
     └── keyvault/                     ← RBAC Key Vault, PE + private DNS, operator-IP firewall, UAMI; tests/
@@ -118,9 +126,10 @@ and is heavily commented inline. Every module carries a
 | **entra-diagnostics** | `azurerm_monitor_aad_diagnostic_setting` | Entra AuditLogs / SignInLogs / NonInteractive / ServicePrincipal / Provisioning → `loga-idlab` (+ RiskyUsers / UserRiskEvents / RiskyServicePrincipals / ServicePrincipalRiskEvents with bootstrap `enable_identity_protection_logs`, P2). Called from `envs/bootstrap` only. |
 | **monitoring** | `azurerm_sentinel_log_analytics_workspace_onboarding`, `azurerm_sentinel_alert_rule_scheduled` (one per rule: 5 core + 11 ITDR + 6 ITDR v2), `azurerm_sentinel_automation_rule` (notify; + containment, + opt-in alert-added trigger), `azurerm_monitor_scheduled_query_rules_alert_v2` (same rules on the post-trial path, minus the two Sentinel-only ones), `azurerm_monitor_action_group`, `azurerm_sentinel_watchlist` + items (`operator_ips`); ITDR telemetry (`telemetry.tf`): `azurerm_log_analytics_workspace_table_custom_log` (`VaultCheckout_CL`), DCE + DCRs, AMA on DC01 (incl. 4662 filtered to control access) | All **22** `lab/kql` detections, each behind a flag: the 5 core rules with `enable_sentinel` / `enable_la_alerts`, the 11 ITDR rules with `enable_itdr_detections` (telemetry without starting a trial), the 6 second-wave rules with `enable_itdr_detections_v2` (device-code sign-in, risky security-info registration, DC logon outside the operator allow-list, vault anomaly, SoD pair completed, PIM activation without the auth context). `security_info_registered_risky` and `sod_violation_granted` look back 14 days, so they are Sentinel only. `itdr_exclude_rules` holds back any rule whose table has no data yet. The IaC identity, privileged group and privileged user ids are rendered in as IMMUTABLE ids (`iac_principal_ids`, `privileged_group_ids`, `privileged_user_ids`); `azure_pim_group_ids` (PIM-Azure-RG-Contributors, passed by `envs/dev/main.tf`) gets its own Medium path in `pim-group-member-added-outside-pim`, because a direct member add is that group's intended route. The `operator_ips` watchlist is Terraform-owned (built from `operator_ip_ranges`, `ExpiresOn` = `operator_ips_expires_on`): edit the variable, never the watchlist. Response: `lab/monitoring/playbook-notify.json` and, with `enable_itdr_containment`, `playbook-contain.json` (approval-gated revoke + confirm compromised + disable on High incidents; never on the SoD or vault rules). Inventory per rule: [`lab/kql/README.md`](../kql/README.md); operations: [`lab/scripts/monitoring/README.md`](../scripts/monitoring/README.md). |
 | **keyvault** | `azurerm_key_vault` (RBAC, firewall deny-by-default), `azurerm_private_endpoint` + `azurerm_private_dns_zone` (+ link), `azurerm_user_assigned_identity`, `azurerm_role_assignment` (Secrets User for the UAMI, ABAC-limited to the secret names in `uami_readable_secret_names` (default `demo-app-config`) so Tier-0 and playbook secrets in the same vault stay unreadable to it; Secrets Officer for human custodians), `azurerm_virtual_network`/`subnet`, `azurerm_monitor_diagnostic_setting` | Hardened secret store + a read-only (never write) managed identity. Public access only when `allowed_ip_ranges` lists the operator IP. |
-| **apps** | `azuread_application_from_template` (AWS gallery; ServiceNow from the non-gallery template), `azuread_service_principal`, `azuread_service_principal_token_signing_certificate`, `azuread_claims_mapping_policy`, `azuread_application_identifier_uri` / `_redirect_uris`, `azuread_synchronization_job` + `_secret` (staged), `azuread_application` (Clinical Portal, guacamole-psm), `azuread_app_role_assignment`, `azuread_group` (PAM-Operators) | `enable_sso_apps`: AWS IAM Identity Center SAML (one assignment = the SCIM scope; Entra-minted signing cert; NameID + ABAC session tags) and the Clinical Portal OIDC app (Clinician / Pharmacist / Auditor roles to groups). `enable_scim_provisioning`: the AWS provisioning job, created **stopped**. `enable_pam_oidc_app`: guacamole-psm, id-token sign-in for the PSM stand-in (+ CA022). `enable_servicenow_sso`: ServiceNow SAML for the developer instance (one assignment: App-ServiceNow-Users; NameID = UPN; provisioning DESIGNED, not built). `clinical_portal_preauthorize_azure_cli`: E25 token demo only. See [`modules/apps/README.md`](modules/apps/README.md). |
+| **apps** | `azuread_application_from_template` (AWS gallery; ServiceNow from the non-gallery template), `azuread_service_principal`, `azuread_service_principal_token_signing_certificate`, `azuread_claims_mapping_policy`, `azuread_application_identifier_uri` / `_redirect_uris`, `azuread_synchronization_job` + `_secret` (staged), `azuread_application` (Clinical Portal, guacamole-psm), `azuread_app_role_assignment`, `azuread_group` (PAM-Operators) | `enable_sso_apps`: AWS IAM Identity Center SAML (one assignment = the SCIM scope; Entra-minted signing cert; NameID + ABAC session tags) and the Clinical Portal OIDC app (Clinician / Pharmacist / Auditor roles to groups). `enable_scim_provisioning`: the AWS provisioning job, created **stopped**. `enable_pam_oidc_app`: guacamole-psm, id-token sign-in for the PSM stand-in (+ CA022). `enable_servicenow_sso`: ServiceNow SAML for the developer instance (one assignment: App-ServiceNow-Users; NameID = UPN; provisioning DESIGNED, not built). `clinical_portal_preauthorize_azure_cli`: E25 token demo only. `enable_okta_federation`: okta-clinic-idp, Entra as the OIDC identity provider for the acquired clinic's Okta org (one assignment: App-Okta-Federation-Users; the client secret is a human's bounded post-apply step; the Okta side is the `okta/` root). See [`modules/apps/README.md`](modules/apps/README.md). |
 | **evidence-store** | `azurerm_storage_account` (version-level WORM default policy, Shared Key off, deny-by-default firewall), `azurerm_storage_container`, `azurerm_role_assignment` (ABAC delete-deny writers, readers), `azurerm_monitor_diagnostic_setting` | `enable_evidence_store`: where evidence packs, KPI snapshots and assessment raw reports live for 6 years, immutable (Unlocked first; locking is a second, acknowledged apply). Writers are granted by a human. |
 | **aws/** *(separate root, not a module)* | `data.aws_ssoadmin_instances`, `data.aws_identitystore_group` (read-only), `aws_ssoadmin_permission_set`, `aws_ssoadmin_managed_policy_attachment`, `aws_ssoadmin_account_assignment` | `ViewOnlyAccess` (PT4H, AWS job-function policy) granted to the SCIM-provisioned `App-AWS-IdentityCenter-Users` group in the target account. Human-applied after SAML + SCIM; never planned/applied by CI. Provider `hashicorp/aws ~> 6.0`. Default target = the caller's (management) account — a documented lab trade-off; production targets a member account. |
+| **okta/** *(separate root, not a module)* | `okta_group`, `okta_group_rule`, `okta_app_bookmark`, `okta_app_group_assignment`; behind `enable_entra_federation`: `okta_idp_oidc`, `okta_policy_rule_idp_discovery` (+ `data.okta_default_policy`, read-only) | The Okta side of "Okta trusts Entra" (runbook Phase 1, [ADR 0022](../docs/adr/0022-okta-coexistence-as-code.md)): `Clinic-Staff` filled by a rule on the clinic login domain, one legacy bookmark app assigned to it, then the Microsoft Entra ID OIDC identity provider (client id from `envs/dev` output `okta_idp_client_id`, secret as `TF_VAR_entra_client_secret` at apply time) and ONE routing rule sending that login domain to it, Okta's Default Rule kept as the fallback. `routing_rule_active = false` is the runbook's rollback. Human-applied after the Entra app; never planned/applied by CI. Provider `okta/okta ~> 4.0` (4.20.0). Target: an Okta Integrator Free org, the real product on its free plan. |
 
 ---
 
@@ -215,6 +224,7 @@ combinations that cannot work.
 | `require_scim_credentials` | `false` | Fail closed when the SCIM credential would be created without a token (`true` in the apply workflow) | — |
 | `enable_pam_oidc_app` | `false` | guacamole-psm + PAM-Operators, and CA022 | `enable_sso_apps` |
 | `enable_servicenow_sso` | `false` | ServiceNow SAML app (non-gallery, assignment required, one group) | `enable_sso_apps`; `servicenow_instance_url` in `terraform.tfvars` / `TF_VAR_`, never `lab.tfvars` |
+| `enable_okta_federation` | `false` | okta-clinic-idp: Entra as the OIDC identity provider for the acquired clinic's Okta org (apps `okta.tf`), one assignment (App-Okta-Federation-Users); the client secret is minted by a human post-apply, never by Terraform | `enable_sso_apps`; `okta_org_domain` in `terraform.tfvars` / `TF_VAR_`, never `lab.tfvars`; then the human-applied `okta/` root |
 | `clinical_portal_preauthorize_azure_cli` | `false` | Pre-authorizes the Azure CLI on the Clinical Portal scope (evidence E25 token demo only) | `enable_sso_apps`; turn off afterwards |
 | `enable_nhi_governance` | `false` | App-Consent-Reviewers group for the admin consent workflow (groups) | `enable_premium` |
 | `enable_agent_identity` | `false` | `uami-agent-runtime`, a role-less managed identity for Entra Agent ID | nothing in Terraform; the Agent ID API is preview and licence-gated (verify: Agent 365) |
@@ -247,14 +257,23 @@ environment, not committed.
 |---|---|---|
 | `enable_github_oidc` | `false` | GitHub Actions OIDC provider + a read-only role for plan runs |
 
+**`okta/` (human-applied)**
+
+| Flag | Default | Effect |
+|---|---|---|
+| `enable_entra_federation` | `false` | The Microsoft Entra ID OIDC identity provider + the routing rule for the clinic login domain (needs the Entra app's client id, the tenant id and `TF_VAR_entra_client_secret`). Off = only the clinic's own estate (group, rule, legacy app) |
+| `routing_rule_active` | **`true`** | `false` = the routing rule goes INACTIVE: the runbook's Phase 1 rollback, clinic users back on Okta passwords; a `check` warns on every plan |
+
 ---
 
 ## Validate / fmt status
 
 Re-validated 2026-10-20 with **HashiCorp Terraform v1.16.5** (`terraform
 fmt -check -recursive` clean; `init -backend=false` + `validate` clean in
-every directory below). Providers locked: **azuread 3.10.0**, **azurerm
-4.81.0**, **random 3.9.1**, and **hashicorp/aws 6.69.1** (`aws/` only).
+every directory below), and again on 2026-10-26 for `modules/apps`, `envs/dev`
+and the new `okta` root. Providers locked: **azuread 3.10.0**, **azurerm
+4.81.0**, **random 3.9.1**, **hashicorp/aws 6.69.1** (`aws/` only) and
+**okta/okta 4.20.0** (`okta/` only).
 OpenTofu v1.13.1 also validated every directory on 2026-10-19, before the
 latest changes.
 
@@ -275,6 +294,7 @@ latest changes.
 | `envs/dev` (whole composition) | ok | **Success** | clean |
 | `envs/bootstrap` | ok | **Success** | clean |
 | `aws` (separate root, hashicorp/aws 6.69.1) | ok | **Success** | clean |
+| `okta` (separate root, okta/okta 4.20.0) | ok | **Success** | clean |
 | `k8s/platform`, `k8s/identity`, `k8s/aks-mapping` | ok | **Success** | clean |
 
 What the committed code itself enforces (`validation` / `precondition` /
@@ -318,17 +338,19 @@ What the committed code itself enforces (`validation` / `precondition` /
 every one of these tests on each pull request (configured; no workflow has
 run yet).
 
-**Last run: 2026-10-20 (evening), HashiCorp Terraform 1.16.5, author's
-machine, a copy of the working tree: 325 runs passed, 0 failed, across 18
-directories** (302 in the Entra / Azure / AWS roots and modules, 23 in the
-three Kubernetes roots), and `validate` passed in all 18.
+**Last run: 2026-10-26, HashiCorp Terraform 1.16.5, author's machine, the
+working tree: 356 runs passed, 0 failed, across 19 directories** (333 in the
+Entra / Azure / AWS / Okta roots and modules, 23 in the three Kubernetes
+roots), and `validate` passed in all 19. (2026-10-20: 325 runs in 18
+directories, before `modules/apps/tests/okta.tftest.hcl` and the `okta` root.)
 
 | Directory | Test file(s) | Runs | What it asserts |
 |---|---|---|---|
 | `envs/dev` | `mock_plan.tftest.hcl` | 13 | The composition plans with the committed `lab.tfvars` and none of the staged layers plans anything; `lab.tfvars` holds back every SecurityEvent rule, the preview rule, the vault anomaly rule and `identity_risk`, on the Sentinel and the Log Analytics path; with every flag on it plans on both detection paths (Sentinel, Log Analytics alerts); legacy flags on with new flags off; the `c1` context refused while CA021 is report-only, in the same change that enables CA021, and without the tenant attestation, and allowed once CA021 is enforced; no DC keeps a /24 out of the watchlist; DC01 refuses a range wider than one host; flags without premium warn |
 | `envs/bootstrap` | `optin.tftest.hcl` | 3 | Nothing extra by default; `enable_app_management_roles` adds exactly the four APPLY and two read-only PLAN roles; `enable_identity_protection_logs` adds the four risk categories to the baseline |
 | `aws` | `github_oidc.tftest.hcl` | 7 | Off by default; the role trusts one repository's PR subject only; every allow is a read; wildcard and environment subjects refused; missing repository ids fail; an existing OIDC provider is reused |
-| `modules/apps` | `apps.tftest.hcl`, `servicenow.tftest.hcl` | 31 | One AWS assignment, SAML basics and claims, wildcard reply URL and wrong template refused, three app roles mapped to fixed ids, SCIM absent by default and created stopped, empty SCIM token fails the gated apply and only warns in a PR plan, guacamole-psm id-token only and operators only; ServiceNow absent by default, one assignment, the sign-on URL from the IdP `sys_id`; a missing group or instance URL, a wildcard, trailing-slash, path, non-ServiceNow or plain-http instance URL and a malformed `sys_id` refused; three mocked applies |
+| `okta` | `okta_federation.tftest.hcl` | 16 | By default only the clinic's estate (Clinic-Staff, its login-domain rule, the legacy bookmark app, one assignment); with `enable_entra_federation` the Entra OIDC IdP on the tenant's v2.0 endpoints (openid profile email, link by email) and ONE routing rule, priority 1, suffix-matching the clinic login domain only and targeting that IdP, attached to Okta's built-in discovery policy by data source (the Default Rule stays); the secret is sensitive end to end and, like the client and tenant ids, required when on; the rollback sets the rule INACTIVE, keeps the IdP and raises the warning check; JIT can be turned off; an @ or scheme in the domain, a plain-http app URL, a non-Okta cell, a host or -admin org name and a non-GUID client id refused; one mocked apply |
+| `modules/apps` | `apps.tftest.hcl`, `servicenow.tftest.hcl`, `okta.tftest.hcl` | 46 | One AWS assignment, SAML basics and claims, wildcard reply URL and wrong template refused, three app roles mapped to fixed ids, SCIM absent by default and created stopped, empty SCIM token fails the gated apply and only warns in a PR plan, guacamole-psm id-token only and operators only; ServiceNow absent by default, one assignment, the sign-on URL from the IdP `sys_id`; a missing group or instance URL, a wildcard, trailing-slash, path, non-ServiceNow or plain-http instance URL and a malformed `sys_id` refused; three mocked applies; okta-clinic-idp absent by default, when on one app (single tenant, implicit grants off, the Graph scopes Okta asks for), one SP (assignment required), one assignment to App-Okta-Federation-Users and one redirect URI (the Okta authorize callback, https by construction), the ITSM reference stamped, the flag without an org host or group fails the plan, a scheme, path, wildcard, non-Okta host, look-alike suffix or -admin host refused, preview and EMEA cells accepted, a secret lifetime over 180 days refused; a fourth mocked apply (the bounded secret-minting command, the NHI row) |
 | `modules/conditional-access` | `ca002_ca020_ca021_admins`, `ca004`, `ca006_ca007_risk`, `ca008_phishing_resistant`, `ca009_ca010_baseline`, `ca060_clinical` (`.tftest.hcl`) | 71 | CA002 role list cannot shrink; CA020 session-only, report-only, 4 h max; CA021 rendered report-only and its contract with the post-apply script, and the PIM context refused until CA021 is enforced and attested; CA023 off by default, report-only, never on the PIM context; risk policies report-only with the safe shape; CA008 scope, second keys, phishable combinations refused, break-glass excluded from every policy; CA009 multi-use TAP refused; CA010 exception group next to break-glass; CA022 targets the PSM app + admin portals with the ADMIN strength; CA060 device filter and injection-safe profile name; CA004 uses the bare named-location GUID |
 | `modules/dc-vm` | `operator_ip.tftest.hcl` | 11 | Only single-host operator addresses open RDP / LDAPS; /24, /31, any-address, bare, IPv6 and malformed entries refused; disk and outbound shape unchanged |
 | `modules/entitlement` | `governance.tftest.hcl` | 26 | Defaults match `lab/iga/access-catalog.json`; birthright packages have no policy and no expiry; T1 never reviews clinical packages; T2 only long or extendable packages; reviews deny by default; no self-review; break-glass never a review target; requested birthright, expiring automatic and automatic privileged packages refused; B2B package shape |
@@ -353,7 +375,7 @@ first plan) caught. The `aws/` root documents its own checks in
 Run every directory the way CI does:
 
 ```bash
-for d in envs/dev envs/bootstrap aws k8s/platform k8s/identity k8s/aks-mapping modules/*; do
+for d in envs/dev envs/bootstrap aws okta k8s/platform k8s/identity k8s/aks-mapping modules/*; do
   terraform -chdir="$d" init -backend=false -input=false >/dev/null &&
   terraform -chdir="$d" validate &&
   { [ -d "$d/tests" ] || continue; terraform -chdir="$d" test $( [ -f "$d/lab.tfvars" ] && echo -var-file=lab.tfvars ); }
@@ -363,7 +385,7 @@ done
 - No `terraform apply` has run — **no tenant exists yet**. Every statement
   above is a `validate` / `fmt` / mocked-test result or a property of the
   committed code, not a deployment result.
-- The three roots (`envs/dev`, `envs/bootstrap`, `aws`) carry a
+- The four roots (`envs/dev`, `envs/bootstrap`, `aws`, `okta`) carry a
   `.terraform.lock.hcl` meant to be **committed**: `registry.terraform.io`
   hashes generated by HashiCorp Terraform 1.16.5 with `terraform providers lock
   -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64`
@@ -492,8 +514,13 @@ performed by a privileged human.
    `preferredTokenSigningKeyThumbprint`), the AWS console identity-source
    switch, putting the AWS SCIM token into Key Vault, the one local seeding
    apply, and the ServiceNow-side identity provider record. ServiceNow
-   provisioning is designed, not built; the Okta federation trust stays
-   portal / vendor work. The AWS permission set +
+   provisioning is designed, not built. The Okta coexistence is code on
+   both sides (`enable_okta_federation` here, the human-applied `okta/`
+   root there; ADR 0022); what stays human is minting the one client secret
+   (output `okta_idp_client_secret_command`, bounded to 180 days) and
+   entering it once as `TF_VAR_entra_client_secret`, granting admin consent
+   on `okta-clinic-idp`, and the Okta API token in the applier's shell
+   ([`okta/README.md`](okta/README.md)). The AWS permission set +
    account assignment is code in the separate, human-applied `aws/` root.
 
 8. **Remote-state storage account bootstrap** (see below) — created once,

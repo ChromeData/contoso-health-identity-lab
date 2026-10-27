@@ -151,6 +151,7 @@ resource "azurerm_public_ip" "vm" {
 }
 
 resource "azurerm_network_interface" "vm" {
+  #checkov:skip=CKV_AZURE_119:The Intune endpoint is reached over RDP from the operator IP only (NSG); no Bastion or VPN in a one-person lab. Public IP is the documented stand-in (lab/docs/STAND-INS.md).
   name                = "nic-${var.vm_name}"
   location            = var.location
   resource_group_name = var.resource_group_name

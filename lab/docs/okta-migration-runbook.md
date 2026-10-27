@@ -42,31 +42,49 @@ sign-in volume (Okta System Log), and plan waves of 10–20 apps. Identify
 Goal: clinic users sign in with their **Entra** identity and still reach every
 Okta app. No app changes yet.
 
-1. Entra → App registrations → **New registration** `okta-clinic-idp`
-   (single tenant). Redirect URI (Web):
-   `https://<okta-org>.okta.com/oauth2/v1/authorize/callback`.
-   Add a client secret, entered once by hand into Okta in the next step.
-   It lives in Okta's credential store, never in the repo.
-2. Okta Admin → Security → **Identity Providers → Add → Microsoft** (OIDC).
-   Client ID + secret from step 1, scopes `openid profile email`.
-   *Account link*: match on email. *JIT provisioning*: on (lab) / off with
-   pre-linked accounts **[prod]**.
-3. Okta → Security → Identity Providers → **Routing rules → Add**: users whose
-   login domain is `<custom domain>` → the Microsoft IdP. Keep the default rule
-   (Okta login) **below** it as the fallback.
-4. Entra: assign `App-Okta-Federation-Users` to `okta-clinic-idp`. That's the
-   *allow-list* of who may federate (the group is created by Terraform
-   `modules/groups`).
+**Status: BUILT** ([ADR 0022](adr/0022-okta-coexistence-as-code.md)). The
+steps below are Terraform, behind flags that are off, validated and
+mock-tested offline, **never applied** (no tenant, no Okta org). The Entra
+side is `lab/terraform/modules/apps/okta.tf` (`enable_okta_federation` in
+`lab/terraform/envs/dev/lab.tfvars`, CI-applied by PR); the Okta side is the
+separate, human-applied root `lab/terraform/okta/` (its README has the apply
+order). The client secret stays a manual hand-off, on purpose.
+
+1. Entra: app registration `okta-clinic-idp` (single tenant), redirect URI
+   (Web) `https://<okta-org>.okta.com/oauth2/v1/authorize/callback`, the
+   Graph scopes Okta asks for, assignment required —
+   `modules/apps/okta.tf`, with the org host as `okta_org_domain`. **The
+   client secret is not created by Terraform:** a human mints it post-apply
+   with output `okta_idp_client_secret_command` (bounded to 180 days) and
+   enters it once into the Okta root in step 2. It lives in Okta's
+   credential store (and the Okta root's local state), never in the repo.
+2. Okta: the **Microsoft Entra ID identity provider** (OIDC; client id from
+   `envs/dev` output `okta_idp_client_id`, the secret as
+   `TF_VAR_entra_client_secret` at apply time, scopes `openid profile
+   email`) — `lab/terraform/okta/main.tf`, `okta_idp_oidc.entra`, behind
+   `enable_entra_federation`. *Account link*: match on email. *JIT
+   provisioning*: on (lab) / off with pre-linked accounts **[prod]**
+   (`jit_provisioning = false`).
+3. Okta: the **routing rule** — users whose login domain is
+   `clinic_login_domain` → the Entra IdP (`okta_policy_rule_idp_discovery.clinic_to_entra`,
+   priority 1, suffix match). Okta's default rule (Okta login) is never
+   managed and stays **below** it as the fallback.
+4. Entra: `App-Okta-Federation-Users` assigned to `okta-clinic-idp`, the
+   only assignment — `azuread_app_role_assignment.okta_federation_users` in
+   `okta.tf` (the group is created by Terraform `modules/groups`). That's the
+   *allow-list* of who may federate.
 5. Conditional Access already applies, because the sign-in happens at Entra.
 
 **Validate:** in a private window, open Okta, enter
 `dana.okafor@<domain>`, and you're sent to Entra → MFA → back to the Okta
 dashboard. Okta System Log shows the IdP sign-in. Entra sign-in logs show app
-`okta-clinic-idp` with the CA result.
-**Rollback:** disable the routing rule. Users fall back to Okta passwords
-instantly.
-**Evidence:** screenshot of the routing rule, and an Entra sign-in log row
-with CA applied.
+`okta-clinic-idp` with the CA result. Then rehearse the rollback, timed.
+**Rollback:** `routing_rule_active = false` in `lab/terraform/okta`, one
+apply: the rule goes INACTIVE, users fall back to Okta passwords at the next
+sign-in, and a `check` warns on every plan until it is `true` again.
+**Evidence:** `terraform output` of the Okta root (`routing_rule_id`,
+`routing_rule_status`, `entra_idp_id`), the Entra sign-in log row with CA
+applied, and the timed rollback.
 
 **Verify in the lab:** that the Integrator Free plan exposes Identity
 Providers and routing rules in your org. If the Microsoft IdP type isn't

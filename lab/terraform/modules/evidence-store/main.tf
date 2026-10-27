@@ -233,6 +233,7 @@ resource "azurerm_storage_account" "evidence" {
 # Private access only; it inherits the account's WORM policy.
 # -----------------------------------------------------------------------------
 resource "azurerm_storage_container" "evidence" {
+  #checkov:skip=CKV2_AZURE_21:Blob read/write/delete logging IS on: azurerm_monitor_diagnostic_setting.blob (allLogs -> loga-idlab) targets the blob service by id string, which this graph check cannot follow.
   name                  = var.container_name
   storage_account_id    = azurerm_storage_account.evidence.id
   container_access_type = "private"

@@ -100,6 +100,7 @@ resource "azurerm_public_ip" "dc" {
 }
 
 resource "azurerm_network_interface" "dc" {
+  #checkov:skip=CKV_AZURE_119:The lab DC is reached over RDP from the operator IP only (NSG below); there is no Bastion or VPN in a one-person lab. Public IP is the documented stand-in (lab/docs/STAND-INS.md).
   name                = "nic-${var.vm_name}"
   location            = var.location
   resource_group_name = var.resource_group_name

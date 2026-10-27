@@ -52,6 +52,9 @@
 #                                          CA022 (was CA009) admin strength.
 #     enable_servicenow_sso             ->   + ServiceNow PDI SAML app (needs
 #                                          servicenow_instance_url).
+#     enable_okta_federation            ->   + okta-clinic-idp, Entra as the IdP
+#                                          for the clinic's Okta org (needs
+#                                          okta_org_domain; ADR 0022).
 #   enable_pim_tiers                   -> Tier-0 / Tier-1 PIM role groups +
 #                                          approver groups (premium).
 #     enable_helpdesk_au_scoping        ->   + AU-Workforce-Standard; help-desk
@@ -183,6 +186,13 @@ check "servicenow_sso_requires_sso_apps" {
   assert {
     condition     = !var.enable_servicenow_sso || (var.enable_premium && var.enable_sso_apps)
     error_message = "enable_servicenow_sso = true has no effect unless enable_premium and enable_sso_apps are both true (the ServiceNow SAML app lives in modules/apps)."
+  }
+}
+
+check "okta_federation_requires_sso_apps" {
+  assert {
+    condition     = !var.enable_okta_federation || (var.enable_premium && var.enable_sso_apps)
+    error_message = "enable_okta_federation = true has no effect unless enable_premium and enable_sso_apps are both true (okta-clinic-idp lives in modules/apps)."
   }
 }
 
@@ -621,6 +631,14 @@ module "apps" {
   servicenow_instance_url          = var.servicenow_instance_url
   servicenow_sso_sys_id            = var.servicenow_sso_sys_id
   servicenow_users_group_object_id = module.groups[0].app_access_group_object_ids["servicenow"]
+
+  # okta-clinic-idp (default false): Entra as the OIDC identity provider for
+  # the acquired clinic's Okta org (runbook Phase 1, ADR 0022). The ONE
+  # principal on it is App-Okta-Federation-Users; the client secret is a
+  # human's post-apply step, and the Okta side is lab/terraform/okta.
+  enable_okta_federation                = var.enable_okta_federation
+  okta_org_domain                       = var.okta_org_domain
+  okta_federation_users_group_object_id = module.groups[0].app_access_group_object_ids["okta"]
 }
 
 # -----------------------------------------------------------------------------

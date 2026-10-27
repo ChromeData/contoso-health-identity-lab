@@ -12,6 +12,13 @@
       08-Measure-KPIs                  KPI maths, 06 contract, end-to-end snapshot
                                        (public-safe, hashed, failures never 0)
       Invoke-BreakGlassDrill           Pass/Partial/Fail, public-record guard
+      Export-IdentityConfig            normalisation (deterministic, volatile fields
+                                       dropped, ids hashed with -Public), the -Offline
+                                       fixture end to end, the online path on a mocked
+                                       Graph (a failed section is failed, never empty)
+      Compare-IdentityConfig           deep diff + severity table, lab.tfvars intent,
+                                       break-glass invariants, exceptions with expiry
+                                       and term limits, exit codes, public-safe Markdown
       Set-AuthenticationMethodsPolicy  desired state against a simulated policy
       NhiGovernance                    06 / Find-ShadowAdmins offline mocks, app
                                        management + consent policy merges, Agent ID
@@ -19,6 +26,8 @@
       PostApply                        New-AccessReviewDefinitions, New-B2BConnected-
                                        Organization, Invoke-PostApply order + the
                                        real scripts' parameter contracts
+      New-KpiOnePager                  value / direction rendering, unmeasured never 0,
+                                       08 comparison parity, end-to-end on files
       Invoke-BaselineAssessment        ScubaGear / Zero Trust import, KPIs, hashing,
                                        public-safe summary (needs the CISA sample:
                                        tests/fixtures/Get-ScubaSample.ps1 - its

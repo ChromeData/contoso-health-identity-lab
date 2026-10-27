@@ -107,12 +107,17 @@ enable_shared_clinical_ca     = false
 # clinical_portal_preauthorize_azure_cli: E25 token demo only; off again after.
 # enable_servicenow_sso adds the ServiceNow PDI SAML app (its instance URL
 # goes in terraform.tfvars / TF_VAR_, never here).
+# enable_okta_federation adds okta-clinic-idp, Entra as the IdP for the acquired
+# clinic's Okta org (runbook Phase 1, ADR 0022; the org host goes in
+# terraform.tfvars / TF_VAR_, never here). The Okta side is the separate,
+# human-applied root lab/terraform/okta.
 enable_sso_apps                        = false
 enable_scim_provisioning               = false
 aws_scim_job_enabled                   = false
 enable_pam_oidc_app                    = false
 clinical_portal_preauthorize_azure_cli = false
 enable_servicenow_sso                  = false
+enable_okta_federation                 = false
 
 # Non-human identity governance: App-Consent-Reviewers group (premium) for the
 # admin consent workflow; uami-agent-runtime for Entra Agent ID. The tenant

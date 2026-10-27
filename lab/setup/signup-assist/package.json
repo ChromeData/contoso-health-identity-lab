@@ -1,0 +1,15 @@
+{
+  "name": "signup-assist",
+  "private": true,
+  "type": "module",
+  "description": "Opens a real browser, fills sign-up forms from profile.json, and hands over to you only for CAPTCHA, SMS codes and card entry.",
+  "scripts": {
+    "setup": "npm install && npx playwright install chromium",
+    "microsoft": "node assist.mjs microsoft",
+    "azure": "node assist.mjs azure",
+    "okta": "node assist.mjs okta",
+    "aws": "node assist.mjs aws",
+    "servicenow": "node assist.mjs servicenow"
+  },
+  "dependencies": { "playwright": "^1.50.0" }
+}

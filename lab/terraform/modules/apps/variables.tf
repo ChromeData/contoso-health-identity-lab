@@ -7,6 +7,7 @@
 #   3. Contoso Clinical Portal  - OIDC app registration with app roles
 #   4. guacamole-psm            - PSM stand-in OIDC sign-in (off by default)
 #   5. ServiceNow               - SAML enterprise app (off by default)
+#   6. okta-clinic-idp          - Entra as OIDC IdP for the clinic Okta org (off by default)
 # plus ownership inputs shared by every app.
 #
 # Nothing here is committed with a real value. Tenant identifiers come from
@@ -514,4 +515,93 @@ variable "servicenow_saml_claims_policy_enabled" {
     problem).
   EOT
   default     = true
+}
+
+# ---- 6. okta-clinic-idp: Entra as the IdP for the clinic's Okta org (okta.tf) --
+
+variable "enable_okta_federation" {
+  type        = bool
+  description = <<-EOT
+    Create okta-clinic-idp, the Entra half of the Okta coexistence
+    (lab/docs/okta-migration-runbook.md Phase 1, ADR 0022): a single-tenant
+    OIDC app registration whose one redirect URI is the Okta org's authorize
+    callback, its service principal with assignment required, and ONE
+    assignment (App-Okta-Federation-Users). The client secret is NOT created:
+    a human mints it post-apply (output okta_idp_client_secret_command) and
+    hands it once to the Okta root (lab/terraform/okta). Needs
+    okta_org_domain and okta_federation_users_group_object_id. envs/dev flag:
+    enable_okta_federation. Off by default.
+  EOT
+  default     = false
+}
+
+variable "okta_org_domain" {
+  type        = string
+  description = <<-EOT
+    The Okta org HOST, e.g. integrator-1234567.okta.com (an Integrator Free
+    org), dev-12345.okta.com, <org>.oktapreview.com or <org>.okta-emea.com.
+    Bare host: no scheme (the module adds https), no path, no wildcard, no
+    port, lower case, and never the -admin host (the admin console is not an
+    OIDC callback). A custom Okta domain is a design change (the callback
+    host follows issuer_mode in the Okta root), not a value here. Required
+    when enable_okta_federation = true. Not a secret, but org-specific:
+    terraform.tfvars / TF_VAR_, never lab.tfvars.
+  EOT
+  default     = ""
+
+  validation {
+    condition     = var.okta_org_domain == "" || can(regex("^[a-z0-9][a-z0-9-]*\\.(okta\\.com|oktapreview\\.com|okta-emea\\.com)$", var.okta_org_domain))
+    error_message = "okta_org_domain must be empty or a bare Okta org host: <org>.okta.com, <org>.oktapreview.com or <org>.okta-emea.com (lower case; no scheme, path, port or wildcard)."
+  }
+
+  validation {
+    condition     = !endswith(split(".", var.okta_org_domain)[0], "-admin")
+    error_message = "okta_org_domain must be the org host, not the -admin console host: Okta's OIDC callback lives on the org host."
+  }
+}
+
+variable "okta_federation_users_group_object_id" {
+  type        = string
+  description = <<-EOT
+    Object id of App-Okta-Federation-Users (modules/groups output
+    app_access_group_object_ids["okta"]) - the ONLY principal assigned to
+    okta-clinic-idp, i.e. the allow-list of who may federate into Okta.
+    Required when enable_okta_federation = true.
+  EOT
+  default     = ""
+
+  validation {
+    # Unknown at plan when the group is created in the same apply; the check
+    # then runs at apply.
+    condition     = var.okta_federation_users_group_object_id == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.okta_federation_users_group_object_id))
+    error_message = "okta_federation_users_group_object_id must be empty or a group object id (GUID)."
+  }
+}
+
+variable "okta_idp_app_display_name" {
+  type        = string
+  description = "Display name of the Entra app registration Okta signs in through (sign-in logs, the Okta System Log's IdP name is separate). The runbook calls it okta-clinic-idp."
+  default     = "okta-clinic-idp"
+
+  validation {
+    condition     = length(trimspace(var.okta_idp_app_display_name)) > 0
+    error_message = "okta_idp_app_display_name must not be empty."
+  }
+}
+
+variable "okta_idp_secret_lifetime_days" {
+  type        = number
+  description = <<-EOT
+    Lifetime, in days, of the client secret a human mints post-apply with
+    output okta_idp_client_secret_command (Terraform never creates it). At
+    most 180: the P180D rotation recorded for okta-clinic-idp-client-secret
+    in lab/iga/nhi-secrets-register.json. Rotation = mint a new one, enter it
+    in the Okta root, remove the old one in Entra.
+  EOT
+  default     = 180
+
+  validation {
+    condition     = var.okta_idp_secret_lifetime_days >= 1 && var.okta_idp_secret_lifetime_days <= 180 && floor(var.okta_idp_secret_lifetime_days) == var.okta_idp_secret_lifetime_days
+    error_message = "okta_idp_secret_lifetime_days must be a whole number of days from 1 to 180 (the register's P180D rotation is the ceiling)."
+  }
 }

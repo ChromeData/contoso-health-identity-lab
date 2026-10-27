@@ -26,3 +26,6 @@ __pycache__/
 .DS_Store
 .vscode/
 .idea/
+
+# Sign-up hand-back (identifiers for after-signup.sh) - never commit
+lab/setup/handback.env

@@ -196,6 +196,7 @@ run "plan_legacy_flags_on_new_flags_off" {
     # The new flags, explicitly off (lab.tfvars says the same).
     enable_registration_ca                  = false
     enable_servicenow_sso                   = false
+    enable_okta_federation                  = false
     enable_device_code_block                = false
     enable_admin_session_controls           = false
     enable_pim_auth_context                 = false
@@ -264,6 +265,10 @@ run "plan_legacy_flags_on_new_flags_off" {
     condition     = output.apps_nhi_inventory.servicenow == null
     error_message = "the ServiceNow SAML app must not be planned while enable_servicenow_sso is off"
   }
+  assert {
+    condition     = output.apps_nhi_inventory.okta_clinic_idp == null && output.okta_idp_client_id == null
+    error_message = "okta-clinic-idp must not be planned while enable_okta_federation is off"
+  }
 }
 
 run "plan_all_flags_on_sentinel" {
@@ -296,6 +301,7 @@ run "plan_all_flags_on_sentinel" {
     enable_shared_clinical_ca           = true
     enable_sso_apps                     = true
     enable_servicenow_sso               = true
+    enable_okta_federation              = true
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
     enable_pim_tiers                    = true
@@ -336,6 +342,7 @@ run "plan_all_flags_on_sentinel" {
     aws_scim_template_id        = "placeholderTemplate"
     containment_playbook_id     = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Logic/workflows/pb-identity-contain"
     servicenow_instance_url     = "https://dev00000.service-now.com" # synthetic PDI
+    okta_org_domain             = "integrator-1234567.okta.com"      # synthetic Integrator Free org
     # Dummy, synthetic SCIM credential: without one, modules/apps' check
     # (correctly) warns that the credential would be created empty.
     aws_scim_credentials = {
@@ -395,6 +402,10 @@ run "plan_all_flags_on_sentinel" {
     condition     = output.apps_nhi_inventory.servicenow != null
     error_message = "enable_servicenow_sso must plan the ServiceNow SAML app (modules/apps servicenow.tf)"
   }
+  assert {
+    condition     = output.apps_nhi_inventory.okta_clinic_idp != null && output.okta_idp_redirect_uri == "https://integrator-1234567.okta.com/oauth2/v1/authorize/callback"
+    error_message = "enable_okta_federation must plan okta-clinic-idp with the Okta callback as its one redirect URI (modules/apps okta.tf)"
+  }
 }
 
 run "plan_all_flags_on_la_alerts" {
@@ -424,6 +435,7 @@ run "plan_all_flags_on_la_alerts" {
     enable_shared_clinical_ca           = true
     enable_sso_apps                     = true
     enable_servicenow_sso               = true
+    enable_okta_federation              = true
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
     enable_pim_tiers                    = true
@@ -461,6 +473,7 @@ run "plan_all_flags_on_la_alerts" {
     app_owner_object_ids        = ["cccccccc-cccc-cccc-cccc-cccccccccccc"]
     aws_scim_template_id        = "placeholderTemplate"
     servicenow_instance_url     = "https://dev00000.service-now.com" # synthetic PDI
+    okta_org_domain             = "integrator-1234567.okta.com"      # synthetic Integrator Free org
     aws_scim_credentials = {
       tenant_url   = "https://scim.us-east-1.amazonaws.com/abcd-1234/scim/v2"
       secret_token = "not-a-real-token-0123456789abcdef"
@@ -488,6 +501,10 @@ run "plan_all_flags_on_la_alerts" {
   assert {
     condition     = output.apps_nhi_inventory.servicenow != null
     error_message = "enable_servicenow_sso must plan the ServiceNow SAML app (modules/apps servicenow.tf)"
+  }
+  assert {
+    condition     = output.apps_nhi_inventory.okta_clinic_idp != null && output.okta_idp_redirect_uri == "https://integrator-1234567.okta.com/oauth2/v1/authorize/callback"
+    error_message = "enable_okta_federation must plan okta-clinic-idp with the Okta callback as its one redirect URI (modules/apps okta.tf)"
   }
 }
 
@@ -657,6 +674,7 @@ run "flags_without_premium_warn" {
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
     enable_servicenow_sso               = true
+    enable_okta_federation              = true
     enable_pim_tiers                    = true
     enable_helpdesk_au_scoping          = true
     enable_global_admin_pim_policy      = true
@@ -674,6 +692,7 @@ run "flags_without_premium_warn" {
     check.scim_requires_sso_apps,
     check.pam_oidc_app_requires_sso_apps,
     check.servicenow_sso_requires_sso_apps,
+    check.okta_federation_requires_sso_apps,
     check.pim_extensions_require_premium,
     check.b2b_requires_governance,
     check.nhi_governance_requires_premium,
