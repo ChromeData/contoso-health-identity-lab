@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><title>card</title>
+<style>
+  html,body{margin:0;height:100%;background:#121216;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;overflow:hidden}
+  .wrap{position:absolute;left:150px;right:150px;top:50%;transform:translateY(-50%)}
+  .kick{display:inline-flex;align-items:center;gap:14px;background:#24242B;border-radius:999px;padding:10px 24px 10px 12px;font-size:24px;font-weight:650;opacity:0;transform:translateY(14px);transition:all .7s}
+  .kick .d{width:32px;height:32px;border-radius:50%;background:#2A2A30;display:grid;place-items:center}.kick .d i{width:12px;height:12px;border-radius:50%;border:3px solid #F06A35;display:block}
+  h1{font-size:104px;line-height:1.02;letter-spacing:-.035em;margin:34px 0 0;font-weight:800;opacity:0;transform:translateY(18px);transition:all .8s .15s}
+  h1 em{font-style:normal;color:#4D86FF}
+  p{font-size:34px;line-height:1.4;color:#B9B7B0;max-width:1300px;margin:30px 0 0;opacity:0;transform:translateY(18px);transition:all .8s .35s}
+  .row{display:flex;gap:14px;margin-top:46px;flex-wrap:wrap;opacity:0;transition:opacity .8s .6s}
+  .row span{background:#202027;border:1px solid #33333C;border-radius:999px;padding:10px 20px;font-size:22px;color:#DAD8D2;font-weight:600}
+  .row span b{color:#F06A35}
+  .on .kick,.on h1,.on p{opacity:1;transform:none}.on .row{opacity:1}
+  .glow{position:absolute;width:1100px;height:1100px;border-radius:50%;right:-380px;top:-420px;background:radial-gradient(circle,rgba(77,134,255,.22),transparent 62%)}
+  .glow2{position:absolute;width:900px;height:900px;border-radius:50%;left:-300px;bottom:-500px;background:radial-gradient(circle,rgba(240,106,53,.16),transparent 62%)}
+</style></head><body><div class="glow"></div><div class="glow2"></div>
+<div class="wrap" id="w"><div class="kick"><div class="d"><i></i></div><span id="k"></span></div><h1 id="h"></h1><p id="p"></p><div class="row" id="r"></div></div>
+<script>
+window.card = (c) => {
+  document.getElementById('k').textContent = c.kick || '';
+  document.getElementById('h').innerHTML = c.title || '';
+  document.getElementById('p').textContent = c.sub || '';
+  document.getElementById('r').innerHTML = (c.chips || []).map((x) => `<span>${x}</span>`).join('');
+  requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('w').classList.add('on')));
+};
+</script></body></html>
