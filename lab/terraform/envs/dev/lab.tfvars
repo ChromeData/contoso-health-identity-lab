@@ -183,7 +183,7 @@ itdr_exclude_rules = [
 enable_evidence_store = true
 
 # Domain controller VM - free tier (no Entra license needed; Azure compute cost).
-enable_dc = false
+enable_dc = true
 
 # Windows 11 Entra-joined + Intune-enrolled VM - the CA005 "compliant device".
 # Azure compute cost. Flip only AFTER enable_premium is applied AND the human
