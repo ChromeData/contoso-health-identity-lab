@@ -101,18 +101,17 @@ locals {
   # container is NOT the evidence container. The assignment is scoped to the
   # evidence container, so writers can never delete; if someone later widens
   # the scope to the account, deletes elsewhere work and the evidence
-  # container stays protected. deleteBlobVersion is not in Storage Blob Data
-  # Contributor; it is listed so the condition still holds if the role is
-  # ever swapped for Owner. WORM already blocks deleting RETAINED versions;
-  # this also blocks deleting versions whose retention has expired.
-  # verify: Storage ABAC condition syntax and actions
-  # (learn.microsoft.com/azure/storage/blobs/storage-auth-abac-examples).
+  # container stays protected. Only actions the role holds may appear in a
+  # condition: Azure refuses an assignment whose condition names an action
+  # outside the role (InvalidRoleAssignmentCondition, proven 2026-10-27 with
+  # deleteBlobVersion/action on Storage Blob Data Contributor). Versions are
+  # protected by WORM, not by this condition. If the role is ever swapped for
+  # Owner, add the deleteBlobVersion/action clause back.
+  # Source: learn.microsoft.com/azure/storage/blobs/storage-auth-abac-examples.
   writer_abac_condition = <<-EOT
     (
      (
       !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete'})
-      AND
-      !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/deleteBlobVersion/action'})
      )
      OR
      (
