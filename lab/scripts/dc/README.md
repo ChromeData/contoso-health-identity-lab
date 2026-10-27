@@ -14,6 +14,7 @@ extension.
 | `01-Install-ADDSForest.ps1` | NTDS data disk → `F:`, DSRM password generated **straight into Key Vault**, AD DS + DNS, new forest (no reboot) |
 | `02-Configure-Domain.ps1` | DNS forwarder to Azure DNS, UPN suffix, OUs, KDS root key, AD CS (LDAPS), PAM-managed accounts + delegation, prints the provisioning OU expression |
 | `03-Get-LdapsCaCert.ps1` | Prints the lab root CA certificate (PEM) for Vault's LDAPS trust |
+| `run-on-dc.py` | Runs any of these scripts on DC01 with secret parameters as a managed run command: secrets come from the Keychain or Terraform state inside the helper, are scrubbed from output, never on a command line |
 | `04-Install-CloudSyncAgent.ps1` | Installs and registers the Entra provisioning agent (Cloud Sync) unattended: Microsoft-signature gate, gMSA, domain bind. Replaces the manual RDP step |
 
 ## Run it
@@ -63,21 +64,27 @@ for an Enterprise Admin.
    registers it through run-command. Microsoft publishes no direct installer
    URL, so capture it from *Entra Connect → Cloud sync → Agents → Download
    on-premises agent* and pass it as `InstallerUrl`; the script refuses any
-   file not validly signed by Microsoft Corporation. Both passwords go only
-   through `--protected-parameters`:
+   file not validly signed by Microsoft Corporation. Run it with
+   `run-on-dc.py`, which passes both passwords as protected parameters:
 
    ```bash
-   az vm run-command invoke -g $RG -n $VM --command-id RunPowerShellScript \
-     --scripts @lab/scripts/dc/04-Install-CloudSyncAgent.ps1 \
-     --parameters "InstallerUrl=$URL" "HybridAdminUpn=$UPN" \
-                  "DomainName=corp.$DOMAIN" "DomainAdminUser=CORP\\contosoadmin" \
-     --protected-parameters "HybridAdminPassword=$HPW" "DomainAdminPassword=$DPW"
+   # Secrets are resolved inside the helper (Keychain / Terraform state) and
+   # sent as protected parameters of a managed run command: never on a command
+   # line. `az vm run-command invoke` has no protected parameters, and when it
+   # rejects an argument it prints the whole command line, secrets included.
+   lab/scripts/dc/run-on-dc.py lab/scripts/dc/04-Install-CloudSyncAgent.ps1 \
+     --param "InstallerUrl=$URL" --param "HybridAdminUpn=svc-cloudsync@<tenant>.onmicrosoft.com" \
+     --param "DomainName=corp.$DOMAIN" --param 'DomainAdminUser=CORP\contosoadmin' \
+     --secret HybridAdminPassword=keychain:contoso-lab-cloudsync \
+     --secret DomainAdminPassword=keychain:contoso-lab-dc01-admin
    ```
 
    The same agent serves Cloud Sync **and** API-driven provisioning to AD. It
    creates its gMSA, which the KDS root key from step 3 makes possible. Its
-   Entra sign-in is password-only (no device code): if that account must
-   satisfy MFA, use one scoped to Hybrid Identity Administrator.
+   Entra sign-in is password-only (no device code), so use a dedicated
+   cloud-only account holding only Hybrid Identity Administrator
+   (`svc-cloudsync`), never a Global Administrator, and disable it once the
+   agent shows Healthy (re-enable only to re-register).
 5. Paste the printed `parentDistinguishedName` expression into the
    provisioning app's attribute mapping (*Apply this mapping: Always*). That's
    what places each worker in their department OU and moves leavers to

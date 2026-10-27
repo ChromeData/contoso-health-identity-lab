@@ -28,9 +28,9 @@
     the URL there at run time and pass it in; the signature gate in step 3 is
     what makes that safe.
 
-    Secrets: -HybridAdminPassword and -DomainAdminPassword arrive as run-command
-    PROTECTED parameters (encrypted in transit, never returned in the
-    run-command instance view or its output). They are turned into
+    Secrets: -HybridAdminPassword and -DomainAdminPassword arrive as PROTECTED
+    parameters of a managed run command (lab/scripts/dc/run-on-dc.py; never
+    returned by Azure, scrubbed from output). They are turned into
     SecureStrings at once and the plain copies are cleared.
 
     Known limit: Connect-AADCloudSyncAzureAD signs in with a password and has
@@ -58,12 +58,15 @@
     Its password. Pass ONLY through --protected-parameters.
 
 .EXAMPLE
-    # From the repo root. Secrets come from the Keychain / Terraform state and
-    # are never echoed.
-    az vm run-command invoke -g rg-identity-lab -n vm-dc01 --command-id RunPowerShellScript `
-      --scripts @lab/scripts/dc/04-Install-CloudSyncAgent.ps1 `
-      --parameters "InstallerUrl=$url" "HybridAdminUpn=$upn" "DomainName=corp.contosohealthlab.com" "DomainAdminUser=CORP\contosoadmin" `
-      --protected-parameters "HybridAdminPassword=$hpw" "DomainAdminPassword=$dpw"
+    # From the repo root, through the helper: the passwords are resolved from
+    # the Keychain inside run-on-dc.py and sent as protected parameters of a
+    # managed run command. Never put them on an az command line: the CLI
+    # echoes rejected command lines, secrets included.
+    lab/scripts/dc/run-on-dc.py lab/scripts/dc/04-Install-CloudSyncAgent.ps1 `
+      --param "InstallerUrl=$url" --param "HybridAdminUpn=svc-cloudsync@<tenant>.onmicrosoft.com" `
+      --param "DomainName=corp.contosohealthlab.com" --param 'DomainAdminUser=CORP\contosoadmin' `
+      --secret HybridAdminPassword=keychain:contoso-lab-cloudsync `
+      --secret DomainAdminPassword=keychain:contoso-lab-dc01-admin
 #>
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '',
     Justification = 'az vm run-command delivers parameters as strings. The passwords arrive as encrypted protected parameters and are converted to SecureString on the first line that touches them.')]
