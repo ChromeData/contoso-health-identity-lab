@@ -105,7 +105,19 @@ jobs:
         # cmdlet signatures (a call with a wrong parameter name fails a test).
         shell: pwsh
         run: |
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          # PSGallery is sometimes missing or unreachable on a fresh runner ("No repository with
+          # the name 'PSGallery' was found"); (re)register it with retries before trusting it.
+          for ($i = 1; $i -le 4; $i++) {
+              try {
+                  if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default -ErrorAction Stop }
+                  Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
+                  break
+              } catch {
+                  if ($i -eq 4) { throw }
+                  Write-Warning "PSGallery not ready (attempt $i): $($_.Exception.Message); retrying"
+                  Start-Sleep -Seconds (15 * $i)
+              }
+          }
           # PSGallery downloads fail transiently ("Source Location ... is not valid"); retry each module.
           function Install-Pinned([string]$Name, [string]$Version, [switch]$SkipPublisherCheck) {
               for ($i = 1; $i -le 4; $i++) {

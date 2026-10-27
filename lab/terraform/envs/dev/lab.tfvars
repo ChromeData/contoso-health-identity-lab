@@ -196,7 +196,7 @@ enable_intune_vm = false
 # Sentinel STARTS ITS 31-DAY TRIAL - flip only after Entra logs have flowed for
 # a few hours (README.md, Staging flags).
 # After the trial: enable_sentinel = false, enable_la_alerts = true.
-enable_sentinel  = false
+enable_sentinel  = true
 enable_la_alerts = false
 
 # Every policy starts report-only. Graduate ONE policy per PR - the CA004 flip
