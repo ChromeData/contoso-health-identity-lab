@@ -17,10 +17,16 @@ extension.
 
 ## Run it
 
+Before the VM exists: `enable_dc` creates a system-assigned managed identity,
+which is a directory object. A tenant younger than 48 hours is capped at 600
+objects and the apply fails with `FailedIdentityOperation ... directory object
+quota limit`; wait for the cap to lift (see `lab/setup/SIGNUP-KIT.md`) and
+re-run the apply.
+
 ```bash
 RG=rg-identity-lab VM=vm-dc01
 KV=$(terraform -chdir=lab/terraform/envs/dev output -raw key_vault_uri | sed -E 's#https://([^.]+).*#\1#')
-DOMAIN=contosohealthlab.com            # your verified custom domain
+DOMAIN=contosohealthlab.com            # your verified custom domain (handback.env CUSTOM_DOMAIN)
 
 # 1) Forest (about 10 min)
 az vm run-command invoke -g $RG -n $VM --command-id RunPowerShellScript \

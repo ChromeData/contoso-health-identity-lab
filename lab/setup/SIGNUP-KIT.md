@@ -12,6 +12,23 @@ items under **Hand back** into `lab/setup/handback.env` (copy it from
 
 Use ONE email for all Microsoft sign-ups, and the same browser profile.
 
+> **Create the tenant two days before you need the DC.** A brand-new Entra
+> tenant is capped at **600 directory objects for its first 48 hours**
+> (Microsoft Learn, *Service limits and restrictions*). The M365 E5 trial alone
+> installs about 400 first-party service principals, so the cap is hit by the
+> lab's Day-2 groups, and anything that creates an object after that (the
+> DC01 managed identity, SSO apps, synced users) fails with
+> `The directory object quota limit for the Tenant has been exceeded`. The cap
+> lifts automatically; check `GET /beta/organization?$select=directorySizeQuota`
+> and `createdDateTime`. A verified custom domain sets the post-cap quota to
+> 300,000 (50,000 without one) but does not lift the cap early.
+
+> **Custom domain.** The AD forest is `corp.<your-domain>` and the UPN suffix is
+> `<your-domain>` (`lab/scripts/dc/README.md`), so buy one before `enable_dc`
+> (any registrar, about $11/yr; Azure App Service Domains refuse free-trial
+> subscriptions). Add it in Entra (`POST /domains`), publish the `MS=` TXT
+> record, `POST /domains/{id}/verify`, and hand back `CUSTOM_DOMAIN=`.
+
 | # | Service | Link | Cost | Card? |
 |---|---|---|---|---|
 | 1 | Microsoft 365 E5 trial (gives you the Entra tenant, Entra ID P2, Intune) | https://www.microsoft.com/en-us/microsoft-365/enterprise/e5 → *Try free for one month* | free 30 days, 25 users | yes (cancel before day 30) |
