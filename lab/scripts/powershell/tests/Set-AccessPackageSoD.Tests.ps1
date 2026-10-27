@@ -31,7 +31,7 @@ BeforeAll {
             if ($u -match "/accessPackages\?\`$filter=displayName eq '(?<n>.+)'&") { $n = $Matches.n.Replace("''", "'"); return @{ value = @($(if ($t.Packages.ContainsKey($n)) { @{ id = $t.Packages[$n]; displayName = $n } }) | Where-Object { $_ }) } }
             if ($u -match "/groups\?\`$filter=displayName eq '(?<n>.+)'&") { $n = $Matches.n.Replace("''", "'"); return @{ value = @($(if ($t.Groups.ContainsKey($n)) { @{ id = $t.Groups[$n]; displayName = $n } }) | Where-Object { $_ }) } }
             if ($u -match '/accessPackages/(?<id>[^/]+)/incompatibleAccessPackages\?') { return @{ value = @(@($t.PkgLinks[$Matches.id]) | Where-Object { $_ } | ForEach-Object { @{ id = $_; displayName = $names[$_] } }) } }
-            if ($u -match '/accessPackages/(?<id>[^/]+)/incompatibleGroups\?') { return @{ value = @(@($t.GrpLinks[$Matches.id]) | Where-Object { $_ } | ForEach-Object { @{ id = $_; displayName = $names[$_] } }) } }
+            if ($u -match '/accessPackages/(?<id>[^/]+)/incompatibleGroups(\?|$)') { return @{ value = @(@($t.GrpLinks[$Matches.id]) | Where-Object { $_ } | ForEach-Object { @{ id = $_; displayName = $names[$_] } }) } }
             throw "unexpected Graph call in test: $Method $u"
         }
     }
