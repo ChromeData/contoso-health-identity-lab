@@ -12,7 +12,7 @@
 # Free tier first: premium/governance false. When the E5 + Governance trials
 # start, flip both in one PR (README.md, Staging flags).
 enable_premium    = true
-enable_governance = false
+enable_governance = true
 
 # Access reviews per ADR 0012 tier (Governance tier), one flag per tier:
 #   _privileged  T1 quarterly, default deny: PIM-governed groups (eligible +
@@ -123,7 +123,7 @@ enable_okta_federation                 = false
 # admin consent workflow; uami-agent-runtime for Entra Agent ID. The tenant
 # policies are post-apply scripts (Set-AppGovernancePolicy.ps1,
 # Set-ConsentPolicy.ps1, New-AgentIdentity.ps1).
-enable_nhi_governance = false
+enable_nhi_governance = true
 enable_agent_identity = false
 
 # ITDR: the eleven identity-attack rules + vault / DC01 telemetry. Starts no

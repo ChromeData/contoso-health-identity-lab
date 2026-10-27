@@ -115,15 +115,17 @@ run "plan_lab_tfvars" {
   # help-desk AU and the CA021 auth-context body are rendered; CA021 stays
   # report-only so PIM must not yet demand c1. Governance (packages, reviews)
   # waits for Day 3.
+  # Day 3 (E19): governance on - packages and their assignment model render;
+  # access reviews wait for Day 8 (enable_access_reviews_*).
   assert {
     condition = alltrue([
       output.pim_auth_context_requests != null,
       output.ca_pim_activation_auth_context_ready == false,
       output.pim_workforce_au_membership_body != null,
-      output.access_review_definitions == null,
-      output.package_assignment_model == null,
+      try(length(output.access_review_definitions), 0) == 0,
+      output.package_assignment_model != null,
     ])
-    error_message = "Day 2: the CA021 body and the help-desk AU membership rule exist, PIM still asks for MFA (CA021 report-only), and no review / package body may be rendered until enable_governance (Day 3)"
+    error_message = "Day 3: CA021 body, help-desk AU rule and the access-package assignment model exist (enable_governance); PIM still asks for MFA (CA021 report-only); access reviews are not rendered until Day 8"
   }
   assert {
     condition     = output.pim_privileged_role_template_ids != null && nonsensitive(output.directory_role_pim_policies) != null
@@ -710,6 +712,7 @@ run "flags_without_premium_warn" {
   variables {
     enable_premium                      = false
     enable_itdr_detections              = false # pinned: lab.tfvars turns it on from P2, this run is about the premium checks
+    enable_governance                   = false # pinned: lab.tfvars turns it on from Day 3
     enable_identity_protection_ca       = true
     enable_phishing_resistant_all_users = true
     enable_registration_ca              = true
