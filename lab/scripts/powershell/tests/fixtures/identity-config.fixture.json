@@ -1,0 +1,387 @@
+{
+  "_comment": "Mock tenant for Export-IdentityConfig.ps1 -Offline and its tests. Keys under 'responses' are Graph URI fragments; the longest fragment contained in the requested URI answers it. Every id is synthetic; the UPNs and the mailbox below exist only to prove the export scrubs them. Nothing here is tenant evidence.",
+  "tenant": {
+    "breakGlassGroupId": "0b1c2d3e-0000-4000-8000-00000000b6a5",
+    "pimApproverGroupId": "0b1c2d3e-0000-4000-8000-0000000a9901"
+  },
+  "responses": {
+    "identity/conditionalAccess/policies": {
+      "value": [
+        {
+          "id": "11111111-0000-4000-8000-0000000ca001",
+          "displayName": "CA001 - Require MFA for all users",
+          "createdDateTime": "2026-10-01T10:00:00Z",
+          "modifiedDateTime": "2026-10-20T08:15:00Z",
+          "state": "enabledForReportingButNotEnforced",
+          "templateId": null,
+          "conditions": {
+            "userRiskLevels": [],
+            "signInRiskLevels": [],
+            "clientAppTypes": [ "all" ],
+            "platforms": null,
+            "locations": null,
+            "devices": null,
+            "clientApplications": null,
+            "applications": { "includeApplications": [ "All" ], "excludeApplications": [], "includeUserActions": [], "includeAuthenticationContextClassReferences": [], "applicationFilter": null },
+            "users": { "includeUsers": [ "All" ], "excludeUsers": [], "includeGroups": [], "excludeGroups": [ "0b1c2d3e-0000-4000-8000-00000000b6a5" ], "includeRoles": [], "excludeRoles": [], "includeGuestsOrExternalUsers": null, "excludeGuestsOrExternalUsers": null }
+          },
+          "grantControls": { "operator": "OR", "builtInControls": [ "mfa" ], "customAuthenticationFactors": [], "termsOfUse": [], "authenticationStrength": null },
+          "sessionControls": null
+        },
+        {
+          "id": "11111111-0000-4000-8000-0000000ca003",
+          "displayName": "CA003 - Block legacy authentication",
+          "createdDateTime": "2026-10-01T10:00:00Z",
+          "modifiedDateTime": "2026-10-19T17:42:00Z",
+          "state": "enabledForReportingButNotEnforced",
+          "templateId": null,
+          "conditions": {
+            "userRiskLevels": [],
+            "signInRiskLevels": [],
+            "clientAppTypes": [ "exchangeActiveSync", "other" ],
+            "platforms": null,
+            "locations": null,
+            "devices": null,
+            "clientApplications": null,
+            "applications": { "includeApplications": [ "All" ], "excludeApplications": [], "includeUserActions": [], "includeAuthenticationContextClassReferences": [], "applicationFilter": null },
+            "users": { "includeUsers": [ "All" ], "excludeUsers": [], "includeGroups": [], "excludeGroups": [ "0b1c2d3e-0000-4000-8000-00000000b6a5" ], "includeRoles": [], "excludeRoles": [], "includeGuestsOrExternalUsers": null, "excludeGuestsOrExternalUsers": null }
+          },
+          "grantControls": { "operator": "OR", "builtInControls": [ "block" ], "customAuthenticationFactors": [], "termsOfUse": [], "authenticationStrength": null },
+          "sessionControls": null
+        },
+        {
+          "id": "11111111-0000-4000-8000-0000000ca004",
+          "displayName": "CA004 - Block sign-in from blocked countries",
+          "createdDateTime": "2026-10-01T10:00:00Z",
+          "modifiedDateTime": "2026-10-19T17:42:00Z",
+          "state": "enabledForReportingButNotEnforced",
+          "templateId": null,
+          "conditions": {
+            "userRiskLevels": [],
+            "signInRiskLevels": [],
+            "clientAppTypes": [ "all" ],
+            "platforms": null,
+            "locations": { "includeLocations": [ "22222222-0000-4000-8000-00000000c0c0" ], "excludeLocations": [] },
+            "devices": null,
+            "clientApplications": null,
+            "applications": { "includeApplications": [ "All" ], "excludeApplications": [], "includeUserActions": [], "includeAuthenticationContextClassReferences": [], "applicationFilter": null },
+            "users": { "includeUsers": [ "All" ], "excludeUsers": [], "includeGroups": [], "excludeGroups": [ "0b1c2d3e-0000-4000-8000-00000000b6a5" ], "includeRoles": [], "excludeRoles": [], "includeGuestsOrExternalUsers": null, "excludeGuestsOrExternalUsers": null }
+          },
+          "grantControls": { "operator": "OR", "builtInControls": [ "block" ], "customAuthenticationFactors": [], "termsOfUse": [], "authenticationStrength": null },
+          "sessionControls": null
+        },
+        {
+          "id": "11111111-0000-4000-8000-0000000ca002",
+          "displayName": "CA002 - Require phishing-resistant MFA for admins",
+          "createdDateTime": "2026-10-01T10:00:00Z",
+          "modifiedDateTime": "2026-10-19T17:42:00Z",
+          "state": "enabledForReportingButNotEnforced",
+          "templateId": null,
+          "conditions": {
+            "userRiskLevels": [],
+            "signInRiskLevels": [],
+            "clientAppTypes": [ "all" ],
+            "platforms": null,
+            "locations": null,
+            "devices": null,
+            "clientApplications": null,
+            "applications": { "includeApplications": [ "All" ], "excludeApplications": [], "includeUserActions": [], "includeAuthenticationContextClassReferences": [], "applicationFilter": null },
+            "users": { "includeUsers": [], "excludeUsers": [], "includeGroups": [], "excludeGroups": [ "0b1c2d3e-0000-4000-8000-00000000b6a5" ], "includeRoles": [ "62e90394-69f5-4237-9190-012177145e10", "194ae4cb-b126-40b2-bd5b-6091b380977d" ], "excludeRoles": [], "includeGuestsOrExternalUsers": null, "excludeGuestsOrExternalUsers": null }
+          },
+          "grantControls": { "operator": "OR", "builtInControls": [], "customAuthenticationFactors": [], "termsOfUse": [], "authenticationStrength": { "id": "33333333-0000-4000-8000-00000000a5a1", "displayName": "Phishing-Resistant MFA (lab)" } },
+          "sessionControls": { "signInFrequency": { "value": 4, "type": "hours", "authenticationType": "primaryAndSecondaryAuthentication", "frequencyInterval": "timeBased", "isEnabled": true } }
+        }
+      ]
+    },
+    "identity/conditionalAccess/namedLocations": {
+      "value": [
+        {
+          "@odata.type": "#microsoft.graph.ipNamedLocation",
+          "id": "22222222-0000-4000-8000-00000000c0c1",
+          "displayName": "Operator egress (lab)",
+          "createdDateTime": "2026-10-01T10:00:00Z",
+          "modifiedDateTime": "2026-10-01T10:00:00Z",
+          "isTrusted": true,
+          "ipRanges": [ { "@odata.type": "#microsoft.graph.iPv4CidrRange", "cidrAddress": "203.0.113.0/24" } ]
+        },
+        {
+          "@odata.type": "#microsoft.graph.countryNamedLocation",
+          "id": "22222222-0000-4000-8000-00000000c0c0",
+          "displayName": "Blocked Countries",
+          "createdDateTime": "2026-10-01T10:00:00Z",
+          "modifiedDateTime": "2026-10-01T10:00:00Z",
+          "countriesAndRegions": [ "KP", "IR", "SY", "CU" ],
+          "includeUnknownCountriesAndRegions": false,
+          "countryLookupMethod": "clientIpAddress"
+        }
+      ]
+    },
+    "policies/authenticationStrengthPolicies/33333333-0000-4000-8000-00000000a5a1/combinationConfigurations": {
+      "value": [
+        {
+          "@odata.type": "#microsoft.graph.fido2CombinationConfiguration",
+          "id": "44444444-0000-4000-8000-00000000f1d0",
+          "appliesToCombinations": [ "fido2" ],
+          "allowedAAGUIDs": [ "cb69481e-8ff7-4039-93ec-0a2729a154a8", "ee882879-721c-4913-9775-3dfcce97072a" ]
+        }
+      ]
+    },
+    "policies/authenticationStrengthPolicies/33333333-0000-4000-8000-00000000a5a2/combinationConfigurations": { "value": [] },
+    "policies/authenticationStrengthPolicies/00000000-0000-0000-0000-000000000004/combinationConfigurations": { "value": [] },
+    "policies/authenticationStrengthPolicies": {
+      "value": [
+        {
+          "id": "33333333-0000-4000-8000-00000000a5a2",
+          "displayName": "Bootstrap and recovery (lab)",
+          "description": "CA009: a one-time TAP or a phishing-resistant method",
+          "policyType": "custom",
+          "requirementsSatisfied": "mfa",
+          "allowedCombinations": [ "temporaryAccessPassOneTime", "fido2", "windowsHelloForBusiness", "x509CertificateMultiFactor" ],
+          "createdDateTime": "2026-10-01T10:00:00Z",
+          "modifiedDateTime": "2026-10-01T10:00:00Z"
+        },
+        {
+          "id": "33333333-0000-4000-8000-00000000a5a1",
+          "displayName": "Phishing-Resistant MFA (lab)",
+          "description": "CA002/CA021/CA022 admin strength",
+          "policyType": "custom",
+          "requirementsSatisfied": "mfa",
+          "allowedCombinations": [ "windowsHelloForBusiness", "fido2", "x509CertificateMultiFactor" ],
+          "createdDateTime": "2026-10-01T10:00:00Z",
+          "modifiedDateTime": "2026-10-18T09:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000004",
+          "displayName": "Phishing-resistant MFA",
+          "description": "Microsoft built-in",
+          "policyType": "builtIn",
+          "requirementsSatisfied": "mfa",
+          "allowedCombinations": [ "windowsHelloForBusiness", "fido2", "x509CertificateMultiFactor" ],
+          "createdDateTime": "2023-01-01T00:00:00Z",
+          "modifiedDateTime": "2023-01-01T00:00:00Z"
+        }
+      ]
+    },
+    "policies/authenticationMethodsPolicy": {
+      "id": "authenticationMethodsPolicy",
+      "displayName": "Authentication Methods Policy",
+      "description": "The tenant-wide policy that controls which authentication methods are allowed in the tenant, authentication method registration requirements, and self-service password reset settings",
+      "lastModifiedDateTime": "2026-10-20T08:00:00Z",
+      "policyVersion": "1.5",
+      "policyMigrationState": "migrationComplete",
+      "registrationEnforcement": {
+        "authenticationMethodsRegistrationCampaign": {
+          "snoozeDurationInDays": 3,
+          "enforceRegistrationAfterAllowedSnoozes": true,
+          "state": "enabled",
+          "excludeTargets": [ { "id": "0b1c2d3e-0000-4000-8000-00000000b6a5", "targetType": "group" } ],
+          "includeTargets": [ { "id": "all_users", "targetType": "group", "targetedAuthenticationMethod": "microsoftAuthenticator" } ]
+        }
+      },
+      "reportSuspiciousActivitySettings": { "state": "enabled", "includeTarget": { "targetType": "group", "id": "all_users" }, "voiceReportingCode": 0 },
+      "authenticationMethodConfigurations": [
+        {
+          "@odata.type": "#microsoft.graph.fido2AuthenticationMethodConfiguration",
+          "id": "Fido2",
+          "state": "enabled",
+          "isSelfServiceRegistrationAllowed": true,
+          "isAttestationEnforced": true,
+          "keyRestrictions": { "isEnforced": true, "enforcementType": "allow", "aaGuids": [ "cb69481e-8ff7-4039-93ec-0a2729a154a8", "ee882879-721c-4913-9775-3dfcce97072a" ] },
+          "includeTargets": [ { "targetType": "group", "id": "0b1c2d3e-0000-4000-8000-0000000ad001", "isRegistrationRequired": false } ],
+          "excludeTargets": []
+        },
+        {
+          "@odata.type": "#microsoft.graph.temporaryAccessPassAuthenticationMethodConfiguration",
+          "id": "TemporaryAccessPass",
+          "state": "enabled",
+          "defaultLifetimeInMinutes": 60,
+          "defaultLength": 12,
+          "minimumLifetimeInMinutes": 10,
+          "maximumLifetimeInMinutes": 480,
+          "isUsableOnce": true,
+          "includeTargets": [ { "targetType": "group", "id": "all_users", "isRegistrationRequired": false } ],
+          "excludeTargets": []
+        },
+        {
+          "@odata.type": "#microsoft.graph.smsAuthenticationMethodConfiguration",
+          "id": "Sms",
+          "state": "disabled",
+          "includeTargets": [],
+          "excludeTargets": []
+        },
+        {
+          "@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethodConfiguration",
+          "id": "MicrosoftAuthenticator",
+          "state": "enabled",
+          "isSoftwareOathEnabled": false,
+          "featureSettings": {
+            "displayAppInformationRequiredState": { "state": "enabled", "includeTarget": { "targetType": "group", "id": "all_users" }, "excludeTarget": { "targetType": "group", "id": "00000000-0000-0000-0000-000000000000" } },
+            "displayLocationInformationRequiredState": { "state": "enabled", "includeTarget": { "targetType": "group", "id": "all_users" }, "excludeTarget": { "targetType": "group", "id": "00000000-0000-0000-0000-000000000000" } }
+          },
+          "includeTargets": [ { "targetType": "group", "id": "all_users", "isRegistrationRequired": false, "authenticationMode": "any" } ],
+          "excludeTargets": []
+        }
+      ]
+    },
+    "policies/roleManagementPolicyAssignments?$filter=scopeId eq '/' and scopeType eq 'DirectoryRole' and roleDefinitionId eq '62e90394-69f5-4237-9190-012177145e10'": {
+      "value": [
+        {
+          "id": "DirectoryRole_9f9f9f9f-0000-4000-8000-000000007e01_7c7c7c7c-0000-4000-8000-0000000090a1_62e90394-69f5-4237-9190-012177145e10",
+          "policyId": "DirectoryRole_9f9f9f9f-0000-4000-8000-000000007e01_7c7c7c7c-0000-4000-8000-0000000090a1",
+          "scopeId": "/",
+          "scopeType": "DirectoryRole",
+          "roleDefinitionId": "62e90394-69f5-4237-9190-012177145e10",
+          "policy": {
+            "id": "DirectoryRole_9f9f9f9f-0000-4000-8000-000000007e01_7c7c7c7c-0000-4000-8000-0000000090a1",
+            "displayName": "DirectoryRole",
+            "description": "DirectoryRole",
+            "isOrganizationDefault": false,
+            "scopeId": "/",
+            "scopeType": "DirectoryRole",
+            "lastModifiedDateTime": "2026-10-20T08:00:00Z",
+            "lastModifiedBy": { "displayName": "Grace Mwangi", "id": "55555555-0000-4000-8000-0000000000ff" },
+            "rules": [
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyExpirationRule", "id": "Expiration_EndUser_Assignment", "isExpirationRequired": true, "maximumDuration": "PT2H", "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyEnablementRule", "id": "Enablement_EndUser_Assignment", "enabledRules": [ "MultiFactorAuthentication", "Justification", "Ticketing" ], "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyApprovalRule", "id": "Approval_EndUser_Assignment", "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] }, "setting": { "isApprovalRequired": true, "isApprovalRequiredForExtension": false, "isRequestorJustificationRequired": true, "approvalMode": "SingleStage", "approvalStages": [ { "approvalStageTimeOutInDays": 1, "isApproverJustificationRequired": true, "escalationTimeInMinutes": 0, "isEscalationEnabled": false, "primaryApprovers": [ { "@odata.type": "#microsoft.graph.groupMembers", "groupId": "0b1c2d3e-0000-4000-8000-0000000a9901", "description": "PIM-Approvers-Tier0" } ], "escalationApprovers": [] } ] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyAuthenticationContextRule", "id": "AuthenticationContext_EndUser_Assignment", "isEnabled": false, "claimValue": null, "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyExpirationRule", "id": "Expiration_Admin_Eligibility", "isExpirationRequired": true, "maximumDuration": "P180D", "target": { "caller": "Admin", "operations": [ "all" ], "level": "Eligibility", "inheritableSettings": [], "enforcedSettings": [] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyNotificationRule", "id": "Notification_Admin_EndUser_Assignment", "notificationType": "Email", "recipientType": "Admin", "notificationLevel": "All", "isDefaultRecipientsEnabled": true, "notificationRecipients": [ "soc-identity@contoso.test" ], "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] } }
+            ]
+          }
+        }
+      ]
+    },
+    "groups?$filter=startswith(mailNickname,'pim-tier')": {
+      "value": [
+        { "id": "0b1c2d3e-0000-4000-8000-0000000a0001", "displayName": "PIM-Tier0-Security-Admins", "mailNickname": "pim-tier0-security-admins" }
+      ]
+    },
+    "groups?$filter=mailNickname eq 'privileged-iam-admins'": {
+      "value": [
+        { "id": "0b1c2d3e-0000-4000-8000-0000000a0002", "displayName": "Privileged-IAM-Admins", "mailNickname": "privileged-iam-admins" }
+      ]
+    },
+    "policies/roleManagementPolicyAssignments?$filter=scopeId eq '0b1c2d3e-0000-4000-8000-0000000a0001' and scopeType eq 'Group'": {
+      "value": [
+        {
+          "id": "Group_0b1c2d3e-0000-4000-8000-0000000a0001_7c7c7c7c-0000-4000-8000-000000009001_member",
+          "policyId": "Group_0b1c2d3e-0000-4000-8000-0000000a0001_7c7c7c7c-0000-4000-8000-000000009001",
+          "scopeId": "0b1c2d3e-0000-4000-8000-0000000a0001",
+          "scopeType": "Group",
+          "roleDefinitionId": "member",
+          "policy": {
+            "id": "Group_0b1c2d3e-0000-4000-8000-0000000a0001_7c7c7c7c-0000-4000-8000-000000009001",
+            "displayName": "Group",
+            "description": "Group",
+            "isOrganizationDefault": false,
+            "scopeId": "0b1c2d3e-0000-4000-8000-0000000a0001",
+            "scopeType": "Group",
+            "lastModifiedDateTime": "2026-10-20T08:00:00Z",
+            "lastModifiedBy": { "displayName": "gh-oidc-entra-apply", "id": "55555555-0000-4000-8000-00000000a901" },
+            "rules": [
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyExpirationRule", "id": "Expiration_EndUser_Assignment", "isExpirationRequired": true, "maximumDuration": "PT4H", "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyEnablementRule", "id": "Enablement_EndUser_Assignment", "enabledRules": [ "MultiFactorAuthentication", "Justification", "Ticketing" ], "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyApprovalRule", "id": "Approval_EndUser_Assignment", "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] }, "setting": { "isApprovalRequired": true, "isApprovalRequiredForExtension": false, "isRequestorJustificationRequired": true, "approvalMode": "SingleStage", "approvalStages": [ { "approvalStageTimeOutInDays": 1, "isApproverJustificationRequired": true, "escalationTimeInMinutes": 0, "isEscalationEnabled": false, "primaryApprovers": [ { "@odata.type": "#microsoft.graph.groupMembers", "groupId": "0b1c2d3e-0000-4000-8000-0000000a9901", "description": "PIM-Approvers-Tier0" } ], "escalationApprovers": [] } ] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyExpirationRule", "id": "Expiration_Admin_Eligibility", "isExpirationRequired": true, "maximumDuration": "P180D", "target": { "caller": "Admin", "operations": [ "all" ], "level": "Eligibility", "inheritableSettings": [], "enforcedSettings": [] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyNotificationRule", "id": "Notification_Admin_EndUser_Assignment", "notificationType": "Email", "recipientType": "Admin", "notificationLevel": "All", "isDefaultRecipientsEnabled": true, "notificationRecipients": [ "soc-identity@contoso.test", "iam-oncall@contoso.test" ], "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] } }
+            ]
+          }
+        }
+      ]
+    },
+    "policies/roleManagementPolicyAssignments?$filter=scopeId eq '0b1c2d3e-0000-4000-8000-0000000a0002' and scopeType eq 'Group'": {
+      "value": [
+        {
+          "id": "Group_0b1c2d3e-0000-4000-8000-0000000a0002_7c7c7c7c-0000-4000-8000-000000009002_member",
+          "policyId": "Group_0b1c2d3e-0000-4000-8000-0000000a0002_7c7c7c7c-0000-4000-8000-000000009002",
+          "scopeId": "0b1c2d3e-0000-4000-8000-0000000a0002",
+          "scopeType": "Group",
+          "roleDefinitionId": "member",
+          "policy": {
+            "id": "Group_0b1c2d3e-0000-4000-8000-0000000a0002_7c7c7c7c-0000-4000-8000-000000009002",
+            "displayName": "Group",
+            "description": "Group",
+            "isOrganizationDefault": false,
+            "scopeId": "0b1c2d3e-0000-4000-8000-0000000a0002",
+            "scopeType": "Group",
+            "lastModifiedDateTime": "2026-10-20T08:00:00Z",
+            "lastModifiedBy": { "displayName": "gh-oidc-entra-apply", "id": "55555555-0000-4000-8000-00000000a901" },
+            "rules": [
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyExpirationRule", "id": "Expiration_EndUser_Assignment", "isExpirationRequired": true, "maximumDuration": "PT4H", "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyEnablementRule", "id": "Enablement_EndUser_Assignment", "enabledRules": [ "MultiFactorAuthentication", "Justification" ], "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyApprovalRule", "id": "Approval_EndUser_Assignment", "target": { "caller": "EndUser", "operations": [ "all" ], "level": "Assignment", "inheritableSettings": [], "enforcedSettings": [] }, "setting": { "isApprovalRequired": true, "isApprovalRequiredForExtension": false, "isRequestorJustificationRequired": true, "approvalMode": "SingleStage", "approvalStages": [ { "approvalStageTimeOutInDays": 1, "isApproverJustificationRequired": true, "escalationTimeInMinutes": 0, "isEscalationEnabled": false, "primaryApprovers": [ { "@odata.type": "#microsoft.graph.groupMembers", "groupId": "0b1c2d3e-0000-4000-8000-0000000a9902", "description": "PIM-Approvers-Tier1" } ], "escalationApprovers": [] } ] } },
+              { "@odata.type": "#microsoft.graph.unifiedRoleManagementPolicyExpirationRule", "id": "Expiration_Admin_Eligibility", "isExpirationRequired": true, "maximumDuration": "P365D", "target": { "caller": "Admin", "operations": [ "all" ], "level": "Eligibility", "inheritableSettings": [], "enforcedSettings": [] } }
+            ]
+          }
+        }
+      ]
+    },
+    "policies/authorizationPolicy": {
+      "id": "authorizationPolicy",
+      "displayName": "Authorization Policy",
+      "description": "Used to manage authorization related settings across the company.",
+      "allowInvitesFrom": "adminsAndGuestInviters",
+      "allowedToSignUpEmailBasedSubscriptions": false,
+      "allowedToUseSSPR": true,
+      "allowEmailVerifiedUsersToJoinOrganization": false,
+      "allowUserConsentForRiskyApps": false,
+      "blockMsolPowerShell": true,
+      "guestUserRoleId": "2af84b1e-32c8-42b7-82bc-daa82404023b",
+      "defaultUserRolePermissions": {
+        "allowedToCreateApps": false,
+        "allowedToCreateSecurityGroups": false,
+        "allowedToCreateTenants": false,
+        "allowedToReadBitlockerKeysForOwnedDevice": true,
+        "allowedToReadOtherUsers": true,
+        "permissionGrantPoliciesAssigned": [ "ManagePermissionGrantsForSelf.microsoft-user-default-low" ]
+      }
+    },
+    "policies/adminConsentRequestPolicy": {
+      "isEnabled": true,
+      "notifyReviewers": true,
+      "remindersEnabled": true,
+      "requestDurationInDays": 30,
+      "version": 3,
+      "reviewers": [ { "query": "/groups/0b1c2d3e-0000-4000-8000-0000000c0ea1/transitiveMembers", "queryType": "MicrosoftGraph", "queryRoot": null } ]
+    },
+    "policies/defaultAppManagementPolicy": {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "displayName": "Default app management tenant policy",
+      "description": "Default tenant policy that enforces app management restrictions on applications and service principals.",
+      "isEnabled": true,
+      "applicationRestrictions": {
+        "passwordCredentials": [
+          { "restrictionType": "passwordAddition", "state": "enabled", "maxLifetime": null, "restrictForAppsCreatedAfterDateTime": "2026-10-01T00:00:00Z" },
+          { "restrictionType": "passwordLifetime", "state": "enabled", "maxLifetime": "P90D", "restrictForAppsCreatedAfterDateTime": "2026-10-01T00:00:00Z" }
+        ],
+        "keyCredentials": [
+          { "restrictionType": "asymmetricKeyLifetime", "state": "enabled", "maxLifetime": "P180D", "restrictForAppsCreatedAfterDateTime": "2026-10-01T00:00:00Z" }
+        ]
+      },
+      "servicePrincipalRestrictions": { "passwordCredentials": [], "keyCredentials": [] }
+    },
+    "policies/crossTenantAccessPolicy/default": {
+      "isServiceDefault": true,
+      "inboundTrust": { "isMfaAccepted": false, "isCompliantDeviceAccepted": false, "isHybridAzureADJoinedDeviceAccepted": false },
+      "automaticUserConsentSettings": { "inboundAllowed": false, "outboundAllowed": false },
+      "invitationRedemptionIdentityProviderConfiguration": { "primaryIdentityProviderPrecedenceOrder": [ "azureActiveDirectory", "externalFederation", "socialIdentityProviders" ], "fallbackIdentityProvider": "defaultConfiguredIdp" },
+      "b2bCollaborationInbound": { "usersAndGroups": { "accessType": "allowed", "targets": [ { "target": "AllUsers", "targetType": "user" } ] }, "applications": { "accessType": "allowed", "targets": [ { "target": "AllApplications", "targetType": "application" } ] } },
+      "b2bCollaborationOutbound": { "usersAndGroups": { "accessType": "allowed", "targets": [ { "target": "AllUsers", "targetType": "user" } ] }, "applications": { "accessType": "allowed", "targets": [ { "target": "AllApplications", "targetType": "application" } ] } },
+      "b2bDirectConnectInbound": { "usersAndGroups": { "accessType": "blocked", "targets": [ { "target": "AllUsers", "targetType": "user" } ] }, "applications": { "accessType": "blocked", "targets": [ { "target": "AllApplications", "targetType": "application" } ] } },
+      "b2bDirectConnectOutbound": { "usersAndGroups": { "accessType": "blocked", "targets": [ { "target": "AllUsers", "targetType": "user" } ] }, "applications": { "accessType": "blocked", "targets": [ { "target": "AllApplications", "targetType": "application" } ] } }
+    },
+    "groups?$filter=mailNickname eq 'break-glass-admins'": {
+      "value": [ { "id": "0b1c2d3e-0000-4000-8000-00000000b6a5", "displayName": "Break-Glass-Admins", "isAssignableToRole": true } ]
+    },
+    "groups/0b1c2d3e-0000-4000-8000-00000000b6a5/members": {
+      "value": [
+        { "@odata.type": "#microsoft.graph.user", "id": "55555555-0000-4000-8000-00000000b601", "userPrincipalName": "bg-admin-01@contosolab.onmicrosoft.com", "accountEnabled": true },
+        { "@odata.type": "#microsoft.graph.user", "id": "55555555-0000-4000-8000-00000000b602", "userPrincipalName": "bg-admin-02@contosolab.onmicrosoft.com", "accountEnabled": true }
+      ]
+    },
+    "roleManagement/directory/roleAssignments?$filter=roleDefinitionId eq '62e90394-69f5-4237-9190-012177145e10' and principalId eq '0b1c2d3e-0000-4000-8000-00000000b6a5'": {
+      "value": [ { "id": "66666666-0000-4000-8000-000000002a01", "principalId": "0b1c2d3e-0000-4000-8000-00000000b6a5", "roleDefinitionId": "62e90394-69f5-4237-9190-012177145e10", "directoryScopeId": "/" } ]
+    }
+  }
+}

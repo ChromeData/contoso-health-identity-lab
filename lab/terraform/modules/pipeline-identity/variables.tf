@@ -84,6 +84,7 @@ variable "plan_graph_roles" {
     "EntitlementManagement.Read.All",         # catalog, packages, policies
     "RoleManagement.Read.Directory",          # directory role assignments
     "RoleManagementPolicy.Read.AzureADGroup", # PIM-for-Groups activation policy
+    "RoleManagementPolicy.Read.Directory",    # PIM directory-role policies: the nightly drift export (ADR 0021)
   ]
 }
 

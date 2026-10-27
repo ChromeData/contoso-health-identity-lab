@@ -5,8 +5,8 @@ Identity Center connector and a ServiceNow developer instance, and a real
 OIDC app registration.
 
 **Status: BUILT** (AWS SAML + SCIM, ServiceNow SAML, Clinical Portal OIDC,
-guacamole-psm; `validate` and 31 mocked `terraform test` runs pass,
-2026-10-20). **DESIGNED:** ServiceNow provisioning (below).
+guacamole-psm, okta-clinic-idp; `validate` and 46 mocked `terraform test`
+runs pass, 2026-10-26). **DESIGNED:** ServiceNow provisioning (below).
 **Nothing in it has run against a tenant yet.** Everything below comes from
 `terraform validate`, the mocked `terraform test` in `tests/`, provider
 source, or Microsoft and AWS documentation. Anything not yet proven is
@@ -20,6 +20,7 @@ during the trial.
 | 3 | **Contoso Clinical Portal, OIDC.** App roles Clinician, Pharmacist and Auditor; a `Clinical.Read` scope; a groups claim limited to app-assigned groups; assignment required; group-to-role grants | `azuread_application`, `azuread_application_identifier_uri`, `azuread_service_principal`, `azuread_app_role_assignment`, optional `azuread_application_pre_authorized` | envs/dev `enable_sso_apps` |
 | 4 | **guacamole-psm, OIDC sign-in for the PSM stand-in** ([`guacamole.tf`](guacamole.tf)). Implicit **id_token only** (Guacamole 1.6's OpenID extension), no client secret, redirect `http://localhost:8081/guacamole/`, assignment required, **one** assignment: the new `PAM-Operators` group. Replaces the portal click-path in `lab/pam/README.md` §6 | `azuread_group`, `azuread_application`, `azuread_service_principal`, `azuread_app_role_assignment` (default access role) | envs/dev `enable_pam_oidc_app` (needs `enable_sso_apps`) |
 | 5 | **ServiceNow, SAML** ([`servicenow.tf`](servicenow.tf)). Non-gallery SAML app with the settings Microsoft's ServiceNow tutorial documents, assignment required, an Entra-minted signing certificate, NameID = UPN, and **one** assignment: `App-ServiceNow-Users`. Provisioning is DESIGNED, not built ([below](#servicenow-pdi-saml)) | `azuread_application_from_template` (non-gallery template), `azuread_service_principal` (`use_existing`), `azuread_application_identifier_uri`, `azuread_application_redirect_uris`, `azuread_service_principal_token_signing_certificate`, `azuread_claims_mapping_policy` + assignment, `azuread_app_role_assignment` | envs/dev `enable_servicenow_sso` (needs `enable_sso_apps` and `servicenow_instance_url`) |
+| 6 | **okta-clinic-idp, OIDC: Entra as the identity provider for the acquired clinic's Okta org** ([`okta.tf`](okta.tf)). Single tenant, implicit grants off, **one** redirect URI (the Okta authorize callback on `okta_org_domain`, https by construction), the Graph scopes Okta asks for declared, assignment required, **one** assignment: `App-Okta-Federation-Users`. The client secret is NOT created: a human mints it post-apply, bounded to 180 days ([below](#okta-coexistence-entra-side)). The Okta half is the human-applied root [`../../okta`](../../okta/README.md) | `azuread_application`, `azuread_service_principal`, `azuread_app_role_assignment` (default access role) | envs/dev `enable_okta_federation` (needs `enable_sso_apps` and `okta_org_domain`); ADR 0022 |
 
 Provider: **azuread `~> 3.10`** (checked against 3.10.0 source and schema).
 No other provider is used. App-role and scope ids are fixed GUIDs, and Entra
@@ -247,7 +248,7 @@ and nothing in CI depends on the instance.
 |---|---|
 | `terraform fmt -check -recursive` | clean |
 | `terraform init -backend=false` + `validate` (HashiCorp Terraform 1.16.5, azuread 3.10.0) | **Success** |
-| `terraform test` (`tests/apps.tftest.hcl` + `tests/servicenow.tftest.hcl`, mocked azuread) | **31 passed, 0 failed** (18 + 13): plan runs plus three mocked applies that exercise the provider's own id parsing (2026-10-20 20:08 UTC, a copy of the working tree) |
+| `terraform test` (`tests/apps.tftest.hcl` + `tests/servicenow.tftest.hcl` + `tests/okta.tftest.hcl`, mocked azuread) | **46 passed, 0 failed** (18 + 13 + 15): plan runs plus four mocked applies that exercise the provider's own id parsing (2026-10-26, the working tree; 31 on 2026-10-20 before `okta.tftest.hcl`) |
 | Checkov 3.3.20 (`-d modules/apps`) | 0 failed |
 
 The tests pin:
@@ -275,6 +276,16 @@ The tests pin:
   wildcard, trailing-slash, path or Reply-URL, non-ServiceNow or plain-http
   instance URL and a malformed `sys_id` are refused; the assignment prefers
   the app's `User` role.
+- okta-clinic-idp is absent by default; when on it plans one app (single
+  tenant, implicit grants off, exactly the delegated Graph scopes Okta asks
+  for), one service principal (assignment required), one assignment to
+  App-Okta-Federation-Users and one redirect URI, the Okta authorize
+  callback; the ITSM reference is stamped; the flag without an org host or
+  without the group fails the plan; a scheme, path, wildcard, non-Okta host,
+  look-alike suffix or `-admin` host is refused and preview / EMEA cells are
+  accepted; a secret lifetime over 180 days is refused; the mocked apply
+  builds the ids, the bounded secret-minting command and the NHI row from
+  the applied values.
 
 **guacamole-psm at tenant time:** apply with `enable_pam_oidc_app = true`, add
 the operators to `PAM-Operators` (and to `CA008-Pilot-PhishingResistant`, so
@@ -304,3 +315,53 @@ strength, so a PSM session always starts with phishing-resistant MFA.
 - [ ] Leaver: Dana is out of the App group, deprovisioned on demand, and gone from the AWS portal.
 - [ ] OIDC: the token shows `roles`, `groups` (app groups only) and `acct`.
 - [ ] ServiceNow: the identifier URI is accepted (the SP is already in SAML mode; identifier-URI policy); the instantiated roles include `User`; NameID value and format as ServiceNow receives them; a non-member is refused at the tile.
+- [ ] okta-clinic-idp: admin consent on the four delegated Graph scopes is accepted and no clinic user sees a consent prompt; `Add-MgApplicationPassword` with `Application.ReadWrite.OwnedBy` is enough for an owner (else record the fallback); a non-member of App-Okta-Federation-Users is refused by Entra before Okta sees them (record the AADSTS code); the Entra sign-in log row for `okta-clinic-idp` shows the CA result; the redirect URI equals the Okta root's `okta_callback_uri`.
+
+---
+
+## Okta coexistence (Entra side)
+
+**BUILT, flag off** (`enable_okta_federation`, [`okta.tf`](okta.tf), 15
+mocked runs in `tests/okta.tftest.hcl`; [ADR 0022](../../docs/adr/0022-okta-coexistence-as-code.md)).
+This is Phase 1 of [`lab/docs/okta-migration-runbook.md`](../../docs/okta-migration-runbook.md)
+("Okta trusts Entra") as code: the acquired clinic keeps its Okta org for the
+apps that have not moved yet, its users sign in at Entra (so Conditional
+Access applies), and Okta accepts the Entra identity through this app. The
+Okta half (the identity provider, the routing rule, `Clinic-Staff`, the legacy
+app) is the separate, human-applied root [`lab/terraform/okta`](../../okta/README.md),
+applied **after** this one. **Nothing has been applied: no tenant and no Okta
+org exist.**
+
+| Setting (runbook Phase 1, step 1 and 4) | Value |
+|---|---|
+| App registration | `okta-clinic-idp` (`okta_idp_app_display_name`), single tenant, Web platform, implicit grants off |
+| Redirect URI | `https://<okta_org_domain>/oauth2/v1/authorize/callback`, exactly one; `okta_org_domain` is the bare org host (`*.okta.com`, `*.oktapreview.com`, `*.okta-emea.com`; Integrator Free orgs are `integrator-NNNNNNN.okta.com`), never the `-admin` host |
+| API permissions (declared, consent is human) | Microsoft Graph delegated `openid`, `profile`, `email`, `User.Read` (*verify:* Okta's current list for a generic OIDC IdP) |
+| Enterprise app | assignment required; **one** assignment: `App-Okta-Federation-Users` (`okta_federation_users_group_object_id`, from `modules/groups`) |
+| Client secret | **not created by Terraform.** Output `okta_idp_client_secret_command` mints one with `Add-MgApplicationPassword`, bounded to `okta_idp_secret_lifetime_days` (default and maximum 180: the `P180D` rotation in `lab/iga/nhi-secrets-register.json`), and prints it once for `TF_VAR_entra_client_secret` in the Okta root |
+| Hand-off to the Okta root | outputs `okta_idp_client_id` and `okta_idp_endpoints` (the tenant's v2.0 issuer, authorize, token, JWKS and userinfo URLs) |
+| NHI inventory row | `okta_clinic_idp`: credential type *client-secret, human-minted, bounded*, no outbound secret |
+
+**Why there is no `okta_idp_secret_mode = "keyvault"`.** It was considered and
+not built, because it does not fit the lab's Key Vault: an
+`azuread_application_password` puts the secret value in `envs/dev` state,
+which the PLAN identity can read (`lab/pipelines/README.md`); the
+`modules/keyvault` module takes no secret input (only the names its UAMI may
+read), its writers are human Secrets Officers by design, the CI APPLY identity
+holds no data-plane role on the vault, the vault sits behind a private
+endpoint with a deny-by-default firewall a hosted runner cannot reach, and
+this module declares `azuread` only. So the secret follows the runbook: one
+human, one bounded secret, entered once into Okta, deleted with the app in
+Phase 4. (`okta.tf` header.)
+
+Staged order (tenant time, after `enable_sso_apps`):
+
+| Stage | Who | What | Evidence to capture |
+|---|---|---|---|
+| O1 | PR → CI apply | `enable_okta_federation = true`, with `okta_org_domain` in `terraform.tfvars` / `TF_VAR_` (never `lab.tfvars`) | Plan comment; the app and its one assignment in Enterprise applications |
+| O1a | operator (Tier 0) | Grant admin consent on `okta-clinic-idp` (Enterprise applications → Permissions), so no clinic user is prompted | Screenshot of the granted delegated permissions |
+| O1b | operator | Run output `okta_idp_client_secret_command`; keep the value only in the shell that applies the Okta root (`read -s`) | The secret's `displayName` and `endDateTime` in the app's Certificates & secrets (never the value) |
+| O2 | operator, Okta | Apply [`lab/terraform/okta`](../../okta/README.md) with `enable_entra_federation = true`: `entra_client_id` = output `okta_idp_client_id`, `entra_tenant_id` from `okta_idp_endpoints`, the secret as `TF_VAR_entra_client_secret` | The Okta root's plan; outputs `entra_idp_id`, `routing_rule_id` |
+| O3 | operator | Cross-check: `terraform output -raw okta_idp_redirect_uri` here equals `terraform -chdir=../../okta output -raw okta_callback_uri` | The two strings side by side |
+| O4 | operator | Runbook Phase 1 *Validate*: a member of `App-Okta-Federation-Users` with a clinic login signs in to Okta and is sent to Entra; a non-member is refused at Entra | Entra sign-in log row for `okta-clinic-idp` with the CA result; Okta System Log IdP event |
+| O5 | operator | Runbook Phase 1 *Rollback* rehearsal: `routing_rule_active = false` in the Okta root, timed, then back | The timed rollback in the evidence log |

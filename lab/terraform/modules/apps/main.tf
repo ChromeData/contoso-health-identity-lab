@@ -27,6 +27,13 @@
 #        NameID = UPN, ONE assignment: App-ServiceNow-Users. Provisioning to
 #        ServiceNow is designed there, not built.
 #
+#   6. okta-clinic-idp (OIDC, okta.tf; enable_okta_federation)
+#        Entra as the identity provider for the acquired clinic's Okta org
+#        (runbook Phase 1, ADR 0022): one redirect URI (the Okta authorize
+#        callback), assignment required, ONE assignment:
+#        App-Okta-Federation-Users. The client secret is minted by a human
+#        post-apply, never by Terraform. The Okta half is lab/terraform/okta.
+#
 # NO STAND-IN: these are real Entra objects and the real AWS IAM Identity
 # Center connector. NOTHING HERE HAS RUN AGAINST A TENANT YET - every
 # statement about runtime behaviour is from Microsoft/AWS documentation or

@@ -17,6 +17,7 @@ mock_provider "azuread" {
         "EntitlementManagement.Read.All"         = "44444444-4444-4444-4444-444444444444"
         "RoleManagement.Read.Directory"          = "55555555-5555-5555-5555-555555555555"
         "RoleManagementPolicy.Read.AzureADGroup" = "66666666-6666-6666-6666-666666666666"
+        "RoleManagementPolicy.Read.Directory"    = "6d6d6d6d-6d6d-6d6d-6d6d-6d6d6d6d6d6d"
         "Application.Read.All"                   = "77777777-7777-7777-7777-777777777777"
         "Synchronization.Read.All"               = "88888888-8888-8888-8888-888888888888"
         "User.ReadBasic.All"                     = "99999999-9999-9999-9999-999999999999"

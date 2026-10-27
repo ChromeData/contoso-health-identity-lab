@@ -69,6 +69,7 @@ when its prerequisite is off):
 | `enable_sso_apps` | AWS IAM Identity Center SAML app + Contoso Clinical Portal OIDC app | P1 (group assignment); bootstrap `enable_app_management_roles` first |
 | `enable_scim_provisioning` / `aws_scim_job_enabled` | AWS provisioning job (created stopped) / start it | needs `enable_sso_apps`; first apply is a local seeding run with the token from Key Vault |
 | `enable_pam_oidc_app` | guacamole-psm + PAM-Operators | needs `enable_sso_apps` |
+| `enable_okta_federation` | okta-clinic-idp: Entra as the OIDC identity provider for the acquired clinic's Okta org, one assignment (App-Okta-Federation-Users); the secret is a human's post-apply step; the Okta side is the human-applied root `../../okta` | needs `enable_sso_apps` and `okta_org_domain` (terraform.tfvars); ADR 0022 |
 | `clinical_portal_preauthorize_azure_cli` | Azure CLI pre-authorized on the Clinical Portal's `Clinical.Read` scope (evidence E25 token demo only; off again after) | needs `enable_sso_apps` |
 | `enable_nhi_governance` | App-Consent-Reviewers (consent policy itself is post-apply) | none for the group |
 

@@ -140,6 +140,13 @@ output "nhi_inventory" {
       credential_expires          = azuread_service_principal_token_signing_certificate.servicenow[0].end_date
       outbound_secret             = "none (provisioning to ServiceNow designed, not built)"
     } : null
+    okta_clinic_idp = var.enable_okta_federation ? {
+      service_principal_object_id = azuread_service_principal.okta_idp[0].object_id
+      owners                      = local.app_owners
+      credential_type             = "client-secret (minted by a human post-apply, at most ${var.okta_idp_secret_lifetime_days} days; held by Okta, never in state - nhi-secrets-register okta-clinic-idp-client-secret)"
+      credential_expires          = null
+      outbound_secret             = "none (Entra is the IdP; the secret is Okta's inbound credential)"
+    } : null
   }
 }
 
@@ -204,4 +211,47 @@ output "servicenow_sign_on_url" {
 output "servicenow_assigned_group_object_id" {
   description = "The single principal assigned to the ServiceNow app (App-ServiceNow-Users)."
   value       = one(azuread_app_role_assignment.servicenow_users[*].principal_object_id)
+}
+
+# ---- okta-clinic-idp (okta.tf) -------------------------------------------------
+# All null while enable_okta_federation is off. The Okta root
+# (lab/terraform/okta) takes okta_idp_client_id and okta_idp_endpoints as
+# inputs; the secret never passes through an output.
+
+output "okta_idp_client_id" {
+  description = "Client (application) id of okta-clinic-idp = entra_client_id in lab/terraform/okta (the Okta root's Microsoft IdP)."
+  value       = one(azuread_application.okta_idp[*].client_id)
+}
+
+output "okta_idp_application_object_id" {
+  description = "Object id of the okta-clinic-idp app registration (the -ApplicationId of the secret-minting command)."
+  value       = one(azuread_application.okta_idp[*].object_id)
+}
+
+output "okta_idp_service_principal_object_id" {
+  description = "Object id of the okta-clinic-idp enterprise app (admin consent target, sign-in log filter)."
+  value       = one(azuread_service_principal.okta_idp[*].object_id)
+}
+
+output "okta_idp_redirect_uri" {
+  description = "The one redirect URI on okta-clinic-idp. Must equal output okta_callback_uri of lab/terraform/okta (same org host) - the README's cross-check."
+  value       = local.okta_enabled ? local.okta_idp_redirect_uri : null
+}
+
+output "okta_idp_endpoints" {
+  description = "The tenant's v2.0 OIDC endpoints for the Okta root's okta_idp_oidc (issuer, authorization, token, JWKS, userinfo). Copy, do not retype."
+  value       = local.okta_enabled ? local.okta_idp_endpoints : null
+}
+
+output "okta_idp_assigned_group_object_id" {
+  description = "The single principal assigned to okta-clinic-idp (App-Okta-Federation-Users): the allow-list of who may federate into Okta."
+  value       = one(azuread_app_role_assignment.okta_federation_users[*].principal_object_id)
+}
+
+output "okta_idp_client_secret_command" {
+  description = "POST-APPLY (tenant time, a human): mint the client secret Okta needs, bounded to okta_idp_secret_lifetime_days, and hand the printed value ONCE to the Okta root as TF_VAR_entra_client_secret. Terraform never creates or stores it (okta.tf header). Needs Connect-MgGraph -Scopes Application.ReadWrite.All (or ownership of the app with Application.ReadWrite.OwnedBy)."
+  value = one([
+    for app in azuread_application.okta_idp :
+    "Add-MgApplicationPassword -ApplicationId ${app.object_id} -PasswordCredential @{ displayName = 'Okta IdP - entered once into lab/terraform/okta'; endDateTime = (Get-Date).ToUniversalTime().AddDays(${var.okta_idp_secret_lifetime_days}) } | Select-Object -ExpandProperty SecretText"
+  ])
 }

@@ -60,7 +60,10 @@ Scenario contract (names, groups, packages) and the full lifecycle run order:
 | `Invoke-BaselineAssessment.ps1` | Runs or imports CISA ScubaGear and Microsoft's Zero Trust Assessment (`-Phase before` / `after` / `checkpoint`), hashes every output, maps each ScubaGear MS.AAD policy to the lab control, uploads to the WORM store | `lab/evidence/assessments/` (public-safe summary); raw reports to `lab/evidence/out/` and the evidence store | `-WhatIf`, `-SkipUpload` | Group.Read.All (ScubaGear and the Zero Trust Assessment request their own read scopes) |
 | `Invoke-BreakGlassDrill.ps1` | Guided break-glass drill (`-Phase Preflight` / `Verify` / `All`): preflight checks, operator-performed sign-ins, then proof the alert fired, read back from Log Analytics | `lab/evidence/drills/` (only what was observed) | `-WhatIf` | User.Read.All, GroupMember.Read.All, Policy.Read.All, UserAuthenticationMethod.Read.All |
 | `Invoke-CaRestoreDrill.ps1` | CA restore drill (`-Mode Snapshot` / `Compare` / `Restore`): snapshot every policy, detect drift, restore one, timed | `lab/evidence/out/ca-restore/`; the tenant only with `-Mode Restore -Apply` | read-only by default; `-WhatIf` | Policy.Read.All (+ Policy.ReadWrite.ConditionalAccess to restore) |
+| `New-KpiOnePager.ps1` | The one-page KPI view for the CISO (monthly) and the board (quarterly): three headline numbers, every KPI with its direction of travel against an earlier snapshot, and each unmeasured KPI stated as such, never as 0. Reads the newest `08` snapshot (or `-SnapshotPath`), `-CompareTo` for direction; writes `<stamp>-onepager.md` + `.sha256` next to it | `lab/evidence/kpis/` (hashed) | `-WhatIf` | none (reads snapshot files only) |
 | `Export-EvidencePack.ps1` | Auditor evidence pack: PIM activation history, access-review decisions, CA inventory, MFA coverage, privileged role assignments, plus the companion evidence above, under one SHA-256 manifest and a control-mapped `SUMMARY.md` | `lab/evidence/out/` | `-WhatIf` | RoleManagement.Read.Directory, PrivilegedAssignmentSchedule.Read.AzureADGroup, AccessReview.Read.All, Policy.Read.All, AuditLog.Read.All, Directory.Read.All |
+| `Export-IdentityConfig.ps1` | Read-only export of the tenant configuration the code owns (CA policies, named locations, authentication strengths and methods policy, PIM policies for directory roles and PIM for Groups, consent / app-management / cross-tenant policies, break-glass exclusion facts) as one normalised, deterministic JSON snapshot; `-Public` hashes every object id and IP range. A section that cannot be read is recorded as `failed`, never as empty (exit 1) | `lab/evidence/config-snapshots/` (hashed, `SHA256SUMS`); without `-Public`, `lab/evidence/out/` only | `-WhatIf`; `-Offline -FixturePath` replays `tests/fixtures/identity-config.fixture.json` | Policy.Read.All, RoleManagementPolicy.Read.Directory, RoleManagementPolicy.Read.AzureADGroup, Group.Read.All, GroupMember.Read.All, RoleManagement.Read.Directory |
+| `Compare-IdentityConfig.ps1` | Drift: a snapshot against the committed baseline (`lab/config-baseline/identity-config.json`) and the declared intent in `lab.tfvars` (`ca_policy_states`, `blocked_countries`) plus the break-glass invariants; High / Medium / Low per the exception standard; time-boxed exceptions from `drift-exceptions.json` (expired = reactivated); JSON findings and a GitHub-issue Markdown. Exit 2 High, 1 Medium, 0 otherwise, 3 = unusable input | `-JsonPath`, `-MarkdownPath` (public-safe) | no tenant: two files in | none (reads files only) |
 
 ### Post-apply (`post-apply/`): what Terraform cannot express
 
@@ -147,6 +150,39 @@ after, drills), follow [`../../docs/evidence-capture-plan.md`](../../docs/eviden
 baseline` come first; `Invoke-BreakGlassDrill.ps1`, the `after` phase and
 `Export-EvidencePack.ps1` come last.
 
+## Configuration drift: export, compare, nightly reconcile
+
+The lab's control plane (Conditional Access, PIM policies, authentication
+methods, consent and app-management policies, cross-tenant defaults, the
+break-glass exclusions) is code. Two scripts close the loop between that
+code and the tenant, next to the real-time detections:
+
+| Layer | What | When | Where |
+|---|---|---|---|
+| Real-time detection | A change as it is made: policy disabled or moved to report-only, an exclusion added, a named location or strength weakened, an admin changing someone's MFA, a role assigned outside PIM | minutes, Sentinel / Log Analytics | [`../../kql/ca-policy-changed.kql`](../../kql/ca-policy-changed.kql), `auth-method-changed-by-admin.kql`, `role-assigned-outside-pim.kql`, `pim-group-member-added-outside-pim.kql` |
+| Nightly reconcile | The tenant as it is against the tenant as the code says: `Export-IdentityConfig.ps1 -Public`, then `Compare-IdentityConfig.ps1` against the committed baseline and `lab.tfvars`; a classified finding opens or updates one `identity-drift` issue | nightly and on demand, CI with the read-only PLAN identity | [`.github/workflows/config-drift.yml`](../../../.github/workflows/config-drift.yml), [`../../config-baseline/`](../../config-baseline/) |
+| Exceptions with expiry | An accepted difference has an id, an owner, an approver and an expiry (90 days High, 180 Medium / Low); the day after it expires the finding is open again; a malformed entry is ignored, never honoured | per finding | [`../../config-baseline/drift-exceptions.json`](../../config-baseline/drift-exceptions.json), [`../../docs/standards/exception-process.md`](../../docs/standards/exception-process.md) |
+
+Why both: a detection can be missed (a rule not yet deployed, an outage, a
+Microsoft-managed edit, an alert nobody acted on). The reconcile cannot be
+silenced by a missed alert, and a read that fails is a finding
+("unknown, not absent"), never silence. Remediation is a pull request: the
+code is the source of truth, so a finding is either a change that skipped
+review, or a baseline nobody updated after one.
+
+Run it without a tenant:
+
+```powershell
+./Export-IdentityConfig.ps1 -Offline -OutputDirectory ../../evidence/out/config-snapshots   # the committed fixture, hashed ids
+./Compare-IdentityConfig.ps1 -SnapshotPath ../../evidence/out/config-snapshots/<UTC>.json -MarkdownPath ../../evidence/out/drift.md
+```
+
+Against the placeholder baseline the compare reports "no baseline yet"
+and still runs the intent and break-glass checks. Committing the first
+baseline is a tenant-time step ([`../../config-baseline/README.md`](../../config-baseline/README.md),
+exception E59). **BUILT, not run**: neither script has read a tenant, and
+the workflow has never run.
+
 ## Tests
 
 ```powershell
@@ -154,7 +190,7 @@ pwsh lab/scripts/powershell/tests/Invoke-LabTests.ps1        # PSScriptAnalyzer 
 pwsh lab/scripts/powershell/tests/Invoke-LabTests.ps1 -CI    # also writes out/testResults.xml (gitignored)
 ```
 
-32 test files in `tests/`, one per script or area (`Reset-DemoState.Tests.ps1`
+35 test files in `tests/`, one per script or area (`Reset-DemoState.Tests.ps1`
 covers [`../demo/`](../demo/)). Two are shared:
 `PostApply.Tests.ps1` checks `Invoke-PostApply.ps1`'s order and the real
 scripts' parameter contracts, and is the only coverage of

@@ -41,6 +41,8 @@ incidents.
 | [0018](0018-nhi-ownership-and-agent-identity-sponsorship.md) | Two owners per non-human identity, platform credential and consent rules, a monthly inventory and a leaver hand-off; agents get Entra Agent ID with a named sponsor | NHI / governance |
 | [0019](0019-pam-vault-high-availability-and-dr.md) | PAM vault: Raft (3 voters in the lab, 5 across three zones in production), auto-unseal from a key outside the cluster, a timed snapshot-restore drill | PAM / resilience |
 | [0020](0020-pim-activation-design.md) | PIM activation: approver groups, eligibility expiry, activation caps (Tier 0 4 h, GA and PAA 2 h, Tier 1 8 h), Tier-1 approval only for Intune, User Administrator and the IGA group, authentication-context step-up in three separate changes, direct GA eligibility, AU-scoped service desk | Privileged access |
+| [0021](0021-configuration-drift-detection.md) | Configuration drift: a nightly read-only reconcile of the tenant against the committed baseline and the declared intent, findings as an issue (never an automatic revert), exceptions with an owner and an expiry | Delivery / detection |
+| [0022](0022-okta-coexistence-as-code.md) | Okta coexistence (acquired clinic) built as code: Okta trusts Entra as its OIDC IdP, a routing rule with the Okta fallback kept, a separate human-applied Okta root, the client secret never in state | Federation / M&A |
 
 ## Format
 

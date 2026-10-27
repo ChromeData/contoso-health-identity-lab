@@ -1,0 +1,5 @@
+{
+  "schema": "contoso-identity-drift-exceptions/v1",
+  "note": "Time-boxed exceptions to configuration drift findings (lab/docs/standards/exception-process.md). Every entry needs id, finding, owner, approved and expires; the term is at most 90 days for a High finding and 180 for Medium or Low, from the approval date. An entry that breaks those rules is ignored and listed in the drift summary; an expired entry reactivates the finding. Format in README.md.",
+  "exceptions": []
+}

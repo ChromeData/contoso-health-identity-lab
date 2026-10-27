@@ -146,6 +146,11 @@ aws_scim_template_id = ""
 servicenow_instance_url = "" # https://devNNNNN.service-now.com
 servicenow_sso_sys_id   = "" # 32 hex characters
 
+# Okta coexistence (enable_okta_federation): the Okta org HOST, the host of
+# okta-clinic-idp's one redirect URI. Same string as lab/terraform/okta
+# output okta_org_domain. No scheme, no path.
+okta_org_domain = "" # integrator-1234567.okta.com
+
 # ---- ITDR ----------------------------------------------------------------------
 # Printed by lab/scripts/monitoring/Deploy-ContainmentPlaybook.ps1.
 containment_playbook_id = ""

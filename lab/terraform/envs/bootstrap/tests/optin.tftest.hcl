@@ -21,6 +21,7 @@ mock_provider "azuread" {
         "EntitlementManagement.Read.All"              = "33333333-3333-3333-3333-333333333333"
         "RoleManagement.Read.Directory"               = "44444444-4444-4444-4444-444444444444"
         "RoleManagementPolicy.Read.AzureADGroup"      = "55555555-5555-5555-5555-555555555555"
+        "RoleManagementPolicy.Read.Directory"         = "6d6d6d6d-6d6d-6d6d-6d6d-6d6d6d6d6d6d"
         "User.ReadWrite.All"                          = "66666666-6666-6666-6666-666666666666"
         "Group.ReadWrite.All"                         = "77777777-7777-7777-7777-777777777777"
         "Policy.ReadWrite.ConditionalAccess"          = "88888888-8888-8888-8888-888888888888"

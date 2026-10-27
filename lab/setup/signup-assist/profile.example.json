@@ -1,0 +1,17 @@
+{
+  "firstName": "Michael",
+  "lastName": "Williams",
+  "email": "you@example.com",
+  "phone": "+1 555 555 0100",
+  "company": "Contoso Health Lab",
+  "companySize": "25-49",
+  "jobTitle": "IAM Engineer",
+  "country": "United States",
+  "address": "",
+  "city": "",
+  "state": "",
+  "zip": "",
+  "username": "admin",
+  "domain": "contosohealthlab7f3a",
+  "password": ""
+}

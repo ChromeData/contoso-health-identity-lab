@@ -9,7 +9,7 @@ Every lab control in one row, mapped only to frameworks whose own text was check
 - **NIST SP 800-171 Rev 2** — the numbering CMMC Level 2 uses (32 CFR 170.14: Level 2 requirements are identical to 800-171 R2; CMMC IDs add a domain prefix, so 3.1.1 is `AC.L2-3.1.1`). NIST withdrew Rev 2 for Rev 3 in May 2024; CMMC still cites Rev 2. Expected for defense contractors handling CUI. Checked against NIST's requirements CSV (csrc.nist.gov)
 - **CIS Critical Security Controls v8.1** — IG1/IG2/IG3 implementation groups (Safeguard numbers, titles and IGs checked against CIS's published v8.1 guide, August 2024)
 
-**Not mapped:** ISO/IEC 27001:2022, NIST CSF 2.0, SOC 2, PCI DSS and GDPR. Their text wasn't checked line by line, and a mapping nobody checked is a claim nobody can stand behind. The rows below are the input for any of them: a new framework is one more line per section, checked against its own text before it is added.
+**Not mapped:** ISO/IEC 27001:2022, NIST CSF 2.0, SOC 2, PCI DSS and GDPR. NIST SP 800-63-4 assurance levels are mapped in section 17 only (authentication and federation), not as a column. Their text wasn't checked line by line, and a mapping nobody checked is a claim nobody can stand behind. The rows below are the input for any of them: a new framework is one more line per section, checked against its own text before it is added.
 
 Each row names a control the lab implements in code, where in the repo it lives, and the referenced control number in each framework. The Entra-side controls are written as code but not yet applied to a tenant, so those rows describe the design, not evidence that the control operated. "n/a" means the framework doesn't have a cleanly-matching clause. Sections 11–16 (added 2026-10-20) cover control areas built after the first version: risk-based access, phishing-resistant authentication, non-human identity governance, ITDR containment, birthright and separation of duties, and just-in-time credentials. They have no SOX row.
 
@@ -268,6 +268,25 @@ Each row names a control the lab implements in code, where in the repo it lives,
 | CIS v8.1 | 3.3 Configure Data Access Control Lists (IG1): database permissions by need to know |
 
 **Lab proof:** the harness run (L02 in `evidence-capture-plan.md`), which is local only. There is no tenant step.
+
+---
+
+## 17. Authentication assurance (NIST SP 800-63-4 AAL / FAL)
+
+**Lab:** the Conditional Access authentication strengths in `lab/terraform/modules/conditional-access/` (CA002 and CA021: the admin phishing-resistant strength; CA008: phishing-resistant for the workforce, pilot first; CA001: MFA; CA009: registration only with a TAP or a phishing-resistant method), the passkey profiles in `post-apply/Set-AuthenticationMethodsPolicy.ps1` (attested, device-bound for admins; synced allowed for staff; SMS and voice retired), the shared-workstation design (ADR 0014) and the federation design for AWS, ServiceNow, the clinical portal and the Okta coexistence (`modules/apps`, `lab/terraform/okta/`). Added 2026-10-26; the assurance-level labels below follow the definitions in NIST SP 800-63B-4 (authentication) and 800-63C-4 (federation) and were checked against the published Rev 4 text (verify: the final Rev 4 wording for AAL3 authenticator requirements and FAL2 assertion protection before citing this in an assessment). Nothing has been measured: no sign-in has happened.
+
+| Framework | Control |
+|---|---|
+| NIST SP 800-63B-4 | **AAL3** for Tier-0 and Tier-1 administrators: hardware-bound, phishing-resistant authenticator (attested device-bound passkey or FIDO2 security key) required at every Tier-0 activation (`c1`, CA021) and at admin sign-in (CA002); reauthentication at most every 4 hours on the admin portals (CA020). **AAL2** for the workforce: MFA with phishing-resistant methods preferred and the SMS and voice channels retired (CA001, CA008, methods policy); reauthentication every 12 hours or 30 minutes of inactivity is Microsoft's session default, not a lab setting (verify:). **Registration of a new authenticator** needs an existing phishing-resistant authenticator or a one-time pass handed over after identity verification (CA009, `help-desk-identity-verification.md`), which maps to the binding and renewal requirements |
+| NIST SP 800-63C-4 | **FAL2** for every federated app: signed SAML assertions or OIDC ID tokens from Entra, assignment required (no open audience), NameID = UPN (`modules/apps`); the Okta coexistence is an FAL2 federation in the other direction (Entra as the IdP for Okta, `lab/terraform/okta/`). FAL3 (holder-of-key) is not claimed |
+| NIST SP 800-63A-4 | **IAL**: not claimed. Identity proofing is HR's onboarding process (`raci.md`); the lab's day-one credential hand-off (TAP given in person) is the binding step, not proofing |
+| HITRUST CSF v11.2.0 | 01.q User Identification and Authentication; 01.j User Authentication for External Connections |
+| HIPAA Security Rule | §164.312(d) Person or entity authentication (Required); §164.312(a)(2)(i) Unique user identification |
+| NIST 800-53 R5 | IA-2(1) MFA to privileged accounts; IA-2(2) MFA to non-privileged accounts; IA-2(8) Access to accounts, replay resistant; IA-5(2) Public key-based authentication; IA-8 Identification and Authentication (Non-Organizational Users) for federation |
+| NIST 800-171 R2 (CMMC L2) | 3.5.3 MFA; 3.5.4 Replay-resistant authentication |
+| CIS v8.1 | 6.3 Require MFA for Externally-Exposed Applications (IG1); 6.4 Require MFA for Remote Network Access (IG1); 6.5 Require MFA for Administrative Access (IG1) |
+
+**Lab proof:** the graduation evidence for CA002, CA008 and CA021 (E30–E38b in `evidence-capture-plan.md`) and the passkey rollout metrics (`07-Passwordless-Rollout.ps1`, KPI `phishing_resistant_pct` and `phishing_resistant_device_bound_pct`). Until then, the strengths and profiles are code only.
 
 ---
 

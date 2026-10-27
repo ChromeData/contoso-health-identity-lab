@@ -61,6 +61,26 @@ credentials** (fmt, validate and every mocked `terraform test`, the Pester
 suites, the shell tests and the Splunk drift check). Its two checks are the
 4th and 5th required checks (§5 F).
 
+Also not drawn: `config-drift.yml`, the **nightly reconcile**. The
+detections at the bottom of the diagram fire when a change is made; the
+reconcile catches what they missed. Every night (and on demand) it signs in
+as the read-only PLAN app over OIDC, exports the tenant's Conditional
+Access, named locations, authentication strengths and methods, PIM policies,
+consent / app-management / cross-tenant policies and break-glass exclusion
+facts as one normalised snapshot with every id hashed
+(`Export-IdentityConfig.ps1 -Public`), compares it with the committed
+baseline (`lab/config-baseline/identity-config.json`) and with the states
+declared in `lab.tfvars` (`Compare-IdentityConfig.ps1`), uploads the
+snapshot as a run artifact (never commits it), and on High or Medium drift
+opens or updates one issue labelled `identity-drift`. Accepted differences
+live in `lab/config-baseline/drift-exceptions.json` with an owner and an
+expiry (90 days High, 180 Medium / Low): when the exception expires, the
+finding comes back by itself. Until the first tenant export is committed the
+baseline is a placeholder and the job succeeds with "no baseline yet". The
+loop is described in
+[`../scripts/powershell/README.md`](../scripts/powershell/README.md#configuration-drift-export-compare-nightly-reconcile).
+BUILT; no workflow has run yet.
+
 The reviewer approves the run before it re-plans. The applied plan is the fresh
 one on `main`, not the PR comment's; drift since the PR (portal edits, other
 merges) is applied without a second look and is visible in the plan step's log.
@@ -448,6 +468,7 @@ with no PR and no review, lock the WORM store irreversibly.
 | `../../.github/workflows/k8s-identity.yml` | PR touching `lab/k8s/**` or `lab/terraform/k8s/**` (or manual): runs `../k8s/ci/pipeline.sh` on an ephemeral kind cluster, no cloud credentials (§7) |
 | `../../.github/workflows/lab-tests.yml` | every PR and main, **no credentials**: `terraform fmt`, `init -backend=false` + `validate` in every root and module, every mocked `terraform test`; PSScriptAnalyzer + the Pester suites (`lab/scripts/powershell/tests`, ITDR, PAM dependency scan) with pinned modules; the vault-ingest shell test and the Splunk savedsearches drift check |
 | `../../.github/workflows/pam-harness.yml` | manual and nightly, **no credentials**: `lab/pam/test/run-all.sh` (default suites) from a fresh clone on a fresh runner: no `.env`, no `.secrets/`, no Docker volumes. Its console output and per-suite job summary are the third-party-timestamped run of the PAM harness. BUILT, not run (no workflow has run yet) |
+| `../../.github/workflows/config-drift.yml` | nightly and manual, **PLAN app (read-only, OIDC), no secrets**: `Export-IdentityConfig.ps1 -Public` then `Compare-IdentityConfig.ps1` against `lab/config-baseline/`; snapshot + findings as a run artifact, Markdown in the job summary, one `identity-drift` issue on drift (closed by the next clean run). Needs `issues: write` on the job. Succeeds with a notice while the baseline is the placeholder. BUILT, not run |
 
 **Not planned or applied by CI: `lab/terraform/aws/`.** The AWS IAM Identity
 Center root is applied by a human from a short-lived `aws sso login` session.

@@ -560,6 +560,28 @@ variable "servicenow_sso_sys_id" {
   default     = ""
 }
 
+variable "enable_okta_federation" {
+  type        = bool
+  description = <<-EOT
+    Create okta-clinic-idp (modules/apps okta.tf), the Entra half of the
+    Okta coexistence (lab/docs/okta-migration-runbook.md Phase 1, ADR 0022):
+    a single-tenant OIDC app registration whose one redirect URI is the Okta
+    org's authorize callback, assignment required, ONE assignment
+    (App-Okta-Federation-Users). The client secret is minted by a human
+    post-apply (output okta_idp_client_secret_command), never by Terraform.
+    Needs enable_sso_apps and okta_org_domain (the plan fails without it).
+    The Okta half is the separate, human-applied root lab/terraform/okta,
+    applied after this. Off by default.
+  EOT
+  default     = false
+}
+
+variable "okta_org_domain" {
+  type        = string
+  description = "Okta org host, e.g. integrator-1234567.okta.com (bare host: no scheme, path or wildcard; never the -admin host): the host of okta-clinic-idp's one redirect URI. Must equal lab/terraform/okta output okta_org_domain. Required when enable_okta_federation = true. Org-specific: terraform.tfvars / TF_VAR_okta_org_domain, never lab.tfvars."
+  default     = ""
+}
+
 # ---- Governance / PIM extensions ---------------------------------------------
 
 variable "enable_pim_tiers" {

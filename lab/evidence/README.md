@@ -121,6 +121,25 @@ template: no drill has been run, because no tenant exists.
 - The records hold synthetic lab accounts and lab hostnames only: no
   secret, no tenant identifier, no public IP address.
 
+## Configuration snapshots (`config-snapshots/`)
+
+Where `Export-IdentityConfig.ps1 -Public` writes the tenant's configuration
+as code sees it (Conditional Access, named locations, authentication
+strengths and methods, PIM policies, consent / app-management /
+cross-tenant policies, break-glass exclusion facts): one
+`<UTC>.json` per export, normalised so an unchanged tenant gives the same
+bytes, every object id and IP range hashed, no name, UPN or mailbox, plus
+one `SHA256SUMS` for the folder (`shasum -a 256 -c SHA256SUMS`). The
+reviewed first export is also committed as the baseline in
+[`../config-baseline/`](../config-baseline/), and the nightly
+`config-drift.yml` run compares each new export with it. Nightly exports
+are run artifacts (30 days), not commits: a snapshot lands here only when a
+person reviews it, normally in the same PR that updates the baseline.
+
+**Empty until the tenant run.** A fixture replay (`-Offline`) is refused in
+this folder and goes to `out/config-snapshots/`; a snapshot without
+`-Public` (object ids) is refused here too.
+
 ## Not here yet
 
 - Sentinel evidence for the detections: a rule deployed to a workspace,
@@ -129,5 +148,7 @@ template: no drill has been run, because no tenant exists.
 - Tenant evidence (`kpis/`, `assessments/`, `sod/`, drill rows): written
   during the tenant run, as planned in
   [`../docs/evidence-capture-plan.md`](../docs/evidence-capture-plan.md).
+- `config-snapshots/` (above) and the baseline it feeds: no tenant has
+  been exported.
 - `out/` is gitignored. Anything with identity detail (names, UPNs, object
   ids, raw tenant exports) goes there and never into a record.
