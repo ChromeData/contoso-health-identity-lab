@@ -18,6 +18,8 @@ mock_provider "azuread" {
         "RoleManagement.Read.Directory"          = "55555555-5555-5555-5555-555555555555"
         "RoleManagementPolicy.Read.AzureADGroup" = "66666666-6666-6666-6666-666666666666"
         "RoleManagementPolicy.Read.Directory"    = "6d6d6d6d-6d6d-6d6d-6d6d-6d6d6d6d6d6d"
+        "AdministrativeUnit.Read.All"            = "a0a0a0a0-0000-4000-8000-00000000000a"
+        "AdministrativeUnit.ReadWrite.All"       = "a0a0a0a0-0000-4000-8000-00000000000b"
         "Application.Read.All"                   = "77777777-7777-7777-7777-777777777777"
         "Synchronization.Read.All"               = "88888888-8888-8888-8888-888888888888"
         "User.ReadBasic.All"                     = "99999999-9999-9999-9999-999999999999"
