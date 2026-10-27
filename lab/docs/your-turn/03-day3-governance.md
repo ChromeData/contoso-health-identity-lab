@@ -17,7 +17,7 @@ automatic access comes in the joiner stage).
 | 2 | `turn pr day3` | the terminal | two flags `false -> true`: `enable_governance`, `enable_nhi_governance`, then `Success! 13 passed` |
 | 3 | Press **Enter**, wait for green checks, show the **Terraform plan** comment | the PR | a catalog, four access packages and the App-Consent-Reviewers group in the plan |
 | 4 | **Merge pull request**, **Confirm merge** | the PR | "Merged" |
-| 5 | `turn watch` | the terminal | a green tick |
+| 5 | `turn approve`, comment **approve** in the issue, then `turn watch` | the approval issue, then the terminal | the issue closes as approved; the apply ends in a green tick |
 | 6 | `turn outputs` | the terminal | `saved (... bytes)` |
 | 7 | `turn post day3`, then `turn post day3 go` | the terminal | seven separation-of-duties links added, the consent policy and the app rules applied |
 | 8 | `turn open access-packages` | Identity Governance, Access packages | four packages: **Nurse - Clinical Apps**, **ICU - Critical Care Apps**, **ICU - Float Access**, **Pharmacy - Controlled Substances Apps** |

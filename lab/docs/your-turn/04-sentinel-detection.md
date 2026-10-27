@@ -18,7 +18,7 @@ workspace. A rewind and redo does not restart it.
 | 2 | `turn pr sentinel` | the terminal | one flag `false -> true`: `enable_sentinel`, then `Success! 13 passed` |
 | 3 | Press **Enter**, wait for green checks, show the **Terraform plan** comment | the PR | Sentinel onboarding and the analytics rules in the plan |
 | 4 | **Merge pull request**, **Confirm merge** | the PR | "Merged" |
-| 5 | `turn watch` | the terminal | a green tick |
+| 5 | `turn approve`, comment **approve** in the issue, then `turn watch` | the approval issue, then the terminal | the issue closes as approved; the apply ends in a green tick |
 | 6 | `turn open sentinel` | Defender portal, Microsoft Sentinel, Analytics | twelve rules, all **Enabled** |
 | 7 | Point at a few of them | the rules list | break-glass sign-in, failed sign-in spike, legacy authentication, PIM activation, blocked country, Conditional Access change, app credential added, role assigned outside PIM, group member added outside PIM, app permission granted, sign-in method changed by an admin, and Fusion |
 | 8 | Read the Proof part | | |

@@ -19,7 +19,7 @@ so they watch sign-ins without blocking anyone yet.
 | 5 | Open the **Terraform plan** comment | the Conversation tab | a table of steps, then the planned changes |
 | 6 | Open **Files changed** | the diff | the five flag lines in `lab.tfvars` |
 | 7 | Click **Merge pull request**, then **Confirm merge** | the PR | "Merged" |
-| 8 | `turn watch` | the terminal | the apply job, ending in a green tick |
+| 8 | `turn approve`, comment **approve** in the issue, then `turn watch` | the approval issue, then the terminal | the issue closes as approved; the apply ends in a green tick |
 | 9 | `turn outputs` | the terminal | `saved (... bytes)` |
 | 10 | `turn post day1`, then `turn post day1 go` | the terminal | the break-glass check passes: both break-glass accounts are excluded from every policy |
 | 11 | Switch to *Contoso 05 · Sign-in rules*, read up to "Build" | the lab map | the sign-in station |

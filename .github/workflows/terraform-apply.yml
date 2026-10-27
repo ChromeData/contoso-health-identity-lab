@@ -125,8 +125,34 @@ env:
   TF_VAR_require_scim_credentials: "true"
 
 jobs:
+  # The human gate while the repo is PRIVATE: GitHub's Environment required
+  # reviewers need a public repo (or Enterprise). This job opens an "Approve:
+  # apply <sha> to prod" issue and waits for an approver to comment "approve"
+  # or "deny" (30 minutes, then cancel). Approvers: repo Variable
+  # APPLY_APPROVERS (comma-separated logins), default the repo owner. When the
+  # repo goes public, restore required reviewers on prod (lab/pipelines/
+  # README.md section 5E) and delete this job. .github/scripts/apply-approval-gate.sh
+  approval:
+    name: approval (human gate)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Wait for approve / deny
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLY_APPROVERS: ${{ vars.APPLY_APPROVERS }}
+        run: .github/scripts/apply-approval-gate.sh
+
   terraform-apply:
     name: terraform apply (prod, reviewer-gated)
+    needs: approval
     runs-on: ubuntu-latest
     # Defence in depth only: a dispatched run executes the chosen branch's own
     # copy of this file, so a branch can delete this line. The real control is
@@ -134,8 +160,9 @@ jobs:
     # lab/pipelines/README.md §5E), because the APPLY subject
     # `environment:prod` carries no branch ref.
     if: github.ref == 'refs/heads/main'
-    # The required-reviewer gate is configured on this Environment in repo
-    # Settings -> Environments -> prod. The run pauses here until approved.
+    # The human gate is the `approval` job above while the repo is private.
+    # Once public, configure required reviewers on this Environment instead
+    # (repo Settings -> Environments -> prod); the run then pauses here.
     environment:
       name: prod
     permissions:

@@ -7,6 +7,9 @@
 #   turn.sh where              which stage the lab is at right now
 #   turn.sh pr <stage>         preview, then open the PR that moves the lab to
 #                              <stage>; the PR opens in your browser
+#   turn.sh approve [go]       the apply waits for you: open the approval
+#                              issue (or approve from here with 'go')
+#   turn.sh deny [go]          the same, to cancel the apply
 #   turn.sh watch              follow the apply run on main until it finishes
 #   turn.sh outputs            save the Terraform outputs the post-apply step
 #                              reads (private, gitignored folder)
@@ -107,6 +110,22 @@ case "$cmd" in
       Connect-MgGraph -TenantId '$tid' -Scopes ('$GRAPH_SCOPES' -split ',') -NoWelcome
       & ./lab/scripts/powershell/post-apply/Invoke-PostApply.ps1 -OutputsPath '$OUTPUTS' -Only $steps $flag" ;;
 
+  approve|deny)
+    # The apply waits on an "Approve: apply <sha> to prod" issue
+    # (.github/scripts/apply-approval-gate.sh).
+    mode="${1:-}"
+    n=$(gh issue list -R "$REPO_SLUG" --state open --search 'in:title "Approve: apply"' --json number -q '.[0].number')
+    [ -n "$n" ] || die "no apply is waiting for a decision (has the merge's apply run started? try 'turn watch')"
+    title=$(gh issue view "$n" -R "$REPO_SLUG" --json title -q .title)
+    if [ "$mode" = "go" ]; then
+      say "Commenting '$cmd' on: $title"
+      gh issue comment "$n" -R "$REPO_SLUG" --body "$cmd" >/dev/null && echo "  done; the apply job starts within 15 seconds"
+    else
+      say "Opening the waiting approval: $title"
+      echo "  Read it, then comment '$cmd' (or run 'turn.sh $cmd go')."
+      open "https://github.com/$REPO_SLUG/issues/$n"
+    fi ;;
+
   au-rule)
     # Day 2's one manual step: the help-desk admin unit's dynamic membership
     # rule, rendered by Terraform (output pim_workforce_au_membership_body).
@@ -128,5 +147,5 @@ case "$cmd" in
     say "Opening $page"; open "$url" ;;
 
   help|*)
-    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' ;;
+    sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac
