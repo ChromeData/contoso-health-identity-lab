@@ -40,7 +40,7 @@ ghvar() { gh variable get "$1" -R "$REPO_SLUG"; }
 die()  { echo "turn: $*" >&2; exit 1; }
 
 # Graph permissions the post-apply steps need (privileged access + governance).
-GRAPH_SCOPES="AdministrativeUnit.ReadWrite.All,Application.Read.All,AuditLog.Read.All,EntitlementManagement.ReadWrite.All,Group.Read.All,GroupMember.Read.All,GroupMember.ReadWrite.All,LifecycleWorkflows.ReadWrite.All,Policy.Read.All,Policy.ReadWrite.ApplicationConfiguration,Policy.ReadWrite.AuthenticationMethod,Policy.ReadWrite.Authorization,Policy.ReadWrite.ConditionalAccess,Policy.ReadWrite.ConsentRequest,Policy.ReadWrite.PermissionGrant,PrivilegedAssignmentSchedule.Read.AzureADGroup,PrivilegedEligibilitySchedule.Read.AzureADGroup,PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup,RoleAssignmentSchedule.ReadWrite.Directory,RoleEligibilitySchedule.Read.Directory,RoleEligibilitySchedule.ReadWrite.Directory,RoleManagement.Read.Directory,RoleManagement.ReadWrite.Directory,RoleManagementPolicy.ReadWrite.Directory,User.Read.All,User.ReadWrite.All,UserAuthenticationMethod.Read.All"
+GRAPH_SCOPES="AdministrativeUnit.ReadWrite.All,Application.Read.All,AuditLog.Read.All,EntitlementManagement.ReadWrite.All,Group.Read.All,GroupMember.Read.All,GroupMember.ReadWrite.All,LifecycleWorkflows.ReadWrite.All,Policy.Read.All,Policy.ReadWrite.ApplicationConfiguration,Policy.ReadWrite.AuthenticationMethod,Policy.ReadWrite.Authorization,Policy.ReadWrite.ConditionalAccess,Policy.ReadWrite.ConsentRequest,Policy.ReadWrite.PermissionGrant,PrivilegedAssignmentSchedule.Read.AzureADGroup,PrivilegedEligibilitySchedule.Read.AzureADGroup,PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup,RoleAssignmentSchedule.ReadWrite.Directory,RoleEligibilitySchedule.Read.Directory,RoleEligibilitySchedule.ReadWrite.Directory,RoleManagement.Read.Directory,RoleManagement.ReadWrite.Directory,RoleManagementPolicy.ReadWrite.Directory,User.Read.All,User.ReadWrite.All,User-LifeCycleInfo.Read.All,UserAuthenticationMethod.Read.All"
 
 # Post-apply steps per stage (names from Invoke-PostApply.ps1 -ListOnly).
 post_steps() {
@@ -48,6 +48,9 @@ post_steps() {
     day1) echo "baseline" ;;
     day2) echo "baseline,auth-methods,auth-context,directory-role-pim" ;;
     day3) echo "baseline,sod,app-governance,consent" ;;
+    # After the HR feed has created staff (run sheet 06): admin accounts for
+    # the IT staff, birthright packages, joiner/leaver workflows.
+    people) echo "baseline,admin-accounts,auto-assignment,lifecycle-workflows" ;;
     *)    return 1 ;;
   esac
 }
@@ -107,7 +110,7 @@ case "$cmd" in
 
   post)
     stage="${1:?usage: turn.sh post <stage> [go]}"; mode="${2:-}"
-    steps=$(post_steps "$stage") || die "no post-apply steps for '$stage' (stages: day1, day2, day3)"
+    steps=$(post_steps "$stage") || die "no post-apply steps for '$stage' (stages: day1, day2, day3, people)"
     [ -s "$OUTPUTS" ] || die "run 'turn.sh outputs' first"
     tid=$(ghvar AZURE_TENANT_ID)
     if [ "$mode" = "go" ]; then say "Post-apply for '$stage', FOR REAL: $steps"; flag="-Execute"

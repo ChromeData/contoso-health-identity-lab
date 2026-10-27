@@ -14,6 +14,7 @@ extension.
 | `01-Install-ADDSForest.ps1` | NTDS data disk → `F:`, DSRM password generated **straight into Key Vault**, AD DS + DNS, new forest (no reboot) |
 | `02-Configure-Domain.ps1` | DNS forwarder to Azure DNS, UPN suffix, OUs, KDS root key, AD CS (LDAPS), PAM-managed accounts + delegation, prints the provisioning OU expression |
 | `03-Get-LdapsCaCert.ps1` | Prints the lab root CA certificate (PEM) for Vault's LDAPS trust |
+| `configure-sync.py` | Steps 5 and 6 by Graph: Cloud Sync (scoped OUs, password hash, hire date) and the HR app's connectivity + mappings. Idempotent |
 | `run-on-dc.py` | Runs any of these scripts on DC01 with secret parameters as a managed run command: secrets come from the Keychain or Terraform state inside the helper, are scrubbed from output, never on a command line |
 | `04-Install-CloudSyncAgent.ps1` | Installs and registers the Entra provisioning agent (Cloud Sync) unattended: Microsoft-signature gate, gMSA, domain bind. Replaces the manual RDP step |
 
@@ -100,6 +101,25 @@ for an Enterprise Admin.
    Without `OU=Disabled` in scope, a leaver moved there by provisioning falls
    out of sync scope and is **soft-deleted** in Entra instead of showing as
    disabled.
+
+**Steps 5 and 6 are scripted** (`configure-sync.py`, idempotent, Graph only):
+
+```bash
+lab/scripts/dc/configure-sync.py cloudsync --domain corp.$DOMAIN \
+  --ou "OU=Workforce,DC=corp,..." --ou "OU=Disabled,DC=corp,..."      # never ServiceAccounts / PrivilegedAccounts
+lab/scripts/dc/configure-sync.py hrapp --domain corp.$DOMAIN --sp <spId> --job <jobId> \
+  --default-ou "OU=Workforce,DC=corp,..." --parent-dn-file <the expression 02 printed>
+```
+
+`cloudsync` creates the AD2AAD configuration from Microsoft's template, scopes
+it to the OUs given, turns on password-hash sync and maps the hire date
+(`msDS-cloudExtensionAttribute1` -> `EmployeeHireDate`). `hrapp` connects the
+HR provisioning app to the agent (domain + default OU), sets the OU expression,
+takes the UPN straight from the HR `userName` (the verified suffix) and formats
+the SCIM `hireDate` into `msDS-cloudExtensionAttribute1`. Without the hire date
+every birthright rule matches nobody, and `Set-AutoAssignmentPolicies.ps1`
+refuses to run. Cloud Sync runs every 20 minutes; the first HR push to a
+just-promoted DC can fail with LDAP "Busy" (51): re-send the feed, it upserts.
 
 ## Verify
 
