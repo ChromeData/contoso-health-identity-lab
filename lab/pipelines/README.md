@@ -150,7 +150,14 @@ The repo is **public on purpose**, and the pipeline depends on it:
 
 - **Environments + required reviewers are free on public repos.** On private
   repos, protected Environments (the `prod` reviewer gate) need GitHub
-  Team/Enterprise. Public = the reviewer gate costs nothing.
+  Team/Enterprise. Public = the reviewer gate costs nothing. **While the repo
+  is private** the gate is the `approval` job in `terraform-apply.yml`
+  (`.github/scripts/apply-approval-gate.sh`): it opens an "Approve: apply
+  <sha> to prod" issue and the apply waits for an approver's `approve` or
+  `deny` comment (repo Variable `APPLY_APPROVERS`, default the owner; 30
+  minutes, then cancel). Difference: removing that job takes a merged PR,
+  while an Environment reviewer cannot be removed by code. Restore required
+  reviewers (5E) and delete the job when the repo goes public.
 - **Branch protection / rulesets** (require PR, require status checks, require
   review) are free on public repos.
 - **Code scanning (SARIF upload)** — the Checkov results under the *Security &

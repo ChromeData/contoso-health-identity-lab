@@ -17,7 +17,7 @@ Guacamole parts come with the domain controller stage).
 | 2 | `turn pr day2` | the terminal | four flags `false -> true`: `enable_pim_tiers`, `enable_global_admin_pim_policy`, `enable_helpdesk_au_scoping`, `enable_pim_auth_context`, then `Success! 13 passed` |
 | 3 | Press **Enter**, wait for green checks, show the **Terraform plan** comment | the PR | the tier groups and their policies in the plan |
 | 4 | **Merge pull request**, **Confirm merge** | the PR | "Merged" |
-| 5 | `turn watch` | the terminal | a green tick |
+| 5 | `turn approve`, comment **approve** in the issue, then `turn watch` | the approval issue, then the terminal | the issue closes as approved; the apply ends in a green tick |
 | 6 | `turn outputs` | the terminal | `saved (... bytes)` |
 | 7 | `turn post day2`, then `turn post day2 go` | the terminal | the sign-in methods policy, authentication context **c1** with **CA021**, and the Global Administrator policy, each applied |
 | 8 | `turn au-rule`, then `turn au-rule go` | the terminal | the help-desk rule, then `applied` |

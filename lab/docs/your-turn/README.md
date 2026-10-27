@@ -16,7 +16,7 @@ all.
 | 2 | **Open the change** | `turn pr <stage>`. Read the preview out loud, press Enter. The pull request opens in your browser. | 2 min |
 | 3 | **Let the robots check it** | Wait for the checks at the bottom of the PR to go green. Open the **Terraform plan** comment and point at what changes. | 3 to 5 min |
 | 4 | **Merge** | Click **Merge pull request**, then **Confirm merge**. | 10 s |
-| 5 | **Watch it build** | `turn watch`. It follows the apply until it finishes. | 3 to 10 min |
+| 5 | **Approve, then watch it build** | `turn approve` opens the waiting approval issue: read it and comment **approve** (you are the second pair of eyes). Then `turn watch` follows the apply until it finishes. | 3 to 10 min |
 | 6 | **Finish what Terraform can't** | `turn outputs`, then `turn post <stage>` (dry run), then `turn post <stage> go`. | 2 to 5 min |
 | 7 | **Show it** | `turn open <page>` and point at the result. Read the "Proof" part. | 1 to 2 min |
 
@@ -32,6 +32,9 @@ until a command says **FOR REAL** or you press Enter at its prompt.
 ```text
 turn where                 which stage the lab is at now
 turn pr <stage>            preview, then open the PR for <stage>
+turn approve [go]          the apply waits for you: open its approval
+                           issue ('go' approves from the terminal)
+turn deny [go]             the same, to cancel it
 turn watch                 follow the apply until it finishes
 turn outputs               save what the next step needs (private folder)
 turn post <stage>          the stage's finishing steps, dry run
