@@ -96,6 +96,21 @@ once the account exists: Lifecycle Workflows, access packages, CA and PIM.
 
 ## One-time setup (before the script can run against a tenant)
 
+Steps 1 and 3 are scripted: `New-InboundProvisioningApp.ps1` instantiates the
+gallery template, creates the synchronization job, and prints the
+`ServicePrincipalId` and `JobId` this script takes. It is idempotent and
+`-WhatIf` only reads:
+
+```powershell
+Connect-MgGraph -TenantId <tenant> -Scopes Application.ReadWrite.All,Synchronization.ReadWrite.All
+./New-InboundProvisioningApp.ps1 -Target AD -WhatIf   # dry run
+./New-InboundProvisioningApp.ps1 -Target AD           # -> ServicePrincipalId, JobId
+```
+
+Step 2 stays manual for now: on the AD path it needs the registered Cloud Sync
+agent (`lab/scripts/dc/04-Install-CloudSyncAgent.ps1`) assigned to the job, and
+the forest-specific mappings.
+
 1. In the Entra admin center, create an app from **"API-driven provisioning to
    Microsoft Entra ID"** (cloud-only) or **"…to on-premises Active Directory"**
    (hybrid, which is what the diagram shows: HR → AD OU → Cloud Sync → Entra).
