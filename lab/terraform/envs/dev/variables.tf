@@ -899,3 +899,30 @@ variable "tags" {
     managed_by  = "terraform"
   }
 }
+
+# ---- VM sizes ---------------------------------------------------------------
+# B-series v1 (Standard_B2s) hit "SkuNotAvailable ... Capacity Restrictions" in
+# eastus2 on 2026-10-27 (the first DC apply). Standard_B2s_v2 is the drop-in
+# both modules document (2 vCPU / 8 GiB, standardBsv2Family quota). Set back to
+# Standard_B2s here if capacity returns and cost matters more.
+variable "dc_vm_size" {
+  type        = string
+  description = "VM size of DC01 (modules/dc-vm). Default Standard_B2s_v2: B2s had no capacity in eastus2."
+  default     = "Standard_B2s_v2"
+
+  validation {
+    condition     = can(regex("^Standard_[A-Za-z0-9_]+$", var.dc_vm_size))
+    error_message = "dc_vm_size must be an Azure VM size name such as Standard_B2s_v2."
+  }
+}
+
+variable "intune_vm_size" {
+  type        = string
+  description = "VM size of the Windows 11 Intune VM (modules/intune-vm). Default Standard_B2s_v2, for the same capacity reason as dc_vm_size."
+  default     = "Standard_B2s_v2"
+
+  validation {
+    condition     = can(regex("^Standard_[A-Za-z0-9_]+$", var.intune_vm_size))
+    error_message = "intune_vm_size must be an Azure VM size name such as Standard_B2s_v2."
+  }
+}
