@@ -322,7 +322,9 @@ foreach ($pkgName in $managedPackages) {
             continue
         }
         $curPkgs = @(Get-GraphCollection -Uri "$em/accessPackages/$($src.Id)/incompatibleAccessPackages?`$select=id,displayName")
-        $curGrps = @(Get-GraphCollection -Uri "$em/accessPackages/$($src.Id)/incompatibleGroups?`$select=id,displayName")
+        # No $select here: Graph v1.0 answers 404 NotFound to incompatibleGroups?$select=...
+        # (proven 2026-10-27 against a live tenant); the bare collection returns id + displayName anyway.
+        $curGrps = @(Get-GraphCollection -Uri "$em/accessPackages/$($src.Id)/incompatibleGroups")
         $current = @($curPkgs | ForEach-Object { @{ Kind = 'accessPackage'; Id = [string]$_['id']; Name = [string]$_['displayName'] } }) +
                    @($curGrps | ForEach-Object { @{ Kind = 'group'; Id = [string]$_['id']; Name = [string]$_['displayName'] } })
         $wanted = @($plan.Links | Where-Object From -eq $pkgName)
