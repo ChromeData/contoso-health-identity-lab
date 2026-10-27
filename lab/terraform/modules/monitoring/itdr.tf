@@ -159,8 +159,8 @@ locals {
       display_name    = "Contoso ITDR - Authentication method changed by an admin for another user"
       description     = "An admin registered, updated or deleted another user's MFA / passwordless method, TAP included (T1556.006, T1098.005). High for every privileged target (help-desk runbook level V3): in the privileged-id list (break-glass, PIM-group members and eligibles, role holders), granted a directory role or privileged / PIM-tier group membership or ownership (active or eligible) in the last 2 days, or named like a break-glass / Tier-0 account."
       severity        = "Medium"
-      frequency       = "PT5M"
-      period          = "P2D" # 1 h of method changes judged + 2 days of privileged-grant history (see the .kql); P2D is also the LA alert maximum
+      frequency       = "PT1H" # Sentinel refuses a period >= 2 days with a frequency under 1 hour (BadRequest, proven 2026-10-27): hourly, which is also the window the .kql judges
+      period          = "P2D"  # 1 h of method changes judged + 2 days of privileged-grant history (see the .kql); P2D is also the LA alert maximum
       suppress        = null
       tactics         = ["CredentialAccess", "Persistence", "DefenseEvasion"]
       techniques      = ["T1556", "T1098"]
