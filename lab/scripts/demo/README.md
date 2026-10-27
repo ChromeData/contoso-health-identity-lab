@@ -184,3 +184,44 @@ wait for one Cloud Sync cycle plus delivery.
 | `SynchronizationData-User.Upload` | only when provisioning runs (the `bulkUpload` permission, `lab/scripts/mock-hr/README.md`) |
 
 License: Entra ID Governance for the access-package part (same as 02/03/04).
+
+## Rewind and replay the whole lab: `rewind-lab.sh`
+
+`Reset-DemoState.ps1` re-takes one people segment. `rewind-lab.sh` puts the
+whole build back to an earlier **stage** so someone else can build it again,
+step by step, through the same PRs:
+
+```bash
+lab/scripts/demo/rewind-lab.sh day1            # dry run: flag changes, CI test, cleanup list
+lab/scripts/demo/rewind-lab.sh day1 --open-pr  # opens the rewind PR (never merges it)
+```
+
+Stages: `p2`, `day1`, `day2`, `day3`, `sentinel`, `dc`. Each restores
+`lab.tfvars` and the stage-pinning mocked test from that stage's merge commit.
+Merging the rewind PR runs the usual reviewer-gated apply, which **destroys**
+what later stages created. The script then lists what Terraform does not own
+(Cloud Sync, the HR provisioning app, HR users, Lifecycle Workflows, CA021 and
+auth context `c1`, `adm-` accounts). Replay = re-open the stage PRs in order;
+their descriptions on GitHub are the script.
+
+- **Floor is `p2`.** The WORM evidence store is immutable by design. Every run's
+  evidence stays, so a replay adds its own capture-log rows next to the first.
+- **Tenant-wide settings stay as set** (authentication methods, consent, app
+  management, Global Administrator PIM policy). Replaying the post-apply steps
+  re-applies them idempotently. For a true blank slate, use a fresh tenant.
+- The dry run proves the rewind PR passes CI for every stage. A real rewind
+  apply has runtime ordering risks the mocked plan cannot show (for example an
+  access package that still has assignments); re-run the apply after cleanup.
+
+### What a replay costs
+
+| Item | Within the 30-day trial window | After the trials end |
+|---|---|---|
+| Microsoft 365 E5 + Entra ID Governance | Free: rewind and replay in the same tenant | Trials are once per tenant. Sign up a **fresh tenant** with `lab/setup/SIGNUP-KIT.md` (new trials; Microsoft can decline a repeat trial, verify at sign-up) |
+| Custom domain | Keep it | Keep it: remove it from the old tenant, then add and verify it in the new one. Renews yearly |
+| Azure subscription | Free credit | Upgrade to pay-as-you-go (pay for use only: the DC VM shuts down nightly), or move the subscription to the new tenant (*Change directory*) |
+| Okta Integrator, AWS Free plan, ServiceNow PDI, GitHub repo | Reused | Reused: `lab/setup/after-signup.sh` re-points the ids and variables |
+| Sentinel | Trial runs 31 days from onboarding | Pay per GB, or `enable_la_alerts` (Log Analytics alerts) instead |
+
+A fresh tenant is capped at 600 directory objects for its first 48 hours
+(`lab/setup/SIGNUP-KIT.md`): sign up two days before the DC stage.
