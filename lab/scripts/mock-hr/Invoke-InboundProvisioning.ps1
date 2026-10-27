@@ -277,7 +277,7 @@ $dataLines = $rawLines | Where-Object { $_ -notmatch '^\s*#' -and $_ -ne '' }
 if (-not $dataLines -or $dataLines.Count -lt 2) {
     throw "CsvPath '$CsvPath' has no data rows after stripping comments."
 }
-$roster = $dataLines | ConvertFrom-Csv
+$roster = @($dataLines | ConvertFrom-Csv)   # @() keeps a one-row feed an array
 
 # Validate required columns exist exactly once (fail loud on a malformed feed).
 $requiredColumns = 'employeeId', 'givenName', 'surname', 'dept', 'jobTitle', 'manager', 'status', 'startDate', 'endDate'

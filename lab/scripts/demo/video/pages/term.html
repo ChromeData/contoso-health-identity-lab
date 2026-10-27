@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8"><title>terminal</title>
+<style>
+  html,body{margin:0;height:100%;background:#E9E7E1;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif}
+  .win{position:absolute;left:96px;right:96px;top:70px;bottom:120px;background:#16161B;border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.35);overflow:hidden;display:flex;flex-direction:column}
+  .bar{height:46px;background:#24242B;display:flex;align-items:center;padding:0 18px;gap:9px;flex:none}
+  .bar i{width:14px;height:14px;border-radius:50%;display:block}
+  .bar .t{flex:1;text-align:center;color:#A9A7A0;font-size:16px;font-weight:600;margin-right:60px}
+  #scr{flex:1;overflow:hidden;padding:22px 30px;font-family:"SF Mono",Menlo,Monaco,monospace;font-size:21px;line-height:1.5;color:#E6E4DD;white-space:pre}
+  .ln{min-height:1.5em} .ps{color:#F06A35;font-weight:700} .cm{color:#fff;font-weight:600}
+  .ok{color:#7BD88F} .bad{color:#FF7A6B} .dim{color:#8D8B85} .hl{background:rgba(240,106,53,.28);box-shadow:-8px 0 0 rgba(240,106,53,.28),8px 0 0 rgba(240,106,53,.28);border-radius:3px;transition:background .4s}
+  .cur{display:inline-block;width:.6em;height:1.1em;background:#F06A35;vertical-align:-.15em;animation:b 1s steps(1) infinite} @keyframes b{50%{opacity:0}}
+  .cap{position:absolute;left:96px;bottom:44px;font-size:22px;color:#55534E;font-weight:600}
+</style></head><body>
+<div class="win"><div class="bar"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i><div class="t" id="title">zsh — contoso-health-identity-lab</div></div><div id="scr"></div></div>
+<script>
+const scr = document.getElementById('scr'); const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function add(html, cls) { const d = document.createElement('div'); d.className = 'ln ' + (cls || ''); d.innerHTML = html; scr.appendChild(d); scr.scrollTop = scr.scrollHeight; return d; }
+function color(line) {
+  let h = esc(line);
+  h = h.replace(/\b(pass|success|Success!|Succeeded|✓|ok|enabled=True|Healthy|Approved)\b/g, '<span class="ok">$1</span>');
+  h = h.replace(/(✓)/g, '<span class="ok">$1</span>');
+  h = h.replace(/\b(fail(ed)?|failure|refused|enabled=False|AADSTS\d+)\b/g, '<span class="bad">$1</span>');
+  return h;
+}
+window.term = {
+  title(t) { document.getElementById('title').textContent = t; },
+  clear() { scr.innerHTML = ''; },
+  async cmd(text, cps = 32) {
+    const d = add('<span class="ps">❯ </span><span class="cm"></span><span class="cur"></span>');
+    const c = d.querySelector('.cm');
+    for (const ch of text) { c.textContent += ch; await sleep(1000 / cps * (ch === ' ' ? 0.6 : 1) * (0.7 + Math.random() * 0.6)); }
+    await sleep(250); d.querySelector('.cur').remove();
+  },
+  async out(text, lps = 40) {
+    for (const l of text.replace(/\s+$/, '').split('\n')) { add(color(l)); await sleep(1000 / lps); }
+  },
+  prompt() { add('<span class="ps">❯ </span><span class="cur"></span>'); },
+  mark(re) { const r = new RegExp(re); let n = 0; for (const d of scr.querySelectorAll('.ln')) if (r.test(d.textContent)) { d.classList.add('hl'); n++; } return n; },
+  unmark() { for (const d of scr.querySelectorAll('.hl')) d.classList.remove('hl'); },
+};
+</script></body></html>
