@@ -122,7 +122,7 @@ records both exceptions, with User Administrator. Contributor on the RG is Tier 
 | Change | Graph / ARM permission | CI APPLY identity has it? |
 |--------|------------------------|---------------------------|
 | Tier and approver groups, role binding, PIM-for-Groups policies | `Group.ReadWrite.All`, `RoleManagement.ReadWrite.Directory`, `RoleManagementPolicy.ReadWrite.AzureADGroup` | Yes (envs/bootstrap `apply_graph_roles`) |
-| `AU-Workforce-Standard` and its scoped assignments | verify: `AdministrativeUnit.ReadWrite.All` in addition to the above | verify against `apply_graph_roles` before flipping `enable_helpdesk_au_scoping` |
+| `AU-Workforce-Standard` and its scoped assignments | `AdministrativeUnit.ReadWrite.All` in addition to the above (APPLY); `AdministrativeUnit.Read.All` for PLAN (confirmed 2026-10-27: the plan lists AUs) | verify against `apply_graph_roles` before flipping `enable_helpdesk_au_scoping` |
 | Global Administrator policy + eligibility | `RoleManagementPolicy.ReadWrite.Directory`, `RoleEligibilitySchedule.ReadWrite.Directory` | Not used: `Set-DirectoryRolePimPolicies.ps1` runs as a human |
 | Azure eligible assignment + Azure PIM policy | `Microsoft.Authorization/roleEligibilityScheduleRequests/write`, `roleManagementPolicies/write` on the RG (Owner / User Access Administrator) | **No.** It holds Contributor plus an ABAC-limited RBAC Administrator (*verify:* RBAC Administrator lacks these actions). The first apply of `enable_pim_azure_resources` is a **human apply**. Do not hand CI Owner. |
 

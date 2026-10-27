@@ -85,6 +85,7 @@ variable "plan_graph_roles" {
     "RoleManagement.Read.Directory",          # directory role assignments
     "RoleManagementPolicy.Read.AzureADGroup", # PIM-for-Groups activation policy
     "RoleManagementPolicy.Read.Directory",    # PIM directory-role policies: the nightly drift export (ADR 0021)
+    "AdministrativeUnit.Read.All",            # READ-only: plan must list AUs for the help-desk scoping (modules/pim/helpdesk.tf). Proven 2026-10-27: 403 Authorization_RequestDenied on the first Day-2 plan without it.
   ]
 }
 
@@ -113,6 +114,7 @@ variable "apply_graph_roles" {
     "EntitlementManagement.ReadWrite.All",         # catalog, packages, policies
     "RoleManagement.ReadWrite.Directory",          # role-assignable groups + role assignments
     "RoleManagementPolicy.ReadWrite.AzureADGroup", # PIM-for-Groups activation policy
+    "AdministrativeUnit.ReadWrite.All",            # AU-Workforce-Standard + the AU-scoped Helpdesk / Authentication Administrator assignments (enable_helpdesk_au_scoping)
   ]
 }
 

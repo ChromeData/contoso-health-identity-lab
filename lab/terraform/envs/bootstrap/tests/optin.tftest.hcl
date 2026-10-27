@@ -29,6 +29,8 @@ mock_provider "azuread" {
         "RoleManagement.ReadWrite.Directory"          = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         "RoleManagementPolicy.ReadWrite.AzureADGroup" = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
         "Application.ReadWrite.OwnedBy"               = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        "AdministrativeUnit.Read.All"                 = "a0a0a0a0-0000-4000-8000-00000000000a"
+        "AdministrativeUnit.ReadWrite.All"            = "a0a0a0a0-0000-4000-8000-00000000000b"
         "Application.Read.All"                        = "dddddddd-dddd-dddd-dddd-dddddddddddd"
         "Policy.ReadWrite.ApplicationConfiguration"   = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
         "AppRoleAssignment.ReadWrite.All"             = "ffffffff-ffff-ffff-ffff-ffffffffffff"
