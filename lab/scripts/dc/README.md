@@ -14,6 +14,7 @@ extension.
 | `01-Install-ADDSForest.ps1` | NTDS data disk → `F:`, DSRM password generated **straight into Key Vault**, AD DS + DNS, new forest (no reboot) |
 | `02-Configure-Domain.ps1` | DNS forwarder to Azure DNS, UPN suffix, OUs, KDS root key, AD CS (LDAPS), PAM-managed accounts + delegation, prints the provisioning OU expression |
 | `03-Get-LdapsCaCert.ps1` | Prints the lab root CA certificate (PEM) for Vault's LDAPS trust |
+| `04-Install-CloudSyncAgent.ps1` | Installs and registers the Entra provisioning agent (Cloud Sync) unattended: Microsoft-signature gate, gMSA, domain bind. Replaces the manual RDP step |
 
 ## Run it
 
@@ -56,11 +57,27 @@ for an Enterprise Admin.
    `terraform -chdir=lab/terraform/envs/dev output -raw dc_admin_password | pbcopy`
    (macOS; `clip.exe` on Windows, `xclip -selection clipboard` on Linux).
    **Change it immediately** and store the new one in Key Vault as
-   `dc01-admin-password`. Then, in the Entra admin center: *Entra Connect →
-   Cloud sync → Agents → Download on-premises agent*. Install it and sign in
-   with your admin account. The same agent serves Cloud Sync **and**
-   API-driven provisioning to AD. It creates its gMSA, which the KDS root key
-   from step 3 makes possible.
+   `dc01-admin-password`.
+
+   **Cloud Sync agent, no RDP:** `04-Install-CloudSyncAgent.ps1` installs and
+   registers it through run-command. Microsoft publishes no direct installer
+   URL, so capture it from *Entra Connect → Cloud sync → Agents → Download
+   on-premises agent* and pass it as `InstallerUrl`; the script refuses any
+   file not validly signed by Microsoft Corporation. Both passwords go only
+   through `--protected-parameters`:
+
+   ```bash
+   az vm run-command invoke -g $RG -n $VM --command-id RunPowerShellScript \
+     --scripts @lab/scripts/dc/04-Install-CloudSyncAgent.ps1 \
+     --parameters "InstallerUrl=$URL" "HybridAdminUpn=$UPN" \
+                  "DomainName=corp.$DOMAIN" "DomainAdminUser=CORP\\contosoadmin" \
+     --protected-parameters "HybridAdminPassword=$HPW" "DomainAdminPassword=$DPW"
+   ```
+
+   The same agent serves Cloud Sync **and** API-driven provisioning to AD. It
+   creates its gMSA, which the KDS root key from step 3 makes possible. Its
+   Entra sign-in is password-only (no device code): if that account must
+   satisfy MFA, use one scoped to Hybrid Identity Administrator.
 5. Paste the printed `parentDistinguishedName` expression into the
    provisioning app's attribute mapping (*Apply this mapping: Always*). That's
    what places each worker in their department OU and moves leavers to
