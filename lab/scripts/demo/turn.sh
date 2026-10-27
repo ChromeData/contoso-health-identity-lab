@@ -14,7 +14,8 @@
 #   turn.sh outputs            save the Terraform outputs the post-apply step
 #                              reads (private, gitignored folder)
 #   turn.sh post <stage>       the stage's post-apply steps, DRY RUN
-#   turn.sh post <stage> go    the same, for real
+#   turn.sh post <stage> go    the same, for real (stages: day1, day2, day3,
+#                              people, eligibility)
 #   turn.sh graduate <CA> [go] one Conditional Access policy report-only -> On:
 #                              preview + CI test, 'go' opens its PR
 #   turn.sh au-rule [go]       day 2: the help-desk admin unit's membership
@@ -110,7 +111,27 @@ case "$cmd" in
 
   post)
     stage="${1:?usage: turn.sh post <stage> [go]}"; mode="${2:-}"
-    steps=$(post_steps "$stage") || die "no post-apply steps for '$stage' (stages: day1, day2, day3, people)"
+    extra=""
+    if [ "$stage" = "eligibility" ]; then
+      # PIM-for-Groups eligibility for the adm- accounts, built from the
+      # register lab/iga/admin-accounts.json (owner -> eligibleFor).
+      dom=$(ghvar TF_ONMICROSOFT_DOMAIN | tr '[:upper:]' '[:lower:]')
+      map=$(python3 - "$dom" <<'PY'
+import json, sys
+dom = sys.argv[1]
+m = {}
+for a in json.load(open("lab/iga/admin-accounts.json")).get("accounts", []):
+    first, last = a["owner"].lower().split(" ", 1)
+    upn = f"adm-{first}.{last.replace(' ', '')}@{dom}"
+    for g in a.get("eligibleFor", []):
+        m.setdefault(g, []).append(upn)
+print("@{ " + "; ".join(f"'{g}' = @(" + ",".join(f"'{u}'" for u in us) + ")" for g, us in m.items()) + " }")
+PY
+)
+      steps="pim-eligibility"; extra="-PimEligibility $map"
+    else
+      steps=$(post_steps "$stage") || die "no post-apply steps for '$stage' (stages: day1, day2, day3, people, eligibility)"
+    fi
     [ -s "$OUTPUTS" ] || die "run 'turn.sh outputs' first"
     tid=$(ghvar AZURE_TENANT_ID)
     if [ "$mode" = "go" ]; then say "Post-apply for '$stage', FOR REAL: $steps"; flag="-Execute"
@@ -118,7 +139,7 @@ case "$cmd" in
     pwsh -NoProfile -NonInteractive -Command "
       \$global:ConfirmPreference = 'None'
       Connect-MgGraph -TenantId '$tid' -Scopes ('$GRAPH_SCOPES' -split ',') -NoWelcome
-      & ./lab/scripts/powershell/post-apply/Invoke-PostApply.ps1 -OutputsPath '$OUTPUTS' -Only $steps $flag" ;;
+      & ./lab/scripts/powershell/post-apply/Invoke-PostApply.ps1 -OutputsPath '$OUTPUTS' -Only $steps $extra $flag" ;;
 
   approve|deny)
     # The apply waits on an "Approve: apply <sha> to prod" issue
@@ -213,5 +234,5 @@ The plan comment must show exactly one change: $ca's \`state\`." | grep -oE "htt
     say "Opening $page"; open "$url" ;;
 
   help|*)
-    sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//' ;;
+    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac
