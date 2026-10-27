@@ -187,9 +187,12 @@ License: Entra ID Governance for the access-package part (same as 02/03/04).
 
 ## Rewind and replay the whole lab: `rewind-lab.sh`
 
-`Reset-DemoState.ps1` re-takes one people segment. `rewind-lab.sh` puts the
-whole build back to an earlier **stage** so someone else can build it again,
-step by step, through the same PRs:
+`Reset-DemoState.ps1` re-takes one people segment. `rewind-lab.sh` moves the
+whole build to any **stage**, back or forward, through a normal PR, so someone
+else can build it again step by step. It finds the stage main is at by
+comparing flags (`rewind-lab.sh --where`). The performer's run sheets and the
+`turn.sh` short commands that wrap it are in
+[`lab/docs/your-turn/`](../../docs/your-turn/README.md):
 
 ```bash
 lab/scripts/demo/rewind-lab.sh day1            # dry run: flag changes, CI test, cleanup list
