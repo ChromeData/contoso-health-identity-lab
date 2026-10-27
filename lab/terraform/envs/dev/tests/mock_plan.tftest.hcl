@@ -32,9 +32,11 @@
 # lab.tfvars never holds. Synthetic here; from Day 1 (enable_premium in
 # lab.tfvars) every run needs them. A run's own variables block overrides.
 variables {
-  onmicrosoft_domain      = "contosohealthlab.onmicrosoft.com"
-  pim_approver_object_ids = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
-  iac_principal_ids       = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
+  onmicrosoft_domain                     = "contosohealthlab.onmicrosoft.com"
+  pim_approver_object_ids                = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
+  iac_principal_ids                      = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
+  access_review_fallback_group_object_id = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee" # Day 2: TF_ACCESS_REVIEW_FALLBACK_GROUP_OBJECT_ID
+  pim_alert_mailbox                      = "security@contosohealthlab.onmicrosoft.com"
 }
 
 mock_provider "azurerm" {
@@ -109,16 +111,19 @@ run "plan_lab_tfvars" {
     condition     = alltrue([for k, v in var.ca_policy_states : v == "enabledForReportingButNotEnforced"])
     error_message = "Day 1: every CA policy in lab.tfvars is report-only; graduation is a later PR with its checklist"
   }
+  # Day 2 (E16/E16c/E17c): PIM tiers, the Global Administrator policy, the
+  # help-desk AU and the CA021 auth-context body are rendered; CA021 stays
+  # report-only so PIM must not yet demand c1. Governance (packages, reviews)
+  # waits for Day 3.
   assert {
     condition = alltrue([
-      output.pim_auth_context_requests == null,
+      output.pim_auth_context_requests != null,
       output.ca_pim_activation_auth_context_ready == false,
-      output.pim_workforce_au_object_id == null,
-      output.pim_workforce_au_membership_body == null,
+      output.pim_workforce_au_membership_body != null,
       output.access_review_definitions == null,
       output.package_assignment_model == null,
     ])
-    error_message = "no CA021 body, help-desk AU or review / package body may be rendered with lab.tfvars (auth context, help-desk scoping and governance are off until Day 2-3)"
+    error_message = "Day 2: the CA021 body and the help-desk AU membership rule exist, PIM still asks for MFA (CA021 report-only), and no review / package body may be rendered until enable_governance (Day 3)"
   }
   assert {
     condition     = output.pim_privileged_role_template_ids != null && nonsensitive(output.directory_role_pim_policies) != null
