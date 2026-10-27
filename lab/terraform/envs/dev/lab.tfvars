@@ -11,7 +11,7 @@
 
 # Free tier first: premium/governance false. When the E5 + Governance trials
 # start, flip both in one PR (README.md, Staging flags).
-enable_premium    = false
+enable_premium    = true
 enable_governance = false
 
 # Access reviews per ADR 0012 tier (Governance tier), one flag per tier:
@@ -65,7 +65,7 @@ enable_b2b_governance = false
 # only after the E5 licences are ASSIGNED, and set the Microsoft-managed
 # risk-remediation policy to report-only/off by hand first, so CA006 is the
 # single user-risk policy while evidence is captured.
-enable_identity_protection_ca = false
+enable_identity_protection_ca = true
 
 # CA008 phishing-resistant authentication for the workforce (report-only,
 # all users = measures the registration gap) + CA008 pilot group + the
@@ -92,9 +92,9 @@ accept_admin_synced_passkey_risk = false
 #         actions is a tenant-time step, only once CA023 is enforced;
 #   CA060 shared clinical workstations (ADR 0014; needs
 #         enable_phishing_resistant_all_users).
-enable_registration_ca        = false
-enable_device_code_block      = false
-enable_admin_session_controls = false
+enable_registration_ca        = true
+enable_device_code_block      = true
+enable_admin_session_controls = true
 enable_pim_auth_context       = false
 enable_protected_actions_ca   = false
 enable_shared_clinical_ca     = false
