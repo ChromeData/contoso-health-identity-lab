@@ -109,6 +109,7 @@ variable "apply_graph_roles" {
     "Group.ReadWrite.All",                         # groups + memberships
     "Policy.Read.All",                             # required alongside CA write
     "Policy.ReadWrite.ConditionalAccess",          # CA policies, named location, auth strength
+    "Application.Read.All",                        # READ-only: Graph requires it to set a CA policy's application condition (admin portals: CA005/CA020/CA022). Proven 2026-10-27: 403 "Application.Read.All scope is required to add/edit application condition" without it.
     "EntitlementManagement.ReadWrite.All",         # catalog, packages, policies
     "RoleManagement.ReadWrite.Directory",          # role-assignable groups + role assignments
     "RoleManagementPolicy.ReadWrite.AzureADGroup", # PIM-for-Groups activation policy
