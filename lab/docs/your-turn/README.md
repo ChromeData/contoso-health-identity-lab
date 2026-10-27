@@ -35,6 +35,7 @@ turn pr <stage>            preview, then open the PR for <stage>
 turn approve [go]          the apply waits for you: open its approval
                            issue ('go' approves from the terminal)
 turn deny [go]             the same, to cancel it
+turn graduate <CA> [go]    one Conditional Access policy report-only -> On
 turn watch                 follow the apply until it finishes
 turn outputs               save what the next step needs (private folder)
 turn post <stage>          the stage's finishing steps, dry run
@@ -72,10 +73,18 @@ click what the run sheet says.
 | [02 Privileged access](02-day2-privileged-access.md) | `day2` | Contoso 06 · Privileged access | Sixteen PIM tier groups, the Global Administrator policy, the help-desk admin unit |
 | [03 Governance](03-day3-governance.md) | `day3` | Contoso 03 · Joiner & mover | Four access packages, separation of duties, consent rules |
 | [04 Detection](04-sentinel-detection.md) | `sentinel` | Contoso 07 · Detect & respond | Sentinel with eleven lab rules plus Fusion |
+| [05 Directory](05-dc-directory.md) * | `dc` | Contoso 02 · Directory | DC01, the AD forest, the Cloud Sync agent, the HR provisioning app |
+| [06 Joiner](06-joiner-dana.md) * | | Contoso 01 · Source of truth, Contoso 03 · Joiner & mover | Dana's first day: HR row to AD to Entra to her apps |
+| [07 Apps](07-apps-sso.md) * | `apps` | Contoso 04 · Apps | Single sign-on and provisioning to AWS |
+| [08 Sign-in, live](08-sign-in-live.md) * | | Contoso 05 · Sign-in rules | Risk simulations, then each policy switched on (`turn graduate`) |
+| [09 Privileged, live](09-privileged-live.md) * | | Contoso 06 · Privileged access | A real PIM activation, the break-glass drill, a vault check-out |
+| [10 Detection, live](10-detect-live.md) * | | Contoso 07 · Detect & respond | The held-back rules, the containment playbook, each rule fired once |
+| [11 Mover and leaver](11-leaver.md) * | | Contoso 08 · Leaver + non-human identities | Marcus moves to ICU; Dana leaves and loses everything |
+| [12 Proof](12-proof.md) * | | Contoso 09 · Proof, Contoso 11 · Drift, Okta, reporting | Before/after numbers, sealed in the evidence store |
 
-The stages after these (the domain controller, Dana's joiner, the apps, the
-attack drills, the leaver, the proof pack) get their run sheets while they are
-built for the first time, so every step in them is one that has actually run.
+\* Draft: written before that stage first ran in the lab tenant. Each one is
+checked, and its "(verify)" items replaced with what actually appears, when the
+stage is built for the first time.
 
 ## Doing a stage again
 

@@ -15,6 +15,8 @@
 #                              reads (private, gitignored folder)
 #   turn.sh post <stage>       the stage's post-apply steps, DRY RUN
 #   turn.sh post <stage> go    the same, for real
+#   turn.sh graduate <CA> [go] one Conditional Access policy report-only -> On:
+#                              preview + CI test, 'go' opens its PR
 #   turn.sh au-rule [go]       day 2: the help-desk admin unit's membership
 #                              rule (dry run unless 'go')
 #   turn.sh open <page>        open a portal page in your browser:
@@ -119,12 +121,68 @@ case "$cmd" in
     title=$(gh issue view "$n" -R "$REPO_SLUG" --json title -q .title)
     if [ "$mode" = "go" ]; then
       say "Commenting '$cmd' on: $title"
-      gh issue comment "$n" -R "$REPO_SLUG" --body "$cmd" >/dev/null && echo "  done; the apply job starts within 15 seconds"
+      gh issue comment "$n" -R "$REPO_SLUG" --body "$cmd" >/dev/null || die "could not comment"
+      if [ "$cmd" = "approve" ]; then echo "  approved: the apply starts within 15 seconds ('turn.sh watch' to follow it)"
+      else echo "  denied: the apply is cancelled within 15 seconds"; fi
     else
       say "Opening the waiting approval: $title"
       echo "  Read it, then comment '$cmd' (or run 'turn.sh $cmd go')."
       open "https://github.com/$REPO_SLUG/issues/$n"
     fi ;;
+
+  graduate)
+    # One Conditional Access policy from report-only to On, as its own PR:
+    # the lab.tfvars line, plus the mocked test's list of graduated policies
+    # (run plan_lab_tfvars pins every other policy to report-only).
+    ca="${1:?usage: turn.sh graduate <CA001..CA060> [go]}"; mode="${2:-}"
+    printf '%s' "$ca" | grep -Eq '^CA[0-9]{3}$' || die "policy keys look like CA003"
+    [ "$ca" != "CA021" ] || die "CA021 graduates in its own four-PR sequence: run sheet 08"
+    git fetch -q origin main
+    branch="graduate/$(printf '%s' "$ca" | tr '[:upper:]' '[:lower:]')-$(date -u +%Y%m%dT%H%M%SZ)"
+    wt=$(mktemp -d "${TMPDIR:-/tmp}/turn-graduate.XXXXXX")
+    git worktree add -q -b "$branch" "$wt" origin/main
+    cleanup_wt() { git worktree remove --force "$wt" >/dev/null 2>&1 || true; [ "$mode" = "go" ] || git branch -D "$branch" >/dev/null 2>&1 || true; }
+    trap cleanup_wt EXIT
+    say "Graduating $ca: report-only -> On"
+    python3 - "$wt/$DEV_DIR/lab.tfvars" "$wt/$DEV_DIR/tests/mock_plan.tftest.hcl" "$ca" <<'PY' || die "edit failed"
+import re, sys
+tfvars, test, ca = sys.argv[1:4]
+s = open(tfvars).read()
+s2, n = re.subn(r'^(\s*' + ca + r'\s*=\s*)"enabledForReportingButNotEnforced"', r'\1"enabled"', s, count=1, flags=re.M)
+if n != 1:
+    sys.exit(f"{ca} is not report-only in lab.tfvars (already On, or not a key)")
+open(tfvars, 'w').write(s2)
+t = open(test).read()
+first = 'condition     = alltrue([for k, v in var.ca_policy_states : v == "enabledForReportingButNotEnforced"])'
+if first in t:
+    t = t.replace(first, f'condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["{ca}"], k) ? "enabled" : "enabledForReportingButNotEnforced")])', 1)
+    t = t.replace('error_message = "Day 1: every CA policy in lab.tfvars is report-only; graduation is a later PR with its checklist"',
+                  'error_message = "every CA policy in lab.tfvars is report-only except the graduated list; one graduation per PR, with its checklist"', 1)
+else:
+    m = re.search(r'contains\(\[([^\]]*)\], k\) \? "enabled"', t)
+    if not m:
+        sys.exit("could not find the graduated list in run plan_lab_tfvars")
+    keys = [k.strip() for k in m.group(1).split(',') if k.strip()]
+    keys.append(f'"{ca}"')
+    t = t[:m.start(1)] + ', '.join(keys) + t[m.end(1):]
+open(test, 'w').write(t)
+print(f"  lab.tfvars: {ca} -> \"enabled\"; test: {ca} added to the graduated list")
+PY
+    ( cd "$wt" && git --no-pager diff --stat )
+    say "Mocked test, as CI runs it"
+    rc=0; ( cd "$wt/$DEV_DIR" && "$TF" init -backend=false -input=false >/dev/null && "$TF" test -var-file=lab.tfvars -no-color ) > "$wt/.test.log" 2>&1 || rc=$?
+    grep -E "Success!|Failure!|Error:" "$wt/.test.log" | tail -5 || true
+    [ "$rc" -eq 0 ] || { cp "$wt/.test.log" "${TMPDIR:-/tmp}/turn-graduate-$ca.log"; die "test failed; log: ${TMPDIR:-/tmp}/turn-graduate-$ca.log"; }
+    if [ "$mode" != "go" ]; then echo "  PREVIEW only. 'turn.sh graduate $ca go' opens the PR."; exit 0; fi
+    ( cd "$wt" && git add "$DEV_DIR/lab.tfvars" "$DEV_DIR/tests/mock_plan.tftest.hcl" \
+      && git commit -q -m "ca: graduate $ca (report-only -> enabled)" && git push -q -u origin "$branch" )
+    url=$(gh pr create -R "$REPO_SLUG" --base main --head "$branch" --title "$ca: report-only to enabled" --body "Graduates **$ca** from report-only to enabled (one policy per PR).
+
+Before merging, fill in from the report-only data (totals only, no names): days in report-only, sign-ins it would have blocked, each one's disposition, and the rollback (a revert PR). Checklist: \`lab/docs/runbooks/ca-change-review-checklist.md\`.
+
+The plan comment must show exactly one change: $ca's \`state\`." | grep -oE "https://github.com/[^ ]+/pull/[0-9]+" | tail -1)
+    [ -n "$url" ] || die "no PR URL came back"
+    echo "$url"; open "$url" ;;
 
   au-rule)
     # Day 2's one manual step: the help-desk admin unit's dynamic membership
@@ -147,5 +205,5 @@ case "$cmd" in
     say "Opening $page"; open "$url" ;;
 
   help|*)
-    sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//' ;;
+    sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac

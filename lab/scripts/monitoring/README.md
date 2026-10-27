@@ -40,17 +40,18 @@ who was attacked.
 | `kerberoast-rc4-service-ticket` | SecurityEvent (DC01) | RC4 tickets for 3+ user SPNs from one requester, or for a Tier-0 SPN | T1558.003 | requester (flagged) |
 | `dcsync-replication-request` | SecurityEvent (DC01) | always (replication rights used by a non-DC account) | T1003.006 | AD actor (flagged) |
 
-**Written but not deployed yet (six more, catalog only).** `lab/kql` and
+**Second wave (six more, behind `enable_itdr_detections_v2`).** `lab/kql` and
 `lab/splunk/detections` also hold `device-code-signin`,
 `security-info-registered-risky`, `sod-violation-granted`,
 `pim-activation-without-auth-context`, `vault-privileged-access-anomaly` and
 `dc-logon-outside-operator-allowlist`. Splunk schedules all of them (its 22
-saved searches); `modules/monitoring` deploys none of them, and `Itdr.Tests.ps1`
-doesn't cover them. Wiring them needs a Sentinel-only switch (two use 14-day
-look-backs the Log Analytics alert path can't run), new `VaultCheckout_CL`
-columns (`Ticket`, `Operator`, `ErrorText`) in the table, DCR and
-`ingest-vault-audit.sh`, and entity + severity mappings. Until then, run them
-by hand in Logs as hunting queries, and never present them as live rules.
+saved searches). `modules/monitoring/itdr_v2.tf` deploys them when
+`enable_itdr_detections_v2` is on: two are Sentinel-only (14-day look-backs the
+Log Analytics alert path can't run), and the vault anomaly needs the extended
+`VaultCheckout_CL` columns (`Ticket`, `Operator`, `ErrorText`, flag
+`vault_feed_v2_columns` with `ingest-vault-audit.sh --signals all`). While the
+flag is off, run them by hand in Logs as hunting queries, and never present
+them as live rules.
 
 Severity is **dynamic**: each query computes a `Severity` column that the
 Sentinel rule uses per alert (one alert per result row). Incidents group per

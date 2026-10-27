@@ -135,6 +135,20 @@ if [ "$YES" = 1 ]; then
   read -r OWNER_ID REPO_ID < <(gh api "repos/$GITHUB_OWNER/$GITHUB_REPO" --jq '[.owner.id, .id] | @tsv')
 else OWNER_ID="<owner id>"; REPO_ID="<repo id>"; fi
 BOOT="$ROOT/lab/terraform/envs/bootstrap"
+# Knobs a re-run must NOT reset: an empty log_analytics_workspace_id DELETES the
+# tenant's Entra log export (evidence row E07), and the two flags are deliberate
+# widenings. Order: env var, then the existing file, then a lookup / off.
+prev_knob() {
+  [ -f "$BOOT/terraform.tfvars" ] || return 0
+  sed -nE -e "s/^$1 *= *\"([^\"]*)\".*/\1/p" -e "s/^$1 *= *([a-z0-9]+).*/\1/p" "$BOOT/terraform.tfvars" | head -1
+}
+LAW_ID="${LOG_ANALYTICS_WORKSPACE_ID:-$(prev_knob log_analytics_workspace_id)}"
+if [ -z "$LAW_ID" ] && [ "$YES" = 1 ]; then
+  LAW_ID=$(az monitor log-analytics workspace show -g rg-identity-lab -n loga-idlab --query id -o tsv 2>/dev/null || true)
+fi
+APP_ROLES="${ENABLE_APP_MANAGEMENT_ROLES:-$(prev_knob enable_app_management_roles)}"; APP_ROLES="${APP_ROLES:-false}"
+IDP_LOGS="${ENABLE_IDENTITY_PROTECTION_LOGS:-$(prev_knob enable_identity_protection_logs)}"; IDP_LOGS="${IDP_LOGS:-false}"
+note "workspace for the Entra log export: ${LAW_ID:-<none yet: first run, envs/dev not applied>}; app-management roles: $APP_ROLES; Identity Protection logs: $IDP_LOGS"
 note "writing $BOOT/terraform.tfvars (gitignored)"
 if [ "$YES" = 1 ]; then cat > "$BOOT/terraform.tfvars" <<EOF
 subscription_id              = "$AZURE_SUBSCRIPTION_ID"
@@ -148,9 +162,9 @@ tfstate_resource_group_name  = "$STATE_RG"
 tfstate_storage_account_name = "$STATE_SA"
 tfstate_container_name       = "tfstate"
 azure_openai_resource_id     = "${AZURE_OPENAI_RESOURCE_ID:-}"
-log_analytics_workspace_id   = ""
-enable_app_management_roles     = false
-enable_identity_protection_logs = false
+log_analytics_workspace_id   = "$LAW_ID"
+enable_app_management_roles     = $APP_ROLES
+enable_identity_protection_logs = $IDP_LOGS
 EOF
 fi
 # The lock blocks the role assignments bootstrap creates: lift it around the apply.
@@ -216,7 +230,12 @@ fi
 if step_on D; then
 say "D. Local tfvars (gitignored) for envs/dev, okta/, aws/"
 DEV="$ROOT/lab/terraform/envs/dev"
-if [ "$YES" = 1 ]; then
+# These files collect hand-added values over the lab's life (e.g. the AWS SAML
+# metadata). Regenerating them from the .example would silently drop those, so
+# an existing file is kept unless REWRITE_TFVARS=1.
+if [ "$YES" = 1 ] && [ -f "$DEV/terraform.tfvars" ] && [ "${REWRITE_TFVARS:-0}" != 1 ]; then
+  note "kept the existing envs/dev, okta/ and aws/ terraform.tfvars (REWRITE_TFVARS=1 regenerates them from the .example files)"
+elif [ "$YES" = 1 ]; then
   sed -e "s|^subscription_id = .*|subscription_id = \"$AZURE_SUBSCRIPTION_ID\"|" \
       -e "s|^tenant_id       = .*|tenant_id       = \"$TENANT_ID\"|" \
       -e "s|^location        = .*|location        = \"$AZURE_LOCATION\"|" \
