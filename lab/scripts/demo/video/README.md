@@ -1,8 +1,10 @@
 # Demo video: record the live lab
 
-Records a narrated tour of the running tenant: title, lab map, pipeline,
-HR joiner, AD + Cloud Sync, access packages, Conditional Access, PIM (with a
-live activation), Sentinel, leaver, WORM evidence. Output lands in
+Records a narrated tour of the running tenant, written for non-technical
+viewers: title, how the lab was built, lab map, pipeline, HR joiner, AD +
+Cloud Sync, access packages, Conditional Access, PIM (with a live activation),
+Sentinel, leaver, WORM evidence. On-screen "What that means" cards define each
+term as it comes up; the same terms are in `lab/docs/glossary.md`. Output lands in
 `lab/evidence/out/video/` (gitignored).
 
 ## Needs

@@ -60,12 +60,16 @@ const OVERLAY = `(() => {
       #__v_tag{position:absolute;background:#F06A35;color:#fff;font-weight:700;font-size:19px;padding:7px 14px;border-radius:9px;opacity:0;transition:opacity .35s;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.2)}
       #__v_tag.on{opacity:1}
       #__v_cur{position:absolute;left:0;top:0;width:28px;height:28px;transition:transform .75s cubic-bezier(.3,.7,.2,1);filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}
+      #__v_def{position:absolute;right:28px;top:96px;width:560px;background:rgba(23,23,28,.94);color:#fff;border-radius:16px;padding:16px 22px 18px;box-shadow:0 12px 34px rgba(0,0,0,.32);opacity:0;transform:translateY(-10px);transition:opacity .45s,transform .45s;border-left:5px solid #F06A35}
+      #__v_def.on{opacity:1;transform:none} #__v_def.br{top:auto;bottom:28px;right:96px}
+      #__v_def small{display:block;font-size:13px;letter-spacing:.14em;color:#F06A35;font-weight:700;margin-bottom:6px}
+      #__v_def b{display:block;font-size:24px;font-weight:700;letter-spacing:-.01em;margin-bottom:4px} #__v_def span{font-size:19px;line-height:1.35;color:#DAD8D2}
       #__v_rip{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;border:3px solid #F06A35;opacity:0}
       #__v_rip.go{animation:vrip .55s ease-out}
       @keyframes vrip{0%{opacity:.9;transform:scale(.3)}100%{opacity:0;transform:scale(1.4)}}
     \`;
     const root = document.createElement('div'); root.id = '__v_root';
-    root.innerHTML = '<div id="__v_ring"></div><div id="__v_tag"></div><div id="__v_rip"></div>' +
+    root.innerHTML = '<div id="__v_ring"></div><div id="__v_tag"></div><div id="__v_rip"></div><div id="__v_def"><small>WHAT THAT MEANS</small><b></b><span></span></div>' +
       '<svg id="__v_cur" viewBox="0 0 28 28"><path d="M5 3l17 10.5-7.6 1.6 4.6 8.6-3.3 1.7-4.6-8.6L5 22.6z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg>' +
       '<div id="__v_chip"><div class="dot"><i></i></div><div><b></b><span></span></div></div>';
     document.documentElement.appendChild(st); document.documentElement.appendChild(root);
@@ -78,6 +82,7 @@ const OVERLAY = `(() => {
       cursor(x, y, instant) { const c = $('__v_cur'); if (instant) { c.style.transition = 'none'; requestAnimationFrame(() => (c.style.transition = '')); } c.style.transform = 'translate(' + (x - 5) + 'px,' + (y - 3) + 'px)'; },
       ripple(x, y) { const r = $('__v_rip'); r.classList.remove('go'); r.style.left = x + 'px'; r.style.top = y + 'px'; void r.offsetWidth; r.classList.add('go'); },
       hideCursor(h) { $('__v_cur').style.opacity = h ? 0 : 1; },
+      define(term, text, pos) { const d = $('__v_def'); if (!term) { d.classList.remove('on'); return; } d.querySelector('b').textContent = term; d.querySelector('span').textContent = text; d.classList.toggle('br', pos === 'br'); d.classList.add('on'); },
     };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
@@ -183,6 +188,9 @@ export class Rec {
 
   async ov(fn, ...a) { return this.page.evaluate(([fn, a]) => window.__v && window.__v[fn](...a), [fn, a]).catch(() => {}); }
   async chip(t, s) { this.chipNow = [t, s]; await this.ov('chip', t, s); }
+  // Plain-words definition card (top-right on portals, bottom-right on local pages). Cleared at every beat.
+  async define(term, text) { this.defNow = [term, text]; await this.ov('define', term, text, this.kind === 'local' ? 'br' : 'tr'); }
+  async undefine() { this.defNow = null; await this.ov('define', ''); }
   get vh() { return Math.round(H / this.scale); }
   // Bring an element into view with real wheel scrolling (on camera, like a person would).
   async reveal(target) {
@@ -221,6 +229,7 @@ export class Rec {
     if (prep) await prep(this);
     await dismiss(this.page);
     if (this.chipNow) await this.ov('chip', ...this.chipNow);
+    this.defNow = null; await this.ov('define', '');
     await this.ov('cursor', this.cur.x, this.cur.y, true);
     await sleep(350);
     const start = this.now();

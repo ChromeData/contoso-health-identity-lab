@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><title>steps</title>
+<style>
+  html,body{margin:0;height:100%;background:#121216;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;overflow:hidden}
+  .glow{position:absolute;width:1100px;height:1100px;border-radius:50%;right:-380px;top:-420px;background:radial-gradient(circle,rgba(77,134,255,.2),transparent 62%)}
+  .glow2{position:absolute;width:900px;height:900px;border-radius:50%;left:-300px;bottom:-500px;background:radial-gradient(circle,rgba(240,106,53,.15),transparent 62%)}
+  .wrap{position:absolute;left:120px;right:120px;top:90px;bottom:80px;display:grid;grid-template-columns:560px 1fr;gap:70px}
+  .kick{display:inline-flex;align-items:center;gap:14px;background:#24242B;border-radius:999px;padding:10px 24px 10px 12px;font-size:22px;font-weight:650}
+  .kick .d{width:32px;height:32px;border-radius:50%;background:#2A2A30;display:grid;place-items:center}.kick .d i{width:12px;height:12px;border-radius:50%;border:3px solid #F06A35;display:block}
+  h1{font-size:76px;line-height:1.02;letter-spacing:-.035em;margin:30px 0 0;font-weight:800} h1 em{font-style:normal;color:#4D86FF}
+  .lede{font-size:26px;line-height:1.4;color:#B9B7B0;margin-top:26px}
+  ol{list-style:none;margin:0;padding:0;display:grid;gap:14px;align-content:start}
+  li{display:grid;grid-template-columns:62px 1fr;gap:20px;align-items:start;background:#1B1B21;border:1px solid #2A2A33;border-radius:18px;padding:18px 22px;opacity:.38;transition:all .6s}
+  li.on{opacity:1;background:#20202A;border-color:#4D86FF;box-shadow:0 0 0 4px rgba(77,134,255,.18)} li.done{opacity:.75}
+  li .n{width:50px;height:50px;border-radius:50%;background:#2A2A33;display:grid;place-items:center;font-size:24px;font-weight:800;color:#DAD8D2}
+  li.on .n{background:#F06A35;color:#fff} li.done .n{background:#2E9E5B;color:#fff}
+  li b{display:block;font-size:27px;font-weight:700;letter-spacing:-.01em;margin-top:8px}
+  li span{display:block;font-size:20px;line-height:1.4;color:#B9B7B0;margin-top:6px;max-height:0;overflow:hidden;transition:max-height .7s}
+  li.on span,li.done span{max-height:140px}
+</style></head><body><div class="glow"></div><div class="glow2"></div>
+<div class="wrap"><div><div class="kick"><div class="d"><i></i></div><span id="k"></span></div><h1 id="h"></h1><div class="lede" id="p"></div></div><ol id="ol"></ol></div>
+<script>
+window.steps = {
+  init(c) { document.getElementById('k').textContent = c.kick; document.getElementById('h').innerHTML = c.title; document.getElementById('p').textContent = c.sub || '';
+    document.getElementById('ol').innerHTML = c.steps.map((s, i) => `<li><div class="n">${i + 1}</div><div><b>${s.title}</b><span>${s.detail}</span></div></li>`).join(''); },
+  show(i) { [...document.querySelectorAll('li')].forEach((li, k) => { li.classList.toggle('on', k === i); li.classList.toggle('done', k < i); }); },
+};
+</script></body></html>
