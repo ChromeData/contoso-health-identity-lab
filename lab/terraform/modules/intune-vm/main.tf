@@ -181,11 +181,16 @@ resource "random_password" "admin" {
 resource "azurerm_windows_virtual_machine" "vm" {
   #checkov:skip=CKV_AZURE_151:Encryption at host needs the EncryptionAtHost feature registered on the subscription; the lab endpoint's disks use platform-managed server-side encryption (lab/terraform/README.md, Checkov baseline).
   #checkov:skip=CKV_AZURE_50:The Entra join needs the AADLoginForWindows VM extension (see the identity block below); blocking extensions would make the VM unjoinable.
-  name                  = var.vm_name
-  computer_name         = var.computer_name
-  location              = var.location
-  resource_group_name   = var.resource_group_name
-  size                  = var.vm_size
+  name                = var.vm_name
+  computer_name       = var.computer_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  size                = var.vm_size
+  # v6/v7 sizes are NVMe-only (no SCSI controller); Azure defaults to SCSI,
+  # so they need the controller named. null keeps the Azure default for the
+  # older SCSI sizes. The image must list NVMe in DiskControllerTypes (both
+  # Windows Server 2022 Azure Edition and Windows 11 25H2 do).
+  disk_controller_type  = can(regex("_v[67]$", var.vm_size)) ? "NVMe" : null
   admin_username        = var.admin_username
   admin_password        = random_password.admin.result
   network_interface_ids = [azurerm_network_interface.vm.id]

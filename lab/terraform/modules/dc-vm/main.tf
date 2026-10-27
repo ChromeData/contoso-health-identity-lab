@@ -131,11 +131,16 @@ resource "random_password" "admin" {
 resource "azurerm_windows_virtual_machine" "dc" {
   #checkov:skip=CKV_AZURE_151:Encryption at host needs the EncryptionAtHost feature registered on the subscription; the lab DC's disks use platform-managed server-side encryption (lab/terraform/README.md, Checkov baseline).
   #checkov:skip=CKV_AZURE_50:The forest is built with az vm run-command (lab/scripts/dc/README.md), which runs through the VM agent's extension path; extensions stay allowed.
-  name                  = var.vm_name
-  computer_name         = var.computer_name
-  location              = var.location
-  resource_group_name   = var.resource_group_name
-  size                  = var.vm_size
+  name                = var.vm_name
+  computer_name       = var.computer_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  size                = var.vm_size
+  # v6/v7 sizes are NVMe-only (no SCSI controller); Azure defaults to SCSI,
+  # so they need the controller named. null keeps the Azure default for the
+  # older SCSI sizes. The image must list NVMe in DiskControllerTypes (both
+  # Windows Server 2022 Azure Edition and Windows 11 25H2 do).
+  disk_controller_type  = can(regex("_v[67]$", var.vm_size)) ? "NVMe" : null
   admin_username        = var.admin_username
   admin_password        = random_password.admin.result
   network_interface_ids = [azurerm_network_interface.dc.id]
