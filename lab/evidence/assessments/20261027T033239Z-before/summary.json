@@ -1,0 +1,1019 @@
+{
+  "schema": "contoso-baseline-assessment/1",
+  "runId": "20261027T033239Z",
+  "phase": "before",
+  "generatedUtc": "2026-10-27T03:32:39.6572470Z",
+  "toolVersion": "1.0.0",
+  "source": {
+    "kind": "tenant",
+    "detail": "tenant run",
+    "scubaGear": null,
+    "zeroTrust": "tenant"
+  },
+  "scubaGear": {
+    "status": "not-selected",
+    "reason": "",
+    "mode": null,
+    "meta": null,
+    "summary": null,
+    "kpi": null,
+    "unmapped": [],
+    "controls": []
+  },
+  "zeroTrust": {
+    "status": "ok",
+    "reason": "",
+    "mode": "imported",
+    "pillar": "Identity",
+    "meta": {
+      "toolVersion": "3.1.0",
+      "executedAt": "2026-10-27T03:32:15.9148950Z"
+    },
+    "kpi": {
+      "testsCounted": 95,
+      "testsPassed": 44,
+      "passRatePc": 46.3,
+      "highRiskNotPassed": 28
+    },
+    "byStatus": {
+      "Error": 2,
+      "Failed": 48,
+      "Investigate": 1,
+      "Passed": 44,
+      "Planned": 35,
+      "Skipped": 5
+    },
+    "tests": [
+      {
+        "testId": "21784",
+        "title": "All user sign in activity uses phishing-resistant authentication methods",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21887",
+        "title": "All registered redirect URIs must have proper DNS records and ownerships",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21831",
+        "title": "Conditional Access protected actions are enabled",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21771",
+        "title": "Inactive applications don’t have highly privileged Microsoft Entra built-in roles",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21889",
+        "title": "Reduce the user-visible password surface area",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21879",
+        "title": "All entitlement management assignment policies that apply to external users require approval",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21857",
+        "title": "Guest identities are lifecycle managed with access reviews",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "22659",
+        "title": "All risky workload identity sign-ins are triaged",
+        "status": "Skipped",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21838",
+        "title": "Security key authentication method enabled",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21851",
+        "title": "All guests user strong authentication methods",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21870",
+        "title": "Enable SSPR",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "21830",
+        "title": "Highly privileged roles are only activated in a PAW/SAW device",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21793",
+        "title": "Tenant restrictions v2 are configured",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21848",
+        "title": "Enable custom banned passwords",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21776",
+        "title": "User consent settings are restricted",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21819",
+        "title": "Activation alert for Global Administrator role assignments",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21881",
+        "title": "Azure subscriptions used by Identity Governance are secured consistently with Identity Governance roles",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21790",
+        "title": "Outbound cross-tenant access settings are configured",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21883",
+        "title": "Workload Identities are configured with risk-based policies",
+        "status": "Skipped",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21844",
+        "title": "Block legacy Azure AD PowerShell module",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21836",
+        "title": "Workload Identities are not assigned privileged roles",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21816",
+        "title": "All Microsoft Entra privileged role assignments are managed with PIM",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "23183",
+        "title": "Service principals use safe redirect URIs",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21992",
+        "title": "Application Certificates need to be rotated on a regular basis",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21773",
+        "title": "Applications don't have certificates with expiration longer than 180 days",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21865",
+        "title": "Trusted network locations are configured to increase quality of risk detections",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21850",
+        "title": "Smart lockout threshold set to 10 or less",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21867",
+        "title": "Enterprise applications with high privilege Microsoft Graph API permissions have owners",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21801",
+        "title": "Users have strong authentication methods configured",
+        "status": "Error",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21781",
+        "title": "Privileged users sign in with phishing-resistant methods",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21791",
+        "title": "Guest can’t invite other guests",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21849",
+        "title": "Smart lockout duration is set to a minimum of 60",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "24518",
+        "title": "Enterprise applications have owners",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "22128",
+        "title": "Guests are not assigned high privileged directory roles",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21893",
+        "title": "Enable Microsoft Entra ID Protection policy to enforce multifactor authentication registration",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "21775",
+        "title": "Enforce standards for app secrets and certificates",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21941",
+        "title": "Token protection policies are configured",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21770",
+        "title": "Inactive applications don't have highly privileged permissions",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21861",
+        "title": "All risky users are triaged",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21864",
+        "title": "All risk detections are triaged",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21854",
+        "title": "Privileged roles aren't assigned to stale identities",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21964",
+        "title": "Enable protected actions to secure Conditional Access policy creation and changes",
+        "status": "Investigate",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21795",
+        "title": "No legacy authentication sign-in activity",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21912",
+        "title": "Azure resources used by Microsoft Entra only allow access from privileged roles",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21874",
+        "title": "Allow/Deny lists of domains to restrict external collaboration are configured",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21869",
+        "title": "Enterprise applications must require explicit assignment or scoped provisioning",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21845",
+        "title": "Temporary access pass is enabled",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21859",
+        "title": "GDAP admin least privilege",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21898",
+        "title": "All supported access lifecycle resources are managed with entitlement management packages",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21798",
+        "title": "ID Protection notifications enabled",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21876",
+        "title": "Use PIM for Microsoft Entra privileged roles",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21877",
+        "title": "All guests have a sponsor",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21787",
+        "title": "Permissions to create new tenants is limited to the Tenant Creator role",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21872",
+        "title": "Require multifactor authentication for device join and device registration using user action",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21955",
+        "title": "Manage the local administrators on Microsoft Entra joined devices",
+        "status": "Skipped",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21780",
+        "title": "No usage of ADAL in the tenant",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21855",
+        "title": "Privileged roles have access reviews",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21789",
+        "title": "Tenant creation events are triaged",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21983",
+        "title": "No Active Medium priority Entra recommendations found",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21841",
+        "title": "Microsoft Authenticator app report suspicious activity setting is enabled",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21832",
+        "title": "All groups in Conditional Access policies belong to a restricted management administrative unit",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21896",
+        "title": "Service principals don't have certificates or credentials associated with them",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21815",
+        "title": "All privileged role assignments are activated just in time and not permanently active",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21783",
+        "title": "Privileged Microsoft Entra built-in roles are targeted with Conditional Access policies to enforce phishing-resistant methods",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21806",
+        "title": "Secure the MFA registration (My Security Info) page",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21888",
+        "title": "App registrations must not have dangling or abandoned domain redirect URIs",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21863",
+        "title": "All high-risk sign-ins are triaged",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21803",
+        "title": "Migrate from legacy MFA and SSPR policies",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21786",
+        "title": "User sign-in activity uses token protection",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21890",
+        "title": "Require password reset notifications for user roles",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21929",
+        "title": "All entitlement management packages that apply to guests have expirations or access reviews configured in their assignment policies",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21875",
+        "title": "All entitlement management assignment policies that apply to external users require connected organizations",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21833",
+        "title": "Directory Sync account credentials haven't been rotated recently",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "21823",
+        "title": "Guest self-service sign-up via user flow is disabled",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21885",
+        "title": "App registrations use safe redirect URIs",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21813",
+        "title": "High Global Administrator to privileged user ratio",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21772",
+        "title": "Applications don't have secrets configured",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21802",
+        "title": "Microsoft Authenticator app shows sign-in context",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21797",
+        "title": "Restrict access to high risk users",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21809",
+        "title": "Admin consent workflow is enabled",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21777",
+        "title": "App Instance Property Lock is configured for all multitenant applications",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21847",
+        "title": "Password protection for on-premises is enabled",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21953",
+        "title": "Local Admin Password Solution is deployed",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21808",
+        "title": "Restrict device code flow",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21818",
+        "title": "Activation alert for highly privileged role assignments",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21821",
+        "title": "Guest access is restricted",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21882",
+        "title": "No nested groups in PIM for groups",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21886",
+        "title": "Applications that use Microsoft Entra for authentication and support provisioning are configured",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21858",
+        "title": "Inactive guest identities are disabled or removed from the tenant",
+        "status": "Error",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21817",
+        "title": "Global Administrator role activation triggers an approval workflow",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21799",
+        "title": "Block high risk sign-ins",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21891",
+        "title": "Require password reset notifications for administrator roles",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21822",
+        "title": "Guest access is limited to approved tenants",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21811",
+        "title": "Password expiration is disabled",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21807",
+        "title": "Creating new applications and service principles is restricted to privileged users",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21825",
+        "title": "Privileged users have short-lived sign-in sessions",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21837",
+        "title": "Limit the maximum number of devices per user to 10",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21884",
+        "title": "Conditional Access policies for workload identities based on known networks are configured",
+        "status": "Skipped",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21814",
+        "title": "Privileged accounts are cloud native identities",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21892",
+        "title": "All sign-in activity comes from managed devices",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21835",
+        "title": "Emergency access accounts are configured appropriately",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "22072",
+        "title": "Self-Service Password Reset does not use Q & A",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21840",
+        "title": "Security key attestation is enforced",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21820",
+        "title": "Activation alert for all privileged role assignments",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "21954",
+        "title": "Restrict nonadministrator users from recovering the BitLocker keys for their owned devices",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21774",
+        "title": "Microsoft services applications don't have credentials configured",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21894",
+        "title": "All certificates Microsoft Entra Application Registrations and Service Principals must be issued by an approved certification authority",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "21846",
+        "title": "Temporary access pass restricted to one-time use",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "21804",
+        "title": "Weak authentication methods are disabled",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21810",
+        "title": "Resource-Specific Consent is restricted",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21782",
+        "title": "Privileged accounts have phishing-resistant methods registered",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21824",
+        "title": "Guests don't have long lived sign-in sessions",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21984",
+        "title": "No Active low priority Entra recommendations found",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "21899",
+        "title": "All privileged role assignments have a recipient that can receive notifications",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "22124",
+        "title": "High priority Entra recommendations are addressed",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21842",
+        "title": "Block administrators from using SSPR",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21895",
+        "title": "Application Certificate Credentials are managed using HSM",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "24570",
+        "title": "Entra Connect Sync is configured with Service Principal Credentials",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21897",
+        "title": "All app assignment and group membership is governed",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21828",
+        "title": "Authentication transfer is blocked",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21834",
+        "title": "Directory sync account is locked down to specific named location",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "21860",
+        "title": "Diagnostic settings are configured for all Microsoft Entra logs",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21829",
+        "title": "Use cloud authentication",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21839",
+        "title": "Passkey authentication method enabled",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21800",
+        "title": "All user sign-in activity uses strong authentication methods",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21868",
+        "title": "Guests don't own apps in the tenant",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21788",
+        "title": "Global Administrators don't have standing elevated access to all Azure subscriptions in the tenant",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21878",
+        "title": "All entitlement management policies have an expiration date",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21796",
+        "title": "Block legacy authentication policies are configured",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21812",
+        "title": "Maximum number of Global Administrators doesn't exceed eight users",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "21792",
+        "title": "Guests have restricted access to directory objects",
+        "status": "Failed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21985",
+        "title": "Turn off Seamless SSO if there are is no usage",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Medium"
+      },
+      {
+        "testId": "21843",
+        "title": "Block legacy Microsoft Online PowerShell module",
+        "status": "Planned",
+        "pillar": "Identity",
+        "risk": "Low"
+      },
+      {
+        "testId": "21862",
+        "title": "All risky workload identities are triaged",
+        "status": "Skipped",
+        "pillar": "Identity",
+        "risk": "High"
+      },
+      {
+        "testId": "21866",
+        "title": "All Microsoft Entra recommendations are addressed",
+        "status": "Passed",
+        "pillar": "Identity",
+        "risk": "Medium"
+      }
+    ]
+  },
+  "rawManifest": {
+    "location": "private: lab/evidence/out/assessments (gitignored) + WORM container",
+    "manifestSha256": "842ab702fcab45c1f9e6453c5ee741e257274bbe8e34a4229f945813d6cc9ac2",
+    "files": [
+      {
+        "path": "zero-trust/ZeroTrustAssessmentReport.html",
+        "sha256": "c18f9b8ccdc33302f7655177c90466f631dc22459426df144d9ca95cfd99606c",
+        "sizeBytes": 1883720
+      },
+      {
+        "path": "zero-trust/ZeroTrustAssessmentReport.json",
+        "sha256": "9d6422f9c8e9417942bd96bfa389be40074105bedc16b44bc5495012bdb8b9bd",
+        "sizeBytes": 329316
+      }
+    ]
+  },
+  "worm": {
+    "status": "skipped (-SkipUpload)",
+    "container": "evidence",
+    "prefix": "assessments/20261027T033239Z-before/",
+    "uploaded": 0,
+    "failed": 0,
+    "immutabilityReported": 0
+  },
+  "comparison": null
+}
