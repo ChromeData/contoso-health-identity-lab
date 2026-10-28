@@ -46,12 +46,12 @@ employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate
 #              adm- accounts (lab/iga/admin-accounts.json,
 #              post-apply/New-AdminAccounts.ps1) that are only ever PIM-eligible.
 # ---------------------------------------------------------------------------
-100492,Dana,Okafor,Nursing,Registered Nurse,200015,joiner,2026-10-19,
+100492,Dana,Okafor,Nursing,Registered Nurse,200015,leaver,2026-10-19,2026-10-28
 100488,Sofia,Reyes,Nursing,Registered Nurse,200015,joiner,2026-10-19,
 100477,Thomas,Nguyen,Radiology,Radiologic Technologist,200021,joiner,2026-10-20,
 200015,Grace,Mwangi,Nursing,Nurse Manager,300001,active,2019-03-04,
 200021,Omar,Haddad,Radiology,Radiology Manager,300001,active,2020-06-15,
-100310,Marcus,Bello,Nursing,Registered Nurse,200015,active,2022-01-10,
+100310,Marcus,Bello,ICU,Registered Nurse,200015,active,2022-01-10,
 100205,Priya,Nair,Billing,Billing Specialist,200030,leaver,2021-09-01,2026-10-17
 300001,Helen,Carter,Administration,Chief Nursing Officer,,active,2016-02-01,
 200030,Daniel,Osei,Billing,Billing Manager,300001,active,2018-11-20,
