@@ -110,7 +110,7 @@ run "plan_lab_tfvars" {
     error_message = "Day 1 + apps: CA001-CA010 and CA020 exist (enable_premium + the CA flags); enable_sso_apps plans the AWS IAM Identity Center and Clinical Portal apps; the PAM app (enable_pam_oidc_app) is still off"
   }
   assert {
-    condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003"], k) ? "enabled" : "enabledForReportingButNotEnforced")])
+    condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003", "CA004"], k) ? "enabled" : "enabledForReportingButNotEnforced")])
     error_message = "every CA policy in lab.tfvars is report-only except the graduated list; one graduation per PR, with its checklist"
   }
   # Day 2 (E16/E16c/E17c): PIM tiers, the Global Administrator policy, the
