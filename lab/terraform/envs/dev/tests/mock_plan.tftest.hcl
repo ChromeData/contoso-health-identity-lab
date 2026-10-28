@@ -104,8 +104,8 @@ run "plan_lab_tfvars" {
   # Day 1 (E12): enable_premium + the report-only CA additions. Every policy
   # is report-only (ca_policy_states), the apps and governance stay off.
   assert {
-    condition     = output.clinical_portal_client_id == null && output.guacamole_psm_client_id == null && output.ca_policy_display_names != null
-    error_message = "Day 1: CA001-CA010 and CA020 exist (enable_premium + the CA flags); no app (enable_sso_apps / enable_pam_oidc_app) may be planned yet"
+    condition     = nonsensitive(output.apps_nhi_inventory) != null && nonsensitive(output.apps_nhi_inventory).servicenow == null && output.guacamole_psm_client_id == null && output.ca_policy_display_names != null
+    error_message = "Day 1 + apps: CA001-CA010 and CA020 exist (enable_premium + the CA flags); enable_sso_apps plans the AWS IAM Identity Center and Clinical Portal apps; the PAM app (enable_pam_oidc_app) is still off"
   }
   assert {
     condition     = alltrue([for k, v in var.ca_policy_states : v == "enabledForReportingButNotEnforced"])

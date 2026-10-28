@@ -111,7 +111,7 @@ enable_shared_clinical_ca     = false
 # clinic's Okta org (runbook Phase 1, ADR 0022; the org host goes in
 # terraform.tfvars / TF_VAR_, never here). The Okta side is the separate,
 # human-applied root lab/terraform/okta.
-enable_sso_apps                        = false
+enable_sso_apps                        = true
 enable_scim_provisioning               = false
 aws_scim_job_enabled                   = false
 enable_pam_oidc_app                    = false
