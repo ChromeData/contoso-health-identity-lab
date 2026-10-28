@@ -197,6 +197,9 @@ else:
 open(test, 'w').write(t)
 print(f"  lab.tfvars: {ca} -> \"enabled\"; test: {ca} added to the graduated list")
 PY
+    # The shorter "enabled" value shifts the trailing comment column, and CI
+    # runs terraform fmt -check: format the two edited files as CI would see them.
+    ( cd "$wt/$DEV_DIR" && "$TF" fmt lab.tfvars tests/mock_plan.tftest.hcl >/dev/null )
     ( cd "$wt" && git --no-pager diff --stat )
     say "Mocked test, as CI runs it"
     rc=0; ( cd "$wt/$DEV_DIR" && "$TF" init -backend=false -input=false >/dev/null && "$TF" test -var-file=lab.tfvars -no-color ) > "$wt/.test.log" 2>&1 || rc=$?
