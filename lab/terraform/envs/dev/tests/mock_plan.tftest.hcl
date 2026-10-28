@@ -108,8 +108,8 @@ run "plan_lab_tfvars" {
     error_message = "Day 1: CA001-CA010 and CA020 exist (enable_premium + the CA flags); no app (enable_sso_apps / enable_pam_oidc_app) may be planned yet"
   }
   assert {
-    condition     = alltrue([for k, v in var.ca_policy_states : v == "enabledForReportingButNotEnforced"])
-    error_message = "Day 1: every CA policy in lab.tfvars is report-only; graduation is a later PR with its checklist"
+    condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003"], k) ? "enabled" : "enabledForReportingButNotEnforced")])
+    error_message = "every CA policy in lab.tfvars is report-only except the graduated list; one graduation per PR, with its checklist"
   }
   # Day 2 (E16/E16c/E17c): PIM tiers, the Global Administrator policy, the
   # help-desk AU and the CA021 auth-context body are rendered; CA021 stays
