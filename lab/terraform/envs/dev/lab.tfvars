@@ -169,10 +169,6 @@ operator_ips_expires_on   = "2027-01-20"
 #                                        confirms the activity strings
 itdr_exclude_rules = [
   "identity_risk",
-  "tier0_logon_without_checkout",
-  "ad_privileged_group_change",
-  "kerberoast_rc4_service_ticket",
-  "dcsync_replication_request",
   "dc_logon_outside_operator_allowlist",
   "vault_privileged_access_anomaly",
   "pim_activation_without_auth_context",
