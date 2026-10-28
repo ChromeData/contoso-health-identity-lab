@@ -32,6 +32,8 @@
 # lab.tfvars never holds. Synthetic here; from Day 1 (enable_premium in
 # lab.tfvars) every run needs them. A run's own variables block overrides.
 variables {
+  servicenow_instance_url                = "https://dev00000.service-now.com"       # synthetic PDI: enable_servicenow_sso precondition (lab.tfvars stage)
+  app_owner_object_ids                   = ["cccccccc-cccc-cccc-cccc-cccccccccccc"] # the apps module's human-owner check
   onmicrosoft_domain                     = "contosohealthlab.onmicrosoft.com"
   pim_approver_object_ids                = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
   iac_principal_ids                      = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
@@ -104,7 +106,7 @@ run "plan_lab_tfvars" {
   # Day 1 (E12): enable_premium + the report-only CA additions. Every policy
   # is report-only (ca_policy_states), the apps and governance stay off.
   assert {
-    condition     = nonsensitive(output.apps_nhi_inventory) != null && nonsensitive(output.apps_nhi_inventory).servicenow == null && output.guacamole_psm_client_id == null && output.ca_policy_display_names != null
+    condition     = nonsensitive(output.apps_nhi_inventory) != null && nonsensitive(output.apps_nhi_inventory).servicenow != null && nonsensitive(output.apps_nhi_inventory).okta_clinic_idp == null && output.guacamole_psm_client_id == null && output.ca_policy_display_names != null
     error_message = "Day 1 + apps: CA001-CA010 and CA020 exist (enable_premium + the CA flags); enable_sso_apps plans the AWS IAM Identity Center and Clinical Portal apps; the PAM app (enable_pam_oidc_app) is still off"
   }
   assert {
