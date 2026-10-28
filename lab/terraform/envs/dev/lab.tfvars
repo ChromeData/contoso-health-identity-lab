@@ -26,7 +26,7 @@ enable_governance = true
 # or the entitlement approver group). A POLICY review switched back off needs
 # the portal. The bodies are created by post-apply/New-AccessReviewDefinitions.ps1.
 enable_access_reviews             = false
-enable_access_reviews_privileged  = false
+enable_access_reviews_privileged  = true
 enable_access_reviews_requestable = false
 enable_access_reviews_inactive    = false
 
