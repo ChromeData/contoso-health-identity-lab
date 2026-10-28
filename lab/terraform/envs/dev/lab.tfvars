@@ -117,8 +117,8 @@ enable_sso_apps = true
 # metadata re-uploaded on the AWS / ServiceNow side (README, rotation).
 saml_signing_cert_end_date             = "2027-04-20T00:00:00Z"
 servicenow_saml_signing_cert_end_date  = "2027-04-20T00:00:00Z"
-enable_scim_provisioning               = false
-aws_scim_job_enabled                   = false
+enable_scim_provisioning               = true
+aws_scim_job_enabled                   = true
 enable_pam_oidc_app                    = false
 clinical_portal_preauthorize_azure_cli = false
 enable_servicenow_sso                  = true
