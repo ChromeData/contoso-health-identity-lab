@@ -32,9 +32,11 @@
 # lab.tfvars never holds. Synthetic here; from Day 1 (enable_premium in
 # lab.tfvars) every run needs them. A run's own variables block overrides.
 variables {
-  okta_org_domain                        = "integrator-0000000.okta.com"            # synthetic org host: enable_okta_federation precondition (lab.tfvars stage)
-  servicenow_instance_url                = "https://dev00000.service-now.com"       # synthetic PDI: enable_servicenow_sso precondition (lab.tfvars stage)
-  app_owner_object_ids                   = ["cccccccc-cccc-cccc-cccc-cccccccccccc"] # the apps module's human-owner check
+  aws_scim_credentials                   = { tenant_url = "https://scim.us-east-1.amazonaws.com/abcd-1234/scim/v2", secret_token = "not-a-real-token-0123456789abcdef" } # the stage test turns SCIM on; the creating run reads the real values from Key Vault
+  aws_scim_template_id                   = "aWSSingleSignon"                                                                                                             # synthetic: enable_scim_provisioning precondition (lab.tfvars stage)
+  okta_org_domain                        = "integrator-0000000.okta.com"                                                                                                 # synthetic org host: enable_okta_federation precondition (lab.tfvars stage)
+  servicenow_instance_url                = "https://dev00000.service-now.com"                                                                                            # synthetic PDI: enable_servicenow_sso precondition (lab.tfvars stage)
+  app_owner_object_ids                   = ["cccccccc-cccc-cccc-cccc-cccccccccccc"]                                                                                      # the apps module's human-owner check
   onmicrosoft_domain                     = "contosohealthlab.onmicrosoft.com"
   pim_approver_object_ids                = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
   iac_principal_ids                      = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
