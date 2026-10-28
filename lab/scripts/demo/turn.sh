@@ -52,6 +52,7 @@ post_steps() {
     # After the HR feed has created staff (run sheet 06): admin accounts for
     # the IT staff, birthright packages, joiner/leaver workflows.
     people) echo "baseline,admin-accounts,auto-assignment,lifecycle-workflows" ;;
+    reviews) echo "access-reviews" ;;
     *)    return 1 ;;
   esac
 }
@@ -130,7 +131,7 @@ PY
 )
       steps="pim-eligibility"; extra="-PimEligibility $map"
     else
-      steps=$(post_steps "$stage") || die "no post-apply steps for '$stage' (stages: day1, day2, day3, people, eligibility)"
+      steps=$(post_steps "$stage") || die "no post-apply steps for '$stage' (stages: day1, day2, day3, people, eligibility, reviews)"
     fi
     [ -s "$OUTPUTS" ] || die "run 'turn.sh outputs' first"
     tid=$(ghvar AZURE_TENANT_ID)
