@@ -309,7 +309,7 @@ else {
     # Policies via the package (accessPackages/{id}?$expand=assignmentPolicies),
     # the documented v1.0 path that also works for catalog-scoped admins.
     $policies = @(@((Get-MgEntitlementManagementAccessPackage -AccessPackageId $newAp.Id -ExpandProperty 'assignmentPolicies' -ErrorAction Stop).AssignmentPolicies) | Where-Object { $null -ne $_ })
-    $already = & $getHeld $newAp.Id
+    $already = @(& $getHeld $newAp.Id)
     if ($already) {
         Write-Console "  [=] User already has '$NewAccessPackageName' ($($already[0].State))$(if ($newModel -eq 'automatic') { ' - delivered by the automatic (birthright) policy' })." -ForegroundColor Green
         $addState = 'already-held'
@@ -329,7 +329,7 @@ else {
             for ($i = 0; -not $already -and $i -lt $attempts; $i++) {
                 Write-Console "  [i] Waiting for the automatic (birthright) assignment - next check in $PollSeconds s." -ForegroundColor DarkGray
                 Start-Sleep -Seconds $PollSeconds
-                $already = & $getHeld $newAp.Id
+                $already = @(& $getHeld $newAp.Id)
             }
             if ($already) { Write-Console "  [+] '$NewAccessPackageName' $($already[0].State) by the automatic (birthright) policy." -ForegroundColor Green; $addState = 'auto-delivered' }
             else {
