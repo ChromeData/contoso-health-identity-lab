@@ -125,10 +125,10 @@ run "plan_lab_tfvars" {
       output.pim_auth_context_requests != null,
       output.ca_pim_activation_auth_context_ready == false,
       output.pim_workforce_au_membership_body != null,
-      try(length(output.access_review_definitions), 0) == 0,
+      try(length(output.access_review_definitions), 0) > 0,
       output.package_assignment_model != null,
     ])
-    error_message = "Day 3: CA021 body, help-desk AU rule and the access-package assignment model exist (enable_governance); PIM still asks for MFA (CA021 report-only); access reviews are not rendered until Day 8"
+    error_message = "Day 3: CA021 body, help-desk AU rule and the access-package assignment model exist (enable_governance); PIM still asks for MFA (CA021 report-only); the privileged (T1) access reviews render with enable_access_reviews_privileged"
   }
   assert {
     condition     = output.pim_privileged_role_template_ids != null && nonsensitive(output.directory_role_pim_policies) != null
