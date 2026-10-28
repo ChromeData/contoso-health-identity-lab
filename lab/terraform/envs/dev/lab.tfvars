@@ -121,7 +121,7 @@ enable_scim_provisioning               = false
 aws_scim_job_enabled                   = false
 enable_pam_oidc_app                    = false
 clinical_portal_preauthorize_azure_cli = false
-enable_servicenow_sso                  = false
+enable_servicenow_sso                  = true
 enable_okta_federation                 = false
 
 # Non-human identity governance: App-Consent-Reviewers group (premium) for the
