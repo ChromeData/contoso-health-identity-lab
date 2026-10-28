@@ -203,7 +203,7 @@ enable_la_alerts = false
 # Every policy starts report-only. Graduate ONE policy per PR - the CA004 flip
 # is the on-camera pipeline demo.
 ca_policy_states = {
-  CA001 = "enabledForReportingButNotEnforced" # require MFA, all users
+  CA001 = "enabled"                           # require MFA, all users
   CA002 = "enabledForReportingButNotEnforced" # phishing-resistant, admins
   CA003 = "enabled"                           # block legacy auth
   CA004 = "enabled"                           # block countries
