@@ -111,7 +111,12 @@ enable_shared_clinical_ca     = false
 # clinic's Okta org (runbook Phase 1, ADR 0022; the org host goes in
 # terraform.tfvars / TF_VAR_, never here). The Okta side is the separate,
 # human-applied root lab/terraform/okta.
-enable_sso_apps                        = true
+enable_sso_apps = true
+# Signing certificates must fit the tenant's 180-day key-credential policy
+# (Set-AppGovernancePolicy.ps1). Rotation = a new date here, then the IdP
+# metadata re-uploaded on the AWS / ServiceNow side (README, rotation).
+saml_signing_cert_end_date             = "2027-04-20T00:00:00Z"
+servicenow_saml_signing_cert_end_date  = "2027-04-20T00:00:00Z"
 enable_scim_provisioning               = false
 aws_scim_job_enabled                   = false
 enable_pam_oidc_app                    = false
