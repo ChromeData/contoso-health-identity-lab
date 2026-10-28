@@ -21,7 +21,7 @@ terraform {
     # Azure Resource Manager (Key Vault, networking, Log Analytics).
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 4.0"
+      version = "~> 5.11"
     }
 
     # Initial password generation for lab/break-glass accounts.
