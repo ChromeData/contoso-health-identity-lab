@@ -173,6 +173,7 @@ operator_ips_expires_on   = "2027-01-20"
 #   pim_activation_without_auth_context  PREVIEW: the first real Tier-0 activation
 #                                        confirms the activity strings
 itdr_exclude_rules = [
+  "sod_violation_granted", # v2: Sentinel answers 400 "Invalid data model" on create (2026-10-29) - held back until the rule body is fixed
   "identity_risk",
   "dc_logon_outside_operator_allowlist",
   "vault_privileged_access_anomaly",
