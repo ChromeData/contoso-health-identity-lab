@@ -170,8 +170,8 @@ run "plan_lab_itdr_hold_back" {
     error_message = "the PREVIEW rule, the vault anomaly rule (extended feed) and identity_risk (risk tables) must be held back by lab.tfvars"
   }
   assert {
-    condition     = length(output.itdr_rule_keys) == 17 - length(var.itdr_exclude_rules) && length(var.itdr_exclude_rules) == 4
-    error_message = "lab.tfvars holds back exactly four of the seventeen ITDR rules (risk tables, v2 watchlist, extended vault feed, PREVIEW); the other thirteen deploy"
+    condition     = length(output.itdr_rule_keys) == 17 - length(var.itdr_exclude_rules) && length(var.itdr_exclude_rules) == 5
+    error_message = "lab.tfvars holds back exactly five of the seventeen ITDR rules (risk tables, v2 watchlist, extended vault feed, PREVIEW, the sod_violation_granted body); the other twelve deploy"
   }
 }
 
@@ -188,7 +188,7 @@ run "plan_lab_itdr_hold_back_la_alerts" {
   }
 
   assert {
-    condition     = length(output.itdr_rule_keys) == 13 && contains(output.itdr_rule_keys, "tier0_logon_without_checkout") && !contains(output.itdr_rule_keys, "dc_logon_outside_operator_allowlist")
+    condition     = length(output.itdr_rule_keys) == 12 && contains(output.itdr_rule_keys, "tier0_logon_without_checkout") && !contains(output.itdr_rule_keys, "dc_logon_outside_operator_allowlist")
     error_message = "the lab.tfvars hold-back list applies on the Log Analytics path too"
   }
 }
