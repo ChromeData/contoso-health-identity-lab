@@ -443,14 +443,20 @@ else {
             # response. 'key' is JSON {result: Success|Skipped|..., details:
             # {errorCode, errorMessage}}; 'value' is JSON with 'action' (e.g.
             # Disable/Update/Other). Never print 'value' - it holds user attributes.
-            $k = [string]$resp['key'] | ConvertFrom-Json
-            $v = if ($resp['value']) { [string]$resp['value'] | ConvertFrom-Json } else { $null }
-            $podResult = if ($k -and $k.PSObject.Properties['result']) { [string]$k.result } else { 'Unknown' }
-            $podAction = if ($v -and $v.PSObject.Properties['action']) { [string]$v.action } else { '' }
+            # The response's 'key' is a type name, not JSON; the outcome is in
+            # 'value': a JSON array of provisioning-log entries with
+            # statusInfo {status, errorCode, reason} and the steps taken.
+            # Never print 'value' whole - it holds user attributes.
+            $items = if ($resp['value']) { @([string]$resp['value'] | ConvertFrom-Json) } else { @() }
+            $first = $items | Select-Object -First 1
+            $podResult = if ($first -and $first.PSObject.Properties['statusInfo'] -and $first.statusInfo.PSObject.Properties['status']) { [string]$first.statusInfo.status } else { 'Unknown' }
+            $podAction = ''
+            if ($first -and $first.PSObject.Properties['action'] -and $first.action) { $podAction = [string]$first.action }
+            elseif ($first -and $first.PSObject.Properties['provisioningSteps']) { $last = @($first.provisioningSteps) | Select-Object -Last 1; if ($last -and $last.PSObject.Properties['name']) { $podAction = [string]$last.name } }
             $podCode = ''; $podWhy = ''
-            if ($k -and $k.PSObject.Properties['details'] -and $k.details) {
-                if ($k.details.PSObject.Properties['errorCode']) { $podCode = [string]$k.details.errorCode }
-                if ($k.details.PSObject.Properties['errorMessage']) { $podWhy = [string]$k.details.errorMessage }
+            if ($first -and $first.PSObject.Properties['statusInfo']) {
+                if ($first.statusInfo.PSObject.Properties['errorCode']) { $podCode = [string]$first.statusInfo.errorCode }
+                if ($first.statusInfo.PSObject.Properties['reason']) { $podWhy = ([string]$first.statusInfo.reason) -replace '\s+', ' ' }
             }
             $podDetail = (@($podCode, $podWhy) | Where-Object { $_ }) -join ': '
             switch ($podResult) {
