@@ -514,12 +514,14 @@ Export-Artifact -Name 'mfa_registration_coverage.json' -Control 'SOX authenticat
 # ===========================================================================
 Export-Artifact -Name 'privileged_role_assignments.json' -Control 'SOX segregation of duties / HIPAA 164.308(a)(3), 164.308(a)(4)' -Collector {
     if ($privRoleError) { throw $privRoleError }
-    Get-MgRoleManagementDirectoryRoleAssignment -All -ExpandProperty 'principal,roleDefinition' |
+    # Graph expands ONE property per query: expand the principal, name the role from a lookup.
+    $roleNames = @{}; Get-MgRoleManagementDirectoryRoleDefinition -All | ForEach-Object { $roleNames[[string]$_.Id] = $_.DisplayName }
+    Get-MgRoleManagementDirectoryRoleAssignment -All -ExpandProperty 'principal' |
         Where-Object { $privRoleIds.Contains([string]$_.RoleDefinitionId) } |
         ForEach-Object {
             $upn = $_.Principal.AdditionalProperties['userPrincipalName']
             [pscustomobject]@{
-                role              = $_.RoleDefinition.DisplayName
+                role              = $roleNames[[string]$_.RoleDefinitionId]
                 principalId       = $_.PrincipalId
                 principal         = $_.Principal.AdditionalProperties['displayName']
                 userPrincipalName = $upn
