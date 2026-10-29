@@ -20,10 +20,18 @@ so say that instead.
   before the 14-day minimum) is approved, not *Proposed*, with the E28 counts
   attached, before the first graduation;
 - Microsoft's own user-risk policy in ID Protection is off or report-only, so
-  CA006 is the only user-risk policy.
+  CA006 is the only user-risk policy;
+- **security defaults are off.** A new tenant ships with them on, and Entra
+  refuses to turn a Conditional Access policy On while they are on (the apply
+  fails with `400 BadRequest: Security defaults`; seen on the first live
+  graduation, 2026-10-28). Entra admin center, **Overview**, **Properties**,
+  **Manage security defaults**, **Disabled**, or in `pwsh`:
+  `Invoke-MgGraphRequest PATCH 'v1.0/policies/identitySecurityDefaultsEnforcementPolicy' -Body @{ isEnabled = $false }`.
+  From that moment until CA001 and CA002 are On, nothing forces MFA on the
+  admins, so graduate CA001 early in the order below and keep the window short.
 
-**Heads-up:** this is a draft. Nothing in it has run in the tenant yet, so
-correct any step the first time you do it. **Test accounts only** for every
+**Heads-up:** steps 13 to 21 ran in the tenant on 2026-10-28 (CA003, CA004);
+the rest is still a draft, so correct any step the first time you do it. **Test accounts only** for every
 simulation. Never use your own account or a break-glass account.
 
 ## Steps
@@ -129,7 +137,8 @@ off), CA022 (comes with the PAM app), and CA023 and CA060 (flags off).
   gate. That revert is the documented rollback.
 - **Every policy:** `lab/scripts/demo/rewind-lab.sh <stage> --open-pr`, with
   the stage `turn where` printed before you started. It restores `lab.tfvars`
-  and the mocked test, so every policy goes back to report-only. If step 33
+  and the mocked test, so every policy goes back to report-only. Security
+  defaults stay off (a replay never needs them back on). If step 33
   ran, go back to MFA first, in its own PR (`pim_tier0_activation_auth_context_id = ""`
   and the switch-over `false`). Then check a Tier-0 group's activation settings
   no longer ask for the context: the provider can leave that rule on, so switch
