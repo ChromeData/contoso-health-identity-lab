@@ -43,9 +43,10 @@ locals {
   # verify: GitHub documents only the :ref: example of this form; confirm the
   # :pull_request and :environment: subjects with GitHub's OIDC subject preview
   # before the first pipeline run.
-  github_repo_path = "${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}"
-  plan_subject     = "repo:${local.github_repo_path}:pull_request"
-  apply_subject    = "repo:${local.github_repo_path}:environment:${var.prod_environment_name}"
+  github_repo_path  = "${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}"
+  plan_subject      = "repo:${local.github_repo_path}:pull_request"
+  plan_main_subject = "repo:${local.github_repo_path}:ref:refs/heads/main"
+  apply_subject     = "repo:${local.github_repo_path}:environment:${var.prod_environment_name}"
 }
 
 # -----------------------------------------------------------------------------
@@ -98,6 +99,18 @@ resource "azuread_application_federated_identity_credential" "plan_pr" {
   audiences      = [local.github_oidc_audience]
   issuer         = local.github_oidc_issuer
   subject        = local.plan_subject
+}
+
+# The nightly config-drift workflow runs on main (schedule / workflow_dispatch),
+# so the PLAN identity also needs the main-branch ref subject - still read-only.
+resource "azuread_application_federated_identity_credential" "plan_main" {
+  #checkov:skip=CKV_AZURE_249:The subject is pinned to this repository's main branch (local.plan_main_subject); the identity is read-only.
+  application_id = azuread_application.plan.id
+  display_name   = "github-main-drift"
+  description    = "GitHub Actions OIDC - runs on main (config-drift, read-only)"
+  audiences      = [local.github_oidc_audience]
+  issuer         = local.github_oidc_issuer
+  subject        = local.plan_main_subject
 }
 
 # Grant the read-only Graph app roles to the PLAN service principal.
