@@ -601,11 +601,13 @@ module "apps" {
   # The ONE principal on the AWS app = the SCIM scope.
   aws_users_group_object_id = module.groups[0].app_access_group_object_ids["aws"]
 
-  aws_saml_entity_id            = var.aws_saml_entity_id
-  aws_saml_acs_urls             = var.aws_saml_acs_urls
-  aws_access_portal_url         = var.aws_access_portal_url
-  saml_cert_notification_emails = var.saml_cert_notification_emails
-  app_owner_object_ids          = var.app_owner_object_ids
+  aws_saml_entity_id                    = var.aws_saml_entity_id
+  saml_signing_cert_end_date            = var.saml_signing_cert_end_date
+  servicenow_saml_signing_cert_end_date = var.servicenow_saml_signing_cert_end_date
+  aws_saml_acs_urls                     = var.aws_saml_acs_urls
+  aws_access_portal_url                 = var.aws_access_portal_url
+  saml_cert_notification_emails         = var.saml_cert_notification_emails
+  app_owner_object_ids                  = var.app_owner_object_ids
 
   enable_scim_provisioning = var.enable_scim_provisioning
   aws_scim_template_id     = var.aws_scim_template_id

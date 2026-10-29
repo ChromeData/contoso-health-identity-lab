@@ -251,10 +251,12 @@ Describe 'Compare-IdentityConfig.ps1 end to end (snapshots from the offline expo
             return (Write-JsonFile (Join-Path $TestDrive "drift-$($script:Counter).json") $j)
         }
         function Invoke-Compare([string]$Snapshot, [string]$Baseline = $script:CleanPath, [string]$Exceptions = $script:ExceptionsFile, [switch]$SkipIntent) {
+            # Declared intent comes from the fixture tfvars (all report-only), not the live lab.tfvars: a graduation must not fail this suite.
+            $fixtureTfVars = Join-Path $PSScriptRoot 'fixtures' 'lab.fixture.tfvars'
             $global:LASTEXITCODE = 0
             $script:Counter++
             $md = Join-Path $TestDrive "out-$($script:Counter).md"; $json = Join-Path $TestDrive "out-$($script:Counter).json"
-            $null = & $script:Compare -SnapshotPath $Snapshot -BaselinePath $Baseline -ExceptionsPath $Exceptions -MarkdownPath $md -JsonPath $json -AsOf $script:Today -WarningAction SilentlyContinue -SkipIntent:$SkipIntent
+            $null = & $script:Compare -SnapshotPath $Snapshot -BaselinePath $Baseline -ExceptionsPath $Exceptions -MarkdownPath $md -JsonPath $json -AsOf $script:Today -WarningAction SilentlyContinue -TfVarsPath $fixtureTfVars -SkipIntent:$SkipIntent
             $r = @{ Exit = $LASTEXITCODE; Md = $md; Json = $json; Report = $null; Keys = @() }
             if (Test-Path -LiteralPath $json) { $r.Report = Read-JsonObject $json; $r.Keys = @($r.Report['findings'] | ForEach-Object { "$($_['severity']):$($_['status']):$($_['key'])" }) }
             return $r

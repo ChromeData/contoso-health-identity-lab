@@ -19,7 +19,7 @@ twelve rules **Enabled** (run sheet 04), and:
 - a Team with an **Identity-SecOps** channel, and two people in it: one who
   will be in `ITDR-Containment-Approvers`, and one who won't be.
 
-**Heads-up:** this is a draft. Nothing in it has run in the tenant yet, so
+**Heads-up:** steps 4 to 8 ran on 2026-10-28 (stage `itdr`: DC01 already had SecurityEvent rows, four rules released, 16 enabled). The rest is still a draft, so
 correct any step the first time you do it. **Test accounts only.** Every PR here
 changes `lab.tfvars` **and** the mocked test that pins the stage, like each
 stage PR before it; the step names the run to update. Once containment is on

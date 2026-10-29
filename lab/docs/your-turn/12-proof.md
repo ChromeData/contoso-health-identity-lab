@@ -9,7 +9,7 @@ nobody can quietly edit them afterwards.
 **Whisperglass:** *Contoso 09 · Proof*, then *Contoso 11 · Drift, Okta,
 reporting*.
 
-**Starts from:** every earlier run sheet done. The "before" numbers already
+**Starts from:** every earlier run sheet done. (2026-10-28: captures E15b, E22-E24, E30/E30a, E53, E57, E58 are in the WORM store and `capture-log.csv`; steps 2-12 below still to run.) The "before" numbers already
 exist: the KPI baseline in `lab/evidence/kpis/` and the "before" assessment in
 `lab/evidence/assessments/`.
 

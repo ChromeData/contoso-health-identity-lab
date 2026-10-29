@@ -928,3 +928,21 @@ variable "intune_vm_size" {
     error_message = "intune_vm_size must be an Azure VM size name such as Standard_D2als_v7."
   }
 }
+
+# SAML token-signing certificate expiry for the AWS and ServiceNow apps (RFC 3339).
+# The tenant's default app management policy (Set-AppGovernancePolicy.ps1) caps
+# key credentials at P180D for apps created after Day 3, and Entra refuses a
+# longer signing certificate (CredentialInvalidLifetimeAsPerAppPolicy, seen on
+# the first apps apply, 2026-10-28). A date is a policy knob, so it lives in
+# lab.tfvars; moving it REPLACES the certificate (modules/apps README, rotation).
+variable "saml_signing_cert_end_date" {
+  type        = string
+  description = "Expiry of the AWS IAM Identity Center SAML signing certificate (RFC 3339); null = Entra's 3-year default, which the lab's 180-day credential policy rejects."
+  default     = null
+}
+
+variable "servicenow_saml_signing_cert_end_date" {
+  type        = string
+  description = "Expiry of the ServiceNow SAML signing certificate (RFC 3339); null = Entra's 3-year default, which the lab's 180-day credential policy rejects."
+  default     = null
+}

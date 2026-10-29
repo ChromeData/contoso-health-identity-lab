@@ -428,3 +428,22 @@ output "intune_vm_admin_password" {
   value       = one(module.intune_vm[*].admin_password)
   sensitive   = true
 }
+
+# ---- ServiceNow (enable_servicenow_sso) ------------------------------------------
+# Run sheet 07 / apps README S1a-S2 read these from the env root; they were
+# only exposed by the module until the first live ServiceNow stage (2026-10-28).
+
+output "servicenow_service_principal_object_id" {
+  description = "Object id of the ServiceNow enterprise app (null while enable_servicenow_sso is off)."
+  value       = one(module.apps[*].servicenow_service_principal_object_id)
+}
+
+output "servicenow_federation_metadata_url" {
+  description = "Entra federation metadata for the ServiceNow app: import it as the IdP in ServiceNow's Multi-Provider SSO (S2)."
+  value       = one(module.apps[*].servicenow_federation_metadata_url)
+}
+
+output "servicenow_saml_signing_cert_activation_command" {
+  description = "S1a: the Update-MgServicePrincipal line that activates the ServiceNow SAML signing certificate (azuread cannot set preferredTokenSigningKeyThumbprint)."
+  value       = one(module.apps[*].servicenow_saml_signing_cert_activation_command)
+}

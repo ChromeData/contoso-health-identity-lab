@@ -1,0 +1,150 @@
+{
+  "generatedUtc": "2026-10-28T23:11:33.2371360Z",
+  "source": "tenant",
+  "definitions": [
+    {
+      "key": "privileged:Global Administrator (eligible)",
+      "displayName": "Privileged access review: Global Administrator (eligible)",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier0-Application-Admins",
+      "displayName": "Privileged access review: PIM-Tier0-Application-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier0-Auth-Policy-Admins",
+      "displayName": "Privileged access review: PIM-Tier0-Auth-Policy-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier0-CA-Admins",
+      "displayName": "Privileged access review: PIM-Tier0-CA-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier0-Cloud-Application-Admins",
+      "displayName": "Privileged access review: PIM-Tier0-Cloud-Application-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier0-Hybrid-Identity-Admins",
+      "displayName": "Privileged access review: PIM-Tier0-Hybrid-Identity-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier0-Privileged-Auth-Admins",
+      "displayName": "Privileged access review: PIM-Tier0-Privileged-Auth-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier0-Privileged-Role-Admins",
+      "displayName": "Privileged access review: PIM-Tier0-Privileged-Role-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier0-Security-Admins",
+      "displayName": "Privileged access review: PIM-Tier0-Security-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier1-Exchange-Admins",
+      "displayName": "Privileged access review: PIM-Tier1-Exchange-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier1-Groups-Admins",
+      "displayName": "Privileged access review: PIM-Tier1-Groups-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier1-Helpdesk",
+      "displayName": "Privileged access review: PIM-Tier1-Helpdesk",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier1-IGA-Admins",
+      "displayName": "Privileged access review: PIM-Tier1-IGA-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier1-Intune-Admins",
+      "displayName": "Privileged access review: PIM-Tier1-Intune-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier1-License-Admins",
+      "displayName": "Privileged access review: PIM-Tier1-License-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier1-SharePoint-Admins",
+      "displayName": "Privileged access review: PIM-Tier1-SharePoint-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:PIM-Tier1-Teams-Admins",
+      "displayName": "Privileged access review: PIM-Tier1-Teams-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    },
+    {
+      "key": "privileged:Privileged-IAM-Admins",
+      "displayName": "Privileged access review: Privileged-IAM-Admins",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    }
+  ]
+}

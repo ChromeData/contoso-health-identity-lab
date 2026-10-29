@@ -41,15 +41,32 @@ stage_commit() {
     day3)     echo c208235 ;;
     sentinel) echo 9325872 ;;
     dc)       echo 8fc86a4 ;;
+    itdr)     echo 73a4897 ;;
+    apps)     echo cd2da6e ;;
+    servicenow) echo b2cd930 ;;
+    okta)     echo d6f9952 ;;
+    reviews)  echo 1710d9b ;;
     *)        return 1 ;;
   esac
 }
-STAGES=(p2 day1 day2 day3 sentinel dc)
+STAGES=(p2 day1 day2 day3 sentinel dc itdr apps servicenow okta reviews)
 
 # Cleanup Terraform cannot do: objects created by post-apply scripts or by
 # provisioning, listed for every stage boundary the rewind crosses.
 cleanup_after() {
   case "$1" in
+    reviews)
+      echo "  - Access review definitions created by post-apply (New-AccessReviewDefinitions.ps1): stop/delete them in Identity Governance > Access reviews." ;;
+    okta)
+      echo "  - Okta root: terraform apply with enable_entra_federation = false (removes the IdP + routing rule); delete the okta-clinic-idp client secret and its app-management exception policy."
+      echo "  - Admin consent on okta-clinic-idp goes with the app (Terraform-owned)." ;;
+    servicenow)
+      echo "  - ServiceNow: delete the Identity Provider record and its certificate (Multi-Provider SSO); clear TF_SERVICENOW_SSO_SYS_ID / servicenow_sso_sys_id." ;;
+    apps)
+      echo "  - AWS: Settings > Identity source back to the Identity Center directory; disable automatic provisioning (SCIM) and delete its tokens; Key Vault aws-scim-* secrets; lab/terraform/aws destroy."
+      echo "  - The imported gallery redirect-URI set and the Clinical Portal app are Terraform-owned (removed with the flag)." ;;
+    itdr)
+      echo "  - Nothing extra: the four SecurityEvent rules are Terraform-owned (they return to itdr_exclude_rules)." ;;
     dc)
       echo "  - Cloud Sync: delete the configuration, then uninstall/unregister the agent (Entra Connect > Cloud sync)."
       echo "  - Delete the 'Contoso HR Inbound Provisioning' enterprise app (New-InboundProvisioningApp.ps1)."
@@ -82,6 +99,16 @@ post_apply_for() {
       echo "  - sentinel: nothing to run; check the analytics rules show Enabled." ;;
     dc)
       echo "  - dc: lab/scripts/dc: 01 forest, reboot, 02 configure, 04 Cloud Sync agent; then mock-hr/New-InboundProvisioningApp.ps1." ;;
+    itdr)
+      echo "  - itdr: nothing to run; DC01 must already send SecurityEvent rows (Sentinel Logs)." ;;
+    apps)
+      echo "  - apps: run sheet 07 steps 8-19 (certificate activation, AWS identity source, SCIM token to Key Vault, template id, local seeding apply, provision Dana, lab/terraform/aws)." ;;
+    servicenow)
+      echo "  - servicenow: activate the signing certificate (output servicenow_saml_signing_cert_activation_command), create the IdP from servicenow_federation_metadata_url (plugin com.snc.integration.sso.multi.installer), then TF_SERVICENOW_SSO_SYS_ID + an apply." ;;
+    okta)
+      echo "  - okta: admin consent on okta-clinic-idp, output okta_idp_client_secret_command (needs the app's secret-exception policy), then lab/terraform/okta apply with enable_entra_federation = true." ;;
+    reviews)
+      echo "  - reviews: Invoke-PostApply.ps1 -Execute -Only access-reviews (Graph session needs AccessReview.ReadWrite.All)." ;;
   esac
 }
 

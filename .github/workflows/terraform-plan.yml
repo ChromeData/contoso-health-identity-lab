@@ -145,6 +145,7 @@ jobs:
       # AWS portal URL), so Variables. Unset = '': nothing plans while the flag
       # is off, and the plan refuses the flag without the URL.
       TF_VAR_servicenow_instance_url: ${{ vars.TF_SERVICENOW_INSTANCE_URL }}
+      TF_VAR_okta_org_domain: ${{ vars.TF_OKTA_ORG_DOMAIN }}
       TF_VAR_servicenow_sso_sys_id: ${{ vars.TF_SERVICENOW_SSO_SYS_ID }}
       # ITDR: the APPLY identity by immutable id (envs/bootstrap output
       # iac_principal_ids) and extra privileged users - JSON lists of GUIDs.

@@ -26,7 +26,7 @@ enable_governance = true
 # or the entitlement approver group). A POLICY review switched back off needs
 # the portal. The bodies are created by post-apply/New-AccessReviewDefinitions.ps1.
 enable_access_reviews             = false
-enable_access_reviews_privileged  = false
+enable_access_reviews_privileged  = true
 enable_access_reviews_requestable = false
 enable_access_reviews_inactive    = false
 
@@ -111,13 +111,18 @@ enable_shared_clinical_ca     = false
 # clinic's Okta org (runbook Phase 1, ADR 0022; the org host goes in
 # terraform.tfvars / TF_VAR_, never here). The Okta side is the separate,
 # human-applied root lab/terraform/okta.
-enable_sso_apps                        = false
-enable_scim_provisioning               = false
-aws_scim_job_enabled                   = false
+enable_sso_apps = true
+# Signing certificates must fit the tenant's 180-day key-credential policy
+# (Set-AppGovernancePolicy.ps1). Rotation = a new date here, then the IdP
+# metadata re-uploaded on the AWS / ServiceNow side (README, rotation).
+saml_signing_cert_end_date             = "2027-04-20T00:00:00Z"
+servicenow_saml_signing_cert_end_date  = "2027-04-20T00:00:00Z"
+enable_scim_provisioning               = true
+aws_scim_job_enabled                   = true
 enable_pam_oidc_app                    = false
 clinical_portal_preauthorize_azure_cli = false
-enable_servicenow_sso                  = false
-enable_okta_federation                 = false
+enable_servicenow_sso                  = true
+enable_okta_federation                 = true
 
 # Non-human identity governance: App-Consent-Reviewers group (premium) for the
 # admin consent workflow; uami-agent-runtime for Entra Agent ID. The tenant
@@ -198,17 +203,17 @@ enable_la_alerts = false
 # Every policy starts report-only. Graduate ONE policy per PR - the CA004 flip
 # is the on-camera pipeline demo.
 ca_policy_states = {
-  CA001 = "enabledForReportingButNotEnforced" # require MFA, all users
+  CA001 = "enabled"                           # require MFA, all users
   CA002 = "enabledForReportingButNotEnforced" # phishing-resistant, admins
   CA003 = "enabled"                           # block legacy auth
-  CA004 = "enabledForReportingButNotEnforced" # block countries
+  CA004 = "enabled"                           # block countries
   CA005 = "enabledForReportingButNotEnforced" # compliant device, admin portals (pilot group)
   CA006 = "enabledForReportingButNotEnforced" # user risk high -> MFA + secure password change (P2; enable_identity_protection_ca)
   CA007 = "enabledForReportingButNotEnforced" # sign-in risk high -> block (P2; enable_identity_protection_ca)
   CA008 = "enabledForReportingButNotEnforced" # phishing-resistant, workforce (enable_phishing_resistant_all_users)
   CA009 = "enabledForReportingButNotEnforced" # register security info: one-time TAP or phishing-resistant (enable_registration_ca)
-  CA010 = "enabledForReportingButNotEnforced" # block device code flow (enable_device_code_block) - enforcing breaks az login --use-device-code
-  CA020 = "enabledForReportingButNotEnforced" # admin portals: sign-in every 4 h, Tier-0/1 (enable_admin_session_controls)
+  CA010 = "enabled"                           # block device code flow (enable_device_code_block) - enforcing breaks az login --use-device-code
+  CA020 = "enabled"                           # admin portals: sign-in every 4 h, Tier-0/1 (enable_admin_session_controls)
   CA021 = "enabledForReportingButNotEnforced" # PIM activation step-up, auth context c1 - Graph-managed (enable_pim_auth_context)
   CA022 = "enabledForReportingButNotEnforced" # PAM session broker + admin portals, admin strength (enable_pam_oidc_app; was CA009)
   CA023 = "enabledForReportingButNotEnforced" # protected actions (CA / named-location changes), auth context c2 - Graph-managed (enable_protected_actions_ca)

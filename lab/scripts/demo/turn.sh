@@ -52,6 +52,7 @@ post_steps() {
     # After the HR feed has created staff (run sheet 06): admin accounts for
     # the IT staff, birthright packages, joiner/leaver workflows.
     people) echo "baseline,admin-accounts,auto-assignment,lifecycle-workflows" ;;
+    reviews) echo "access-reviews" ;;
     *)    return 1 ;;
   esac
 }
@@ -130,7 +131,7 @@ PY
 )
       steps="pim-eligibility"; extra="-PimEligibility $map"
     else
-      steps=$(post_steps "$stage") || die "no post-apply steps for '$stage' (stages: day1, day2, day3, people, eligibility)"
+      steps=$(post_steps "$stage") || die "no post-apply steps for '$stage' (stages: day1, day2, day3, people, eligibility, reviews)"
     fi
     [ -s "$OUTPUTS" ] || die "run 'turn.sh outputs' first"
     tid=$(ghvar AZURE_TENANT_ID)
@@ -197,6 +198,9 @@ else:
 open(test, 'w').write(t)
 print(f"  lab.tfvars: {ca} -> \"enabled\"; test: {ca} added to the graduated list")
 PY
+    # The shorter "enabled" value shifts the trailing comment column, and CI
+    # runs terraform fmt -check: format the two edited files as CI would see them.
+    ( cd "$wt/$DEV_DIR" && "$TF" fmt lab.tfvars tests/mock_plan.tftest.hcl >/dev/null )
     ( cd "$wt" && git --no-pager diff --stat )
     say "Mocked test, as CI runs it"
     rc=0; ( cd "$wt/$DEV_DIR" && "$TF" init -backend=false -input=false >/dev/null && "$TF" test -var-file=lab.tfvars -no-color ) > "$wt/.test.log" 2>&1 || rc=$?

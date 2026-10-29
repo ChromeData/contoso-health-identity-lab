@@ -1,6 +1,15 @@
 # 07 · Apps and single sign-on (stage `apps`)
 
-Draft: written before this stage first ran in the lab tenant. Steps marked (verify) are checked during the first build.
+Ran in the lab tenant on 2026-10-28 (stages `apps`, `servicenow`, `okta` in `turn`). What the first run taught, kept short:
+
+- Step 2 is real: without the bootstrap app-management roles the apply gets 403s.
+- The tenant's own 180-day key-credential policy rejects Entra's 3-year signing certificate: `saml_signing_cert_end_date` and `servicenow_saml_signing_cert_end_date` now live in `lab.tfvars` (PR #59).
+- The gallery app ships with a Web redirect-URI set and the first apply leaves the Clinical Portal app behind: both are one-time `terraform import`s (PR #59 description).
+- AWS shows the SCIM token once and the page splits it: copy it with the Copy button, then check it with `curl -H "Authorization: Bearer ..." <endpoint>/ServiceProviderConfig` (200) before Key Vault. A truncated token fails **Test Connection** with `SystemForCrossDomainIdentityManagementCredentialValidationFailure`.
+- The seeding apply (step 15) must be targeted (`-target` the synchronization job and secret): a full local apply also tries to reconcile governance objects your user cannot read.
+- Step 19 (the `aws/` root): once the identity source is Entra, the `idlab-admin` SSO profile cannot sign in. The first run created `ViewOnlyAccess` and the group assignment in the console instead (E24). Either apply `aws/` **before** step 12 with an Identity Center user, or accept the console path.
+- ServiceNow: install *Integration - Multiple Provider Single Sign-On Installer* from the Application Manager first; the IdP record can be created by API from the Entra metadata (`sso_properties` / `saml2_update1_properties`, NameID unspecified, `user_name`), then `TF_SERVICENOW_SSO_SYS_ID` + an apply.
+- Okta: the tenant default app-management policy blocks client secrets. `okta_idp_client_secret_command` only works after a per-app exception policy (one `passwordAddition` allowance, 180-day lifetime) is assigned to `okta-clinic-idp`; the Okta root apply then needs `OKTA_API_TOKEN` and `TF_VAR_entra_client_secret` in the shell only.
 
 The `apps` stage is added to `turn` when it is first built.
 

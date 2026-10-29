@@ -15,6 +15,8 @@ then *Contoso 08 · Leaver + non-human identities*.
 Apps** and has an AWS account created by SCIM. `turn where` says `apps` or
 later. You have `<spId>` and `<jobId>`.
 
+**Heads-up (first run, 2026-10-28):** DC01 must be running - the HR agent and Cloud Sync agent live on it and the 19:00 auto-shutdown put both Cloud Sync jobs in quarantine (`HybridIdentityServiceNoActiveAgents`); start the VM, restart `AADConnectProvisioningAgent`, then restart + start the jobs. Marcus moved to ICU (AD 7 s after the push, Entra at the next 20-minute cycle); `03-Mover.ps1` then waits for the ICU birthright package (PR #84 fixed its crash after the wait). Dana's leaver: AD disabled + OU=Disabled 7 s after the push, Entra `accountEnabled=false` 3 minutes later, `04-Leaver.ps1` revoked sessions, removed the package and the three app groups, then waited on the package removal.
+
 **Heads-up:** every step changes real accounts; to film again, use *Do it
 again*. The mover's old package leaves only after a 72-hour grace, so step 6
 is three days later. Run every `./lab/...` command in `pwsh` from the repo

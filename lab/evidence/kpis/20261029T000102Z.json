@@ -1,0 +1,279 @@
+{
+  "schema": "contoso-identity-kpis/v1",
+  "label": "after",
+  "generatedAtUtc": "2026-10-29T00:01:02.7821100Z",
+  "generator": "lab/scripts/powershell/08-Measure-KPIs.ps1",
+  "parameters": {
+    "staleDays": 90,
+    "accessReviewLookbackDays": 90,
+    "hrToDisableLookbackDays": 30,
+    "pamSessionLookbackDays": 30
+  },
+  "kpis": {
+    "admin_standing_users": {
+      "status": "measured",
+      "value": 2,
+      "unit": "users",
+      "note": "break-glass counted apart; privileged = isPrivileged + lab tier map + PIM tier-group roles",
+      "detail": {
+        "breakGlassUsers": 2,
+        "activatedNow": 0,
+        "pimTierGroups": 17,
+        "byTier": {
+          "global_admin": 1,
+          "tier0": 1,
+          "tier1": 0,
+          "other": 0
+        }
+      }
+    },
+    "admin_eligible_only_users": {
+      "status": "measured",
+      "value": 2,
+      "unit": "users",
+      "detail": {
+        "byTier": {
+          "global_admin": 0,
+          "tier0": 1,
+          "tier1": 1,
+          "other": 0
+        }
+      }
+    },
+    "admin_jit_pct": {
+      "status": "measured",
+      "value": 50.0,
+      "unit": "%",
+      "numerator": 2,
+      "denominator": 4
+    },
+    "privileged_service_principals": {
+      "status": "measured",
+      "value": 1,
+      "unit": "service principals",
+      "note": "privileged directory role OR high-privilege Graph application permission (expected: the pipeline APPLY identity)",
+      "detail": {
+        "viaDirectoryRole": 0,
+        "viaGraphApplicationPermission": 1,
+        "viaBoth": 0,
+        "graphPermissionsWatched": 17,
+        "byPermission": {
+          "AppRoleAssignment.ReadWrite.All": 1,
+          "Group.ReadWrite.All": 1,
+          "Policy.ReadWrite.ConditionalAccess": 1,
+          "RoleManagement.ReadWrite.Directory": 1,
+          "RoleManagementPolicy.ReadWrite.AzureADGroup": 1
+        }
+      }
+    },
+    "phishing_resistant_pct": {
+      "status": "measured",
+      "value": 0.0,
+      "unit": "%",
+      "numerator": 0,
+      "denominator": 15,
+      "note": "synced passkeys count (unattested); break-glass excluded",
+      "detail": {
+        "breakGlassAccounts": 2,
+        "breakGlassWithDeviceBoundKey": 0
+      }
+    },
+    "phishing_resistant_device_bound_pct": {
+      "status": "measured",
+      "value": 0.0,
+      "unit": "%",
+      "numerator": 0,
+      "denominator": 15
+    },
+    "ca_mfa_coverage_pct": {
+      "status": "measured",
+      "value": 100.0,
+      "unit": "%",
+      "numerator": 15,
+      "denominator": 15,
+      "note": "enabled policies requiring MFA/auth strength for all apps, no narrowing condition; break-glass excluded by design",
+      "detail": {
+        "policiesCounted": 2
+      }
+    },
+    "ca_mfa_coverage_incl_report_only_pct": {
+      "status": "measured",
+      "value": 100.0,
+      "unit": "%",
+      "numerator": 15,
+      "denominator": 15
+    },
+    "access_review_completion_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "no review decisions in the window (36 instance(s)) - enable_access_reviews / run a review first"
+    },
+    "access_review_revocation_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "no review decisions in the window (36 instance(s)) - enable_access_reviews / run a review first"
+    },
+    "access_review_revocation_applied_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "no review decisions in the window (36 instance(s)) - enable_access_reviews / run a review first"
+    },
+    "stale_accounts": {
+      "status": "measured",
+      "value": 0,
+      "unit": "accounts",
+      "numerator": 0,
+      "denominator": 15,
+      "note": "pct 0; never signed in: 0; pending first sign-in: 13; stale guests: 0"
+    },
+    "hr_to_disable_minutes": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "no matched leaver in the window (0 unmatched disable event(s))"
+    },
+    "nhi_expired_or_orphaned": {
+      "status": "measured",
+      "value": 4,
+      "unit": "NHIs",
+      "denominator": 8,
+      "note": "source: graph (app registrations only)"
+    },
+    "nhi_with_expired_credential": {
+      "status": "measured",
+      "value": 0,
+      "unit": "NHIs",
+      "denominator": 8,
+      "note": "expired credential still attached"
+    },
+    "nhi_orphaned": {
+      "status": "measured",
+      "value": 4,
+      "unit": "NHIs",
+      "denominator": 8,
+      "note": "no accountable owner"
+    },
+    "pam_vaulted_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "-SkipPam"
+    },
+    "pam_rotated_within_policy_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "-SkipPam"
+    },
+    "pam_sessions_recorded_pct": {
+      "status": "not-measured",
+      "value": null,
+      "unit": "",
+      "note": "-SkipPam"
+    }
+  },
+  "comparison": {
+    "against": "10/27/2026 03:34:28",
+    "againstLabel": "baseline",
+    "deltas": {
+      "admin_standing_users": {
+        "before": 1,
+        "after": 2,
+        "delta": 1.0
+      },
+      "admin_eligible_only_users": {
+        "before": 0,
+        "after": 2,
+        "delta": 2.0
+      },
+      "admin_jit_pct": {
+        "before": 0.0,
+        "after": 50.0,
+        "delta": 50.0
+      },
+      "privileged_service_principals": {
+        "before": 1,
+        "after": 1,
+        "delta": 0.0
+      },
+      "phishing_resistant_pct": {
+        "before": 0.0,
+        "after": 0.0,
+        "delta": 0.0
+      },
+      "phishing_resistant_device_bound_pct": {
+        "before": 0.0,
+        "after": 0.0,
+        "delta": 0.0
+      },
+      "ca_mfa_coverage_pct": {
+        "before": 0.0,
+        "after": 100.0,
+        "delta": 100.0
+      },
+      "ca_mfa_coverage_incl_report_only_pct": {
+        "before": 0.0,
+        "after": 100.0,
+        "delta": 100.0
+      },
+      "access_review_completion_pct": {
+        "comparable": false,
+        "before": "not-measured",
+        "after": "not-measured"
+      },
+      "access_review_revocation_pct": {
+        "comparable": false,
+        "before": "not-measured",
+        "after": "not-measured"
+      },
+      "access_review_revocation_applied_pct": {
+        "comparable": false,
+        "before": "not-measured",
+        "after": "not-measured"
+      },
+      "stale_accounts": {
+        "before": 0,
+        "after": 0,
+        "delta": 0.0
+      },
+      "hr_to_disable_minutes": {
+        "comparable": false,
+        "before": "not-measured",
+        "after": "not-measured"
+      },
+      "nhi_expired_or_orphaned": {
+        "before": 2,
+        "after": 4,
+        "delta": 2.0
+      },
+      "nhi_with_expired_credential": {
+        "before": 0,
+        "after": 0,
+        "delta": 0.0
+      },
+      "nhi_orphaned": {
+        "before": 2,
+        "after": 4,
+        "delta": 2.0
+      },
+      "pam_vaulted_pct": {
+        "comparable": false,
+        "before": "not-measured",
+        "after": "not-measured"
+      },
+      "pam_rotated_within_policy_pct": {
+        "comparable": false,
+        "before": "not-measured",
+        "after": "not-measured"
+      },
+      "pam_sessions_recorded_pct": {
+        "comparable": false,
+        "before": "not-measured",
+        "after": "not-measured"
+      }
+    }
+  }
+}
