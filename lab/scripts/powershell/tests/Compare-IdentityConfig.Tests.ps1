@@ -16,7 +16,8 @@ BeforeAll {
     $script:Export = Get-LabScriptPath 'Export-IdentityConfig.ps1'
     . (Get-ScriptFunctionBlock -Path $script:Compare)
     $script:FixturePath = Join-Path $PSScriptRoot 'fixtures' 'identity-config.fixture.json'
-    $script:Placeholder = Join-Path $script:LabPowerShellRoot '..' '..' 'config-baseline' 'identity-config.json'
+    # The committed baseline became a real snapshot on 2026-10-29; the 'no baseline yet' cases use a frozen copy of the original placeholder.
+    $script:Placeholder = Join-Path $PSScriptRoot 'fixtures' 'identity-config.placeholder.json'
     $script:ExceptionsFile = Join-Path $script:LabPowerShellRoot '..' '..' 'config-baseline' 'drift-exceptions.json'
     $script:TfVars = Join-Path $script:LabPowerShellRoot '..' '..' 'terraform' 'envs' 'dev' 'lab.tfvars'
     $script:Today = [datetime]::new(2026, 10, 26, 0, 0, 0, [DateTimeKind]::Utc)
