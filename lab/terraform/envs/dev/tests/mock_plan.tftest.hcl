@@ -716,6 +716,7 @@ run "flags_without_premium_warn" {
   command = plan
 
   variables {
+    enable_intune_vm                    = false # lab.tfvars turns it on; this run has no premium licence
     enable_itdr_detections_v2           = false # lab.tfvars turns it on; this run keeps the ITDR telemetry off
     enable_premium                      = false
     enable_itdr_detections              = false # pinned: lab.tfvars turns it on from P2, this run is about the premium checks
