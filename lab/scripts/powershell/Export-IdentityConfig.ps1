@@ -281,6 +281,7 @@ function ConvertTo-StableConfig {
         $out = [ordered]@{}
         foreach ($k in @($Value.Keys | Sort-Object -Culture 'en-US' -CaseSensitive)) {
             if ($k -in $volatile) { continue }
+            if ("$k" -like '@odata*') { continue }   # Graph annotations carry the tenant id in a URL; never part of the configuration
             if ($k -eq 'notificationRecipients') {
                 # Mailboxes are personal identifiers; the count still shows a
                 # recipient added or removed.
