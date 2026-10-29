@@ -192,7 +192,7 @@ enable_dc = true
 # (Intune enrollment happens during the join, at apply time) and a local
 # re-apply of envs/bootstrap (so CI may grant VM Administrator Login). Then run
 # lab/scripts/intune/New-IntuneComplianceBaseline.ps1.
-enable_intune_vm = false
+enable_intune_vm = true
 
 # Sentinel STARTS ITS 31-DAY TRIAL - flip only after Entra logs have flowed for
 # a few hours (README.md, Staging flags).
