@@ -99,8 +99,8 @@ run "plan_lab_tfvars" {
     error_message = "P2 + DC: enable_itdr_detections is on: VaultCheckout_CL ingestion (--signals checkout) and only the rules whose tables have data (every lab.tfvars hold-back absent); enable_dc plans DC01 (its security DCR id is computed, so only the VM name is asserted here)"
   }
   assert {
-    condition     = output.itdr_sentinel_only_rule_keys == [] && output.operator_ips_watchlist_id == null
-    error_message = "no v2 ITDR rule and no operator_ips watchlist may exist with lab.tfvars"
+    condition     = length(output.itdr_sentinel_only_rule_keys) > 0
+    error_message = "ITDR v2 (enable_itdr_detections_v2): the Sentinel-only second-wave rules and the operator_ips watchlist render with lab.tfvars"
   }
   assert {
     condition     = output.evidence_storage_account_name != null && output.agent_runtime_uami_principal_id == null
@@ -716,6 +716,7 @@ run "flags_without_premium_warn" {
   command = plan
 
   variables {
+    enable_itdr_detections_v2           = false # lab.tfvars turns it on; this run keeps the ITDR telemetry off
     enable_premium                      = false
     enable_itdr_detections              = false # pinned: lab.tfvars turns it on from P2, this run is about the premium checks
     enable_governance                   = false # pinned: lab.tfvars turns it on from Day 3
