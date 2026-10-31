@@ -128,3 +128,17 @@ Monitor Logs Ingestion API · CISA ScubaGear · Microsoft Zero Trust Assessment
    measured in this lab, each already on screen earlier.)
 4. The status column uses only the four status words above, and a result is
    described in the present tense only once it has run.
+
+## CyberArk vocabulary, mapped to the lab's stand-ins
+
+Postings say CyberArk. The lab does the same jobs with HashiCorp Vault and Apache Guacamole. Same control, different product names.
+
+| CyberArk term | What it does | Lab equivalent |
+|---|---|---|
+| Vault / Safe | The locked store, partitioned by team or system | Vault KV secrets engine, one mount per tier |
+| CPM (Central Policy Manager) | Rotates passwords on a schedule or after use | Vault AD secrets engine rotation and check-in |
+| PSM (Privileged Session Manager) | Opens the session for the admin and records it; the admin never sees the password | Guacamole recorded RDP and SSH sessions, credential injected |
+| PVWA (Password Vault Web Access) | The web console where people request and check out access | Vault UI plus the approved-change check on check-out |
+| Dual control | A second person approves a check-out | Approved change ticket required before check-out (`FEED` detection matches check-outs to logons) |
+| Discovery | Finds privileged accounts nobody knew about | `Find-ShadowAdmins.ps1`, `06-NHI-Inventory.ps1` |
+| Conjur | Secrets for programs, not people | Conjur OSS, in the lab under the same name |
