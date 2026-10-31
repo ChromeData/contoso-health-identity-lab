@@ -164,7 +164,7 @@
    "The cabinet's sign-out sheet, copied."
   ],
   "SPLUNK": [
-   "A second alarm system running the same rules on replayed logs, to show the rules are not tied to one product.",
+   "A second alarm system running the very same rules on replayed logs, to show the detections aren't tied to one product. Proven on this machine: every rule fired on the synthetic replay.",
    "A second security desk."
   ],
   "REVIEW": [

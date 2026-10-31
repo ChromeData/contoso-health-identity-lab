@@ -1,0 +1,4 @@
+{
+  "status": "no-baseline",
+  "note": "Frozen copy of the original placeholder baseline. The committed baseline (lab/config-baseline/identity-config.json) became a real tenant snapshot on 2026-10-29; these test cases exercise the 'no baseline yet' path. Compare-IdentityConfig.ps1 reads only the status field."
+}

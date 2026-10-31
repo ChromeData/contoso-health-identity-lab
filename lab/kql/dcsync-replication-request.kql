@@ -2,6 +2,13 @@
 // Detection: DCSync - directory replication requested by a non-DC account
 // Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, hybrid)
 // -----------------------------------------------------------------------------
+// DETECTOR ROLE (ADR 0023)
+//   Microsoft Defender for Identity is the PRIMARY detector for DCSync:
+//   purpose-built and maintained by Microsoft (enable_defender_for_identity).
+//   This rule is its portable, offline-testable twin - the same logic over DC01
+//   SecurityEvent, with an SPL twin and Kusto-emulator tests - and the
+//   post-trial fallback when the MDI licence lapses.
+// -----------------------------------------------------------------------------
 // WHAT IT CATCHES
 //   An account that is NOT a domain controller using the directory
 //   replication rights on the domain object (4662, control access 0x100,

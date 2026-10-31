@@ -15,7 +15,7 @@ Plain reading of the table: **Yes** means the lab did it in a real tenant and ha
 | Identity governance: reviews, entitlements, lifecycle, separation of duties | 7 | Yes | `modules/entitlement`, 9 SoD rules, access reviews, midPoint campaign |
 | Runbooks, SOPs, documentation | 7 | Yes | `lab/docs/runbooks`, `your-turn` run sheets |
 | Commercial PAM (CyberArk, Delinea, BeyondTrust) | 6 | Partly | Vault and Guacamole stand in for CyberArk; vocabulary map in `STAND-INS.md` |
-| Detection, SIEM, incident response | 6 | Yes | 22 detections as code, 17 scheduled in Sentinel, containment playbook; Splunk twins proven on a synthetic replay (22 of 22 fire, E61) |
+| Detection, SIEM, incident response | 6 | Yes | 22 detections as code, 17 scheduled in Sentinel, containment playbook; Splunk twins proven on a synthetic replay (22 of 22 fire, E61); Defender for Identity staged as the native AD-attack detector (ADR 0023), with the SecurityEvent rules as its portable twins |
 | Joiner, mover, leaver automation | 6 | Yes | Leaver gone from AD in 7 s, Entra under 3 min, AWS in 9 min (E52) |
 | Audit evidence for HIPAA, SOX, HITRUST | 6 | Yes | Evidence pack with SHA-256 manifest in tamper-proof storage, compliance crosswalk |
 | Infrastructure as code | 5 | Yes | Terraform for Entra, Azure, AWS, Okta; 64 reviewed changes applied by a password-free pipeline |
@@ -31,13 +31,13 @@ Plain reading of the table: **Yes** means the lab did it in a real tenant and ha
 2. **Passwordless enforced, not just written.** Fix: register two passkeys per admin account, run the passwordless rollout script, graduate CA002 and CA021.
 3. **Clinical single sign-on.** Hospital postings mention Epic and Imprivata. Fix: a FIDO2 key with fast user switching on the Intune VM as the stand-in, documented as such.
 4. **Cross-tenant and multi-tenant.** Two postings. Fix: a second free developer tenant with cross-tenant access settings as Terraform.
-5. **Defender for Identity on the domain controller.** One posting. Fix: the 90-day trial sensor on DC01, mapped to the existing Kerberoasting and DCSync rules.
+5. **Defender for Identity on the domain controller.** One posting. **Closed in code (staged):** MDI is now in the design (ADR 0023) as the primary detector for the native AD signatures, behind `enable_defender_for_identity` — the Defender XDR connector that lands MDI alerts in the lab's workspace is codified (`modules/monitoring/mdi.tf`), and the four SecurityEvent KQL rules are kept as its portable, offline-testable twins (Splunk + Kusto emulator), while `tier0-logon-without-checkout` and `dc-logon-outside-operator-allowlist` stay custom (correlations MDI cannot make). The detection layers: Entra ID Protection (cloud identity risk, live) + Defender for Identity (native AD attacks, staged) + custom detection-as-code on Sentinel with Splunk twins (portable). Remaining human step: the 90-day trial sensor on DC01 (`lab/docs/runbooks/deploy-defender-for-identity-dc01.md`), not yet applied.
 6. **Guest MFA and inactive-guest review.** Roadmap item R11.
 
 ## What the lab has that postings rarely ask for, and that stands out
 
 - **Configuration drift detection** against a committed zero-drift baseline, nightly (`Compare-IdentityConfig.ps1`, ADR 0021).
 - **Tamper-evident evidence**: every page fingerprinted and stored where nobody can edit it, mapped to the control it satisfies. Postings say "produce audit evidence"; none say tamper-evident.
-- **Detection as code with tests**: 22 rules, 261 emulator-tested cases, plus governance for AI agent identities.
+- **Detection as code with tests**: 22 rules, 277 emulator-tested cases, plus governance for AI agent identities.
 
 Lead with those three. They are the difference between "has done IAM" and "thinks like the person who owns it".

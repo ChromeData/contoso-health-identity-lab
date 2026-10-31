@@ -180,6 +180,15 @@ itdr_exclude_rules = [
   "pim_activation_without_auth_context",
 ]
 
+# Defender for Identity (ADR 0023): the native AD-attack detector. Off because
+# it needs a sensor on DC01 and a Defender licence (free 90-day trial), both
+# human steps (lab/docs/runbooks/deploy-defender-for-identity-dc01.md); the flag
+# only adds the Defender XDR connector that lands MDI alerts in this workspace,
+# and it needs enable_sentinel. The four SecurityEvent KQL rules are MDI's
+# portable twins; tier0-logon-without-checkout and dc-logon-outside-operator-
+# allowlist stay custom (correlations MDI cannot make).
+enable_defender_for_identity = false
+
 # WORM evidence store (Azure storage cost only). Apply BEFORE Day 0 of the
 # trial window; it starts Unlocked - locking is a separate, deliberate PR.
 enable_evidence_store = true

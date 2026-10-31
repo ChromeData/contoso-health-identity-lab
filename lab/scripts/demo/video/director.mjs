@@ -44,6 +44,7 @@ function ids() {
 
 // The Whisperglass lab map, with the tiles that now run in the tenant marked
 // "RAN · tenant" (blue) and the "nothing in a tenant yet" copy updated.
+const RAN_HARNESS = ['SPLUNK']; // proven on this machine's Splunk replay, not a tenant (E61)
 const RAN_TENANT = ['HR', 'AGENT', 'AD', 'SYNC', 'ENTRA', 'LCW', 'DYNGRP', 'BIRTH', 'AP', 'SOD', 'CABASE', 'CARISK', 'CASESS', 'BG', 'PIM', 'HDAU', 'KV', 'LA', 'LEAVER', 'NHI', 'EVID', 'WORM', 'KPI'];
 // Sheet mode: one white grid sheet, chips top-left, zoom top-right, compact panel bottom-left (pages/sheet.css + sheet.js).
 function injectSheet(s) {
@@ -71,6 +72,7 @@ function buildMap() {
   const re = /(<script type="application\/json" id="lab-data">)([\s\S]*?)(<\/script>)/;
   const d = JSON.parse(s.match(re)[2]);
   for (const n of d.nodes) if (RAN_TENANT.includes(n.id)) n.status = 'RAN · tenant';
+  for (const n of d.nodes) if (RAN_HARNESS.includes(n.id)) n.status = 'RAN · harness';
   for (const st of d.delivery.steps) st.status = 'RAN · tenant';
   s = s.replace(re, (_, a, __, c) => a + JSON.stringify(d).replace(/</g, '\\u003c') + c);
   s = s.replace('RAN · tenant: none yet', 'RAN · tenant').replace('RAN · tenant: nothing yet.', 'RAN · tenant: running in the lab tenant now.').replace("Plan and apply haven't run: no tenant yet.", 'Plan and apply now run against the lab tenant.').replace(/Nothing has run in a Microsoft tenant yet: that's the\s+next step\./, 'Now running in a real Microsoft Entra tenant.');

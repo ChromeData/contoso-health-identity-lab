@@ -3,6 +3,13 @@
 //            (no Vault check-out, RID-500 break-glass, or an unvaulted admin)
 // Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, hybrid)
 // -----------------------------------------------------------------------------
+// DETECTOR ROLE (ADR 0023)
+//   Genuinely custom - NOT a Defender for Identity twin. It correlates each
+//   Tier-0 DC logon against the PAM Vault check-out feed (VaultCheckout_CL): a
+//   logon with no check-out around it is credential use outside PAM. MDI does
+//   not know the lab's Vault check-out windows, so it cannot make this call.
+//   This is the lab's own detection.
+// -----------------------------------------------------------------------------
 // WHAT IT CATCHES
 //   Every Tier-0 logon on a domain controller that PAM does not account for.
 //   Three classes (the Class column):

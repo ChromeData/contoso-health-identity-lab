@@ -54,9 +54,10 @@ run "defaults_create_nothing" {
       length(azurerm_monitor_data_collection_endpoint.itdr) == 0 &&
       length(azurerm_monitor_data_collection_rule.vault_checkout) == 0 &&
       length(azurerm_virtual_machine_extension.dc_ama) == 0 &&
-      length(azurerm_sentinel_automation_rule.contain) == 0
+      length(azurerm_sentinel_automation_rule.contain) == 0 &&
+      length(azurerm_sentinel_data_connector_microsoft_threat_protection.mdi) == 0
     )
-    error_message = "ITDR telemetry and containment must stay off by default."
+    error_message = "ITDR telemetry, containment and the Defender for Identity connector must stay off by default."
   }
   assert {
     condition     = length(output.itdr_rule_keys) == 0 && output.vault_ingestion == null
@@ -404,5 +405,52 @@ run "containment_on_alert_added_is_opt_in" {
       jsonencode(jsondecode(azurerm_sentinel_automation_rule.contain_on_alert_added[0].condition_json)[2].conditionProperties.propertyValues) == jsonencode(["High"])
     )
     error_message = "containment_on_alert_added: a second, Updated-trigger rule for 'High ITDR alert added'."
+  }
+}
+
+# Defender for Identity (mdi.tf, ADR 0023): the flag only adds the Microsoft
+# Defender XDR connector, and only with enable_sentinel. The sensor, workspace
+# and licence are human steps the runbook carries, not Terraform.
+run "defender_for_identity_connector_needs_both_flags" {
+  command = plan
+  variables {
+    enable_defender_for_identity = true
+    # enable_sentinel stays false
+  }
+
+  # Variable validation refuses the flag without enable_sentinel.
+  expect_failures = [var.enable_defender_for_identity]
+}
+
+run "defender_for_identity_connector_created" {
+  command = apply
+  variables {
+    enable_sentinel              = true
+    enable_defender_for_identity = true
+  }
+
+  assert {
+    condition = (
+      length(azurerm_sentinel_data_connector_microsoft_threat_protection.mdi) == 1 &&
+      azurerm_sentinel_data_connector_microsoft_threat_protection.mdi[0].log_analytics_workspace_id == azurerm_sentinel_log_analytics_workspace_onboarding.this[0].workspace_id
+    )
+    error_message = "enable_defender_for_identity + enable_sentinel must create exactly one Defender XDR connector on the onboarded workspace."
+  }
+  assert {
+    condition     = output.defender_for_identity_connector_id != null
+    error_message = "defender_for_identity_connector_id output must be set once the connector exists."
+  }
+}
+
+run "defender_for_identity_off_with_sentinel_on" {
+  command = plan
+  variables {
+    enable_sentinel = true
+    # enable_defender_for_identity stays false
+  }
+
+  assert {
+    condition     = length(azurerm_sentinel_data_connector_microsoft_threat_protection.mdi) == 0 && output.defender_for_identity_connector_id == null
+    error_message = "Sentinel on but the MDI flag off must create no Defender XDR connector."
   }
 }
