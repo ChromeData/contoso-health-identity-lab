@@ -214,6 +214,23 @@ jq -e --arg idx "$SPLUNK_INDEX" '
 unset tok
 log "HEC token restricted to index=${SPLUNK_INDEX} (read back)"
 
+# 5b. detections app ------------------------------------------------------------------------
+# Copied in after first boot, not bind-mounted: a mount under /opt/splunk/etc before the
+# image's /sbin/updateetc.sh runs stops it seeding the stock config, and HEC's own app goes
+# missing (start loop). Idempotent: skipped when the app is already in the container.
+cname="$(docker compose ps -q splunk)"
+if ! docker exec "$cname" test -d "/opt/splunk/etc/apps/${SPLUNK_APP}/default" 2>/dev/null; then
+  log "Installing app/${SPLUNK_APP} into the container and restarting Splunk"
+  docker cp "app/${SPLUNK_APP}" "$cname":/opt/splunk/etc/apps/
+  docker exec -u root "$cname" chown -R splunk:splunk "/opt/splunk/etc/apps/${SPLUNK_APP}"
+  docker exec -u splunk "$cname" /opt/splunk/bin/splunk restart >/dev/null 2>&1 || true
+  for _ in $(seq 1 90); do
+    [[ "$(docker inspect "$cname" --format '{{.State.Health.Status}}' 2>/dev/null)" == "healthy" ]] && break
+    sleep 10
+  done
+  log "App installed; Splunk healthy again"
+fi
+
 # 6. verification -------------------------------------------------------------------------
 splunk_rest GET "/services/data/indexes/${SPLUNK_INDEX}?output_mode=json" >/dev/null \
   || die "index '${SPLUNK_INDEX}' missing - is app/${SPLUNK_APP}/default/indexes.conf mounted?"
