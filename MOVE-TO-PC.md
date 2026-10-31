@@ -30,6 +30,8 @@ On the Mac they are Keychain items. On Windows use Credential Manager (`cmdkey`)
 | `contoso-lab-test-user-a/b/c`, `contoso-lab-tap-adm-raj`, `contoso-lab-totp-adm-raj` | Test users and the adm-raj MFA seed |
 | `greptile-api` | Greptile API key (MCP server in `.mcp.json`) |
 
+Not every helper reads a vault, though: `lab/scripts/dc/run-on-dc.py` and a few others call the macOS `security` command directly (`keychain:<service>`), so on Windows they need a `security`-shim or a rewrite to read the Windows vault. Creating the Credential Manager entries is necessary but not sufficient; treat those scripts as Mac-only until ported.
+
 PowerShell equivalent of the Mac lookups: `Get-Secret -Name contoso-lab-admin -AsPlainText` with the SecretManagement module. Set `GREPTILE_API_KEY` from the vault in your PowerShell profile the same way `~/.zshrc` does on the Mac.
 
 ## 3. Files that are not in git and must be carried by hand
@@ -38,7 +40,7 @@ PowerShell equivalent of the Mac lookups: `Get-Secret -Name contoso-lab-admin -A
 - `lab/setup/signup-assist/profile.json` (the browser profile used for sign-ups). Optional; a fresh profile works.
 - `lab/terraform/**/terraform.tfvars` where present (the AWS and Okta roots). Gitignored; copy or recreate from `terraform.tfvars.example`.
 - `lab/splunk/.env` is generated per machine by `splunk-up.sh`; do not copy it.
-- `lab/evidence/out/` (video renders, raw captures). Large and regenerable; copy only `out/video/clips/*.mp3` (the presenter voice lines) and `out/build/*.png` (the sign-up screenshots the maps use).
+- `lab/evidence/out/` (video renders, raw captures). Large and regenerable; copy only `out/video/clips/*.mp3` and `out/video/clips/face.mp4` (the presenter voice lines and the intro clip the 00-face scene uses) and `out/video/build/*.png` (the sign-up screenshots the maps embed).
 
 ## 4. Machine-specific pieces in the Mac scratchpad, now in the repo
 
@@ -46,7 +48,9 @@ PowerShell equivalent of the Mac lookups: `Get-Secret -Name contoso-lab-admin -A
 
 ## 5. Terraform state
 
-State is remote (Azure storage backend configured in each root). Nothing to copy. Run `terraform init` in each root once; the CI pipeline keeps applying from GitHub regardless of which laptop you use.
+Mixed, so read this carefully:
+- `lab/terraform/envs/dev` uses a **remote** Azure storage backend (`backend.tf`). Nothing to copy; `terraform init` reconnects to it, and the CI pipeline keeps applying from GitHub regardless of which laptop you use.
+- `lab/terraform/aws` and `lab/terraform/okta` use **local** state (no backend block), so their `terraform.tfstate` lives only on this Mac. If you move machines, either copy `lab/terraform/{aws,okta}/terraform.tfstate*` over a secure channel, or migrate each to a remote backend first. The Okta root's state holds the API token value; treat the file as a secret. Skipping this leaves the new machine blind to those resources, so the next apply tries to recreate what already exists.
 
 ## 6. First run on the PC, in order
 

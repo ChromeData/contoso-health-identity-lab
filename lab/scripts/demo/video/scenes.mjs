@@ -58,7 +58,7 @@ function buildMapData() {
         tiles: [{ name: 'PLAN identity', note: 'Proposes changes', glyph: 'PLAN', kind: 'code' }, { name: 'APPLY identity', note: 'Makes them', glyph: 'APPLY', kind: 'code' }, { name: 'GitHub trust', note: 'Minutes-long token, no secret', glyph: 'OIDC', kind: 'code' }],
         outs: ['<b>2</b> identities · <b>0</b> passwords', 'Refused from any other branch'] },
       { title: 'The pipeline', kicker: '64 reviewed changes', goal: 'Reviewed, repeatable, provable', text: 'Every change is a pull request. Checks rehearse it, a person approves it, Terraform applies it. That is how all of the lab was built, in days.',
-        bullets: ['Day 1: sign-in rules, report-only', 'Day 2: admin tiers (PIM)', 'Day 3: access governance (packages, workflows)', 'Then: 17 detection rules, then the domain controller, then SSO and automatic accounts for AWS, ServiceNow and Okta'],
+        bullets: ['Day 1: sign-in rules, report-only', 'Day 2: admin tiers (PIM)', 'Day 3: access governance (packages, workflows)', 'Then: 17 detection rules, then the domain controller, then single sign-on for AWS, ServiceNow and Okta, with automatic accounts for AWS'],
         chips: [{ text: 'AS CODE', kind: 'code' }, { text: 'DONE', kind: 'done' }],
         tiles: [{ name: 'Pull request', note: 'A change plus a reviewer', img: BIMG('github'), kind: 'code' }, { name: 'Checks', note: '13 mocked tests', glyph: '13 ✓', kind: 'code' }, { name: 'Approve', note: 'A person types it', glyph: 'approve', kind: 'hand' }, { name: 'Terraform apply', note: 'Makes the tenant match', glyph: 'TF', kind: 'code' }],
         outs: ['<b>64</b> merged pull requests', '<b>13</b> checks on each one'] },
