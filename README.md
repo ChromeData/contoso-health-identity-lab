@@ -240,3 +240,16 @@ synthetic lab accounts only, no secret. All people and organisations are fiction
 ## License
 
 [MIT](LICENSE)
+
+## Known limitations, and the production fix for each
+
+Written down on purpose. A reviewer will find these in ten minutes; better they read them here first.
+
+| Limitation in the lab today | Why it is this way | What production does instead |
+|---|---|---|
+| **One person authors and approves.** The apply gate accepts a self-approval and records it as such (`APPLY_TWO_PERSON=false`). | One collaborator, and GitHub only enforces required reviewers on public or paid repos. | Set `APPLY_TWO_PERSON=true` (the gate then refuses the author), add a second approver account, and turn on branch protection with a required reviewer. The refusal path is already in `.github/scripts/apply-approval-gate.sh`. |
+| **Two sign-in policies are report-only** (CA002 phishing-resistant admins, CA021 step-up for Tier-0 activation). | No passkeys are registered yet; enforcing them first would lock every admin out. | Register two hardware keys per admin, run the passwordless rollout (`07-Passwordless-Rollout.ps1`), then graduate both through their own reviewed change. |
+| **The build account still holds a standing Global Administrator role.** | It created the tenant and the pipeline identities; removing it is the last step, not the first. | Make it eligible in PIM like every other admin, keep the two break-glass accounts as the only standing exceptions, and watch all three with the existing detection rules. |
+| **Splunk is built but has never run.** | The second SIEM needs Docker and a 60-day trial; the Sentinel side already proves the rules. | Run `lab/splunk/splunk-up.sh` and the replay once, capture the evidence row, or drop Splunk and state that one SIEM is the design. |
+| **Several products are stand-ins** (HR system, CyberArk, SailPoint, Workday). | No free trials exist; each stand-in is named with what it replaces (`lab/docs/STAND-INS.md`). | Swap each stand-in for the real product behind the same interface; the code paths and runbooks do not change. |
+| **Four robot accounts have no owner yet.** | The inventory (`06-NHI-Inventory.ps1`) found them; assigning owners needs the business to name people. | Owners assigned in the access-package model, enforced by the nightly drift check. |

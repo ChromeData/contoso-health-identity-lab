@@ -19,6 +19,11 @@
 # Env: GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_SHA,
 #      GITHUB_SERVER_URL, GITHUB_REPOSITORY_OWNER (all set by Actions)
 #      APPLY_APPROVERS            comma-separated logins (default: repo owner)
+#      APPLY_TWO_PERSON           "true" = the person who authored the change
+#                                 may NOT approve it (four-eyes). Default
+#                                 "false" while the lab has one collaborator;
+#                                 the issue then records that the author
+#                                 self-approved. Production: "true".
 #      APPROVAL_TIMEOUT_MINUTES   default 30
 #      APPROVAL_POLL_SECONDS      default 15
 # Exit: 0 approved | 1 denied or timed out
@@ -28,6 +33,7 @@ set -euo pipefail
 : "${GH_TOKEN:?}" "${GITHUB_REPOSITORY:?}" "${GITHUB_RUN_ID:?}" "${GITHUB_SHA:?}"
 SERVER="${GITHUB_SERVER_URL:-https://github.com}"
 APPROVERS="${APPLY_APPROVERS:-${GITHUB_REPOSITORY_OWNER:?}}"
+TWO_PERSON="${APPLY_TWO_PERSON:-false}"
 TIMEOUT_MIN="${APPROVAL_TIMEOUT_MINUTES:-30}"
 POLL="${APPROVAL_POLL_SECONDS:-15}"
 REPO="$GITHUB_REPOSITORY"
@@ -35,6 +41,10 @@ REPO="$GITHUB_REPOSITORY"
 run_url="$SERVER/$REPO/actions/runs/$GITHUB_RUN_ID"
 short="${GITHUB_SHA:0:7}"
 pr=$(gh api "repos/$REPO/commits/$GITHUB_SHA/pulls" --jq '.[0] | select(.) | "#\(.number) \(.title)"' 2>/dev/null || true)
+# Who made the change: the pull request author, or the commit author on a direct push.
+author=$(gh api "repos/$REPO/commits/$GITHUB_SHA/pulls" --jq '.[0].user.login // empty' 2>/dev/null || true)
+[ -n "$author" ] || author=$(gh api "repos/$REPO/commits/$GITHUB_SHA" --jq '.author.login // empty' 2>/dev/null || true)
+author_lc=$(printf '%s' "$author" | tr '[:upper:]' '[:lower:]')
 who=$(printf '%s' "$APPROVERS" | sed 's/[^,][^,]*/@&/g; s/,/, /g')
 
 body=$(cat <<EOF
@@ -49,6 +59,7 @@ Read the Terraform plan comment on the pull request, then comment here:
 - \`deny\` to cancel it
 
 Only $who can decide. With no decision in $TIMEOUT_MIN minutes the apply is cancelled.
+$( [ "$TWO_PERSON" = "true" ] && printf 'Two-person rule is ON: the change author (@%s) cannot approve their own change.' "${author:-unknown}" || printf 'Two-person rule is OFF (single-collaborator lab): an approval by the author (@%s) is accepted and recorded as self-approved.' "${author:-unknown}" )
 EOF
 )
 
@@ -78,8 +89,18 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     who_decided="${decision%% *}"; word="${decision##* }"
     case "$word" in
       approve|approved)
-        echo "Approved by @$who_decided"
-        close completed "Approved by @$who_decided. Applying: $run_url"
+        if [ "$(printf '%s' "$who_decided" | tr '[:upper:]' '[:lower:]')" = "$author_lc" ] && [ -n "$author_lc" ]; then
+          if [ "$TWO_PERSON" = "true" ]; then
+            echo "Refused: @$who_decided authored this change and cannot approve it (APPLY_TWO_PERSON=true)"
+            close not_planned "Refused: @$who_decided authored this change. A different approver must comment approve. The apply is cancelled."
+            exit 1
+          fi
+          echo "Approved by @$who_decided (SELF-APPROVAL: author and approver are the same person; two-person rule is off)"
+          close completed "Approved by @$who_decided. **Self-approval**: the change author approved their own change (two-person rule off in this single-collaborator lab). Applying: $run_url"
+          exit 0
+        fi
+        echo "Approved by @$who_decided (author: @${author:-unknown})"
+        close completed "Approved by @$who_decided (change by @${author:-unknown}). Applying: $run_url"
         exit 0 ;;
       *)
         echo "Denied by @$who_decided"
