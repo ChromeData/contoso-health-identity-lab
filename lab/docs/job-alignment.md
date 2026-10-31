@@ -15,7 +15,7 @@ Plain reading of the table: **Yes** means the lab did it in a real tenant and ha
 | Identity governance: reviews, entitlements, lifecycle, separation of duties | 7 | Yes | `modules/entitlement`, 9 SoD rules, access reviews, midPoint campaign |
 | Runbooks, SOPs, documentation | 7 | Yes | `lab/docs/runbooks`, `your-turn` run sheets |
 | Commercial PAM (CyberArk, Delinea, BeyondTrust) | 6 | Partly | Vault and Guacamole stand in for CyberArk; vocabulary map in `STAND-INS.md` |
-| Detection, SIEM, incident response | 6 | Yes | 22 detections as code, 17 scheduled in Sentinel, containment playbook; Splunk twins proven on a synthetic replay (14 of 22 fired, E59) |
+| Detection, SIEM, incident response | 6 | Yes | 22 detections as code, 17 scheduled in Sentinel, containment playbook; Splunk twins proven on a synthetic replay (15 of 22 fired, E59a) |
 | Joiner, mover, leaver automation | 6 | Yes | Leaver gone from AD in 7 s, Entra under 3 min, AWS in 9 min (E52) |
 | Audit evidence for HIPAA, SOX, HITRUST | 6 | Yes | Evidence pack with SHA-256 manifest in tamper-proof storage, compliance crosswalk |
 | Infrastructure as code | 5 | Yes | Terraform for Entra, Azure, AWS, Okta; 64 reviewed changes applied by a password-free pipeline |

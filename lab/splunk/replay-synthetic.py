@@ -8,8 +8,14 @@ What it does, in plain words
      emulator), merges each row with the case file's defaults, and sends the
      rows to the local Splunk HTTP Event Collector with the sourcetype the
      SPL twin expects (KQL table SigninLogs -> azure:loganalytics:signinlogs).
-     Timestamps are rewritten to "a few minutes ago" so the saved searches'
-     earliest=-1h windows see them.
+     Rows follow the harness row contract (kusto-harness/README.md): "_repeat"
+     makes N copies with "{i}" substituted, "ago:30m" / "in:7d" tokens resolve
+     against now, and a row without TimeGenerated gets "ago:30m". The HEC
+     "time" is the resolved TimeGenerated, so a case lands at the SAME place
+     in the rule's windows as it does on the Kusto emulator (a 12-failure
+     burst in one 10-minute bin, a DC logon 30 min back, a check-out 40 min
+     before the logon). Rows the harness never sees as "now" (ago:3d) stay
+     outside the saved searches' windows here too.
   2. Dispatches every "Contoso - ..." saved search in the contoso_identity
      app over the management API, waits for each, and records how many rows
      it returned.
@@ -27,7 +33,7 @@ Limits (say so once): synthetic rows, not tenant logs; the replay proves the
 SPL and the index pipeline, not Entra. The Log Analytics replay
 (ingest-from-loganalytics.sh) is the tenant-backed path.
 """
-import argparse, base64, datetime as dt, hashlib, json, os, pathlib, ssl, sys, time, urllib.parse, urllib.request
+import argparse, base64, copy, datetime as dt, hashlib, json, os, pathlib, re, ssl, sys, time, urllib.parse, urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -37,6 +43,9 @@ HEC = "https://127.0.0.1:8088/services/collector/event"
 MGMT = "https://127.0.0.1:8089"
 APP = "contoso_identity"
 CTX = ssl.create_default_context(); CTX.check_hostname = False; CTX.verify_mode = ssl.CERT_NONE  # self-signed, loopback only
+REL_TIME = re.compile(r"^(ago|in):(\d+)(s|m|h|d)$")   # same token grammar as kusto-harness/harness.py
+DEFAULT_TIME = "ago:30m"                                # a row without TimeGenerated, as in the harness (and KqlLite)
+TIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"                      # the harness's ingested TimeGenerated text
 
 
 def load_env():
@@ -59,8 +68,36 @@ def sourcetype(table):
     return "azure:loganalytics:" + table.lower()
 
 
+def expand_rows(rows, defaults):
+    """Merge each row over the table defaults; "_repeat": N makes N copies with "{i}" substituted
+    in string values (same as harness.expand_rows, so a 12-failure case is 12 events, not 1)."""
+    out = []
+    for row in rows:
+        n = int(row.get("_repeat", 1))
+        body = {k: v for k, v in row.items() if k != "_repeat"}
+        for i in range(n):
+            r = copy.deepcopy(defaults)
+            for k, v in body.items():
+                r[k] = v.replace("{i}", str(i)) if isinstance(v, str) else copy.deepcopy(v)
+            out.append(r)
+    return out
+
+
+def resolve_time(v, now):
+    """"ago:30m" / "in:7d" -> datetime relative to now (harness.resolve_value); ISO text passes through."""
+    m = REL_TIME.match(v)
+    if m:
+        unit = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days"}[m.group(3)]
+        delta = dt.timedelta(**{unit: int(m.group(2))})
+        return now - delta if m.group(1) == "ago" else now + delta
+    try:
+        return dt.datetime.fromisoformat(v.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 def collect_events():
-    """Yield (sourcetype, row) for every table row in every case, defaults merged."""
+    """Yield (sourcetype, row) for every table row in every case, defaults merged and _repeat expanded."""
     files = sorted(p for p in CASES.glob("*.json") if not p.name.startswith("_"))
     per_rule = {}
     for f in files:
@@ -69,8 +106,7 @@ def collect_events():
         n = 0
         for case in d.get("cases", []):
             for table, rows in (case.get("tables") or {}).items():
-                for row in rows:
-                    merged = dict(defaults.get(table, {})); merged.update(row)
+                for merged in expand_rows(rows, defaults.get(table, {})):
                     merged.setdefault("_case", case.get("id")); merged.setdefault("_rule", d.get("rule"))
                     yield sourcetype(table), merged
                     n += 1
@@ -82,10 +118,14 @@ def send(env, events, dry):
     sent, by_st = 0, {}
     now = dt.datetime.now(dt.timezone.utc)
     batch = []
-    for i, (st, row) in enumerate(events):
-        t = now - dt.timedelta(minutes=2 + (i % 20))
-        row = dict(row); row.setdefault("TimeGenerated", t.strftime("%Y-%m-%dT%H:%M:%SZ"))
-        batch.append(json.dumps({"time": int(t.timestamp()), "index": "entra", "sourcetype": st, "event": row}))
+    for st, row in events:
+        row = dict(row); row.setdefault("TimeGenerated", DEFAULT_TIME)
+        t = resolve_time(row["TimeGenerated"], now) if isinstance(row["TimeGenerated"], str) else None
+        if t is None: sys.exit(f"{row.get('_rule')}/{row.get('_case')}: TimeGenerated {row['TimeGenerated']!r} is neither an ago:/in: token nor ISO 8601")
+        for k, v in row.items():  # other datetime columns carry the same tokens (harness resolves them in every datetime/string column)
+            if isinstance(v, str) and REL_TIME.match(v): row[k] = resolve_time(v, now).strftime(TIME_FMT)
+        row["TimeGenerated"] = t.strftime(TIME_FMT)
+        batch.append(json.dumps({"time": round(t.timestamp(), 3), "index": "entra", "sourcetype": st, "event": row}))
         by_st[st] = by_st.get(st, 0) + 1; sent += 1
         if len(batch) >= 50:
             if not dry: post(env, batch)
