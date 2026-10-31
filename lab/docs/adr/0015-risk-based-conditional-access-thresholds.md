@@ -1,6 +1,6 @@
 # ADR 0015: Risk-based Conditional Access thresholds
 
-- **Status:** Accepted (lab). BUILT: CA006 and CA007 are in code behind `enable_identity_protection_ca` (default off), with mocked Terraform tests. Not run: no tenant exists, so no risk detection has been scored.
+- **Status:** Accepted (lab). BUILT: CA006 and CA007 are in code behind `enable_identity_protection_ca` (default off), with mocked Terraform tests. Applied: CA006 and CA007 are enabled in the lab tenant; no risk detection has been scored yet.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 

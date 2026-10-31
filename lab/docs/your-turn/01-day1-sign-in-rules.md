@@ -1,7 +1,7 @@
 # 01 · Sign-in rules (stage `day1`)
 
-**What you build:** ten Conditional Access policies, every one in report-only,
-so they watch sign-ins without blocking anyone yet.
+**What you build:** ten Conditional Access policies (CA021 follows in 02, making eleven).
+Nine are enforced; CA002 and CA021 stay report-only until passkeys exist.
 
 **Whisperglass:** *Contoso 10 · Delivery* for the pull-request part, then
 *Contoso 05 · Sign-in rules*.
@@ -23,7 +23,7 @@ so they watch sign-ins without blocking anyone yet.
 | 9 | `turn outputs` | the terminal | `saved (... bytes)` |
 | 10 | `turn post day1`, then `turn post day1 go` | the terminal | the break-glass check passes: both break-glass accounts are excluded from every policy |
 | 11 | Switch to *Contoso 05 · Sign-in rules*, read up to "Build" | the lab map | the sign-in station |
-| 12 | `turn open ca` | Entra, Conditional Access, Policies | ten policies, CA001 to CA007, CA009, CA010 and CA020, every one **Report-only** |
+| 12 | `turn open ca` | Entra, Conditional Access, Policies | ten policies, CA001 to CA007, CA009, CA010 and CA020; CA002 **Report-only**, the rest **On** |
 | 13 | Click **CA001** | the policy | state Report-only; under Users, Exclude lists **Break-Glass-Admins** |
 | 14 | `turn open ca-insights` | Insights and reporting | what each policy would have done to real sign-ins |
 | 15 | Read the Proof part | | |

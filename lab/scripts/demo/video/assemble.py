@@ -41,6 +41,11 @@ os.makedirs(os.path.join(OUT, 'scenes'), exist_ok=True)
 scene_files, subs = [], []   # subs: (scene_idx, local_start, local_end, text)
 for si, tlf in enumerate(tls):
     tl = json.load(open(tlf)); sid = tl['id']; beats = tl['beats']
+    if tl.get('clip'):   # external clip with its own audio: conform to 1080p30 and keep it whole
+        out = os.path.join(OUT, 'scenes', f'{sid}.mp4')
+        run([FF, '-y', '-v', 'error', '-i', tl['clip'], '-vf', 'fps=30,scale=1920:1080:force_original_aspect_ratio=decrease:flags=lanczos,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p',
+             '-c:v', 'libx264', '-preset', 'medium', '-crf', '17', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2', out])
+        scene_files.append(out); print(f'scene {sid}: clip {dur(out):.1f}s'); continue
     aud = index[sid]
     if len(beats) != len(aud):
         sys.exit(f'{sid}: recorded {len(beats)} beats but narration has {len(aud)} (re-record it)')

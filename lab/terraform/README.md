@@ -23,8 +23,7 @@ a third human-applied root, `okta/`. Workforce users (Dana Okafor and colleagues
 Terraform's: HR provisioning owns them.
 
 > **Status: BUILT.** Every directory validates and every mocked test passes
-> (counts in [Tests](#tests-mocked-offline)). **Nothing here has been
-> applied: no tenant exists yet.** RAN · tenant: nothing.
+> (counts in [Tests](#tests-mocked-offline)). **Applied to the lab tenant by the pipeline since 2026-10-28: 64 merged changes** (see `lab/evidence/capture-log.csv`). RAN · tenant: bootstrap, dev stages day1 to day3, sentinel, dc, itdr, apps, servicenow, okta, reviews, intune-vm.
 
 Providers: **azuread `~> 3.10`** (Microsoft Graph / Entra) and **azurerm
 `~> 4.0`** (Azure resources), plus **random `~> 3.6`** for initial passwords.

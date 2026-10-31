@@ -5,9 +5,9 @@ PR that touches `lab/terraform/modules/conditional-access/**` or
 `ca_policy_states` / `blocked_countries` in `lab/terraform/envs/dev/lab.tfvars`.
 The reviewer ticks every box or writes why it doesn't apply.
 
-**Who reviews:** on this solo repo the human gate is the `prod` environment
-reviewer (0 required PR approvals; GitHub won't let you approve your own PR).
-With a second maintainer, require 1 approval (`lab/pipelines/README.md` §5 F).
+**Who reviews:** the lab is a free private repo, so GitHub cannot enforce a
+required reviewer; the author ticks this list and self-approves. Production
+uses branch protection with a second person required (`lab/pipelines/README.md` §5 F).
 
 ## Scope
 

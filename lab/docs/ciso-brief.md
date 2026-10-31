@@ -16,8 +16,8 @@ also the main control.
 
 Each line says how far it has got: **BUILT** is code tested offline and
 never applied; **RAN · harness** means it also ran end to end on local
-stand-ins, with a hashed run record in `lab/evidence/`. Nothing has run in
-a tenant yet (**RAN · tenant**: none).
+stand-ins, with a hashed run record in `lab/evidence/`; **RAN · tenant** means it ran
+in the lab tenant, with a row in `lab/evidence/capture-log.csv` (64 merged pull requests since 2026-10-27).
 
 - **HR drives access** (BUILT). A hire, move or termination in HR creates,
   changes or disables the account. A nurse's core clinical access arrives on
@@ -64,9 +64,7 @@ a tenant yet (**RAN · tenant**: none).
 
 **Where it stands:** built as code and tested offline; the vault, the
 session broker, the certification campaign and the database credentials have
-also run end to end on local stand-ins. Nothing has been applied to a tenant,
-so no control has operated in production and no metrics exist yet. The first
-90 days are planned capture by capture (`evidence-capture-plan.md`).
+also run end to end on local stand-ins. Since 2026-10-28 the controls run in a real Entra tenant: nine of eleven sign-in policies enforced, admin rights just-in-time for half the admin roles (the build account is the tracked exception), a leaver removed from AWS in nine minutes, and a nightly drift check against a signed baseline. Measured results are in `lab/evidence/capture-log.csv` (E11b, E30, E52). The 90-day plan in `evidence-capture-plan.md` is now the operating cadence rather than a forecast.
 
 ## Cost per capability (Microsoft list prices, before discounts)
 
@@ -92,7 +90,7 @@ effective date; `vendor-evaluation.md` §8).
 
 | Risk | Residual | What closes it |
 |---|---|---|
-| R01 Pipeline's APPLY identity can change any directory role, and any Graph permission if the SSO apps are staged | High | Time-boxed acceptance now; split out a Tier-0-only identity (ADR 0005, option 3) and alert on out-of-pipeline use |
+| R01 Pipeline's APPLY identity can change any directory role: the deploy robot could grant itself admin rights | High | Time-boxed acceptance now; split out a Tier-0-only identity (ADR 0005, option 3) and alert on out-of-pipeline use |
 | R03 Token theft and MFA phishing | High until phishing-resistant sign-in is enforced for all staff | The staged passwordless rollout; device-code block and risk-based policies are built and waiting to be enforced; a containment response for AD-sourced staff that an attacker's own method can't pass (not built) |
 | R14 Help-desk social engineering | Medium | Built: help-desk scope limited to standard users; registration needs a one-time pass or a phishing-resistant method. The verification ladder remains the real control |
 | R09 One domain controller | High if copied to production | At least two DCs per site; production PAM with HA (SaaS PAM POC, `vendor-evaluation.md`). HA and a timed DR drill already ran on a separate stand-in rehearsal cluster with test data; the vault that holds the AD credentials is still one node |

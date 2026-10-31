@@ -2,9 +2,8 @@
 
 **Scenario:** Contoso Health lab (fictional 5,000-user hospital).
 
-> **Status: this drill has NOT been run.** No tenant has been deployed yet, so
-> the break-glass accounts, their FIDO2 keys and the detections exist only as
-> code. The drill log, [`../../evidence/drills/README.md`](../../evidence/drills/README.md),
+> **Status: this drill has NOT been run.** The tenant exists (2026-10-27), but
+> the drill has not run in it yet. The drill log, [`../../evidence/drills/README.md`](../../evidence/drills/README.md),
 > is an empty template until the first real run. Don't cite a drill result
 > anywhere until a row exists there. The drill script,
 > `lab/scripts/powershell/Invoke-BreakGlassDrill.ps1`, has never run either.

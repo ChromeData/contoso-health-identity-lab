@@ -1,7 +1,7 @@
 # Evidence capture plan: the 30-day E5 + Entra ID Governance window
 
-> **Status: plan only. Nothing in the E-numbered tables has run.** No tenant
-> exists yet. Every E capture is something to do *during* the trial window.
+> **Status: in progress.** The rows that have run are in `../evidence/capture-log.csv`
+> (E07 to E58 so far); the rest is still to do. Every E capture is something to do *during* the trial window.
 > None of it is evidence until the capture log has a row with a real UTC time
 > and a SHA-256. Don't cite any result from this plan until that row exists.
 > The only things that have run are the four local harnesses listed under

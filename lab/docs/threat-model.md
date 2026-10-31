@@ -7,10 +7,11 @@ This page takes five public incidents and, for each step of the attack,
 names the lab control meant to stop it, the detection meant to catch it,
 and the gap that remains. Risk IDs (R01–R16) are in `risk-register.md`.
 
-**Evidence level.** No tenant exists. Every Entra and Azure control named
-here is **BUILT** (offline-tested code) or **DESIGNED** (written down), and
-every Conditional Access policy starts in report-only. No KQL rule has run
-against a workspace, and no rule has fired.
+**Evidence level.** The lab runs in a real tenant since 2026-10-27 (64 merged
+pull requests). Every Entra and Azure control named here is **RAN · tenant**,
+**BUILT** (offline-tested code) or **DESIGNED** (written down). Of 11 Conditional
+Access policies, 9 are enforced; CA002 and CA021 are report-only. 17 KQL rules
+are scheduled in Sentinel (E15, E15b).
 The only things that have **RAN · harness** are local harnesses. On
 2026-10-20: the PAM stand-ins against a Samba AD DC (284/284), the
 500-account discovery-to-reconciliation run (79/79), the midPoint
@@ -39,8 +40,8 @@ are in `lab/evidence/` (index: `lab/evidence/README.md`).
 ## Detections
 
 Every rule is a file in `lab/kql/` with an SPL twin of the same name in
-`lab/splunk/detections/`. All 22 are BUILT; none has run against a
-workspace. Each computes its own `Severity` column, and each maps one
+`lab/splunk/detections/`. All 22 are BUILT; 17 are scheduled in Sentinel,
+5 held back in `itdr_exclude_rules`. Each computes its own `Severity` column, and each maps one
 account entity: the identity containment would act on.
 
 | Group | Files in `lab/kql/` | Deployed by |

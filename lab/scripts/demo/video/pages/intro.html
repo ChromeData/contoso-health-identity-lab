@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cold open</title>
+<style>
+  :root { --bg: #0b1020; --ink: #eaf0ff; --dim: #8b96b8; --line: #243055; --hot: #ff8a3d; --ok: #3ddc97; --blue: #4ea1ff; }
+  html, body { margin: 0; width: 1920px; height: 1080px; background: var(--bg); color: var(--ink); font-family: "Inter", "SF Pro Display", "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  #stage { position: relative; width: 1920px; height: 1080px; }
+  .glow { position: absolute; inset: 0; background: radial-gradient(900px 500px at 30% 20%, rgba(78,161,255,.12), transparent 60%), radial-gradient(800px 500px at 80% 90%, rgba(255,138,61,.10), transparent 60%); }
+  .kick { position: absolute; left: 160px; top: 150px; font-size: 26px; letter-spacing: .28em; text-transform: uppercase; color: var(--dim); opacity: 0; }
+  .clock { position: absolute; left: 160px; top: 200px; font-size: 300px; font-weight: 800; letter-spacing: -.03em; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; opacity: 0; }
+  .clock small { font-size: 60px; font-weight: 600; color: var(--dim); margin-left: 24px; letter-spacing: 0; }
+  .line { position: absolute; left: 160px; top: 540px; font-size: 44px; font-weight: 500; max-width: 1500px; line-height: 1.3; color: var(--ink); opacity: 0; }
+  .chain { position: absolute; left: 160px; top: 720px; display: flex; align-items: center; gap: 0; }
+  .node { width: 300px; height: 200px; border: 2px solid var(--line); border-radius: 22px; background: rgba(255,255,255,.02); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; opacity: 0; transform: translateY(24px); }
+  .node .ico { width: 70px; height: 70px; border-radius: 18px; display: grid; place-items: center; font-size: 30px; font-weight: 800; background: #182145; color: var(--blue); }
+  .node .t { font-size: 26px; font-weight: 600; }
+  .node .s { font-size: 20px; color: var(--dim); }
+  .node.on { border-color: var(--ok); box-shadow: 0 0 0 4px rgba(61,220,151,.15), 0 20px 60px rgba(61,220,151,.12); }
+  .node.on .ico { background: rgba(61,220,151,.18); color: var(--ok); }
+  .node.off { border-color: var(--hot); }
+  .node.off .ico { background: rgba(255,138,61,.18); color: var(--hot); }
+  .arrow { width: 70px; height: 4px; background: var(--line); position: relative; opacity: 0; }
+  .arrow.on { background: var(--ok); }
+  .arrow::after { content: ""; position: absolute; right: -2px; top: -8px; border: 10px solid transparent; border-left-color: inherit; border-left: 14px solid var(--line); }
+  .arrow.on::after { border-left-color: var(--ok); }
+  .stamp { position: absolute; right: 160px; top: 230px; font-size: 24px; color: var(--dim); text-align: right; line-height: 1.6; opacity: 0; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+  .anim { transition: opacity .6s ease, transform .6s ease; }
+  .show { opacity: 1 !important; transform: none !important; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="glow"></div>
+  <div class="kick anim" id="kick">Contoso Health · identity lab · live result</div>
+  <div class="clock anim" id="clock"><span id="mm">0:00</span><small>HR to AWS</small></div>
+  <div class="stamp anim" id="stamp"><b>23:41:26</b> HR feed: leaver<br><b>23:41:33</b> AD disabled<br><b>23:44:13</b> Entra disabled<br><b>23:50:23</b> AWS disabled</div>
+  <div class="line anim" id="line">One HR row flipped. Every account followed. Nobody touched a console.</div>
+  <div class="chain">
+    <div class="node anim" id="n0"><div class="ico">HR</div><div class="t">HR feed</div><div class="s">status: leaver</div></div>
+    <div class="arrow anim" id="a0"></div>
+    <div class="node anim" id="n1"><div class="ico">AD</div><div class="t">Active Directory</div><div class="s">disabled in 7 s</div></div>
+    <div class="arrow anim" id="a1"></div>
+    <div class="node anim" id="n2"><div class="ico">ID</div><div class="t">Entra ID</div><div class="s">sessions revoked</div></div>
+    <div class="arrow anim" id="a2"></div>
+    <div class="node anim" id="n3"><div class="ico">AWS</div><div class="t">AWS account</div><div class="s">switched off</div></div>
+  </div>
+</div>
+<script>
+  // Cold open: a 9-minute leaver clock counting up while the four systems go dark, left to right.
+  const $ = (id) => document.getElementById(id);
+  const show = (id) => $(id).classList.add('show');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  window.intro = {
+    async play() {
+      show('kick'); await sleep(400);
+      show('clock'); show('stamp');
+      // count 0:00 -> 9:00 over ~7 s, nodes light up at the real proportions (7 s, 2m47, 9m)
+      const total = 9 * 60, t0 = performance.now(), span = 7000;
+      const marks = [[0, 'n0'], [7, 'n1'], [167, 'n2'], [537, 'n3']];
+      let next = 0;
+      show('n0'); $('n0').classList.add('off');
+      await new Promise((done) => {
+        const tick = () => {
+          const p = Math.min(1, (performance.now() - t0) / span); const sec = Math.round(p * total);
+          $('mm').textContent = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+          while (next < marks.length && sec >= marks[next][0]) {
+            const id = marks[next][1]; show(id); $(id).classList.add('off');
+            if (next > 0) { const a = $('a' + (next - 1)); a.classList.add('show'); a.classList.add('on'); }
+            next++;
+          }
+          if (p < 1) requestAnimationFrame(tick); else done();
+        }; tick();
+      });
+      await sleep(400); show('line');
+      // 9:00 lands: everything confirmed off
+      for (const id of ['n0', 'n1', 'n2', 'n3']) { $(id).classList.remove('off'); $(id).classList.add('on'); await sleep(120); }
+    }
+  };
+</script>
+</body>
+</html>

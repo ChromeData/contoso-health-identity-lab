@@ -1,7 +1,7 @@
 # 04 · Detection (stage `sentinel`)
 
 **What you build:** the alarm system. Microsoft Sentinel on the lab's log
-workspace, with eleven lab detection rules plus Microsoft's Fusion rule.
+workspace, with seventeen lab detection rules plus Microsoft's Fusion rule.
 
 **Whisperglass:** *Contoso 07 · Detect & respond*.
 
@@ -19,14 +19,14 @@ workspace. A rewind and redo does not restart it.
 | 3 | Press **Enter**, wait for green checks, show the **Terraform plan** comment | the PR | Sentinel onboarding and the analytics rules in the plan |
 | 4 | **Merge pull request**, **Confirm merge** | the PR | "Merged" |
 | 5 | `turn approve`, comment **approve** in the issue, then `turn watch` | the approval issue, then the terminal | the issue closes as approved; the apply ends in a green tick |
-| 6 | `turn open sentinel` | Defender portal, Microsoft Sentinel, Analytics | twelve rules, all **Enabled** |
+| 6 | `turn open sentinel` | Defender portal, Microsoft Sentinel, Analytics | eighteen rules, all **Enabled** |
 | 7 | Point at a few of them | the rules list | break-glass sign-in, failed sign-in spike, legacy authentication, PIM activation, blocked country, Conditional Access change, app credential added, role assigned outside PIM, group member added outside PIM, app permission granted, sign-in method changed by an admin, and Fusion |
 | 8 | Read the Proof part | | |
 
 ## Say this, in your own words
 
 - Every rule is code in the repo, reviewed like everything else.
-- Eight more rules are written but held back on purpose: their data does not
+- Five more rules are written but held back on purpose: their data does not
   exist yet (the domain controller, risky users, the vault). Sentinel refuses a
   rule whose table has never had data, so each one is released in its own PR
   once its data starts flowing.

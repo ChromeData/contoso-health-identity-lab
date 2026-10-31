@@ -42,9 +42,9 @@ sign-in volume (Okta System Log), and plan waves of 10–20 apps. Identify
 Goal: clinic users sign in with their **Entra** identity and still reach every
 Okta app. No app changes yet.
 
-**Status: BUILT** ([ADR 0022](adr/0022-okta-coexistence-as-code.md)). The
-steps below are Terraform, behind flags that are off, validated and
-mock-tested offline, **never applied** (no tenant, no Okta org). The Entra
+**Status: RAN · tenant** (E58; [ADR 0022](adr/0022-okta-coexistence-as-code.md)). The
+steps below are Terraform, validated and mock-tested offline and **applied**
+against the lab tenant and an Okta Integrator Free org. The Entra
 side is `lab/terraform/modules/apps/okta.tf` (`enable_okta_federation` in
 `lab/terraform/envs/dev/lab.tfvars`, CI-applied by PR); the Okta side is the
 separate, human-applied root `lab/terraform/okta/` (its README has the apply

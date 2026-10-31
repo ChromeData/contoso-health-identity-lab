@@ -1,8 +1,8 @@
 # Passwordless rollout plan: persona phases (lab scenario)
 
 **Status:** Proposed · **Date:** 2026-10-20 · **Scope:** Contoso Health, the
-lab's fictional 5,000-user hospital. Nothing below has run. No tenant exists,
-so every KPI is a definition, with values to fill in after each phase.
+lab's fictional 5,000-user hospital. The tenant exists (2026-10-27) but no passkey is
+registered yet (E11b: 0% phishing-resistant), so every KPI is a definition, with values to fill in after each phase.
 
 ## Microsoft's dates set the deadline
 
@@ -76,8 +76,8 @@ https://www.microsoft.com/en-us/security/blog/2026/07/13/microsoft-entra-id-secu
   - nothing
 
   It also issues TAPs and returns the CA008 READY or NOT READY verdict.
-- **CA policies** (all BUILT in `modules/conditional-access`, each
-  report-only behind its own staging flag; none has run against a tenant).
+- **CA policies** (all in `modules/conditional-access`; the applied ones are
+  report-only until passkeys exist, the rest still behind staging flags).
   - **CA002** requires phishing-resistant MFA for admins: Microsoft's
     template list of admin roles plus the lab's tier groups, because
     role assignments scoped to an administrative unit are invisible to the

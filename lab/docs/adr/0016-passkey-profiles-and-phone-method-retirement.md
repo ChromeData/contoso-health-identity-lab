@@ -1,6 +1,6 @@
 # ADR 0016: Passkey profiles and retiring phone-based MFA
 
-- **Status:** Accepted (lab). BUILT: the authentication methods policy is a post-apply script with offline tests; CA008 and CA009 are in Terraform behind staging flags and start in report-only. Not run: no tenant exists and no key has been registered.
+- **Status:** Accepted (lab). BUILT: the authentication methods policy is a post-apply script with offline tests; CA008 and CA009 are in Terraform behind staging flags and start in report-only. Applied: CA009 is enforced in the lab tenant, CA008 still behind its flag; no key has been registered yet (E11b).
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 

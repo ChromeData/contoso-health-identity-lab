@@ -39,9 +39,9 @@ event, not just an IT incident.
 - **One policy changes state per PR.** The PR includes the plan comment, the
   report-only evidence (a query or a workbook screenshot) and a rollback line
   (flip back to report-only).
-- In the lab, every policy is report-only and **none has been graduated**,
-  because no tenant run has happened. There's no report-only evidence to
-  cite yet.
+- In the lab, 9 of 11 policies are **graduated** (E30, under exception E9), with
+  the report-only counts in each PR body; CA002 and CA021 stay report-only
+  until passkeys exist.
 
 ## 3. Exclusions are governed
 

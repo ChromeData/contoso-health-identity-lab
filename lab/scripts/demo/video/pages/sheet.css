@@ -1,0 +1,44 @@
+/* Sheet mode: the lab map on one white grid sheet, no header, chips top-left, zoom top-right, a compact panel bottom-left.
+   Injected into map-video.html by director.mjs (map). Same chrome as pages/build-map.html. */
+:root { --canvas: #F6F5F1; --sheet-line: rgba(30,30,28,.07); }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body { background: var(--canvas) !important; }
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: linear-gradient(var(--sheet-line) 1px, transparent 1px), linear-gradient(90deg, var(--sheet-line) 1px, transparent 1px); background-size: 48px 48px; }
+.page { padding: 0 !important; max-width: none !important; gap: 0 !important; display: block !important; }
+.top, .foot, .hint { display: none !important; }
+.stage { display: block !important; position: fixed; inset: 0; }
+.mapwrap { height: 100vh !important; border-radius: 0 !important; box-shadow: none !important; background: transparent !important; }
+#dotgrid { display: none; }
+.chips { position: fixed; left: 16px; top: 16px; z-index: 6; padding: 0 !important; overflow: visible !important; flex-wrap: wrap; max-width: calc(100vw - 200px); align-items: center; }
+.chips::before { content: "Contoso Health · the lab"; display: inline-flex; align-items: center; height: 34px; padding: 0 14px 0 12px; border-radius: 999px; background: var(--pill); color: #fff; font-size: 13px; font-weight: 700; margin-right: 6px; }
+.chip { height: 32px; padding: 0 12px !important; font-size: 12.5px !important; border: 1px solid var(--line) !important; box-shadow: none !important; }
+.zoom { top: 16px !important; right: 16px !important; z-index: 6; }
+.zoom button { width: 34px !important; height: 34px !important; border-radius: 10px !important; border: 1px solid var(--line) !important; box-shadow: none !important; font-size: 16px !important; }
+.panel { position: fixed !important; left: 16px; bottom: 16px; z-index: 6; width: min(420px, calc(100vw - 32px)); max-height: 250px !important; overflow: hidden !important;
+  padding: 14px 16px 12px !important; gap: 8px !important; border: 1px solid var(--line); box-shadow: 0 14px 40px rgba(0,0,0,.10) !important; border-radius: 14px !important; font-size: 13.5px; line-height: 1.4; }
+.panel h2 { font-size: 20px !important; line-height: 1.1 !important; }
+.panel h3 { font-size: 10.5px !important; margin: 0 0 2px !important; }
+.panel .goal { font-size: 14px !important; line-height: 1.3 !important; }
+.panel .goal::after { display: none !important; }
+.panel .card { padding: 0 !important; background: transparent !important; }
+.panel .card p { font-size: 13.5px !important; }
+.panel .duo { grid-template-columns: 1fr !important; gap: 6px !important; }
+.panel .duo .card:nth-child(n+2), .panel .crumb, .panel .statusrow, .panel .tiles, .panel .links, .panel .path, .panel .days, .panel .cmd, .panel .stepper, .panel .fine, .panel .standin,
+.panel section:has(.links), .panel section:has(.days), .panel section:has(.tiles), .panel .read li:nth-child(n+3), .panel .rules li:nth-child(n+3), .panel .stations-list { display: none !important; }
+.panel .read, .panel .rules { font-size: 13.5px !important; gap: 4px !important; padding-left: 16px !important; }
+.panel.full { max-height: calc(100vh - 110px) !important; overflow-y: auto !important; width: min(460px, calc(100vw - 32px)); }
+.panel.full .duo .card:nth-child(n+2), .panel.full .crumb, .panel.full .statusrow, .panel.full .tiles, .panel.full .links, .panel.full .path, .panel.full .days, .panel.full .cmd, .panel.full .stepper, .panel.full .fine, .panel.full .standin,
+.panel.full section:has(.links), .panel.full section:has(.days), .panel.full section:has(.tiles), .panel.full .read li:nth-child(n+3), .panel.full .rules li:nth-child(n+3), .panel.full .stations-list { display: revert !important; }
+.panel.full .tiles { display: flex !important; } .panel.full .links, .panel.full .days, .panel.full .stations-list { display: grid !important; } .panel.full .stepper, .panel.full .crumb, .panel.full .statusrow { display: flex !important; }
+.panel.off { display: none !important; }
+#sheetbtn { position: absolute; right: 10px; top: 10px; display: flex; gap: 4px; }
+#sheetbtn button, #sheetshow { height: 24px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--grey); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+#sheetshow { position: fixed; left: 16px; bottom: 16px; z-index: 7; height: 30px; display: none; }
+.panel.off ~ #sheetshow { display: block; }
+.panel h2 { padding-right: 120px; }
+.panel section:has(.rules), .panel .rules { display: none !important; }
+.panel.full section:has(.rules), .panel.full .rules { display: grid !important; }
+.panel section:has(.stations-list) { display: none !important; }
+.panel.full section:has(.stations-list) { display: grid !important; }
+#map rect[fill="#ECEBE7"], #map rect[fill="url(#dotgrid)"] { fill: none !important; display: none; }

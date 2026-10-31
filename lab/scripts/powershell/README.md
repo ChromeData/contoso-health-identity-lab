@@ -9,8 +9,7 @@ export an auditor asks for.
 failed, 0 skipped** with every Graph, `az` and Log Analytics call mocked
 (`tests/Invoke-LabTests.ps1`, Pester 5.7.1 and 6.2.0), and PSScriptAnalyzer
 reported **0 errors** and no warning outside test files (warnings are not
-gating). **No script has run against a tenant**
-(RAN · tenant: nothing). Passing proves the logic does what the comments say;
+gating). **Scripts 00 to 06, 08 and the evidence and config exports have run against the lab tenant** (RAN · tenant: joiner, mover and leaver runs captured as E30 to E52; KPI snapshot E11b). Passing proves the logic does what the comments say;
 whether Graph accepts each call is a tenant-time check, listed in each
 script's `.NOTES` as `verify:`.
 

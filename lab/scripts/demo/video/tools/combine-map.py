@@ -1,0 +1,280 @@
+import sys,re,base64,json
+S=sys.argv[1]; V='/Users/michaelwilliams/contoso-health-identity-lab/lab/scripts/demo/video'
+SCRIPT_URL='https://claude.ai/artifact/AVNLqMgHXrsNNttw2PhiGw'
+# ---------- setup (build map) world CSS, scoped under #blayer ----------
+b=open(f'{V}/pages/build-map.html').read()
+style=re.search(r'<style>(.*?)</style>',b,re.S).group(1)
+keep=[]
+for line in style.splitlines():
+    t=line.strip()
+    if not t or t.startswith('/*') or t.startswith(':root') or t.startswith('*{') or t.startswith('html,body') or t.startswith('body::before'): continue
+    if re.match(r'^(\.chips|\.brand|\.chip|\.zoom|\.legend|#vp|#panel|#sheetbtn|#sheetshow|@media|#world)',t): continue
+    keep.append(t)
+css='\n'.join(keep)
+css=re.sub(r'\.tiles\b','.b-tiles',css); css=re.sub(r'\.goal\b','.b-goal',css)
+css=re.sub(r'(?m)^(\S)', r'#blayer \1', css)
+out='/Users/michaelwilliams/contoso-health-identity-lab/lab/evidence/out/video/build'
+imgs={n:'data:image/png;base64,'+base64.b64encode(open(f'{out}/{n}.png','rb').read()).decode() for n in ['entra','azure','aws','servicenow','okta','github','domain','dc01','cloudsync','hrapp','users']}
+src=open(f'{V}/scenes.mjs').read(); fn=src[src.index('function buildMapData()'):src.index('const MAP =')]
+# transcript lines
+lines={x['scene']+'-'+str(x['beat']):x['text'] for x in json.load(open(f'{S}/script.json'))}
+scene_names={'03-delivery':'Delivery pipeline','04-hr-feed':'HR feed','05-hr-app':'HR front door','06-ad':'Active Directory','07-directory':'Directory sync','08-joiner':'Joiner','09-signin':'Sign-in rules','10-pim':'Admin tiers (PIM)','11-pim-live':'PIM live','12-detect':'Detect and respond','13-leaver':'Leaver','14-worm':'Evidence vault','15-evidence':'Proof pack'}
+build_line={0:'01-built-0',2:'01-built-1',3:'01-built-2',4:'01-built-3',5:'01-built-4'}
+lab_ids=['source','directory','joiner','apps','signin','privileged','detect','leaver','proof']
+lab_line={sid:f'02-map-{i+1}' for i,sid in enumerate(lab_ids)}
+walk={'source':['04-hr-feed','05-hr-app'],'directory':['06-ad','07-directory'],'joiner':['08-joiner'],'apps':[],'signin':['09-signin'],'privileged':['10-pim','11-pim-live'],'detect':['12-detect'],'leaver':['13-leaver'],'proof':['14-worm','15-evidence'],'delivery':['03-delivery']}
+first_beat={}
+for k in lines:
+    sc=k.rsplit('-',1)[0]
+    if sc not in first_beat: first_beat[sc]=k
+TR={'build':{str(i):{'id':l,'text':lines.get(l,'')} for i,l in build_line.items()},
+    'lab':{sid:{'id':lab_line[sid],'text':lines.get(lab_line[sid],'')} for sid in lab_ids},
+    'walk':{k:[{'id':first_beat.get(s,s+'-0'),'name':scene_names.get(s,s)} for s in v] for k,v in walk.items()}}
+# ---------- lab page, patched ----------
+m=open('/Users/michaelwilliams/contoso-health-identity-lab/lab/evidence/out/video/map-video.html').read()
+lab=re.search(r'<body>(.*)</body>',m,re.S).group(1)
+OVR={'stations': {'source': 'Everything starts with HR, the official list of who works here. In the lab a spreadsheet plays HR. When HR adds, moves or removes a person, the accounts follow. Nobody creates an account by hand. Why this way: if access came from anywhere else, HR and IT would drift apart and leavers would keep access.', 'directory': "Two directories kept in step. Active Directory on the Windows server is what the hospital's PCs and older systems check logins against. Entra is the cloud copy every modern app checks. Cloud Sync copies accounts up from the server to the cloud, so fixing a person once fixes them everywhere. Why two: the old on-site directory cannot be switched off while PCs and legacy systems need it, and the cloud one is what modern apps and sign-in rules need.", 'joiner': 'What a new hire gets on day one, and how extras are requested. Standard access comes from the job: a nurse gets nurse systems automatically. Anything extra is requested, approved by a manager, and expires. Some combinations are blocked because one person holding both would be a fraud risk. Why: day-one access by job removes the ticket queue, and expiring extras stop access piling up over the years.', 'apps': "The places staff actually go after they sign in. AWS: the cloud console engineers use to run servers. ServiceNow: the help desk where staff raise IT tickets. Okta: a partner clinic's own login system. Each one trusts the hospital login instead of keeping its own passwords, and for AWS the account is created and removed automatically from HR. Why one login: one place to turn a person off, one set of sign-in rules, no forgotten passwords in each app.", 'signin': 'The checks at the door, every time someone signs in. Where you are, what device, how risky this looks, and whether you proved it is you with more than a password. New rules start in watch-only mode so a mistake cannot lock a nurse out mid-shift. Why watch-only first: a bad rule in a hospital locks out clinicians mid-shift, so rules prove themselves before they enforce.', 'privileged': 'Nobody keeps admin power all day. Admins ask for it, say why, get it for a few hours, and it switches off again. Shared passwords for servers live in a vault that rotates them and records who used them. Why: a stolen admin account that holds power all day is the worst case. Power that switches off limits the damage to hours.', 'detect': 'The alarm system. Sign-in and change records flow into one place, rules written as code spot trouble such as an admin sign-in from a new country, and a person approves any lockout before it happens. Why a human approves lockouts: an automatic lockout of the wrong clinician is itself a patient-safety incident.', 'leaver': 'When someone leaves, HR flips one field and everything closes: account off, sessions cut, app access gone, each step timed. Robot accounts the person owned are handed to someone else so nothing is orphaned. Why timed: the gap between someone leaving and losing access is the number an auditor asks for.', 'proof': 'Showing an auditor it works, on demand. Regular reviews of who has what, an evidence binder where every page is fingerprinted and stored where nobody can edit it, and a nightly check that nothing has drifted from the approved setup. Why: a control nobody can prove is a control nobody can trust. Evidence is produced by the system, not assembled by hand before an audit.'}, 'nodes': {'SSO': ["AWS's own login door, set to trust the hospital login. An engineer signs in with her hospital account and has no separate AWS password. SCIM is the part that creates her AWS account when HR hires her and removes it when HR says she left.", 'A second building that accepts our staff badge.'], 'SNOW': ['The IT help desk. Staff raise tickets here and IT tracks changes here. It is set to accept the hospital login, so there is no separate ServiceNow password. The free developer copy stands in for the real one.', 'The ticket desk.'], 'OKTA': ["A partner clinic the hospital bought, which already has its own login system. Okta is set to trust Entra, so the clinic's staff keep signing in through their own door but land under the hospital's rules.", "The acquired building's reception, now checking our badges."], 'HR': ['The spreadsheet that plays the HR system. Every hire, move and exit starts as a row here. A change touching more than ten people is stopped as a safety check.', 'The staff roster.'], 'AGENT': ['A small program on the Windows server that picks up each HR change and creates or updates the account in Active Directory.', 'A clerk collecting the mail.'], 'AD': ['Active Directory: the on-site login system that hospital PCs and older systems check against. Runs on one Windows server here.', "The filing cabinet, with a leavers' drawer."], 'ADCS': ["The server's certificate service. It encrypts the traffic between the server and the cloud so account details do not travel in the open.", 'An envelope, not a postcard.'], 'SYNC': ['Copies accounts from the on-site directory up to Entra every few minutes. The most powerful admin accounts are kept out of the copy on purpose.', 'A photocopier: fix the original.'], 'ENTRA': ['The cloud login system. It holds who you are, which groups you are in, which apps you may open, how you must prove it is you, and who may become an admin.', 'The front desk and badge office.'], 'CABASE': ['The core sign-in rules: everyone proves it is them with more than a password, admins must use a phishing-proof method, and old insecure sign-in protocols are blocked.', 'The guard at every door.'], 'PIM': ['Admin rights are something you switch on, not something you own. The most powerful ones need approval and last four hours.', 'A temporary badge upgrade.'], 'KV': ["Azure's locked box for the few secrets the automation needs, reachable only from inside the lab network.", 'A deposit box off a private corridor.'], 'LA': ['The log store plus the alarm rules. Sign-in and server logs land here, and rules written as code raise an alert on suspicious patterns.', 'The CCTV archive and the security desk.'], 'LEAVER': ['HR marks the person as left. A script then disables the account, cuts live sessions and removes app access, timing each step.', 'Collecting every badge at the exit.'], 'NHI': ['Robot accounts: the identities apps use to talk to each other. Each has two human owners and no stored passwords, and is handed on when an owner leaves.', 'The machine badge register.'], 'EVID': ['One command collects the proof: exports, screenshots and logs, each fingerprinted so tampering would show, filed against the SOX and HIPAA controls they satisfy.', 'The audit binder, every page fingerprinted.'], 'WORM': ['Storage where files can be added but never changed or deleted, so evidence cannot be tampered with.', 'A sealed archive.'], 'DRIFT': ['A nightly read-only check: read the live setup, compare it to the approved one in code, and open an issue if anything differs.', 'A nightly stock-take of every door and lock.'], 'LCW': ['Automatic first-day and last-day tasks. On day one the manager gets a one-time pass to hand the new hire. On the last day the account is closed out.', 'A first- and last-day checklist that runs itself.'], 'DYNGRP': ['Groups that fill themselves. All-Nurses is built from a rule on the HR department, so nobody adds or removes members by hand.', 'A ward list that rewrites itself.'], 'BIRTH': ['The standard access a job comes with. Department plus title decides it. No request, no approver, no expiry, because it is the job.', "The job's standard doors."], 'AP': ['Extras beyond the job. Someone requests, a manager approves, it expires in six months. Guests from a partner tenant come in the same way.', 'Extra doors someone signs for.'], 'SOD': ['Combinations one person must never hold, nine pairs in the lab. Refused at request time, or reported if they slip through.', 'Two bundles nobody may hold together.'], 'INTUNE': ['Admin portals only open from a managed, healthy laptop. In a pilot here.', 'A health stamp on the laptop.'], 'CARISK': ['If Microsoft rates the user as high risk: extra proof and a password change. If the sign-in itself looks risky: blocked.', "The guard's alert list."], 'CAPR': ['Passkeys instead of passwords, in a pilot. Adding a new sign-in method needs a one-time pass or a phishing-proof method.', 'A badge only the real door accepts.'], 'CASESS': ['Admins must sign in again every four hours. The most powerful admins need a step-up. A shared-workstation rule is written but matches no device yet.', 'A fresh check at the secure wing.'], 'BG': ['Two emergency Global Admin accounts with hardware keys, outside every rule, so a bad rule can always be undone. Any use raises an alarm.', 'The fire axe behind glass.'], 'HDAU': ['Help-desk staff can reset standard staff only. Executives and admins sit outside their reach.', "The help desk's floor pass."], 'VAULT': ['Finds the most powerful server passwords, rotates them, and hands them out only against an approved change ticket.', 'A key cabinet that re-keys itself after use.'], 'GUAC': ['An admin works on a server through a recorded session and never sees the password.', 'A recorded room you enter without the key.'], 'HA': ['The vault runs as three copies that agree, with failover and a timed restore drill, so losing one never locks admins out.', 'Three cabinets that agree.'], 'DYN': ['A database login made on request and deleted after one hour.', 'A key cut for one hour.'], 'CONJUR': ['Programs fetch only the secret their policy allows, nothing else.', 'A vending machine for programs.'], 'K8S': ['A container trades a ten-minute token for one secret. Not covered in the walkthrough.', 'A ten-minute visitor pass.'], 'PB': ['Every alert is pushed to a Teams channel and opened as a ServiceNow ticket automatically.', 'The phone tree.'], 'CONTAIN': ['A person approves in Teams. Then sessions are cut and the account disabled or flagged.', "The supervisor's yes."], 'FEED': ['Every password check-out from the vault is matched against who actually logged into the server.', "The cabinet's sign-out sheet, copied."], 'SPLUNK': ['A second alarm system running the same rules on replayed logs, to show the rules are not tied to one product.', 'A second security desk.'], 'REVIEW': ['Managers confirm who still needs what. Riskier access is reviewed more often. Core clinical access is never removed just because nobody answered.', 'The badge audit.'], 'MID': ['The same review run in a non-Microsoft tool over the mock HR users, each decision recorded as its reviewer.', 'The badge audit, beyond Entra.'], 'KPI': ['Scorecards and security scans taken before and after the build, so improvement is measured, not claimed.', 'A before-and-after check-up.'], 'OPMODEL': ['Who decides what, which meeting happens when, the service levels, and what gets reported to the CISO and the board.', 'The org chart for decisions, not people.']}, 'names': {'ADCS': 'Certificates (AD CS)', 'PIM': 'Timed admin rights (PIM)', 'WORM': 'Tamper-proof storage', 'KPI': 'Scorecards, before and after', 'LA': 'Alarm system (Sentinel)', 'NHI': 'Robot accounts', 'LCW': 'First-day, last-day tasks', 'DYNGRP': 'Self-filling groups', 'BIRTH': 'Standard access by job', 'AP': 'Requested extras', 'SOD': 'Blocked combinations', 'CABASE': 'Core sign-in rules', 'CARISK': 'Risky sign-in rules', 'CAPR': 'Passkeys', 'CASESS': 'Session time limits', 'BG': 'Emergency accounts', 'HDAU': 'Help-desk limits', 'KV': 'Secrets vault', 'VAULT': 'Server password vault', 'GUAC': 'Recorded admin sessions', 'HA': 'Vault stays up', 'DYN': 'One-hour database logins', 'CONJUR': 'Secrets for programs', 'K8S': 'Container secrets', 'PB': 'Alert to Teams + ticket', 'CONTAIN': 'Lockout with approval', 'FEED': 'Password check-out log', 'SPLUNK': 'Second alarm system', 'LEAVER': 'Leaver shutdown', 'REVIEW': 'Who-has-what reviews', 'MID': 'Reviews beyond Entra', 'EVID': 'Evidence binder', 'DRIFT': 'Nightly drift check', 'OPMODEL': 'Who decides what', 'AGENT': 'HR to AD agent', 'AD': 'Active Directory', 'ENTRA': 'Entra (cloud login)', 'SSO': 'AWS login door', 'SNOW': 'Help desk (ServiceNow)', 'OKTA': 'Partner clinic (Okta)', 'INTUNE': 'Healthy-device rule', 'HR': 'HR feed (spreadsheet)', 'SYNC': 'Cloud Sync (AD to Entra)'}}
+_re=re.compile(r'(<script type="application/json" id="lab-data">)(.*?)(</script>)',re.S)
+_d=json.loads(_re.search(lab).group(2))
+for st in _d['stations']:
+    if st['id'] in OVR['stations']: st['purpose']=OVR['stations'][st['id']]
+for nd in _d['nodes']:
+    if nd['id'] in OVR['nodes']: nd['definition'],nd['analogy']=OVR['nodes'][nd['id']]
+    if nd['id'] in OVR['names']: nd['name']=OVR['names'][nd['id']]
+lab=_re.sub(lambda m: m.group(1)+json.dumps(_d,ensure_ascii=False).replace('<','\\u003c')+m.group(3), lab, count=1)
+lab=lab.replace('<title>Contoso Health Lab Map</title>','').replace('<meta name="claude:viewport-fit-sides" content="cover">','')
+def rep(a,b_,n=1):
+    global lab; assert a in lab, a[:60]; lab=lab.replace(a,b_,n)
+rep("    svg.setAttribute('viewBox', `${f2(cam.x - w / 2)} ${f2(cam.y - h / 2)} ${f2(w)} ${f2(h)}`);\n",
+    "    svg.setAttribute('viewBox', `${f2(cam.x - w / 2)} ${f2(cam.y - h / 2)} ${f2(w)} ${f2(h)}`);\n    if (window.__syncBuild) window.__syncBuild(cam, vw, vh);\n")
+i=lab.index('  function overviewView() {'); j=lab.index('  function flyTo(')
+lab=lab[:i]+'''  function overviewView() {
+    const WB = window.__allBox ? window.__allBox(W) : W;
+    const all = fitRect(WB, 0.96);
+    if (all.z >= 0.08) return all;
+    const z = clamp((vh / (WB.y1 - WB.y0)) * 0.96, ZMIN, ZMAX);
+    return { x: WB.x0 + vw / (2 * z), y: (WB.y0 + WB.y1) / 2, z };
+  }
+  window.__lab = { flyTo, fitRect, select, W, L, NB, get cam() { return cam; }, panel: document.getElementById('panel'), chips: document.getElementById('chips'), svg };
+'''+lab[j:]
+rep('const MIN_GAP = 780;','const MIN_GAP = 900;')
+rep('st[i - 1].ex1 - s.ex0 + 170)','st[i - 1].ex1 - s.ex0 + 260)')
+rep('PITCH = 252','PITCH = 290')
+rep('pillShape(pin, s.title, s.pillW, PILL_H);','pillShape(pin, (s.i + 7) + " · " + s.title, s.pillW + 46, PILL_H);')
+rep('data-go="station:${esc(s.id)}">${esc(s.title)}</button>`))','data-go="station:${esc(s.id)}">${s.i + 7} ${esc(s.title)}</button>`))')
+rep('data-go="delivery">Delivery</button>','data-go="delivery">16 Delivery</button>')
+rep('    if (fly && target) flyTo(target);','    if (window.__onSelect) window.__onSelect(it);\n    if (fly && target) flyTo(window.__adjust ? window.__adjust(target) : target);')
+rep('<div class="overlay" id="overlay"></div>','<div class="overlay" id="overlay"></div>\n      <div id="blayer"><div id="bhost"><div id="b-world"><div class="spine"><div class="fill" id="b-fill"></div><div class="cap"></div></div><div id="b-stations"></div></div></div></div>')
+rep('.chips::before { content: "Contoso Health · the lab";','.chips::before { content: "Contoso Health";')
+rep('#dotgrid { display: none; }','#dotgrid { display: none; }\n#map rect[fill="#ECEBE7"], #map rect[fill="url(#dotgrid)"] { fill: none !important; display: none; }')
+glue_css='''
+<style>
+#blayer { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; transform-origin: 0 0; pointer-events: none; z-index: 2; }
+#bhost { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+#b-world { position: absolute; left: 0; top: 0; height: 820px; }
+#blayer .st { pointer-events: auto; }
+#blayer .st.pick .tile { opacity: .35; filter: saturate(.6); }
+#blayer .st.pick .tile.focus { opacity: 1; filter: none; box-shadow: 0 0 0 5px rgba(232,112,58,.35), 0 12px 30px rgba(0,0,0,.14); border-color: #E8703A; transform: scale(1.04); }
+#blayer .st .nxt { position: absolute; left: 456px; top: 432px; width: 34px; height: 34px; border-radius: 50%; background: #fff; border: 1.5px solid #DEDCD6; display: grid; place-items: center; color: #E8703A; font-weight: 800; font-size: 18px; z-index: 3; }
+#blayer .st:last-child .nxt { display: none; }
+#blayer .tile .num, #blayer .pill .num { position: absolute; right: 7px; top: 7px; min-width: 24px; height: 22px; padding: 0 7px; border-radius: 999px; background: #16161A; color: #fff; font-size: 11.5px; font-weight: 800; display: grid; place-items: center; letter-spacing: .02em; }
+#blayer .pill .num { position: static; margin-left: 6px; background: #F4F3EF; color: #5E5D59; }
+.mapwrap .zoom, .mapwrap .hint { z-index: 3; }
+.chipsep { font-size: 11px; font-weight: 800; letter-spacing: .08em; color: #8A8984; text-transform: uppercase; margin: 0 2px 0 10px; align-self: center; }
+.chip[data-build][aria-current="true"] { background: #E8703A; color: #fff; border-color: #E8703A; }
+/* callout: the panel sits next to the piece you clicked */
+.panel { transition: left .25s ease, top .25s ease; }
+.panel.anch { left: 16px !important; top: var(--ptop, 64px) !important; bottom: auto !important; width: min(400px, calc(100% - 32px)); z-index: 7; max-height: calc(100% - 80px) !important; overflow-y: auto !important; }
+.panel.anch::before { display: none; }
+.panel .shot { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.panel .kind { display: inline-flex; font-size: 11px; font-weight: 800; letter-spacing: .08em; padding: 4px 9px; border-radius: 6px; color: #fff; background: var(--pill); width: max-content; }
+.panel .kind.hand { background: #E8703A; } .panel .kind.code { background: #2F6BFF; }
+.panel .read li[data-tile] { cursor: pointer; } .panel .read li[data-tile]:hover b { color: #E8703A; }
+.panel.anch::before { content: ""; position: absolute; left: -9px; top: 22px; width: 16px; height: 16px; background: var(--card); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
+.panel.anch.flip::before { left: auto; right: -9px; transform: rotate(-135deg); }
+.cnum { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: #16161A; color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .04em; width: max-content; }
+.cnum.setup { background: #E8703A; }
+.ctr { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
+.ctr h3 { margin: 0 !important; display: block !important; }
+.ctr p { font-size: 13px !important; color: var(--grey); line-height: 1.4; display: block !important; }
+.ctr .q { font-style: italic; color: var(--ink) !important; }
+.ctr a { color: var(--blue); font-weight: 600; text-decoration: none; font-size: 12.5px; }
+.ctr .walk { display: flex; flex-wrap: wrap; gap: 6px; }
+.ctr .walk a { background: var(--soft); border-radius: 999px; padding: 3px 9px; }
+.cnav { display: flex !important; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+.cnav button { border: 0; background: var(--soft); color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 700; border-radius: 9px; padding: 7px 11px; cursor: pointer; max-width: 48%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cnav button.next { background: var(--pill); color: #fff; }
+.panel.full .ctr p { display: block !important; }
+.panel.anch .ctx h3 { display: block !important; margin: 0 0 3px !important; }
+.panel.anch .ctx p { display: block !important; -webkit-line-clamp: unset !important; font-size: 13.5px !important; line-height: 1.45; }
+.panel.anch .read li, .panel.anch .rules li { display: list-item !important; }
+.panel.anch .duo .card:nth-child(n+2), .panel.anch section:has(.tiles), .panel.anch .tiles, .panel.anch .statusrow, .panel.anch .fine { display: revert !important; }
+.panel.anch .tiles { display: flex !important; } .panel.anch .statusrow { display: flex !important; }
+.panel.anch .card p { display: block !important; }
+.panel.anch .standin { display: block !important; }
+.panel .pts { margin: 0; padding-left: 16px !important; display: grid !important; gap: 4px !important; font-size: 13.5px !important; line-height: 1.4; }
+.panel .pts li { display: list-item !important; }
+.panel .pts li::marker { color: #E8703A; }
+.panel.ovw { max-height: calc(100% - 90px) !important; overflow-y: auto !important; width: min(420px, calc(100% - 32px)); }
+.panel.ovw .read li:nth-child(n+3) { display: list-item !important; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin: 0 4px 0 0; vertical-align: -1px; }
+#g-bridge text { font-family: system-ui, -apple-system, "SF Pro Display", "Segoe UI", sans-serif; }
+'''+css+'''
+</style>
+'''
+pre_script='''<script>
+// numbering for the lab row: stations 7..15 (the setup row is 1..6), used by the lab map while it draws
+window.__labNum = (s) => s.i + 7;
+</script>
+'''
+glue_js='''
+<script>
+(function () {
+  const lab = window.__lab; if (!lab) return;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const IMGS = ''' + json.dumps(imgs) + ''';
+  const BIMG = (n) => IMGS[n] || '';
+  const TR = ''' + json.dumps(TR, ensure_ascii=False) + ''';
+  const CTX = {"0": {"what": ["Six accounts, six platforms, one job each. No overlap.", "Entra: where every staff login lives.", "Azure: the computer room for the server and evidence storage.", "AWS, ServiceNow, Okta: where staff go after they sign in. Cloud console, help desk, partner clinic.", "GitHub: the filing cabinet for the code and every change."], "how": ["Each sign-up: a card for identity checks, a phone for a text code, a confirmation email.", "All free trials or free tiers. Nothing charged.", "Ids saved once in a config file, never typed again."]}, "1": {"what": ["A real domain: contosohealthlab.com.", "Without it every account ends in onmicrosoft.com. No hospital would accept that.", "Proved by one DNS text record only the owner can set."], "how": ["$11 a year at a registrar.", "Same name on the on-site directory: corp.contosohealthlab.com.", "Sign-ins look the same on-site and in the cloud."]}, "2": {"what": ["The pipeline needs its own login to change the tenant.", "Normal way: a password or key stored in GitHub. That stored secret is what attackers steal.", "Here there is none. GitHub mints a short-lived signed token per run (OIDC).", "Entra trusts it only from this repo, only from the main branch.", "Two robots: PLAN reads and proposes. APPLY changes, only on the production path."], "how": ["One script from a laptop created both identities and their trust rules.", "Deliberate test: a run from a throwaway branch asked for a token. Entra refused.", "That refusal is saved in the evidence folder."]}, "3": {"what": ["Nothing is clicked into the tenant by hand.", "Change is written as Terraform code, opened as a pull request.", "Thirteen tests run. A person types approve. Then APPLY runs Terraform.", "Every one of the 25 changes has the trail: who proposed, what the plan said, who approved."], "how": ["Day 1: sign-in rules, report-only so nobody gets locked out.", "Day 2: admin tiers in PIM.", "Day 3: access packages and workflows.", "Then eleven detection rules, then the domain controller."]}, "4": {"what": ["Most hospitals still run on-site Active Directory, so the lab does too.", "DC01: a Windows Server 2022 VM in Azure, built by Terraform, promoted by script.", "Cloud Sync copies accounts up to Entra every few minutes, passwords included (scrambled).", "One person, one password, both places."], "how": ["The VM shuts down nightly and is started for demos.", "The sync agent is installed by script, because it has to run from inside the server."]}, "5": {"what": ["No real HR system, so a spreadsheet of thirteen fake staff stands in.", "A script pushes each row through Microsoft's HR front door into Active Directory.", "Cloud Sync carries them to Entra.", "Priya arrives marked as a leaver and lands disabled.", "Three IT staff get a second adm- admin account."], "how": ["Run once for joiners, again for a mover (a nurse changing ward) and a leaver.", "The leaver run is the nine-minute HR to AWS clock shown in the lab."]}};
+  const TILES = {"0": [["The hospital's login system. Every staff account, group and sign-in rule lives here.", "Sign into anything in the lab and Entra is what checks who you are.", "Why Entra: the hospital runs on Microsoft 365 and Windows, so staff accounts belong here.", "E5 trial unlocks the security features: sign-in rules, timed admin rights, risk alerts."], ["The computer room. Microsoft's cloud, used only for hosting.", "Runs the one Windows server, the locked evidence storage, the secrets vault and the log store.", "Staff never sign into Azure. Only the pipeline and the admin do."], ["What engineers sign into to run cloud servers.", "IAM Identity Center is just AWS's own login door.", "Wired to trust Entra: hospital login, no separate AWS password.", "HR marks you a leaver and your AWS access disappears on its own. That is the nine-minute clock."], ["The IT help desk. Staff raise tickets here, IT tracks changes here.", "Developer instance means ServiceNow's free practice copy. Works like the real one.", "Proves staff can sign into the help desk with their hospital login."], ["Plays a partner clinic the hospital bought, which already has its own login system.", "Integrator org means Okta's free practice account.", "Why: acquired clinics' staff need hospital systems without being re-created one by one.", "Okta trusts Entra, so clinic staff use their own door and still follow hospital rules."], ["The filing cabinet for the code and the diary of every change.", "Every rule, server and account was written as text and saved here.", "Private repo: only invited people can see it.", "Also runs the pipeline: tests, approval, apply."]], "1": [["The real domain, bought at a registrar and verified in Entra.", "Every account ends in this name, not onmicrosoft.com."], ["One text record at the registrar that only the owner can set.", "Microsoft reads it and accepts the domain. Nothing else changes hands."]], "2": [["The read-only robot.", "On every pull request it signs in, reads the tenant and writes out what would change.", "It cannot change anything."], ["The robot that makes changes.", "Gets a token only on the main branch, only after a person approved.", "Holds only the roles the lab needs."], ["The trust rule, called OIDC federation.", "GitHub signs a short-lived token for each run.", "Entra accepts it only from this repository and branch.", "No password or key stored anywhere."]], "3": [["Every change starts here.", "The Terraform diff, a description, and a reviewer."], ["Thirteen mocked Terraform tests on every pull request.", "Run against a fake tenant, so broken rules are caught before a human looks."], ["The human gate.", "The pipeline opens an issue with the plan. A person types approve.", "That word is what releases the apply."], ["The APPLY robot runs Terraform and makes the real tenant match the code.", "The plan it used and the result are saved as evidence."]], "4": [["A Windows Server 2022 VM in Azure.", "Created by Terraform, promoted to a domain controller by script.", "The on-site directory most hospitals still have.", "Shuts down nightly to save money."], ["Microsoft's agent, installed on DC01.", "Every few minutes it copies the Workforce and Disabled folders up to Entra.", "Carries a scrambled copy of each password, so one password works in both places."], ["The cloud side of the directory.", "Synced accounts land here and pick up sign-in rules, groups and app access."]], "5": [["Thirteen fake staff: department, title, manager. Plus one leaver.", "Stands in for the HR system."], ["Microsoft's inbound provisioning app.", "The same door a real HR system like Workday would use.", "A script pushes each spreadsheet row through it into Active Directory."], ["The staff, synced up from Active Directory.", "Each in the right department, with groups and app access assigned by rules."], ["Three IT staff get a second adm- account for admin work.", "Everyday logins never hold admin power."]]};
+  const ul = (v) => Array.isArray(v) ? `<ul class="read pts">${v.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : `<p>${esc(v || '')}</p>`;
+  const SCRIPT_URL = ''' + json.dumps(SCRIPT_URL) + ''';
+  ''' + fn + '''
+  const NOTES = ["Where every staff login lives", "Hosts the server and the evidence files", "The cloud console engineers sign into", "The IT help desk", "A partner clinic's own login system", "Where the code and the change history live"];
+  const D = buildMapData(), SP = 600, L0 = 120, WH = 820, n = D.stations.length, worldW = L0 * 2 + SP * n;
+  D.stations[0].tiles.forEach((t, j) => { if (NOTES[j]) t.note = NOTES[j]; });
+  const W = lab.W, k = (W.x1 - W.x0) / worldW, gap = 420 * k, BX = W.x0, BY = W.y0 - WH * k - gap;
+  const layer = document.getElementById('blayer'), host = document.getElementById('bhost'), world = document.getElementById('b-world');
+  world.style.width = worldW + 'px'; host.style.left = BX + 'px'; host.style.top = BY + 'px'; host.style.transform = `scale(${k})`;
+  document.getElementById('b-stations').innerHTML = D.stations.map((s, i) => `<div class="st done in" id="bst${i}" style="left:${L0 + SP * i}px" data-i="${i}">
+      <div class="b-tiles">${s.tiles.map((t, j) => `<div class="tile ${t.kind || ''}">${t.img ? `<img src="${esc(t.img)}" alt="">` : `<div class="ph">${esc(t.glyph || '')}</div>`}<div class="tag">${esc(t.kind === 'hand' ? 'BY HAND' : t.kind === 'code' ? 'AS CODE' : '')}</div><span class="num">${i + 1}.${j + 1}</span><div class="lb">${esc(t.name)}<small>${esc(t.note || '')}</small></div></div>`).join('')}</div>
+      <div class="wire"></div>
+      <div class="pill"><div class="n"><span>${i + 1}</span></div><div><div class="t">${esc(s.title)}</div><div class="k">${esc(s.kicker || '')}</div></div></div>
+      <div class="nxt">›</div>
+      <div class="wire2"></div>
+      <div class="below"><div class="outs">${(s.outs || []).map((o) => `<span class="out"><i></i>${o}</span>`).join('')}</div><div class="b-goal">${esc(s.goal || '')}</div></div></div>`).join('');
+  document.querySelector('#b-world .spine').classList.add('in'); document.getElementById('b-fill').style.width = '100%';
+  // ---- numbering on the lab row: tiles 7.1, 7.2 ... and a badge on the delivery band (16)
+  const svg = lab.svg, NSVG = 'http://www.w3.org/2000/svg';
+  const mk = (t, a, p) => { const e = document.createElementNS(NSVG, t); for (const q in a) e.setAttribute(q, a[q]); p.appendChild(e); return e; };
+  const tileNum = {};
+  lab.L.st.forEach((s) => s.nodes.forEach((nd, j) => { tileNum[nd.id] = `${s.i + 7}.${j + 1}`; }));
+  svg.querySelectorAll('g.node[data-go^="tile:"]').forEach((g) => {
+    const id = g.getAttribute('data-go').slice(5), nd = lab.NB[id]; if (!nd) return;
+    const bg = mk('g', { class: 'tnum', transform: `translate(${-nd.size / 2 + 4},${-nd.size / 2 + 4})`, 'pointer-events': 'none' }, g);
+    const label = tileNum[id] || '', w = label.length * 11 + 14;
+    mk('rect', { x: -w / 2, y: -13, width: w, height: 26, rx: 13, fill: '#16161A', stroke: '#FFFFFF', 'stroke-width': 3 }, bg);
+    mk('text', { x: 0, y: 5, 'text-anchor': 'middle', 'font-size': 15, 'font-weight': 800, fill: '#FFFFFF', 'font-family': 'system-ui, -apple-system, sans-serif' }, bg).textContent = label;
+  });
+  // ---- flow: arrows between lab stations on the spine, and a bridge from the setup row down into the lab
+  const stX = lab.L.st.map((s) => s.x);
+  const gFlow = mk('g', { id: 'g-bridge' }, svg);
+  for (let i = 0; i < stX.length - 1; i++) { const x = (stX[i] + stX[i + 1]) / 2; mk('path', { d: `M${x - 14} -16L${x + 10} 0L${x - 14} 16`, fill: 'none', stroke: '#E8703A', 'stroke-width': 7, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, gFlow); }
+  const sx0 = BX + k * (L0 + SP * (n - 1) + 300), sy0 = BY + k * 456, ex = stX[0], ey = -60;
+  const x1 = sx0 + 420 * k, gy = (BY + WH * k + W.y0) / 2, r = 90;
+  mk('path', { d: `M${sx0} ${sy0}L${x1 - r} ${sy0}Q${x1} ${sy0} ${x1} ${sy0 + r}L${x1} ${gy - r}Q${x1} ${gy} ${x1 - r} ${gy}L${ex + r} ${gy}Q${ex} ${gy} ${ex} ${gy + r}L${ex} ${ey - 10}`, fill: 'none', stroke: '#E8703A', 'stroke-width': 8, 'stroke-dasharray': '26 18', 'stroke-linecap': 'round' }, gFlow);
+  mk('path', { d: `M${ex - 26} ${ey - 40}L${ex} ${ey - 6}L${ex + 26} ${ey - 40}`, fill: 'none', stroke: '#E8703A', 'stroke-width': 8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, gFlow);
+  const lbx = (x1 + ex) / 2, lby = gy - 70;
+  mk('rect', { x: lbx - 330, y: lby - 42, width: 660, height: 84, rx: 42, fill: '#16161A' }, gFlow);
+  mk('text', { x: lbx, y: lby + 14, 'text-anchor': 'middle', 'font-size': 40, 'font-weight': 700, fill: '#FFFFFF' }, gFlow).textContent = '1 to 6 built it. 7 to 16 is the lab running.';
+  // ---- one camera for both rows
+  const panel = lab.panel, wrap = document.querySelector('.mapwrap');
+  let anchor = null; // world point the callout points at
+  function place(cam, vw, vh) { panel.classList.toggle('anch', !!anchor); if (anchor) { const cb = chips.getBoundingClientRect().bottom - wrap.getBoundingClientRect().top; panel.style.setProperty('--ptop', Math.max(64, cb + 10) + 'px'); } }
+  const PW = 432; // panel width plus gutter: the selected piece is framed in the space to its right
+  window.__adjust = (t) => { const r = svg.getBoundingClientRect(), vw = Math.max(1, r.width); const z = t.z * Math.max(0.5, (vw - PW) / vw); return { x: t.x - (PW / 2) / z, y: t.y, z }; };
+  window.__syncBuild = (cam, vw, vh) => { layer.style.transform = `translate(${vw / 2 - cam.x * cam.z}px, ${vh / 2 - cam.y * cam.z}px) scale(${cam.z})`; place(cam, vw, vh); };
+  window.__allBox = (W) => ({ x0: W.x0, y0: BY - 320 * k, x1: W.x1, y1: W.y1 + 120 });
+  const rect = (i) => ({ x0: BX + k * (L0 + SP * i - 40), x1: BX + k * (L0 + SP * i + 480), y0: BY, y1: BY + WH * k });
+  // ---- one chip bar
+  const chips = lab.chips, first = chips.querySelector('.chip');
+  const sep1 = document.createElement('span'); sep1.className = 'chipsep'; sep1.textContent = 'Setup';
+  const sep2 = document.createElement('span'); sep2.className = 'chipsep'; sep2.textContent = 'Lab';
+  first.after(sep1); let a0 = sep1;
+  D.stations.forEach((s, i) => { const c = document.createElement('button'); c.type = 'button'; c.className = 'chip'; c.dataset.build = i; c.textContent = `${i + 1} ${s.title}`; c.setAttribute('aria-current', 'false'); a0.after(c); a0 = c; });
+  a0.after(sep2);
+  // ---- sequence for Prev / Next
+  const SEQ = D.stations.map((s, i) => ({ type: 'build', i })).concat(lab.L.st.map((s) => ({ type: 'station', id: s.id }))).concat([{ type: 'delivery' }]);
+  const seqName = (it) => it.type === 'build' ? `${it.i + 1} ${D.stations[it.i].title}` : it.type === 'delivery' ? '16 Delivery' : `${lab.L.st.find((s) => s.id === it.id).i + 7} ${lab.L.st.find((s) => s.id === it.id).title}`;
+  let cur = -1;
+  const goSeq = (idx) => { const it = SEQ[(idx + SEQ.length) % SEQ.length]; if (it.type === 'build') go(it.i); else lab.select(it); };
+  function nav(idx) {
+    const el = document.createElement('div'); el.className = 'cnav';
+    el.innerHTML = `<button type="button" data-nav="${idx - 1}">← ${esc(seqName(SEQ[(idx - 1 + SEQ.length) % SEQ.length]))}</button><button type="button" class="next" data-nav="${idx + 1}">${esc(seqName(SEQ[(idx + 1) % SEQ.length]))} →</button>`;
+    el.addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (!b) return; e.stopPropagation(); e.preventDefault(); goSeq(+b.dataset.nav); }, true);
+    return el;
+  }
+  const link = (id) => `${SCRIPT_URL}#${id}`;
+  function transcript(kind, key) {
+    const t = kind === 'build' ? TR.build[key] : TR.lab[key], w = TR.walk[key] || [];
+    if (!t && !w.length) return '';
+    let h = '<div class="ctr"><h3>In the video</h3>';
+    if (t) h += `<p class="q">“${esc(t.text)}”</p><a href="${link(t.id)}" target="_blank" rel="noopener">Edit this line in the script ↗</a>`;
+    else if (kind === 'build') h += '<p>Not narrated in the intro; it is on the map for completeness.</p>';
+    if (w.length) h += `<p>Full walkthrough:</p><div class="walk">${w.map((x) => `<a href="${link(x.id)}" target="_blank" rel="noopener">${esc(x.name)}</a>`).join('')}</div>`;
+    return h + '</div>';
+  }
+  const unpick = () => document.querySelectorAll('#blayer .st.pick').forEach((x) => { x.classList.remove('pick'); x.querySelectorAll('.tile.focus').forEach((t) => t.classList.remove('focus')); });
+  function go(i) {
+    const s = D.stations[i];
+    unpick(); lab.select({ type: 'overview' }, { fly: false });
+    for (let q = 0; q < n; q++) { const e = document.getElementById('bst' + q); e.classList.toggle('on', q === i); e.classList.toggle('done', q !== i); }
+    panel.classList.remove('off');
+    const c = CTX[String(i)] || {};
+    panel.innerHTML = `<span class="cnum setup">Setup · ${i + 1} of ${n}</span><h2>${esc(s.title)}</h2><div class="goal">${esc(s.goal || '')}</div><section class="ctx"><h3>What it is</h3>${ul(c.what || s.text)}</section><section class="ctx"><h3>How it was set up</h3>${ul(c.how)}</section><section class="ctx"><h3>The pieces</h3><ul class="read">${s.tiles.map((t, j) => `<li data-tile="${j}"><b>${i + 1}.${j + 1}</b> ${esc(t.name)}<span class="fine"> · ${esc(t.note || '')}</span></li>`).join('')}</ul></section>`;
+    panel.querySelectorAll('li[data-tile]').forEach((li) => li.addEventListener('click', () => tileGo(i, +li.dataset.tile)));
+    cur = i; panel.appendChild(nav(cur));
+    if (window.sheet) window.sheet.full(false);
+    chips.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-current', c.dataset.build == i ? 'true' : 'false'));
+    anchor = { x: BX + k * (L0 + SP * i + 470), y: BY + k * 120 };
+    lab.flyTo(window.__adjust(lab.fitRect(rect(i), 0.9)));
+  }
+  function worldRect(el) {
+    const r = el.getBoundingClientRect(), v = svg.getBoundingClientRect(), cam = lab.cam, vw = v.width, vh = v.height;
+    const toW = (sx, sy) => ({ x: (sx - v.left - vw / 2) / cam.z + cam.x, y: (sy - v.top - vh / 2) / cam.z + cam.y });
+    const a = toW(r.left, r.top), b2 = toW(r.right, r.bottom); return { x0: a.x, y0: a.y, x1: b2.x, y1: b2.y };
+  }
+  function tileGo(i, j) {
+    const s = D.stations[i], t = s.tiles[j], el = document.querySelectorAll(`#bst${i} .tile`)[j]; if (!t || !el) return;
+    lab.select({ type: 'overview' }, { fly: false });
+    for (let q = 0; q < n; q++) { const e = document.getElementById('bst' + q); e.classList.toggle('on', q === i); e.classList.toggle('done', q !== i); }
+    const desc = (TILES[String(i)] || [])[j] || t.note || '';
+    panel.classList.remove('off');
+    panel.innerHTML = `<span class="cnum setup">Setup · ${i + 1}.${j + 1}</span><h2>${esc(t.name)}</h2><div class="goal">${esc(t.note || '')}</div>${t.img ? `<img class="shot" src="${esc(t.img)}" alt="">` : ''}<span class="kind ${t.kind || ''}">${t.kind === 'hand' ? 'Signed up by hand' : t.kind === 'code' ? 'Built as code' : 'Piece'}</span><section class="ctx"><h3>What it is</h3>${ul(desc)}</section>`;
+    const nv = document.createElement('div'); nv.className = 'cnav';
+    const prev = j > 0 ? { l: `← ${i + 1}.${j}`, f: () => tileGo(i, j - 1) } : { l: `← ${i + 1} ${s.title}`, f: () => go(i) };
+    const next = j < s.tiles.length - 1 ? { l: `${i + 1}.${j + 2} →`, f: () => tileGo(i, j + 1) } : { l: `${seqName(SEQ[(i + 1) % SEQ.length])} →`, f: () => goSeq(i + 1) };
+    nv.innerHTML = `<button type="button" data-nav="p">${esc(prev.l)}</button><button type="button" class="next" data-nav="n">${esc(next.l)}</button>`;
+    nv.addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (!b) return; e.stopPropagation(); (b.dataset.nav === 'p' ? prev.f : next.f)(); }, true);
+    panel.appendChild(nv);
+    if (window.sheet) window.sheet.full(false);
+    chips.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-current', c.dataset.build == i ? 'true' : 'false'));
+    anchor = { x: 0, y: 0 }; cur = i;
+    document.querySelectorAll('#blayer .tile.focus').forEach((x) => x.classList.remove('focus')); el.classList.add('focus'); document.getElementById('bst' + i).classList.add('pick');
+    lab.flyTo(window.__adjust(lab.fitRect(worldRect(el.parentElement), 0.8)));
+  }
+  window.__onSelect = (it) => {
+    unpick();
+    for (let q = 0; q < n; q++) { const el = document.getElementById('bst' + q); el.classList.remove('on'); el.classList.add('done'); }
+    if (it.type === 'overview') { anchor = null; cur = -1; panel.classList.add('ovw');
+      panel.insertAdjacentHTML('beforeend', `<section class="ctx"><h3>How to read it</h3><ul class="read pts"><li><b>1 to 6</b> is how the lab was built. <b>7 to 16</b> is the lab running.</li><li>Click a number for the overview of that part. Click a sub-number like 1.3 for just that piece.</li><li><span class="sw" style="background:#E8703A"></span>Orange: done by a person. <span class="sw" style="background:#2F6BFF"></span>Blue: written as code.</li><li>Dark tiles are Microsoft products. Dashed tiles stand in for a product with no free trial.</li><li>Orange chevrons point to the next step. Prev and Next on each card walk all sixteen.</li></ul></section>`);
+      return; }
+    panel.classList.remove('ovw');
+    let num = '', key = null;
+    if (it.type === 'station') { const s = lab.L.st.find((x) => x.id === it.id); num = `Lab · ${s.i + 7} of 16`; key = s.id; const g = svg.querySelector(`g[data-go="station:${s.id}"] g`); anchor = { x: s.x + (s.pillW || 300) / 2 + 20, y: -30 }; cur = n + s.i; }
+    else if (it.type === 'tile') { const nd = lab.NB[it.id]; num = `Lab · ${tileNum[it.id] || ''}`; key = nd.st.id; anchor = { x: nd.x + nd.size / 2 + 10, y: nd.y - nd.size / 2 }; cur = n + nd.st.i; }
+    else if (it.type === 'delivery') { num = 'Lab · 16 of 16'; key = 'delivery'; anchor = { x: lab.L.spineX0 + 40, y: W.y0 + 40 }; cur = SEQ.length - 1; }
+    panel.querySelectorAll('p:not(.fine):not(.why):not(.path)').forEach((pp) => { if (pp.closest('.cnav, .ctr')) return; if (pp.textContent.length < 60) return; const parts = pp.textContent.split(/(?<=[.!?])\s+(?=[A-Z])/).filter(Boolean); if (parts.length > 1) { const u = document.createElement('ul'); u.className = 'read pts'; u.innerHTML = parts.map((x) => `<li>${esc(x)}</li>`).join(''); pp.replaceWith(u); } });
+    const badge = document.createElement('span'); badge.className = 'cnum'; badge.textContent = num; panel.prepend(badge);
+    panel.appendChild(nav(cur));
+  };
+  chips.addEventListener('click', (e) => { const c = e.target.closest('[data-build]'); if (c) go(+c.dataset.build); });
+  layer.addEventListener('click', (e) => { const tile = e.target.closest('.tile'); const st = e.target.closest('.st'); if (tile && st) { const j = [...st.querySelectorAll('.tile')].indexOf(tile); tileGo(+st.dataset.i, j); } else if (st) go(+st.dataset.i); });
+  lab.select({ type: 'overview' }, { fly: false });
+  lab.flyTo(lab.fitRect(window.__allBox(W), 0.96), 0);
+  setTimeout(() => lab.flyTo(lab.fitRect(window.__allBox(W), 0.96), 0), 400);
+})();
+</script>
+'''
+page='<title>Contoso Lab Maps</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n'+pre_script+lab+glue_css+glue_js
+open(f'{S}/contoso-lab-setup-map.html','w').write(page); print(len(page)//1024,'KB')
