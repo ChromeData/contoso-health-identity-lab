@@ -133,6 +133,7 @@ def send(env, events, dry):
         for k, v in row.items():  # other datetime columns carry the same tokens (harness resolves them in every datetime/string column)
             if isinstance(v, str) and REL_TIME.match(v): row[k] = resolve_time(v, now).strftime(TIME_FMT)
         row["TimeGenerated"] = t.strftime(TIME_FMT)
+        row["_synthetic"] = "replay-synthetic"  # marks our rows so reset_index never deletes tenant logs
         batch.append(json.dumps({"time": round(t.timestamp(), 3), "index": INDEX, "sourcetype": st, "event": row}))
         by_st[st] = by_st.get(st, 0) + 1; sent += 1
         if len(batch) >= 50:
@@ -161,6 +162,19 @@ def reset_index(env):
     """Empty the replay index before sending, so rows from a previous run cannot be
     counted as proof. Delete then recreate over REST (admin, loopback). Idempotent: a
     missing index is simply (re)created; a brand-new deployment has nothing to clear."""
+    # Refuse to wipe the shared index if it holds anything other than our synthetic
+    # rows (e.g. a tenant replay from ingest-from-loganalytics.sh keeps its data here).
+    try:
+        sid = rest(env, f"/servicesNS/nobody/{APP}/search/jobs",
+                   {"search": "search index=%s NOT _synthetic=replay-synthetic | head 1" % INDEX,
+                    "exec_mode": "blocking", "earliest_time": "0", "latest_time": "now"}, "POST").get("sid")
+        if sid:
+            res = rest(env, f"/services/search/jobs/{urllib.parse.quote(sid)}/results", method="GET")
+            if res.get("results"):
+                sys.exit(f"refusing to reset: index {INDEX} holds non-synthetic (tenant) data. "
+                         "Run the smoke test on a disposable Splunk or a clean index; this tool will not delete tenant logs.")
+    except urllib.error.HTTPError:
+        pass  # index not present yet, or search unavailable: the delete below is then a no-op/create
     try:
         rest(env, f"/services/data/indexes/{INDEX}", method="DELETE")
     except urllib.error.HTTPError as e:
