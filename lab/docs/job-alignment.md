@@ -22,7 +22,7 @@ Plain reading of the table: **Yes** means the lab did it in a real tenant and ha
 | Passwordless, FIDO2 | 4 | Partly | Policies written (CA002, CA008, CA021); report-only until passkeys are registered |
 | SailPoint or Saviynt experience | 4 | Partly | midPoint stands in; the model (birthright, request, review, SoD) is the same |
 | B2B and guest access | 3 | Partly | Guest access packages built; guest MFA and inactive-guest review on the roadmap |
-| Sign-in troubleshooting from logs | 3 | Yes | `Diagnose-SignIn.ps1` explains a sign-in in plain words from the correlation id |
+| Sign-in troubleshooting from logs | 3 | Partly | `Diagnose-SignIn.ps1` explains a sign-in in plain words from the correlation id; offline-only (tested against fixtures, not yet run against the tenant's Graph) |
 | Non-human and workload identities | 2 | Yes | Inventory, two-owner rule, federated pipeline identities with no secrets |
 
 ## Gaps, in the order postings care about them

@@ -220,6 +220,7 @@ function Get-BlockReason([string]$PolicyName, [string]$Country) {
         'countr|location|geo' { return "the sign-in came from $where (policy $code)" }
         'legacy|basic auth' { return "the app signed in the old way (legacy authentication), which is blocked (policy $code)" }
         'risk' { return "the sign-in was judged risky (policy $code)" }
+        'device.?code' { return "the sign-in used device code flow, which is blocked (policy $code)" }
         'device|compliant' { return "the device is not a compliant hospital device (policy $code)" }
         default { return "policy $code blocks this sign-in" }
     }
@@ -282,6 +283,10 @@ function ConvertTo-SignInDiagnosis($SignIn) {
                 'countr|location|geo' { $tell = "Sign-ins from $(if ($country) { $country } else { 'this country' }) are not allowed; if you are travelling, use the hospital VPN or tell the service desk before you travel." }
                 'legacy|basic auth' { $tell = 'The app you used signs in an old way that is no longer allowed; update to the current app or use the web version.' }
                 'risk' { $tell = 'This sign-in looked risky, so it was blocked; the service desk will check it with you and reset your password if needed.' }
+                # Device code flow blocks must be handled before the generic device match
+                # below, so the user is not wrongly told to enrol a device. break stops the
+                # later 'device|compliant' case (switch -Regex runs every match otherwise).
+                'device.?code' { $tell = 'This app signed in with device code flow, where you type a code shown on another screen; the hospital blocks that, so sign in directly in the browser or the app itself instead of entering a code.'; break }
                 'device|compliant' { $tell = 'Sign in from your hospital-managed device, or enrol this one with the service desk first.' }
                 default { $tell = "This sign-in is blocked by policy $($b.Code); the service desk is checking whether you should be in its scope." }
             }

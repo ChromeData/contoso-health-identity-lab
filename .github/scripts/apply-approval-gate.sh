@@ -89,6 +89,11 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     who_decided="${decision%% *}"; word="${decision##* }"
     case "$word" in
       approve|approved)
+        if [ "$TWO_PERSON" = "true" ] && [ -z "$author_lc" ]; then
+          echo "Refused: the two-person rule is ON but the change author could not be identified, so self-approval cannot be ruled out (APPLY_TWO_PERSON=true)"
+          close not_planned "Refused: the two-person rule is ON but the change author could not be identified, so this approval cannot be accepted (self-approval cannot be ruled out). The apply is cancelled."
+          exit 1
+        fi
         if [ "$(printf '%s' "$who_decided" | tr '[:upper:]' '[:lower:]')" = "$author_lc" ] && [ -n "$author_lc" ]; then
           if [ "$TWO_PERSON" = "true" ]; then
             echo "Refused: @$who_decided authored this change and cannot approve it (APPLY_TWO_PERSON=true)"

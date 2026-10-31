@@ -278,6 +278,11 @@ output "dc_security_dcr_id" {
   value       = module.monitoring.dc_security_dcr_id
 }
 
+output "defender_for_identity_connector_id" {
+  description = "Microsoft Defender XDR data connector carrying MDI alerts into SecurityAlert (null unless enable_sentinel + enable_defender_for_identity). Verify step for deploy-defender-for-identity-dc01.md."
+  value       = module.monitoring.defender_for_identity_connector_id
+}
+
 # ---- SSO apps (modules/apps) -----------------------------------------------------
 
 output "aws_federation_metadata_url" {

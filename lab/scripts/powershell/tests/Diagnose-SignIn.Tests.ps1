@@ -83,6 +83,17 @@ Describe 'ConvertTo-SignInDiagnosis (verdicts on the fixture)' {
         $d.Text | Should -Match 'Graph says: Access has been blocked'
     }
 
+    It 'blocked by CA010 (device code flow): names device code flow, not a device to enrol' {
+        $d = ConvertTo-SignInDiagnosis @{
+            status = @{ errorCode = 53003; failureReason = 'Access has been blocked by Conditional Access policies.' }; conditionalAccessStatus = 'failure'
+            appliedConditionalAccessPolicies = @(@{ displayName = 'CA010 - Block device code flow'; result = 'failure'; enforcedGrantControls = @('Block'); enforcedSessionControls = @() })
+        }
+        $d.Verdict | Should -Be 'Blocked: the sign-in used device code flow, which is blocked (policy CA010)'
+        $d.Outcome | Should -Be 'Blocked'
+        $d.TellUser | Should -Match 'device code flow'
+        $d.TellUser | Should -Not -Match 'enrol' -Because 'a device code flow block is not a device-compliance problem'
+    }
+
     It 'report-only failure on CA002: allowed, with what would have happened' {
         $d = ConvertTo-SignInDiagnosis $script:SignIns[2]
         $d.Verdict | Should -Be 'Allowed, but policy CA002 would have blocked it once enforced (it demands a phishing-resistant method (authentication strength))'
