@@ -333,6 +333,35 @@ variable "vault_feed_v2_columns" {
   default     = false
 }
 
+# -----------------------------------------------------------------------------
+# Microsoft Defender for Identity (mdi.tf, ADR 0023). The native AD-attack
+# detector; the four SecurityEvent KQL rules are its portable twins.
+# -----------------------------------------------------------------------------
+variable "enable_defender_for_identity" {
+  type        = bool
+  description = <<-EOT
+    Wire Microsoft Defender for Identity (MDI) alerts into this workspace via
+    the Microsoft Defender XDR data connector (there is no standalone MDI
+    connector any more; MDI flows through Defender XDR into SecurityAlert).
+    This is the ONLY MDI piece Terraform can express: the sensor on DC01, the
+    MDI workspace, the directory service account and the Defender licence (free
+    90-day trial) are human steps in
+    lab/docs/runbooks/deploy-defender-for-identity-dc01.md. Needs
+    enable_sentinel (the connector is a Sentinel feature). Default off: it adds
+    nothing and starts no trial until a human has run the runbook.
+    verify: in the unified Defender portal the Defender XDR connection may be
+    managed for you once Sentinel is onboarded there - if so, this becomes a
+    portal step and the flag just records intent (mdi.tf header).
+  EOT
+  default     = false
+
+  # Cross-variable validation (Terraform >= 1.9, see versions.tf).
+  validation {
+    condition     = !var.enable_defender_for_identity || var.enable_sentinel
+    error_message = "enable_defender_for_identity needs enable_sentinel = true: the Microsoft Defender XDR data connector is a Microsoft Sentinel feature over an onboarded workspace."
+  }
+}
+
 variable "tags" {
   type        = map(string)
   description = "Tags for taggable resources."

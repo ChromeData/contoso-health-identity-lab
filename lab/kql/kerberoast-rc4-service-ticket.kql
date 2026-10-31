@@ -2,6 +2,13 @@
 // Detection: Kerberoasting - RC4 service tickets for user-account SPNs
 // Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, hybrid)
 // -----------------------------------------------------------------------------
+// DETECTOR ROLE (ADR 0023)
+//   Microsoft Defender for Identity is the PRIMARY detector for Kerberoasting:
+//   purpose-built and maintained by Microsoft (enable_defender_for_identity).
+//   This rule is its portable, offline-testable twin - the same logic over DC01
+//   SecurityEvent, with an SPL twin and Kusto-emulator tests - and the
+//   post-trial fallback when the MDI licence lapses.
+// -----------------------------------------------------------------------------
 // WHAT IT CATCHES
 //   A Kerberos service ticket (4769) issued with RC4-HMAC (encryption type
 //   0x17) for a service that is a USER account with an SPN (not a computer

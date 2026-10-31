@@ -6,7 +6,7 @@ days; reviewed in the post-incident forum (`standards/iam-operating-model.md`,
 §2). Blameless: it names systems and gaps, not people.
 
 **Status of this template:** no incident has occurred and no tabletop has
-run in the lab (no tenant exists). The example values below are placeholders
+run in the lab. The example values below are placeholders
 in angle brackets, never measured numbers.
 
 ---

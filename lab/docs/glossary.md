@@ -10,6 +10,11 @@ written for someone who is not in IT, then the longer name in brackets.
 - **Active Directory (AD).** The older, on-site version of that list, running on a server in the building. Most hospitals still have one.
 - **Domain controller (DC).** The server that runs Active Directory. The lab's is called DC01.
 - **Virtual machine (VM).** A computer rented in the cloud instead of bought for a server room.
+- **E5.** Microsoft's top licence tier. The lab needs it because the sign-in rules, timed admin rights and risk alerts only come with it.
+- **SAML and OIDC.** Two standard ways an app accepts a signed note from the login system instead of keeping its own password. SAML is the older one most business apps speak; OIDC is the newer one.
+- **SCIM.** The standard for one system telling another "create this account" or "remove it". It is how AWS accounts appear and disappear with HR.
+- **PIM (Privileged Identity Management).** Microsoft's feature for admin rights that switch on for a few hours with a reason, instead of being held all day.
+- **Fusion.** A Sentinel detection that joins several weak signals into one alert. It counts as a rule in Microsoft's totals, which is why rule counts differ by one.
 - **Organizational unit (OU).** A folder inside Active Directory. The lab has one per department, plus a Disabled folder for leavers.
 - **Cloud Sync.** Microsoft's bridge: a small agent on the domain controller that copies accounts up to Entra ID every few minutes. (Microsoft Entra Cloud Sync.)
 - **Password hash sync.** Part of that bridge. It carries a scrambled form of each password up, so people have one password in both places; the real password never leaves the server.
@@ -40,7 +45,7 @@ written for someone who is not in IT, then the longer name in brackets.
 - **Access package.** A bundle of access for one job (apps and groups), wrapped with rules on who gets it, who approves, and when it expires.
 - **Automatic assignment.** An access package given from HR facts alone, with no request. Nurses get the nurse package because HR says they are nurses.
 - **Separation of duties (SoD).** Two kinds of access that must never sit on one person. Here: nursing apps and controlled-substance dispensing.
-- **Lifecycle workflow.** A checklist that runs on an HR date: first-day tasks for a joiner, same-minute lock-out for a leaver.
+- **Lifecycle workflow.** A checklist that runs on an HR date: first-day tasks for a joiner, a timed lock-out for a leaver (AD in 7 s, Entra under 3 min, AWS in 9 min; E52).
 - **Admin account.** A second, separate login (adm-...) for people who do IT work. Admin power never sits on a daily account.
 
 ## Sign-in

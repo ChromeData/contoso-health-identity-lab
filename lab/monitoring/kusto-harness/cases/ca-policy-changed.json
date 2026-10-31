@@ -1,0 +1,153 @@
+{
+  "rule": "ca-policy-changed",
+  "about": "The CaPolicy object kind, which itdr-cases.json does not cover (its rows are named locations and authentication strengths): every Change branch (Disabled, ToReportOnly, ExclusionsChanged, Deleted, Added, Updated), the state regex over the escaped-quote form of the policy JSON, a delete whose modifiedProperties is an EMPTY array (mv-apply + summarize keeps the row - probe mv-apply-empty-array-summarize), the CI apply identity matched by servicePrincipalId (Low), the IaC display name on another app (IacNameSpoof, High) and the look-back edge.",
+  "defaults": {
+    "AuditLogs": {
+      "Category": "Policy", "Result": "success", "CorrelationId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "InitiatedBy": {"user": {"id": "11111111-1111-1111-1111-111111111111", "displayName": null,
+                               "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+                               "ipAddress": "203.0.113.10", "roles": []}}
+    }
+  },
+  "cases": [
+    {
+      "id": "policy-disabled-escaped-json",
+      "kind": "positive",
+      "label": "CA001 switched enabled -> disabled; the policy JSON carries escaped quotes, as the audit record wraps it: Disabled, High",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Update conditional access policy",
+        "TargetResources": [{"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "type": "Policy",
+          "modifiedProperties": [
+            {"displayName": "ConditionalAccessPolicy",
+             "oldValue": "\"{\\\"id\\\":\\\"22222222-2222-2222-2222-222222222222\\\",\\\"displayName\\\":\\\"CA001 - Require MFA for all users\\\",\\\"state\\\":\\\"enabled\\\",\\\"conditions\\\":{\\\"users\\\":{\\\"includeUsers\\\":[\\\"All\\\"],\\\"excludeUsers\\\":[\\\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\\\"],\\\"excludeGroups\\\":[]}}}\"",
+             "newValue": "\"{\\\"id\\\":\\\"22222222-2222-2222-2222-222222222222\\\",\\\"displayName\\\":\\\"CA001 - Require MFA for all users\\\",\\\"state\\\":\\\"disabled\\\",\\\"conditions\\\":{\\\"users\\\":{\\\"includeUsers\\\":[\\\"All\\\"],\\\"excludeUsers\\\":[\\\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\\\"],\\\"excludeGroups\\\":[]}}}\""},
+            {"displayName": "Included Updated Properties", "oldValue": null, "newValue": "\"ConditionalAccessPolicy\""}
+          ]}]
+      }]},
+      "expect": [{"Severity": "High", "ObjectKind": "CaPolicy", "Change": "Disabled", "OldState": "enabled", "NewState": "disabled",
+                  "PolicyName": "CA001 - Require MFA for all users", "PolicyId": "22222222-2222-2222-2222-222222222222",
+                  "Actor": "mallory.admin@contosohealthlab.onmicrosoft.com", "ActorObjectId": "11111111-1111-1111-1111-111111111111",
+                  "ActorIp": "203.0.113.10", "IsIac": false, "IacNameSpoof": false}],
+      "expectRows": 1
+    },
+    {
+      "id": "policy-to-report-only",
+      "kind": "positive",
+      "label": "CA004 moved from enabled to report-only (enabledForReportingButNotEnforced): ToReportOnly, High",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Update conditional access policy",
+        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "CA004 - Block high-risk countries", "type": "Policy",
+          "modifiedProperties": [
+            {"displayName": "ConditionalAccessPolicy",
+             "oldValue": "{\"id\":\"33333333-3333-3333-3333-333333333333\",\"displayName\":\"CA004 - Block high-risk countries\",\"state\":\"enabled\",\"conditions\":{\"users\":{\"includeUsers\":[\"All\"],\"excludeUsers\":[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"],\"excludeGroups\":[]},\"locations\":{\"includeLocations\":[\"ffffffff-ffff-ffff-ffff-ffffffffffff\"]}},\"grantControls\":{\"operator\":\"OR\",\"builtInControls\":[\"block\"]}}",
+             "newValue": "{\"id\":\"33333333-3333-3333-3333-333333333333\",\"displayName\":\"CA004 - Block high-risk countries\",\"state\":\"enabledForReportingButNotEnforced\",\"conditions\":{\"users\":{\"includeUsers\":[\"All\"],\"excludeUsers\":[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"],\"excludeGroups\":[]},\"locations\":{\"includeLocations\":[\"ffffffff-ffff-ffff-ffff-ffffffffffff\"]}},\"grantControls\":{\"operator\":\"OR\",\"builtInControls\":[\"block\"]}}"},
+            {"displayName": "Included Updated Properties", "oldValue": null, "newValue": "\"ConditionalAccessPolicy\""}
+          ]}]
+      }]},
+      "expect": [{"Severity": "High", "Change": "ToReportOnly", "OldState": "enabled", "NewState": "enabledForReportingButNotEnforced",
+                  "PolicyName": "CA004 - Block high-risk countries"}]
+    },
+    {
+      "id": "exclusion-group-added",
+      "kind": "positive",
+      "label": "A group added to CA001's excludeGroups while the state stays enabled: ExclusionsChanged, High",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Update conditional access policy",
+        "TargetResources": [{"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "type": "Policy",
+          "modifiedProperties": [
+            {"displayName": "ConditionalAccessPolicy",
+             "oldValue": "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"displayName\":\"CA001 - Require MFA for all users\",\"state\":\"enabled\",\"conditions\":{\"users\":{\"includeUsers\":[\"All\"],\"excludeUsers\":[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"],\"excludeGroups\":[]}},\"grantControls\":{\"operator\":\"OR\",\"builtInControls\":[\"mfa\"]}}",
+             "newValue": "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"displayName\":\"CA001 - Require MFA for all users\",\"state\":\"enabled\",\"conditions\":{\"users\":{\"includeUsers\":[\"All\"],\"excludeUsers\":[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"],\"excludeGroups\":[\"99999999-9999-9999-9999-999999999999\"]}},\"grantControls\":{\"operator\":\"OR\",\"builtInControls\":[\"mfa\"]}}"},
+            {"displayName": "Included Updated Properties", "oldValue": null, "newValue": "\"ConditionalAccessPolicy\""}
+          ]}]
+      }]},
+      "expect": [{"Severity": "High", "Change": "ExclusionsChanged", "OldState": "enabled", "NewState": "enabled",
+                  "OldExclusions": "[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"][]",
+                  "NewExclusions": "[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"][\"99999999-9999-9999-9999-999999999999\"]"}]
+    },
+    {
+      "id": "policy-deleted-empty-modified-properties",
+      "kind": "positive",
+      "label": "CA004 deleted; the record's modifiedProperties is [] (the row must survive mv-apply + summarize): Deleted, High",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Delete conditional access policy",
+        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "CA004 - Block high-risk countries", "type": "Policy",
+          "modifiedProperties": []}]
+      }]},
+      "expect": [{"Severity": "High", "ObjectKind": "CaPolicy", "Change": "Deleted", "PolicyName": "CA004 - Block high-risk countries",
+                  "PolicyId": "33333333-3333-3333-3333-333333333333", "Actor": "mallory.admin@contosohealthlab.onmicrosoft.com"}],
+      "expectRows": 1
+    },
+    {
+      "id": "policy-added-by-iac-sp-id",
+      "kind": "positive",
+      "label": "The CI apply identity (matched by servicePrincipalId, IacPrincipalIds rendered) adds CA009: Added, Low; Actor and ActorIp come from InitiatedBy.app",
+      "lets": {"IacPrincipalIds": ["44444444-4444-4444-4444-444444444444"]},
+      "tables": {"AuditLogs": [{
+        "OperationName": "Add conditional access policy",
+        "InitiatedBy": {"app": {"appId": "66666666-6666-6666-6666-666666666666", "displayName": "gh-oidc-entra-apply (write)",
+                                "servicePrincipalId": "44444444-4444-4444-4444-444444444444", "servicePrincipalName": null,
+                                "ipAddress": "198.51.100.7"}},
+        "TargetResources": [{"id": "55555555-5555-5555-5555-555555555555", "displayName": "CA009 - Require compliant device for clinicians", "type": "Policy",
+          "modifiedProperties": [
+            {"displayName": "ConditionalAccessPolicy", "oldValue": null,
+             "newValue": "{\"id\":\"55555555-5555-5555-5555-555555555555\",\"displayName\":\"CA009 - Require compliant device for clinicians\",\"state\":\"enabled\",\"conditions\":{\"users\":{\"includeGroups\":[\"99999999-9999-9999-9999-999999999999\"],\"excludeUsers\":[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"],\"excludeGroups\":[]}},\"grantControls\":{\"operator\":\"OR\",\"builtInControls\":[\"compliantDevice\"]}}"}
+          ]}]
+      }]},
+      "expect": [{"Severity": "Low", "Change": "Added", "NewState": "enabled", "IsIac": true, "IacNameSpoof": false,
+                  "Actor": "gh-oidc-entra-apply (write)", "ActorUpn": "", "ActorApp": "gh-oidc-entra-apply (write)",
+                  "ActorSpId": "44444444-4444-4444-4444-444444444444", "ActorIp": "198.51.100.7"}]
+    },
+    {
+      "id": "report-only-back-to-enforced-is-drift",
+      "kind": "positive",
+      "label": "A human moves CA004 from report-only back to enabled, exclusions unchanged: nothing weakens, Updated, Medium (drift)",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Update conditional access policy",
+        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "CA004 - Block high-risk countries", "type": "Policy",
+          "modifiedProperties": [
+            {"displayName": "ConditionalAccessPolicy",
+             "oldValue": "{\"id\":\"33333333-3333-3333-3333-333333333333\",\"displayName\":\"CA004 - Block high-risk countries\",\"state\":\"enabledForReportingButNotEnforced\",\"conditions\":{\"users\":{\"includeUsers\":[\"All\"],\"excludeUsers\":[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"],\"excludeGroups\":[]}}}",
+             "newValue": "{\"id\":\"33333333-3333-3333-3333-333333333333\",\"displayName\":\"CA004 - Block high-risk countries\",\"state\":\"enabled\",\"conditions\":{\"users\":{\"includeUsers\":[\"All\"],\"excludeUsers\":[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"],\"excludeGroups\":[]}}}"},
+            {"displayName": "Included Updated Properties", "oldValue": null, "newValue": "\"ConditionalAccessPolicy\""}
+          ]}]
+      }]},
+      "expect": [{"Severity": "Medium", "Change": "Updated", "OldState": "enabledForReportingButNotEnforced", "NewState": "enabled",
+                  "IsIac": false, "IacNameSpoof": false}]
+    },
+    {
+      "id": "iac-display-name-on-another-app",
+      "kind": "positive",
+      "label": "An app that only CARRIES the IaC display name (ids not in the rendered list) edits CA001: IacNameSpoof, High even for a harmless Updated",
+      "lets": {"IacPrincipalIds": ["44444444-4444-4444-4444-444444444444"]},
+      "tables": {"AuditLogs": [{
+        "OperationName": "Update conditional access policy",
+        "InitiatedBy": {"app": {"appId": "77777777-7777-7777-7777-777777777777", "displayName": "gh-oidc-entra-apply (write)",
+                                "servicePrincipalId": "88888888-8888-8888-8888-888888888888", "servicePrincipalName": null}},
+        "TargetResources": [{"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "type": "Policy",
+          "modifiedProperties": [
+            {"displayName": "ConditionalAccessPolicy",
+             "oldValue": "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"displayName\":\"CA001 - Require MFA for all users\",\"state\":\"enabled\",\"conditions\":{\"users\":{\"includeUsers\":[\"All\"],\"excludeUsers\":[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"],\"excludeGroups\":[]}}}",
+             "newValue": "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"displayName\":\"CA001 - Require MFA for all users (reviewed)\",\"state\":\"enabled\",\"conditions\":{\"users\":{\"includeUsers\":[\"All\"],\"excludeUsers\":[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"],\"excludeGroups\":[]}}}"}
+          ]}]
+      }]},
+      "expect": [{"Severity": "High", "Change": "Updated", "IsIac": false, "IacNameSpoof": true,
+                  "ActorApp": "gh-oidc-entra-apply (write)", "ActorSpId": "88888888-8888-8888-8888-888888888888"}]
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "CA001 disabled 2 h ago is outside the 1 h look-back",
+      "tables": {"AuditLogs": [{
+        "TimeGenerated": "ago:2h",
+        "OperationName": "Update conditional access policy",
+        "TargetResources": [{"id": "22222222-2222-2222-2222-222222222222", "displayName": "CA001 - Require MFA for all users", "type": "Policy",
+          "modifiedProperties": [
+            {"displayName": "ConditionalAccessPolicy",
+             "oldValue": "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"state\":\"enabled\"}",
+             "newValue": "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"state\":\"disabled\"}"}
+          ]}]
+      }]}
+    }
+  ]
+}

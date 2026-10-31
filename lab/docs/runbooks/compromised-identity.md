@@ -1,6 +1,6 @@
 # Runbook: compromised identity (L1 / L2)
 
-**Scenario:** Contoso Health lab, a fictional 5,000-user hospital. **Status:** written against the lab code, not yet exercised. No tenant has been deployed (`lab/terraform/README.md`, *Validate / fmt status*).
+**Scenario:** Contoso Health lab, a fictional 5,000-user hospital. **Status:** written against the lab code, not yet exercised in the tenant (`lab/evidence/capture-log.csv`).
 
 **Use when:** a workforce account is believed to be used by someone other than its owner. Typical triggers:
 

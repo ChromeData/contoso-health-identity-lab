@@ -1,6 +1,6 @@
 # ADR 0022: Okta coexistence built as code (acquired clinic, Okta Integrator Free)
 
-- **Status:** Accepted (lab). BUILT: the Entra side in `modules/apps/okta.tf` behind `enable_okta_federation` (off) and the Okta side as a separate, human-applied root `lab/terraform/okta/`, both with mocked `terraform test` suites. Not applied: no Okta org and no Entra tenant exist. The migration runbook (`okta-migration-runbook.md`) stays the operating document; this ADR records why Phase 1 is now code and where its limits are. **RAN · tenant:** nothing.
+- **Status:** Accepted (lab). BUILT: the Entra side in `modules/apps/okta.tf` behind `enable_okta_federation` (on) and the Okta side as a separate, human-applied root `lab/terraform/okta/`, both with mocked `terraform test` suites. Applied against the lab tenant and an Okta Integrator Free org (E58). The migration runbook (`okta-migration-runbook.md`) stays the operating document; this ADR records why Phase 1 is now code and where its limits are. **RAN · tenant:** E58.
 - **Date:** 2026-10-26
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital that has acquired a clinic running Okta). Not a real employer.
 

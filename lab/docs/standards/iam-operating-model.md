@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Scope | Contoso Health, the lab's fictional 5,000-user hospital |
-| Status | Draft v0.1, 2026-10-26. Nothing here has operated: no tenant exists |
+| Status | Draft v0.1, 2026-10-26. Operating in the lab tenant since 2026-10-27 (`lab/evidence/capture-log.csv`) |
 | Owner | IAM Engineering, accountable to the CISO |
 
 The RACI (`raci.md`) says **who** does each activity. This document says

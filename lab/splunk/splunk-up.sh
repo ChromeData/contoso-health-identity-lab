@@ -136,12 +136,6 @@ app_fingerprint() {
 app_fp="$(app_fingerprint)"
 [[ -n "$app_fp" ]] || die "could not fingerprint app/${SPLUNK_APP}"
 
-pre_cid="$(docker compose ps -q "$SPLUNK_SERVICE" 2>/dev/null || true)"
-pre_running="false"
-if [[ -n "$pre_cid" ]]; then
-  pre_running="$(docker inspect -f '{{.State.Running}}' "$pre_cid" 2>/dev/null || echo false)"
-fi
-
 log "Starting Splunk (docker compose up -d)"
 docker compose up -d
 
@@ -175,14 +169,10 @@ wait_healthy() {
 }
 wait_healthy
 
-# Same container that was already running + app changed since the last
-# verified run (or no record of one) -> it is serving stale config.
-if [[ "$cid" == "$pre_cid" && "$pre_running" == "true" \
-      && "$(cat "$APP_FP_FILE" 2>/dev/null || true)" != "$app_fp" ]]; then
-  log "app/${SPLUNK_APP} changed since Splunk last loaded it - restarting the container so the current detections are live"
-  docker compose restart "$SPLUNK_SERVICE"
-  wait_healthy
-fi
+# The detections app is copied into the container, not bind-mounted (see 5b), so a
+# restart on its own would only reload the STALE copy already inside the container.
+# The re-copy-then-restart that makes an edited .spl live is handled in step 5b, which
+# compares this run's fingerprint ($app_fp) against the last verified run ($APP_FP_FILE).
 
 info="$(splunk_rest GET '/services/server/info?output_mode=json')" \
   || die "management API on 127.0.0.1:8089 did not accept the admin login"
@@ -213,6 +203,33 @@ jq -e --arg idx "$SPLUNK_INDEX" '
   || die "HEC token '${SPLUNK_HEC_TOKEN_NAME}' is NOT restricted to index=${SPLUNK_INDEX} after the update (REST read-back of index/indexes)"
 unset tok
 log "HEC token restricted to index=${SPLUNK_INDEX} (read back)"
+
+# 5b. detections app ------------------------------------------------------------------------
+# Copied in after first boot, not bind-mounted: a mount under /opt/splunk/etc before the
+# image's /sbin/updateetc.sh runs stops it seeding the stock config, and HEC's own app goes
+# missing (start loop). Because it is a copy, an edited .spl only reaches a RUNNING container
+# if we re-copy it here. Idempotent: the copy+restart runs on first boot (app absent) or when
+# the app changed since the last verified run (fingerprint $app_fp vs $APP_FP_FILE); an
+# unchanged re-run copies nothing and does not restart. docker cp into the existing apps/ dir
+# overwrites changed files and leaves Splunk-Web edits under local/ untouched.
+cname="$(docker compose ps -q "$SPLUNK_SERVICE")"
+app_present=false
+docker exec "$cname" test -d "/opt/splunk/etc/apps/${SPLUNK_APP}/default" 2>/dev/null && app_present=true
+if [[ "$app_present" != "true" || "$(cat "$APP_FP_FILE" 2>/dev/null || true)" != "$app_fp" ]]; then
+  if [[ "$app_present" == "true" ]]; then
+    log "app/${SPLUNK_APP} changed since Splunk last loaded it - re-copying it into the container and restarting Splunk"
+  else
+    log "Installing app/${SPLUNK_APP} into the container and restarting Splunk"
+  fi
+  docker cp "app/${SPLUNK_APP}" "$cname":/opt/splunk/etc/apps/
+  docker exec -u root "$cname" chown -R splunk:splunk "/opt/splunk/etc/apps/${SPLUNK_APP}"
+  docker exec -u splunk "$cname" /opt/splunk/bin/splunk restart >/dev/null 2>&1 || true
+  for _ in $(seq 1 90); do
+    [[ "$(docker inspect "$cname" --format '{{.State.Health.Status}}' 2>/dev/null)" == "healthy" ]] && break
+    sleep 10
+  done
+  log "App synced; Splunk healthy again"
+fi
 
 # 6. verification -------------------------------------------------------------------------
 splunk_rest GET "/services/data/indexes/${SPLUNK_INDEX}?output_mode=json" >/dev/null \

@@ -1,0 +1,164 @@
+// =============================================================================
+// Detection: Permission (consent) granted to an application
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   Any new delegated or application permission given to an app - the
+//   illicit-consent / OAuth-phishing path, and the quiet way a compromised
+//   admin hands an attacker's app tenant-wide Graph access. Three audit shapes:
+//     "Consent to application"                     -> the consent itself (user
+//                                                     or admin), ConsentContext.*
+//     "Add delegated permission grant"             -> oauth2PermissionGrant
+//                                                     created (also via Graph API)
+//     "Add app role assignment to service principal" -> an APPLICATION
+//                                                     permission (app-only, always
+//                                                     tenant-wide) granted to an app
+//   One admin consent writes several of these with the same CorrelationId;
+//   they become separate alerts that Sentinel groups into one incident.
+//
+// SEVERITY (dynamic - the Severity column)
+//   TenantWide = admin consent, consent on behalf of all users, or an
+//                application permission.
+//   HighRisk   = at least one permission on the HighRiskPermissions list (mail,
+//                files - the scopes OAuth-phishing kits ask for - and every
+//                Tier-0 Graph permission: directory/app/role write, PIM
+//                schedules and policies, permission-grant and auth-method
+//                policy, password profile, organization, entitlement mgmt).
+//   High   : TenantWide AND HighRisk (an app can now read every mailbox or
+//            rewrite the directory without any user present).
+//   Medium : TenantWide OR HighRisk.
+//   Low    : a low-risk single-user consent, or the CI apply identity.
+//   Healthcare note: user consent should be OFF (admin consent workflow
+//   only), which makes every row here a deliberate admin action.
+//
+// TABLE / SOURCE
+//   AuditLogs, Category "ApplicationManagement". Permissions come from the
+//   modifiedProperties ConsentAction.Permissions ("... Scope: Mail.Read
+//   User.Read, ..."), DelegatedPermissionGrant.Scope and AppRole.Value.
+//   verify: the exact modifiedProperty names for "Add delegated permission
+//   grant" and "Add app role assignment to service principal" on the first
+//   consent in the lab tenant (they match community rules, not a Microsoft
+//   schema document).
+//
+// LICENSE
+//   AuditLogs export to Log Analytics; no premium licence needed.
+//
+// MITRE ATT&CK
+//   T1528 Steal Application Access Token (CredentialAccess)
+//   T1098.003 Account Manipulation: Additional Cloud Roles - app role grants
+//   (Persistence, PrivilegeEscalation)
+//
+// FALSE-POSITIVE NOTES
+//   - Onboarding a sanctioned SaaS app (admin consent, usually Medium). Tie it
+//     to the change ticket; keep a short allow-list of approved client app
+//     ids in a Sentinel watchlist if the volume ever needs it.
+//   - The CI apply identity granting Graph roles to the pipeline apps (Low;
+//     matched by its immutable ids - see IacPrincipalIds; an app merely NAMED
+//     like it is High, IacNameSpoof).
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · one alert per row · Severity column ·
+//   Entities: Account = ActorUpn / ActorObjectId, IP = ActorIp.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; containment card on High (the CONSENTING
+//   identity is the subject). Revoking the grant / disabling the app is an
+//   app-owner decision and stays manual (runbook step): removing a grant can
+//   break a sanctioned integration.
+// =============================================================================
+
+let LookBack = 1h;
+// The CI apply identity, matched on IMMUTABLE ids (service principal object
+// id / application client id), never on its display name: anyone who owns or
+// administers an app can rename it "gh-oidc-entra-apply (write)", and a
+// display-name match would DOWNGRADE that attacker's changes.
+// modules/monitoring renders the list from var.iac_principal_ids (envs/
+// bootstrap output iac_principal_ids). Committed, it is empty: run as-is,
+// nothing counts as IaC - fail closed, severity can only go up.
+let IacPrincipalIds = dynamic(["44444444-4444-4444-4444-444444444444"]); // @@IAC_PRINCIPAL_IDS@@
+let IacDisplayName = "gh-oidc-entra-apply (write)"; // impersonation check ONLY, never trust
+// Data-access scopes OAuth-phishing kits ask for, plus every Tier-0 Graph
+// permission: one that lets an app make itself (or anyone) Global Admin, take
+// over accounts or switch off the controls. Keep the Tier-0 part in step with
+// Find-ShadowAdmins.ps1 / 06-NHI-Inventory.ps1 ($Tier0GraphPermissions).
+let HighRiskPermissions = dynamic([
+    "Mail.Read", "Mail.ReadWrite", "Mail.Send", "MailboxSettings.ReadWrite",
+    "EWS.AccessAsUser.All", "full_access_as_app", "Contacts.Read",
+    "Files.Read.All", "Files.ReadWrite.All", "Sites.Read.All", "Sites.ReadWrite.All",
+    "Sites.FullControl.All", "Notes.Read.All",
+    "Directory.ReadWrite.All", "Directory.AccessAsUser.All", "Application.ReadWrite.All",
+    "AppRoleAssignment.ReadWrite.All", "RoleManagement.ReadWrite.Directory",
+    "RoleAssignmentSchedule.ReadWrite.Directory", "RoleEligibilitySchedule.ReadWrite.Directory",
+    "RoleManagementPolicy.ReadWrite.Directory",
+    "PrivilegedAccess.ReadWrite.AzureADGroup", "PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup",
+    "PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup",
+    "User.ReadWrite.All", "User-PasswordProfile.ReadWrite.All", "Group.ReadWrite.All",
+    "GroupMember.ReadWrite.All", "Policy.ReadWrite.ConditionalAccess",
+    "Policy.ReadWrite.PermissionGrant", "Policy.ReadWrite.AuthenticationMethod",
+    "UserAuthenticationMethod.ReadWrite.All", "Domain.ReadWrite.All",
+    "Organization.ReadWrite.All", "EntitlementManagement.ReadWrite.All"]);
+AuditLogs
+| where TimeGenerated > ago(LookBack)
+| where Category == "ApplicationManagement"
+| where Result =~ "success"
+| where OperationName in~ ("Consent to application", "Add delegated permission grant",
+                           "Add app role assignment to service principal")
+| extend ActorUpn      = tostring(InitiatedBy.user.userPrincipalName)
+| extend ActorObjectId = tostring(InitiatedBy.user.id)
+| extend ActorApp      = tostring(InitiatedBy.app.displayName)
+| extend ActorIp       = iff(isnotempty(tostring(InitiatedBy.user.ipAddress)),
+                             tostring(InitiatedBy.user.ipAddress),
+                             tostring(InitiatedBy.app.ipAddress))
+| extend Actor         = iff(isnotempty(ActorUpn), ActorUpn, ActorApp)
+| mv-apply tr = TargetResources on (
+    where tostring(tr.type) =~ "ServicePrincipal"
+    | take 1
+    | extend TargetName     = tostring(tr.displayName),
+             TargetObjectId = tostring(tr.id),
+             ModProps       = tr.modifiedProperties
+  )
+| mv-apply mp = ModProps on (
+    summarize IsAdminConsentRaw = take_anyif(tostring(mp.newValue), tostring(mp.displayName) =~ "ConsentContext.IsAdminConsent"),
+              OnBehalfOfAllRaw  = take_anyif(tostring(mp.newValue), tostring(mp.displayName) =~ "ConsentContext.OnBehalfOfAll"),
+              PermissionsRaw    = take_anyif(tostring(mp.newValue), tostring(mp.displayName) =~ "ConsentAction.Permissions"),
+              DelegatedScopeRaw = take_anyif(tostring(mp.newValue), tostring(mp.displayName) =~ "DelegatedPermissionGrant.Scope"),
+              AppRoleValueRaw   = take_anyif(tostring(mp.newValue), tostring(mp.displayName) =~ "AppRole.Value"),
+              ClientAppRaw      = take_anyif(tostring(mp.newValue), tostring(mp.displayName) =~ "ServicePrincipal.DisplayName")
+  )
+| extend GrantKind = case(
+    OperationName =~ "Add app role assignment to service principal", "ApplicationPermission",
+    OperationName =~ "Add delegated permission grant",               "DelegatedGrant",
+    "Consent")
+// "Consent to application" targets the CLIENT app; the other two target the
+// RESOURCE (e.g. Microsoft Graph) and name the client in a modified property.
+| extend ClientApp = iff(GrantKind == "Consent", TargetName, trim(@'"', ClientAppRaw))
+| extend ResourceApp = iff(GrantKind == "Consent", "", TargetName)
+| extend PermissionText = case(
+    GrantKind == "Consent",        strcat_array(extract_all(@"Scope:\s*([^,\]]+)", PermissionsRaw), " "),
+    GrantKind == "DelegatedGrant", trim(@'"', DelegatedScopeRaw),
+    trim(@'"', AppRoleValueRaw))
+// '-' is part of a permission name (User-PasswordProfile.ReadWrite.All);
+// splitting on it would let a hyphenated Tier-0 scope slip past the list.
+| extend Permissions = extract_all(@"([A-Za-z][A-Za-z0-9_.-]*)", PermissionText)
+| extend HighRiskGranted = set_intersect(Permissions, HighRiskPermissions)
+| extend IsAdminConsent = trim(@'"', IsAdminConsentRaw) =~ "True"
+| extend OnBehalfOfAll  = trim(@'"', OnBehalfOfAllRaw) =~ "True"
+| extend TenantWide = IsAdminConsent or OnBehalfOfAll or GrantKind == "ApplicationPermission"
+| extend HighRisk   = array_length(HighRiskGranted) > 0
+| extend ActorSpId  = tostring(InitiatedBy.app.servicePrincipalId)
+| extend ActorAppId = tostring(InitiatedBy.app.appId)
+| extend IsIac = (isnotempty(ActorSpId) and ActorSpId in (IacPrincipalIds))
+              or (isnotempty(ActorAppId) and ActorAppId in (IacPrincipalIds))
+// The IaC name on an app that is NOT the IaC identity = someone impersonating
+// the pipeline to look routine. Always High.
+| extend IacNameSpoof = not(IsIac) and ActorApp =~ IacDisplayName
+| extend Severity = case(
+    IacNameSpoof,            "High",
+    IsIac,                   "Low",
+    TenantWide and HighRisk, "High",
+    TenantWide or HighRisk,  "Medium",
+    "Low")
+| project TimeGenerated, Severity, Actor, ActorUpn, ActorObjectId, ActorApp, ActorIp, IsIac, IacNameSpoof,
+          OperationName, GrantKind, ClientApp, ResourceApp, TargetObjectId, IsAdminConsent,
+          OnBehalfOfAll, TenantWide, Permissions, HighRiskGranted, CorrelationId
+| sort by TimeGenerated desc

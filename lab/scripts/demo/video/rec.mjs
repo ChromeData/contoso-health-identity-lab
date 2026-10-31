@@ -187,9 +187,10 @@ export class Rec {
   }
 
   async ov(fn, ...a) { return this.page.evaluate(([fn, a]) => window.__v && window.__v[fn](...a), [fn, a]).catch(() => {}); }
-  async chip(t, s) { this.chipNow = [t, s]; await this.ov('chip', t, s); }
+  async chip() { }
   // Plain-words definition card (top-right on portals, bottom-right on local pages). Cleared at every beat.
-  async define(term, text) { this.defNow = [term, text]; await this.ov('define', term, text, this.kind === 'local' ? 'br' : 'tr'); }
+  // Definitions and chips are OFF (2026-10-29): terms are said once in the narration and live in lab/docs/glossary.md.
+  async define() { }
   async undefine() { this.defNow = null; await this.ov('define', ''); }
   get vh() { return Math.round(H / this.scale); }
   // Bring an element into view with real wheel scrolling (on camera, like a person would).

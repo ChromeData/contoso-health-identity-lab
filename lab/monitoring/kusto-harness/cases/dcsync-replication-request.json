@@ -1,0 +1,89 @@
+{
+  "rule": "dcsync-replication-request",
+  "about": "Complements the itdr-cases.json rows (one Get-Changes-All request, both rights in one request, the DC machine account, AccessMask 0x10, a different control-access right): the summarize over several requests by one account (Requests, RightsUsed as a set, one row), the filtered-set right, an upper-case GUID and mixed-case account, two accounts giving two rows, an EMPTY Properties field, a second DC that is not in DcHosts and the look-back edge. Properties follows the 4662 layout: the %%7688 (Control Access) marker and one {guid} per line, plus the domainDNS class GUID a real event lists.",
+  "defaults": {
+    "SecurityEvent": {
+      "EventID": 4662, "Computer": "DC01.corp.test.local", "TimeGenerated": "ago:20m",
+      "SubjectUserName": "mallory", "SubjectDomainName": "CORP",
+      "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+      "ObjectServer": "DS", "OperationType": "Object Access", "AccessMask": "0x100"
+    }
+  },
+  "cases": [
+    {
+      "id": "three-requests-one-row",
+      "kind": "positive",
+      "label": "Three replication requests by mallory in 30 min (secretsdump): one row, Requests 3, RightsUsed is the set of every GUID seen",
+      "tables": {"SecurityEvent": [
+        {"TimeGenerated": "ago:30m", "Properties": "%%7688\r\n\t\t{19195a5b-6da0-11d0-afd3-00c04fd930c9}\r\n\t\t{1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}\r\n"},
+        {"TimeGenerated": "ago:20m", "Properties": "%%7688\r\n\t\t{19195a5b-6da0-11d0-afd3-00c04fd930c9}\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n"},
+        {"TimeGenerated": "ago:10m", "Properties": "%%7688\r\n\t\t{19195a5b-6da0-11d0-afd3-00c04fd930c9}\r\n\t\t{1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n"}
+      ]},
+      "expect": [{"Severity": "High", "Account": "mallory", "AccountDomain": "CORP",
+                  "AccountSid": "S-1-5-21-1000000001-2000000002-3000000003-1107", "Host": "DC01", "Computer": "DC01.corp.test.local",
+                  "Requests": 3,
+                  "RightsUsed": ["19195a5b-6da0-11d0-afd3-00c04fd930c9", "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2", "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"]}],
+      "expectRows": 1
+    },
+    {
+      "id": "filtered-set-right",
+      "kind": "positive",
+      "label": "DS-Replication-Get-Changes-In-Filtered-Set alone (89e95b76-...) is one of the three rights",
+      "tables": {"SecurityEvent": [{
+        "Properties": "%%7688\r\n\t\t{19195a5b-6da0-11d0-afd3-00c04fd930c9}\r\n\t\t{89e95b76-444d-4c62-991a-0facbeda640c}\r\n"
+      }]},
+      "expect": [{"Severity": "High", "Account": "mallory", "Requests": 1,
+                  "RightsUsed": ["19195a5b-6da0-11d0-afd3-00c04fd930c9", "89e95b76-444d-4c62-991a-0facbeda640c"]}]
+    },
+    {
+      "id": "upper-case-guid-mixed-case-account",
+      "kind": "positive",
+      "label": "The GUID logged in upper case and the account as 'Mallory': has_any is case-insensitive, Account is lower-cased",
+      "tables": {"SecurityEvent": [{
+        "SubjectUserName": "Mallory",
+        "Properties": "%%7688\r\n\t\t{1131F6AD-9C07-11D1-F79F-00C04FC2DCD2}\r\n"
+      }]},
+      "expect": [{"Severity": "High", "Account": "mallory", "Requests": 1, "RightsUsed": ["1131F6AD-9C07-11D1-F79F-00C04FC2DCD2"]}]
+    },
+    {
+      "id": "two-accounts-two-rows",
+      "kind": "positive",
+      "label": "mallory and tier0-admin-01 each request replication once: one row per account",
+      "tables": {"SecurityEvent": [
+        {"Properties": "%%7688\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n"},
+        {"SubjectUserName": "tier0-admin-01", "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1105",
+         "Properties": "%%7688\r\n\t\t{1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n"}
+      ]},
+      "expect": [
+        {"Account": "mallory", "AccountSid": "S-1-5-21-1000000001-2000000002-3000000003-1107", "Requests": 1, "Severity": "High"},
+        {"Account": "tier0-admin-01", "AccountSid": "S-1-5-21-1000000001-2000000002-3000000003-1105", "Requests": 1, "Severity": "High",
+         "RightsUsed": ["1131f6aa-9c07-11d1-f79f-00c04fc2dcd2", "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"]}
+      ],
+      "expectRows": 2
+    },
+    {
+      "id": "empty-properties",
+      "kind": "negative",
+      "label": "A 4662 with AccessMask 0x100 but an empty Properties field names no right",
+      "tables": {"SecurityEvent": [{"Properties": ""}]}
+    },
+    {
+      "id": "second-dc-not-in-dchosts",
+      "kind": "negative",
+      "label": "The same request logged by DC02, which DcHosts does not list (the rule watches DC01 only)",
+      "tables": {"SecurityEvent": [{
+        "Computer": "DC02.corp.test.local",
+        "Properties": "%%7688\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n"
+      }]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A replication request 2 h ago is outside the 1 h look-back",
+      "tables": {"SecurityEvent": [{
+        "TimeGenerated": "ago:2h",
+        "Properties": "%%7688\r\n\t\t{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}\r\n"
+      }]}
+    }
+  ]
+}

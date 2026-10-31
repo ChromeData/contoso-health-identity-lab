@@ -1,6 +1,6 @@
 # ADR 0018: Non-human identity ownership and agent identity sponsorship
 
-- **Status:** Accepted (lab). BUILT: the inventory, app management policy, consent policy, leaver hand-off and agent identity scripts, with offline Pester tests against mocks. Not run: no tenant exists, so no NHI has been inventoried and no agent identity exists.
+- **Status:** Accepted (lab). BUILT: the inventory, app management policy, consent policy, leaver hand-off and agent identity scripts, with offline Pester tests against mocks. Applied: `enable_nhi_governance` is on in the lab tenant; `enable_agent_identity` is still off, so no agent identity exists.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 

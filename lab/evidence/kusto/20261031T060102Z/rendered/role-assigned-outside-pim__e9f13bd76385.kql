@@ -1,0 +1,154 @@
+// =============================================================================
+// Detection: Directory role assigned outside PIM (standing privilege created)
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   A permanent (active) Entra directory role assignment that did NOT come
+//   through Privileged Identity Management. The lab's design is zero standing
+//   admin outside the two break-glass accounts: every elevation is a PIM
+//   activation (pim-activation.kql) that expires. A direct "Add member to
+//   role" therefore either came from the CI apply identity building the PIM
+//   tiers (expected, reviewed in a PR) or is a policy violation / persistence.
+//   PIM's own Core Directory writes carry Identity "MS-PIM", so they are
+//   excluded; Entra also logs some direct assignments as "Add member to role
+//   outside of PIM". A third route is caught too: an ACTIVE assignment made
+//   in the PIM blade ("Add member to role in PIM completed (permanent |
+//   timebound)", logged by PIM) - standing privilege that the MS-PIM
+//   exclusion would otherwise hide.
+//   The PRINCIPAL receiving the role may be a user, a service principal or a
+//   role-assignable group (a role on a service principal is the quietest
+//   persistence of all). NOT covered here: a member added to a group that
+//   already HOLDS a role (Break-Glass-Admins, Privileged-IAM-Admins, the
+//   PIM-Tier* groups) - that is pim-group-member-added-outside-pim.kql.
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : any direct or PIM-permanent active assignment not made by the
+//            CI apply identity, and anything by an app only NAMED like it
+//            (IacNameSpoof).
+//   Medium : the CI apply identity, matched by its immutable service
+//            principal / app id (expected while the PIM tiers are built;
+//            match it to the PR), or a time-bound ACTIVE PIM assignment (it
+//            expires, but it is still not an approved activation).
+//   RoleTier = "Tier0" marks control-plane roles for triage priority.
+//
+// TABLE / SOURCE
+//   AuditLogs, Category "RoleManagement", LoggedByService "Core Directory"
+//   (direct writes) and "PIM" (active assignments made in PIM).
+//   The role name is the modifiedProperty "Role.DisplayName". Same logic as
+//   Microsoft's "User Assigned Privileged Role outside of PIM" analytic rule,
+//   extended to non-user principals and scoped (administrative unit) roles.
+//   verify: "Add scoped member to role" string on the first AU-scoped
+//   assignment.
+//
+// LICENSE
+//   PIM needs Entra ID P2 (in the E5 trial); the detection itself only needs
+//   AuditLogs in Log Analytics.
+//
+// MITRE ATT&CK
+//   T1098.003 Account Manipulation: Additional Cloud Roles
+//   Tactics: Persistence, PrivilegeEscalation
+//
+// FALSE-POSITIVE NOTES
+//   - Break-glass accounts get their standing Global Administrator from IaC
+//     once (Medium) - expected exactly once per account.
+//   - Microsoft first-party services occasionally write role membership (e.g.
+//     directory sync accounts). They show as High with an app actor; confirm
+//     the ActorApp before escalating.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · one alert per row · Severity column ·
+//   Entities: Account = ActorUpn / ActorObjectId, IP = ActorIp.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; containment card on High (the ACTOR is the
+//   subject - whoever can grant standing roles outside PIM holds Tier 0).
+//   Removing the assignment is a manual runbook step: the playbook never
+//   edits role assignments (that would need Privileged Role Administrator on
+//   an automation identity).
+// =============================================================================
+
+let LookBack = 1h;
+// The CI apply identity, matched on IMMUTABLE ids (service principal object
+// id / application client id), never on its display name: anyone who owns or
+// administers an app can rename it "gh-oidc-entra-apply (write)", and a
+// display-name match would DOWNGRADE that attacker's changes.
+// modules/monitoring renders the list from var.iac_principal_ids (envs/
+// bootstrap output iac_principal_ids). Committed, it is empty: run as-is,
+// nothing counts as IaC - fail closed, severity can only go up.
+let IacPrincipalIds = dynamic(["44444444-4444-4444-4444-444444444444"]); // @@IAC_PRINCIPAL_IDS@@
+let IacDisplayName = "gh-oidc-entra-apply (write)"; // impersonation check ONLY, never trust
+let Tier0Roles = dynamic([
+    "Global Administrator", "Privileged Role Administrator",
+    "Privileged Authentication Administrator", "Security Administrator",
+    "Conditional Access Administrator", "Application Administrator",
+    "Cloud Application Administrator", "Hybrid Identity Administrator",
+    "Authentication Policy Administrator", "Domain Name Administrator",
+    "External Identity Provider Administrator", "Intune Administrator",
+    "User Administrator", "Authentication Administrator",
+    "Helpdesk Administrator", "Exchange Administrator", "SharePoint Administrator"]);
+// ACTIVE assignments made in the PIM blade / PIM API. PIM writes them, so the
+// MS-PIM exclusion below would otherwise hide them - and an active
+// assignment, permanent or not, is standing privilege, not an activation
+// (activations are "Add member to role completed (PIM activation)").
+// Names: Microsoft Learn audit activity reference, PIM section.
+let PimActiveOps = dynamic(["Add member to role in PIM completed (permanent)",
+                            "Add member to role in PIM completed (timebound)"]);
+AuditLogs
+| where TimeGenerated > ago(LookBack)
+| where Category == "RoleManagement"
+| where Result =~ "success"
+| where OperationName has "Add member to role outside of PIM"
+     or (LoggedByService =~ "Core Directory"
+         and OperationName in~ ("Add member to role", "Add scoped member to role")
+         and Identity !in ("MS-PIM", "MS-PIM-Fairfax"))
+     or (LoggedByService =~ "PIM" and OperationName in~ (PimActiveOps))
+| extend AssignmentPath = case(
+    OperationName =~ "Add member to role in PIM completed (permanent)", "PimPermanentActive",
+    OperationName =~ "Add member to role in PIM completed (timebound)", "PimTimeboundActive",
+    "Direct")
+| extend ActorUpn      = tostring(InitiatedBy.user.userPrincipalName)
+| extend ActorObjectId = tostring(InitiatedBy.user.id)
+| extend ActorApp      = tostring(InitiatedBy.app.displayName)
+| extend ActorIp       = iff(isnotempty(tostring(InitiatedBy.user.ipAddress)),
+                             tostring(InitiatedBy.user.ipAddress),
+                             tostring(InitiatedBy.app.ipAddress))
+| extend Actor         = iff(isnotempty(ActorUpn), ActorUpn, ActorApp)
+// The principal that received the role, picked by TYPE. PIM records name the
+// role as a target of type "Role"; Core Directory puts it in a modified
+// property. verify: the PIM record's TargetResources shape on the first
+// permanent assignment in the lab tenant.
+| mv-apply tr = TargetResources on (
+    where tostring(tr.type) in~ ("User", "ServicePrincipal", "Group")
+    | take 1
+    | extend TargetType     = tostring(tr.type),
+             TargetObjectId = tostring(tr.id),
+             TargetName     = iff(isnotempty(tostring(tr.userPrincipalName)),
+                                  tostring(tr.userPrincipalName), tostring(tr.displayName)),
+             ModProps       = tr.modifiedProperties
+  )
+| mv-apply mp = ModProps on (
+    summarize RoleFromProps = take_anyif(trim(@'"', tostring(mp.newValue)), tostring(mp.displayName) =~ "Role.DisplayName")
+  )
+| mv-apply rt = TargetResources on (
+    summarize RoleFromTarget = take_anyif(tostring(rt.displayName), tostring(rt.type) =~ "Role")
+  )
+| extend RoleName = coalesce(RoleFromProps, RoleFromTarget)
+| extend RoleTier = iff(RoleName in (Tier0Roles), "Tier0", "Other")
+| extend ActorSpId  = tostring(InitiatedBy.app.servicePrincipalId)
+| extend ActorAppId = tostring(InitiatedBy.app.appId)
+| extend IsIac = (isnotempty(ActorSpId) and ActorSpId in (IacPrincipalIds))
+              or (isnotempty(ActorAppId) and ActorAppId in (IacPrincipalIds))
+// The IaC name on an app that is NOT the IaC identity = someone impersonating
+// the pipeline to look routine. Always High.
+| extend IacNameSpoof = not(IsIac) and ActorApp =~ IacDisplayName
+// A time-bound ACTIVE assignment still expires (PIM's active_assignment
+// expiry policy) - Medium; permanent and direct ones never do - High.
+| extend Severity = case(
+    IacNameSpoof,                          "High",
+    IsIac,                                 "Medium",
+    AssignmentPath == "PimTimeboundActive", "Medium",
+    "High")
+| project TimeGenerated, Severity, AssignmentPath, RoleName, RoleTier, TargetType, TargetName,
+          TargetObjectId, Actor, ActorUpn, ActorObjectId, ActorApp, ActorSpId, ActorIp, IsIac,
+          IacNameSpoof, OperationName, CorrelationId
+| sort by TimeGenerated desc

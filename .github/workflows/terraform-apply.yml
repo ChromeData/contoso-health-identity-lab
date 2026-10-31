@@ -149,6 +149,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           APPLY_APPROVERS: ${{ vars.APPLY_APPROVERS }}
+          APPLY_TWO_PERSON: ${{ vars.APPLY_TWO_PERSON || 'false' }}
         run: .github/scripts/apply-approval-gate.sh
 
   terraform-apply:

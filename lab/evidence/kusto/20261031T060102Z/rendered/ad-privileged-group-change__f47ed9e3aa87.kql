@@ -1,0 +1,92 @@
+// =============================================================================
+// Detection: Member added to a privileged Active Directory group
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, hybrid)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   A member added to one of the AD groups lab/pam/pam-policy.json treats as
+//   Tier 0 (Domain Admins, Enterprise Admins, Schema Admins, Administrators,
+//   Account / Backup / Server / Print Operators, DnsAdmins, Group Policy
+//   Creator Owners, Key Admins, Enterprise Key Admins) or Tier 1
+//   (Tier1-Server-Admins). In this lab Tier-0 accounts are created ONCE by
+//   scripts/dc and then vaulted (lab/pam onboard.sh), so a new member is
+//   either an approved change (ticket) or the attacker's first persistence
+//   step - followed by a logon that tier0-logon-without-checkout.kql reports
+//   as Class "Unvaulted".
+//     4728  member added to a security-enabled GLOBAL group  (Domain Admins...)
+//     4732  member added to a security-enabled LOCAL group   (Administrators, *Operators)
+//     4756  member added to a security-enabled UNIVERSAL group (Enterprise / Schema Admins)
+//   Groups are matched by well-known SID / RID first (a renamed "Domain
+//   Admins" still matches), then by name for the ones with no fixed RID
+//   (DnsAdmins, Tier1-Server-Admins).
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : any Tier-0 group.
+//   Medium : Tier1-Server-Admins.
+//
+// TABLE / SOURCE
+//   SecurityEvent from DC01 (AMA + DCR, modules/monitoring telemetry.tf;
+//   4728/4732/4756 are already in dc_event_ids). verify: SecurityEvent via
+//   AMA needs Microsoft Sentinel + the "Windows Security Events via AMA"
+//   connector on the workspace (Microsoft Learn, "Collect Windows events with
+//   Azure Monitor Agent"); without it the rows land in Event. Keep this rule
+//   in itdr_exclude_rules until DC01 rows are in SecurityEvent.
+//   verify: "Audit Security Group Management" success is on for DC01 (default
+//   on Windows Server domain controllers).
+//
+// LICENSE
+//   No Entra licence. AMA ingestion billed per GB (a lab DC is tiny).
+//
+// MITRE ATT&CK
+//   T1098.007 Account Manipulation: Additional Local or Domain Groups
+//   T1078.002 Valid Accounts: Domain Accounts
+//   Tactics: Persistence, PrivilegeEscalation
+//
+// FALSE-POSITIVE NOTES
+//   - scripts/dc/02-Configure-Domain.ps1 building the domain (tier0-admin-01/02
+//     into Domain Admins): expected once, at DC build.
+//   - An approved Tier-0 change: match it to the CHG ticket, then onboard the
+//     new account to the vault (onboard.sh) - an unvaulted Tier-0 account is a
+//     finding even when the add was approved.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · one alert per row · Severity column ·
+//   Entities: Account = Account / AccountDomain / AccountSid (the ACTOR who
+//   added the member), Host = Host. The new member is a custom detail.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident. The actor is an AD account with no Entra object
+//   id, so the containment playbook takes the AD path (comment + ticket);
+//   removing the member and disabling the actor is Invoke-AdContainment.ps1,
+//   run by a human.
+// =============================================================================
+
+let LookBack = 1h;
+let DcHosts = dynamic(["DC01"]);
+// Well-known SIDs (BUILTIN) and domain RIDs of the pam-policy.json Tier-0 groups.
+let Tier0BuiltinSids = dynamic(["S-1-5-32-544", "S-1-5-32-548", "S-1-5-32-549", "S-1-5-32-550", "S-1-5-32-551"]);
+let Tier0DomainRids  = dynamic(["512", "518", "519", "520", "526", "527"]);
+let Tier0GroupNames  = dynamic(["DnsAdmins"]);
+let Tier1GroupNames  = dynamic(["Tier1-Server-Admins"]);
+SecurityEvent
+| where TimeGenerated > ago(LookBack)
+| where EventID in (4728, 4732, 4756)
+| extend Host = toupper(tostring(split(Computer, ".")[0]))
+| where Host in (DcHosts)
+| extend GroupName = TargetUserName, GroupSid = TargetSid
+| extend GroupRid  = tostring(split(GroupSid, "-")[-1])
+| extend GroupTier = case(
+    GroupSid in (Tier0BuiltinSids),                                  "tier0",
+    GroupSid startswith "S-1-5-21-" and GroupRid in (Tier0DomainRids), "tier0",
+    GroupName in~ (Tier0GroupNames),                                 "tier0",
+    GroupName in~ (Tier1GroupNames),                                 "tier1",
+    "")
+| where isnotempty(GroupTier)
+// The ACTOR is the subject (who to contain); the new member is a detail.
+| extend Account       = tolower(SubjectUserName)
+| extend AccountDomain = SubjectDomainName
+| extend AccountSid    = SubjectUserSid
+| extend NewMember     = coalesce(MemberName, MemberSid)
+| extend Severity = iff(GroupTier == "tier0", "High", "Medium")
+| project TimeGenerated, Severity, GroupName, GroupSid, GroupTier, NewMember, MemberSid,
+          Account, AccountDomain, AccountSid, Host, Computer, EventID
+| sort by TimeGenerated desc

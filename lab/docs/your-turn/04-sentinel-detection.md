@@ -3,6 +3,12 @@
 **What you build:** the alarm system. Microsoft Sentinel on the lab's log
 workspace, with eleven lab detection rules plus Microsoft's Fusion rule.
 
+> **Current status (2026-10-31):** the numbers here are what *this stage*
+> restores — eleven lab rules plus Fusion. In all, Terraform can schedule
+> seventeen (the 22 KQL rules minus the five in `itdr_exclude_rules`); the
+> remaining rules come online in later stages as their data — the domain
+> controller, risky users, the vault — starts flowing.
+
 **Whisperglass:** *Contoso 07 · Detect & respond*.
 
 **Starts from:** `turn where` says `day3`.
@@ -19,14 +25,14 @@ workspace. A rewind and redo does not restart it.
 | 3 | Press **Enter**, wait for green checks, show the **Terraform plan** comment | the PR | Sentinel onboarding and the analytics rules in the plan |
 | 4 | **Merge pull request**, **Confirm merge** | the PR | "Merged" |
 | 5 | `turn approve`, comment **approve** in the issue, then `turn watch` | the approval issue, then the terminal | the issue closes as approved; the apply ends in a green tick |
-| 6 | `turn open sentinel` | Defender portal, Microsoft Sentinel, Analytics | twelve rules, all **Enabled** |
+| 6 | `turn open sentinel` | Defender portal, Microsoft Sentinel, Analytics | twelve rules, all **Enabled** (the eleven lab rules below plus Fusion) |
 | 7 | Point at a few of them | the rules list | break-glass sign-in, failed sign-in spike, legacy authentication, PIM activation, blocked country, Conditional Access change, app credential added, role assigned outside PIM, group member added outside PIM, app permission granted, sign-in method changed by an admin, and Fusion |
 | 8 | Read the Proof part | | |
 
 ## Say this, in your own words
 
 - Every rule is code in the repo, reviewed like everything else.
-- Eight more rules are written but held back on purpose: their data does not
+- Five more rules are written but held back on purpose: their data does not
   exist yet (the domain controller, risky users, the vault). Sentinel refuses a
   rule whose table has never had data, so each one is released in its own PR
   once its data starts flowing.

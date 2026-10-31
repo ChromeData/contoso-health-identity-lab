@@ -1,0 +1,227 @@
+// =============================================================================
+// Detection: PAM vault anomalies - Tier-0 credential retrieval outside a
+//            ticketed check-out, rotation failure, root-token use, failed
+//            vault authentication bursts (PTA-equivalent)
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, PAM)
+// SPL twin:  lab/splunk/detections/vault-privileged-access-anomaly.spl
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   tier0-logon-without-checkout.kql watches the DC side (a Tier-0 logon with
+//   no check-out). This rule watches the VAULT side - the HashiCorp Vault
+//   stand-in for the CyberArk Digital Vault (ADR 0007) - for the misuse a
+//   CyberArk shop gets from PTA (Privileged Threat Analytics) and CPM
+//   alerts. One rule, one Signal column, one row per event or burst:
+//
+//   Signal                      What happened                    CyberArk analogue
+//   Tier0CredReadUncovered      read of ldap/static-cred/tier0/* PTA retrieval analytics:
+//                               by a token with no CHG ticket    credential retrieved outside
+//                               and no TIER-0 (tier0-admins)     a ticketed request (verify:
+//                               check-out by the same operator   PTA event name)
+//                               in the last 4 h (a low-tier
+//                               check-out does not cover it)
+//   Tier0CheckoutWithoutTicket  tier0-admins check-out whose     Master Policy "dual control /
+//                               token carries no valid ticket    ticketing integration" bypass
+//                               (psm-session.sh always sets one,
+//                               so this is root or an ad-hoc
+//                               token skipping the ITSM gate)
+//   RotationFailed              rotate-role / rotate-root /      CPM "change failed" on an
+//                               library check-in returned an     account (the exposed
+//                               error: the password that was     password stays valid)
+//                               just used may still be valid
+//   RootTokenUse                any request made with a root-    no PTA name: CyberArk's
+//                               policy token (production: root   built-in Administrator
+//                               is revoked after init; any use   logon to the Vault
+//                               is an incident)
+//   AuthFailureBurst            >= 5 failed vault logins or      PTA "Suspicious Vault login"
+//                               invalid-token calls from one     class (verify: PTA event
+//                               address in a 10-min clock bin,   name)
+//                               ACROSS login names (a spray of
+//                               1-4 tries per name still counts;
+//                               LoginNames lists them)
+//   Tier0AccessDenied           a VALID token denied on a        Safe-permission violation
+//                               tier0 path (wrong Safe)          (Vault audit, ITAAL)
+//   Named PTA detection confirmed in vendor material: "Suspected credentials
+//   theft" (= tier0-logon-without-checkout.kql; e.g. Elastic's CyberArk PTA
+//   integration lists it as a PTA CEF event). "Unmanaged privileged access"
+//   appears in secondary material only - verify: docs.cyberark.com PTA
+//   security events. The other PTA names above are verify: items too.
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : Tier0CredReadUncovered, Tier0CheckoutWithoutTicket, a
+//            RotationFailed on a Tier-0 path or rotate-root (the bind account
+//            that rotates everything), RootTokenUse touching anything beyond
+//            the known lab automation paths or any sys/audit/ change (audit
+//            device tampering), an AuthFailureBurst against a named login.
+//   Medium : RotationFailed elsewhere, an invalid-token-only burst (usually a
+//            stale script), Tier0AccessDenied.
+//   Low    : RootTokenUse limited to LabRootAutomationPaths (lab/pam scripts
+//            mint and revoke check-out tokens with root - a documented
+//            stand-in gap), or a Tier-0 read by an approved consumer in
+//            Tier0CredConsumers. Low is still alerted, never hidden.
+//
+// TABLE / SOURCE
+//   VaultCheckout_CL, the table tier0-logon-without-checkout.kql joins,
+//   filled by lab/scripts/monitoring/ingest-vault-audit.sh from Vault's file
+//   audit device. TODAY the script ships only check-out / check-in /
+//   heartbeat rows. This rule needs it to also ship the Operation values
+//   cred-read, rotation-failed, root-token, auth-failed, access-denied and
+//   three new columns Ticket, Operator, ErrorText (from the token metadata
+//   psm-session.sh sets, and the audit record's error). Until then the
+//   new signals return nothing; column_ifexists() keeps the query valid
+//   before the schema change, and Tier0CheckoutWithoutTicket stays off until
+//   the Ticket column exists (it would otherwise flag every check-out).
+//   Field shapes observed on a throwaway Vault 2.1.1 dev container (file
+//   audit device): auth.metadata (operator, ticket) is logged in clear; a
+//   root token's auth.policies is ["root"]; a failed userpass login is a
+//   response on auth/userpass/login/<name> with error "invalid credentials";
+//   an invalid token gives error "...permission denied ... invalid token"
+//   with no auth block; a policy denial keeps the auth block and the error
+//   "permission denied". verify: the same on the lab stack's Vault, and the
+//   error text of a failed rotate-role / library check-in (not reproduced:
+//   needs the LDAP engine and a reachable DC).
+//
+// LICENSE
+//   None beyond Log Analytics ingestion (a few KB a day in the lab).
+//
+// MITRE ATT&CK
+//   T1555 Credentials from Password Stores (CredentialAccess)
+//   T1078 Valid Accounts (DefenseEvasion, Persistence, PrivilegeEscalation)
+//   T1110 Brute Force (CredentialAccess)
+//   T1562 Impair Defenses (DefenseEvasion) - audit device changes, and a
+//     failed rotation leaves a credential valid that should have died
+//
+// FALSE-POSITIVE NOTES
+//   - Lab setup runs (pam-up.sh, onboard.sh, rotate.sh, reconcile.sh) use the
+//     root token on many paths: expect High RootTokenUse rows during setup.
+//     That is the honest signal - the stand-in keeps a root token; production
+//     revokes it after init and uses generate-root under quorum.
+//   - psm-session.sh minting / revoking check-out tokens and
+//     ingest-vault-audit.sh calling sys/audit-hash: Low (LabRootAutomationPaths).
+//   - A DC that is deallocated (nightly) makes check-in rotation fail:
+//     RotationFailed High. Expected only if a check-in ran while the DC was
+//     off; the account stays checked out and must be rotated once DC01 is up.
+//   - No Tier-0 static role exists in the lab today (Tier-0 humans are
+//     library accounts), so Tier0CredReadUncovered is silent until one is
+//     onboarded - it is the guard for that day.
+//
+// TUNABLE
+//   LookBack 1h; MaxCheckout 4h (library max_ttl, onboard.sh); Grace 5m;
+//   BurstWindow 10m tumbling bins, BurstThreshold 5 (same known gap as
+//   failed-signin-spike.kql: a burst straddling a bin edge splits). Keyed
+//   on source address only: brute force on ONE login name from rotating
+//   addresses (< 5 per address per bin) is a known gap;
+//   Tier0Library, Tier0CredPrefix (pam-policy.json tier0 library and
+//   static_prefix); LabRootAutomationPaths; Tier0CredConsumers (Vault token
+//   display names of approved application readers - empty).
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 6h (1 h judged + 4 h 5 m of check-out history) ·
+//   one alert per row · Severity column · Entities: Account = Actor,
+//   Host = SourceHost, IP = RemoteAddress.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident. The Actor is a Vault identity, not an Entra
+//   object, so the containment playbook takes no automatic action; the
+//   runbook step is: revoke the token (by accessor), check the account in
+//   (rotates it), and for RotationFailed run ./rotate.sh or
+//   ./psm-session.sh checkin once the cause is fixed.
+// =============================================================================
+
+let LookBack        = 1h;
+let MaxCheckout     = 4h;
+let Grace           = 5m;
+let BurstWindow     = 10m;
+let BurstThreshold  = 5;
+let Tier0Library    = "tier0-admins";
+let Tier0CredPrefix = "ldap/static-cred/tier0/";
+let LabRootAutomationPaths = dynamic(["auth/token/create", "auth/token/revoke", "sys/audit-hash/file"]);
+let Tier0CredConsumers     = dynamic([]);
+let HasTicketColumn = toscalar(VaultCheckout_CL | getschema | where ColumnName == "Ticket" | count) > 0;
+let Vault = VaultCheckout_CL
+    | where TimeGenerated > ago(LookBack + MaxCheckout + Grace)
+    | where Operation != "heartbeat"
+    | extend Ticket    = tostring(column_ifexists("Ticket", "")),
+             Operator  = tostring(column_ifexists("Operator", "")),
+             ErrorText = tostring(column_ifexists("ErrorText", ""))
+    | extend LoginName   = extract(@"^auth/[^/]+/login/([^/?]+)", 1, VaultPath)
+    | extend Actor       = coalesce(Operator, VaultActor, LoginName)
+    | extend TicketValid = Ticket matches regex @"^CHG[0-9]{7}$";
+let CheckOuts = Vault
+    | where Operation == "check-out" and Library == Tier0Library and isnotempty(Operator)
+    | project Operator, OutTime = TimeGenerated;
+// A Tier-0 read is covered only by a TIER-0 (tier0-admins) check-out of the
+// same operator that started at most MaxCheckout before it (Grace for clock
+// skew). A helpdesk-library check-out never covers a Tier-0 read.
+let ReadCoverage = Vault
+    | where TimeGenerated > ago(LookBack)
+    | where Operation == "cred-read"
+    | join kind=leftouter CheckOuts on Operator
+    | summarize CoveredByCheckout = max(toint(isnotnull(OutTime)
+                    and OutTime between ((TimeGenerated - MaxCheckout) .. (TimeGenerated + Grace))))
+                by RequestId;
+Vault
+| where TimeGenerated > ago(LookBack)
+| join kind=leftouter ReadCoverage on RequestId
+| extend Signal = case(
+    Operation == "cred-read" and VaultPath startswith Tier0CredPrefix and not(TicketValid)
+        and coalesce(CoveredByCheckout, 0) == 0,                                  "Tier0CredReadUncovered",
+    Operation == "check-out" and Library == Tier0Library and HasTicketColumn
+        and not(TicketValid),                                                     "Tier0CheckoutWithoutTicket",
+    Operation == "rotation-failed",                                               "RotationFailed",
+    Operation == "root-token",                                                    "RootTokenUse",
+    Operation == "auth-failed",                                                   "AuthFailureBurst",
+    Operation == "access-denied" and VaultPath has "tier0",                       "Tier0AccessDenied",
+    "")
+| where isnotempty(Signal)
+// Event-level signals: one row per request (and account). Volume signals: one
+// row per actor or source per 10-minute clock bin.
+| extend Bin = bin(TimeGenerated, BurstWindow)
+| extend GroupKey = case(
+    Signal in ("RootTokenUse", "Tier0AccessDenied"), strcat(Actor, "|", RemoteAddress, "|", tostring(Bin)),
+    Signal == "AuthFailureBurst",                    strcat(RemoteAddress, "|", tostring(Bin)),
+    strcat(RequestId, "|", Account))
+| summarize TimeGenerated   = max(TimeGenerated),
+            FirstSeen       = min(TimeGenerated),
+            Events          = count(),
+            Actor           = take_any(Actor),
+            Operator        = take_any(Operator),
+            VaultActor      = take_any(VaultActor),
+            Ticket          = take_any(Ticket),
+            Account         = take_any(Account),
+            Library         = take_any(Library),
+            LoginName       = take_any(LoginName),
+            LoginNames      = make_set_if(LoginName, isnotempty(LoginName), 10),
+            RemoteAddress   = take_any(RemoteAddress),
+            SourceHost      = take_any(SourceHost),
+            TokenPolicies   = take_any(TokenPolicies),
+            VaultPaths      = make_set(VaultPath, 10),
+            Errors          = make_set(ErrorText, 5),
+            RequestIds      = make_set(RequestId, 10),
+            NonLabRootPaths = make_set_if(VaultPath, VaultPath !in (LabRootAutomationPaths), 10),
+            AuditTamper     = max(toint(VaultPath matches regex @"^sys/audit/")),
+            Tier0Rotation   = max(toint(VaultPath has "tier0" or VaultPath == "ldap/rotate-root"
+                                        or Library == Tier0Library)),
+            ConsumerRead    = max(toint(VaultActor in (Tier0CredConsumers)))
+            by Signal, GroupKey
+| where Signal != "AuthFailureBurst" or Events >= BurstThreshold
+| extend VaultPath = tostring(VaultPaths[0])
+| extend Severity = case(
+    Signal == "Tier0CredReadUncovered" and ConsumerRead == 1,                              "Low",
+    Signal in ("Tier0CredReadUncovered", "Tier0CheckoutWithoutTicket"),                    "High",
+    Signal == "RotationFailed" and Tier0Rotation == 1,                                     "High",
+    Signal == "RotationFailed",                                                            "Medium",
+    Signal == "RootTokenUse" and (AuditTamper == 1 or array_length(NonLabRootPaths) > 0), "High",
+    Signal == "RootTokenUse",                                                              "Low",
+    Signal == "AuthFailureBurst" and array_length(LoginNames) > 0,                         "High",
+    "Medium")
+| extend CyberArkAnalogue = case(
+    Signal == "Tier0CredReadUncovered",     "PTA-style: retrieval outside a ticketed request",
+    Signal == "Tier0CheckoutWithoutTicket", "Master Policy dual control / ticketing bypassed",
+    Signal == "RotationFailed",             "CPM change failed",
+    Signal == "RootTokenUse",               "Built-in Vault Administrator used",
+    Signal == "AuthFailureBurst",           "PTA-style: failed Vault logon burst",
+    "Safe permission violation")
+| project TimeGenerated, Severity, Signal, CyberArkAnalogue, Actor, Operator, VaultActor, Ticket, Account,
+          Library, LoginName, LoginNames, VaultPath, VaultPaths, Events, Errors, NonLabRootPaths, AuditTamper,
+          RemoteAddress, SourceHost, TokenPolicies, FirstSeen, RequestIds
+| sort by TimeGenerated desc

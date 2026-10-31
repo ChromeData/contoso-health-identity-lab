@@ -9,8 +9,7 @@ export an auditor asks for.
 failed, 0 skipped** with every Graph, `az` and Log Analytics call mocked
 (`tests/Invoke-LabTests.ps1`, Pester 5.7.1 and 6.2.0), and PSScriptAnalyzer
 reported **0 errors** and no warning outside test files (warnings are not
-gating). **No script has run against a tenant**
-(RAN · tenant: nothing). Passing proves the logic does what the comments say;
+gating). **Scripts 00 to 06, 08 and the evidence and config exports have run against the lab tenant** (RAN · tenant: joiner, mover and leaver runs captured as E30 to E52; KPI snapshot E11b). Passing proves the logic does what the comments say;
 whether Graph accepts each call is a tenant-time check, listed in each
 script's `.NOTES` as `verify:`.
 
@@ -56,6 +55,7 @@ Scenario contract (names, groups, packages) and the full lifecycle run order:
 | `08-Measure-KPIs.ps1` | KPI snapshot (standing admins, phishing-resistant coverage, HR-to-disable minutes, NHI findings, PAM), baseline then after; `-CompareTo` prints deltas. A failed measure is recorded as failed, never 0 | `lab/evidence/kpis/` (hashed) | `-WhatIf` | User.Read.All, Group.Read.All, Directory.Read.All, AuditLog.Read.All, RoleManagement.Read.Directory, PrivilegedEligibilitySchedule.Read.AzureADGroup, PrivilegedAssignmentSchedule.Read.AzureADGroup, Policy.Read.All, AccessReview.Read.All, Application.Read.All |
 | `09-SoD-Report.ps1` | Detective SoD over `lab/iga/sod-rules.json`: packages, groups (transitive + PIM-eligible), roles (active + eligible), the reviewer of record. Exit code = open violations; 255 = no valid report | `lab/evidence/sod/` (pseudonymised, hashed) | `-WhatIf`, `-InputPath` fixture | EntitlementManagement.Read.All, GroupMember.Read.All, User.Read.All, RoleManagement.Read.Directory, PrivilegedEligibilitySchedule.Read.AzureADGroup |
 | `10-Review-KPIs.ps1` | Access-review KPIs per ADR 0012 tier and reviewer: completion, revocation, rubber-stamp rate (reviewers with 10+ items), approve-against-recommendation, clinical lockouts | `lab/evidence/kpis/reviews-<UTC>.json` (hashed) | `-WhatIf`, `-InputPath` fixture | AccessReview.Read.All, EntitlementManagement.Read.All, User.Read.All, Group.Read.All |
+| `Diagnose-SignIn.ps1` | Help-desk sign-in explainer: paste a correlation id, or a UPN and `-LastHours`, and get a plain-words verdict per sign-in ("Blocked: the sign-in came from a country the hospital does not allow (policy CA004)", "Allowed after MFA", "Allowed, but policy CA002 would have blocked it once enforced"), the facts (every CA policy's result and what it demanded, MFA method, device compliance, location, risk, client app), and "Tell the user:" one sentence; common AADSTS codes in plain words. One object per sign-in to pipe, plus a Markdown report. A failed read is FAILED (exit 1), never "no sign-in" | `lab/evidence/out/sign-in/` (names a person; gitignored) | read-only | AuditLog.Read.All, Directory.Read.All |
 | `Find-ShadowAdmins.ps1` | Principals one step from a privileged role: owners of role-assignable groups or Tier-0 apps, app admins who can add a credential to a Tier-0 app, workloads whose Graph permissions amount to directory write, PIM-eligible paths | `lab/evidence/out/` | `-Offline`; `-FailOnFinding` (non-zero exit on a finding) | RoleManagement.Read.Directory, Group.Read.All, PrivilegedEligibilitySchedule.Read.AzureADGroup, PrivilegedAssignmentSchedule.Read.AzureADGroup, Application.Read.All, Directory.Read.All |
 | `Invoke-BaselineAssessment.ps1` | Runs or imports CISA ScubaGear and Microsoft's Zero Trust Assessment (`-Phase before` / `after` / `checkpoint`), hashes every output, maps each ScubaGear MS.AAD policy to the lab control, uploads to the WORM store | `lab/evidence/assessments/` (public-safe summary); raw reports to `lab/evidence/out/` and the evidence store | `-WhatIf`, `-SkipUpload` | Group.Read.All (ScubaGear and the Zero Trust Assessment request their own read scopes) |
 | `Invoke-BreakGlassDrill.ps1` | Guided break-glass drill (`-Phase Preflight` / `Verify` / `All`): preflight checks, operator-performed sign-ins, then proof the alert fired, read back from Log Analytics | `lab/evidence/drills/` (only what was observed) | `-WhatIf` | User.Read.All, GroupMember.Read.All, Policy.Read.All, UserAuthenticationMethod.Read.All |
@@ -190,7 +190,7 @@ pwsh lab/scripts/powershell/tests/Invoke-LabTests.ps1        # PSScriptAnalyzer 
 pwsh lab/scripts/powershell/tests/Invoke-LabTests.ps1 -CI    # also writes out/testResults.xml (gitignored)
 ```
 
-35 test files in `tests/`, one per script or area (`Reset-DemoState.Tests.ps1`
+36 test files in `tests/`, one per script or area (`Reset-DemoState.Tests.ps1`
 covers [`../demo/`](../demo/)). Two are shared:
 `PostApply.Tests.ps1` checks `Invoke-PostApply.ps1`'s order and the real
 scripts' parameter contracts, and is the only coverage of

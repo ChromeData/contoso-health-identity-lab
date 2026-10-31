@@ -1,0 +1,145 @@
+{
+  "when": "20261031T050736Z",
+  "what": "Synthetic replay of the KQL harness cases into local Splunk 10.4.4; every Contoso saved search dispatched over -2h.",
+  "events_sent": 215,
+  "events_by_sourcetype": {
+    "azure:loganalytics:auditlogs": 67,
+    "azure:loganalytics:signinlogs": 65,
+    "azure:loganalytics:aadnoninteractiveusersigninlogs": 7,
+    "azure:loganalytics:securityevent": 35,
+    "azure:loganalytics:aaduserriskevents": 4,
+    "azure:loganalytics:aadriskyusers": 3,
+    "azure:loganalytics:vaultcheckout_cl": 34
+  },
+  "cases_per_rule": {
+    "auth-method-changed-by-admin": 11,
+    "blocked-country-signin": 8,
+    "break-glass-signin": 10,
+    "dc-logon-outside-operator-allowlist": 16,
+    "device-code-signin": 11,
+    "failed-signin-spike": 9,
+    "identity-risk": 9,
+    "kerberoast-rc4-service-ticket": 8,
+    "legacy-auth": 6,
+    "pim-activation-without-auth-context": 19,
+    "pim-activation": 6,
+    "security-info-registered-risky": 34,
+    "sod-violation-granted": 23,
+    "tier0-logon-without-checkout": 25,
+    "vault-privileged-access-anomaly": 20
+  },
+  "searches": {
+    "Contoso - Authentication method changed by an admin for another user": {
+      "rows": 5,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD53d120d5343389a41_at_1793423232_2",
+      "failed": false
+    },
+    "Contoso - Break-glass account sign-in (any)": {
+      "rows": 6,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD59ef4406435cb56b3_at_1793423233_3",
+      "failed": false
+    },
+    "Contoso - Conditional Access policy changed outside IaC": {
+      "rows": 0,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD55376e31a18c2ad8a_at_1793423234_4",
+      "failed": false
+    },
+    "Contoso - Credential added to an application or service principal": {
+      "rows": 0,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD53df6dee93b0fef50_at_1793423236_5",
+      "failed": false
+    },
+    "Contoso - DC01 logon from outside the operator allowlist": {
+      "rows": 7,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD599ea8b8f2e3bbd74_at_1793423237_6",
+      "failed": false
+    },
+    "Contoso - DCSync replication request by a non-DC account": {
+      "rows": 0,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD5a9457b41612a75a2_at_1793423238_7",
+      "failed": false
+    },
+    "Contoso - Device-code flow sign-in": {
+      "rows": 4,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD5ba54bb5d5f8bbbaf_at_1793423239_8",
+      "failed": false
+    },
+    "Contoso - Directory role assigned outside PIM": {
+      "rows": 2,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD5fdaff3e579285763_at_1793423240_9",
+      "failed": false
+    },
+    "Contoso - Failed sign-in spike from one IP (spray or brute force)": {
+      "rows": 0,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD52d6b7df9dde45449_at_1793423241_10",
+      "failed": false
+    },
+    "Contoso - Kerberoasting RC4 service tickets": {
+      "rows": 1,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD55430e08b9fce3118_at_1793423242_11",
+      "failed": false
+    },
+    "Contoso - Legacy authentication attempts": {
+      "rows": 2,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD52863710b180b70c1_at_1793423243_12",
+      "failed": false
+    },
+    "Contoso - Member added to a privileged AD group": {
+      "rows": 0,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD5ca1c742d8e2282e5_at_1793423244_13",
+      "failed": false
+    },
+    "Contoso - Member added to a privileged group outside PIM": {
+      "rows": 2,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD586e2497806976c0f_at_1793423245_14",
+      "failed": false
+    },
+    "Contoso - PAM vault anomaly (PTA-equivalent)": {
+      "rows": 9,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD584362cba46362503_at_1793423246_15",
+      "failed": false
+    },
+    "Contoso - Permission (consent) granted to an application": {
+      "rows": 0,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD5cf00f47bfc9e2bf4_at_1793423247_16",
+      "failed": false
+    },
+    "Contoso - PIM activation (just-in-time elevation)": {
+      "rows": 13,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD546f8190496ac26c0_at_1793423249_17",
+      "failed": false
+    },
+    "Contoso - Risky user or risky sign-in (Identity Protection)": {
+      "rows": 5,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD532a7169eaa87b0e3_at_1793423250_18",
+      "failed": false
+    },
+    "Contoso - Security info registered from a risky or unfamiliar context": {
+      "rows": 4,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD55b27d1736c42c446_at_1793423251_19",
+      "failed": false
+    },
+    "Contoso - Separation-of-duties violation granted": {
+      "rows": 19,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD54df2c3c0e5c63d53_at_1793423252_20",
+      "failed": false
+    },
+    "Contoso - Sign-in from a blocked or watched country": {
+      "rows": 7,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD5057994e6ce2f7446_at_1793423253_21",
+      "failed": false
+    },
+    "Contoso - Tier-0 logon on DC01 without a Vault check-out": {
+      "rows": 0,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD5ce4d01eb23351a14_at_1793423254_22",
+      "failed": false
+    },
+    "Contoso - Tier-0 PIM activation without authentication context": {
+      "rows": 0,
+      "sid": "admin__nobody_Y29udG9zb19pZGVudGl0eQ__RMD58b0475b92f3f4daa_at_1793423255_23",
+      "failed": false
+    }
+  },
+  "summary": "14 of 22 saved searches returned rows on the synthetic events",
+  "limits": "Synthetic events only. Not tenant logs. Proves the SPL twins and the index pipeline, not Entra."
+}

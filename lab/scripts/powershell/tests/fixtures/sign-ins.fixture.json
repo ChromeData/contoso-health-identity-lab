@@ -1,0 +1,77 @@
+{
+  "_comment": "Synthetic beta /auditLogs/signIns rows for Diagnose-SignIn.Tests.ps1. No tenant data: every GUID starts 00000000-0000-4000-8000-, every UPN is @contoso.test, every IP is from RFC 5737 TEST-NET. Three cases: allowed after MFA; blocked by CA004 (blocked country); allowed with CA002 report-only failure.",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-0000000000a1",
+      "correlationId": "00000000-0000-4000-8000-0000000000c1",
+      "createdDateTime": "2026-10-29T14:02:11Z",
+      "userPrincipalName": "nurse.one@contoso.test",
+      "userDisplayName": "Nurse One",
+      "appDisplayName": "Office 365 SharePoint Online",
+      "clientAppUsed": "Browser",
+      "ipAddress": "203.0.113.10",
+      "status": { "errorCode": 0, "failureReason": "Other.", "additionalDetails": "MFA requirement satisfied by claim in the token" },
+      "conditionalAccessStatus": "success",
+      "authenticationRequirement": "multiFactorAuthentication",
+      "mfaDetail": { "authMethod": "Microsoft Authenticator app", "authDetail": "MFA completed in Azure AD" },
+      "deviceDetail": { "deviceId": "00000000-0000-4000-8000-0000000000d1", "displayName": "LAPTOP-TEST-01", "operatingSystem": "Windows 11", "browser": "Edge 130.0.0", "isCompliant": true, "isManaged": true, "trustType": "Azure AD joined" },
+      "location": { "city": "Seattle", "state": "Washington", "countryOrRegion": "US" },
+      "riskLevelDuringSignIn": "none",
+      "riskLevelAggregated": "none",
+      "riskState": "none",
+      "appliedConditionalAccessPolicies": [
+        { "id": "00000000-0000-4000-8000-0000000000e1", "displayName": "CA001 - Require MFA for all users", "result": "success", "enforcedGrantControls": [ "Mfa" ], "enforcedSessionControls": [] },
+        { "id": "00000000-0000-4000-8000-0000000000e3", "displayName": "CA003 - Block legacy authentication", "result": "notApplied", "enforcedGrantControls": [], "enforcedSessionControls": [] },
+        { "id": "00000000-0000-4000-8000-0000000000e4", "displayName": "CA004 - Block sign-in from blocked countries", "result": "notApplied", "enforcedGrantControls": [], "enforcedSessionControls": [] }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a2",
+      "correlationId": "00000000-0000-4000-8000-0000000000c2",
+      "createdDateTime": "2026-10-29T13:40:52Z",
+      "userPrincipalName": "nurse.one@contoso.test",
+      "userDisplayName": "Nurse One",
+      "appDisplayName": "Microsoft Teams",
+      "clientAppUsed": "Mobile Apps and Desktop clients",
+      "ipAddress": "198.51.100.77",
+      "status": { "errorCode": 53003, "failureReason": "Access has been blocked by Conditional Access policies. The access policy does not allow token issuance.", "additionalDetails": "" },
+      "conditionalAccessStatus": "failure",
+      "authenticationRequirement": "singleFactorAuthentication",
+      "mfaDetail": null,
+      "deviceDetail": { "deviceId": "", "displayName": "", "operatingSystem": "Android", "browser": "Teams 1.0", "isCompliant": false, "isManaged": false, "trustType": "" },
+      "location": { "city": "Pyongyang", "state": "", "countryOrRegion": "KP" },
+      "riskLevelDuringSignIn": "medium",
+      "riskLevelAggregated": "medium",
+      "riskState": "atRisk",
+      "appliedConditionalAccessPolicies": [
+        { "id": "00000000-0000-4000-8000-0000000000e4", "displayName": "CA004 - Block sign-in from blocked countries", "result": "failure", "enforcedGrantControls": [ "Block" ], "enforcedSessionControls": [] },
+        { "id": "00000000-0000-4000-8000-0000000000e1", "displayName": "CA001 - Require MFA for all users", "result": "notApplied", "enforcedGrantControls": [], "enforcedSessionControls": [] },
+        { "id": "00000000-0000-4000-8000-0000000000e3", "displayName": "CA003 - Block legacy authentication", "result": "notApplied", "enforcedGrantControls": [], "enforcedSessionControls": [] }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a3",
+      "correlationId": "00000000-0000-4000-8000-0000000000c3",
+      "createdDateTime": "2026-10-29T09:15:30Z",
+      "userPrincipalName": "adm-admin.two@contoso.test",
+      "userDisplayName": "adm Admin Two",
+      "appDisplayName": "Microsoft Azure Management",
+      "clientAppUsed": "Browser",
+      "ipAddress": "203.0.113.22",
+      "status": { "errorCode": 0, "failureReason": "Other.", "additionalDetails": "MFA completed in Azure AD" },
+      "conditionalAccessStatus": "success",
+      "authenticationRequirement": "multiFactorAuthentication",
+      "mfaDetail": { "authMethod": "Mobile app notification", "authDetail": "MFA completed in Azure AD" },
+      "deviceDetail": { "deviceId": "00000000-0000-4000-8000-0000000000d3", "displayName": "PAW-TEST-02", "operatingSystem": "Windows 11", "browser": "Edge 130.0.0", "isCompliant": true, "isManaged": true, "trustType": "Azure AD joined" },
+      "location": { "city": "Portland", "state": "Oregon", "countryOrRegion": "US" },
+      "riskLevelDuringSignIn": "none",
+      "riskLevelAggregated": "none",
+      "riskState": "none",
+      "appliedConditionalAccessPolicies": [
+        { "id": "00000000-0000-4000-8000-0000000000e1", "displayName": "CA001 - Require MFA for all users", "result": "success", "enforcedGrantControls": [ "Mfa" ], "enforcedSessionControls": [] },
+        { "id": "00000000-0000-4000-8000-0000000000e2", "displayName": "CA002 - Require phishing-resistant MFA for admin roles", "result": "reportOnlyFailure", "enforcedGrantControls": [ "RequireAuthenticationStrength" ], "enforcedSessionControls": [] },
+        { "id": "00000000-0000-4000-8000-0000000000e4", "displayName": "CA004 - Block sign-in from blocked countries", "result": "reportOnlyNotApplied", "enforcedGrantControls": [], "enforcedSessionControls": [] }
+      ]
+    }
+  ]
+}

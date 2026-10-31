@@ -141,7 +141,7 @@ Fill these in after running.
   (`modules/pim/helpdesk.tf`). The restricted management administrative
   unit for VIPs is a Graph call too, because the provider can't set that
   property: `post-apply/New-RestrictedAdminUnit.ps1`, never run.
-- **Code only, never applied:** CA002 now lists Microsoft's template admin
+- **Applied, report-only:** CA002 now lists Microsoft's template admin
   roles plus the lab's tier extras (Authentication Administrator and
   Privileged Authentication Administrator included), and can also target
   the admin groups (`admin_scope_group_object_ids`). Conditional Access

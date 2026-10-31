@@ -1,0 +1,242 @@
+// =============================================================================
+// Detection: Separation-of-duties (SoD) violation GRANTED - access delivered
+//            that completes a toxic pair from lab/iga/sod-rules.json
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, IGA)
+// SPL twin:  lab/splunk/detections/sod-violation-granted.spl
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   A user receives an access package or a group that sits on one side of an
+//   SoD rule while already holding something on the OTHER side - e.g. a nurse
+//   (administers medication) gaining controlled-substance dispensing
+//   (SOD-01, drug diversion). Entra's incompatibleAccessPackages /
+//   incompatibleGroups block REQUESTS and new admin assignments, but not:
+//     - a direct add to the resource group behind the package (the
+//       "App-Pharmacy-Dispensing-Users" bypass),
+//     - access that existed before the incompatibility was configured
+//       (incompatibility never removes access - Microsoft Learn),
+//     - pairs whose side is a PIM group or that only one direction can block
+//       (SOD-07, see its preventiveNote),
+//     - a post-apply script (Set-IncompatibleAccessPackages.ps1) that has not
+//       run yet, or a link someone removed.
+//   The preventive control is the incompatibility links; the full detective
+//   sweep over EXISTING access is 09-SoD-Report.ps1. This rule is the
+//   near-real-time tripwire between sweeps: it fires at the moment of grant.
+//     "Fulfill access package assignment"   (EntitlementManagement) -> granted
+//     "Remove access package assignment"                             -> removed
+//     "Add member to group" / "Remove member from group"
+//                                           (GroupManagement)       -> same for
+//                                                                       side groups
+//     PIM-for-Groups ELIGIBILITY (LoggedByService PIM, GroupManagement):
+//       "Add eligible member to role in PIM completed (permanent|timebound)"
+//                                                               -> granted
+//       "Remove eligible member from role in PIM completed (...)"
+//                                                               -> removed
+//       (Microsoft Learn, audit activity reference, PIM section: the
+//       PIM-for-Groups strings say "role" - the group's member role - not
+//       "group"; Category GroupManagement is what scopes them to groups.)
+//     sod-rules.json holdingSemantics counts an ELIGIBLE member as holding a
+//     PIM group (they can activate alone), so making a nurse eligible for
+//     PIM-EHR-AuditLog-Admins (SOD-07) fires here, before any activation.
+//     Eligibility and membership are tracked as separate paths, so the
+//     "Remove member from group" logged when an ACTIVATION ends does not
+//     cancel a standing eligibility.
+//     verify: the PIM-for-Groups activity strings (matched below on
+//     "eligible member" + "completed" within Category GroupManagement and
+//     LoggedByService PIM), whether an eligibility EXPIRY is logged under its
+//     own name, and that the group appears in TargetResources - on the first
+//     eligibility event in the tenant.
+//
+// SEVERITY (dynamic - the Severity column)
+//   The rule's own risk from sod-rules.json (High for SOD-01..08, Medium for
+//   SOD-09). Low when an unexpired approved exception covers the user and
+//   rule (SodExceptions, mirrored from sod-rules.json "exceptions" - empty
+//   today). Still alerted.
+//
+// TABLE / SOURCE
+//   AuditLogs. Activity names and "the user who received the access is
+//   identified by ActorUserPrincipalName" (= InitiatedBy.user here): Microsoft
+//   Learn, entitlement-management-reports (checked 2026-10-20). The package /
+//   group name is read from TargetResources displayName and modifiedProperties
+//   newValue / oldValue text (one constant regex), then matched against the
+//   ruleset. oldValue matters for removals: Entra writes a removed value as
+//   old (Group.DisplayName old "All-Nurses", new null), and a removal that
+//   went unrecognised would leave a stale "Held" that raises a false alert.
+//   verify: the removal record shape on the first lab removal.
+//   verify: TargetResources shape of "Fulfill access package assignment"
+//   (package type name, whether a User target is present) and of an
+//   automatic-assignment-policy grant, on the first assignment in the tenant.
+//   History: AuditLogs over 14 days (Sentinel's maximum look-back). Older
+//   holdings come from Sentinel watchlist "sod_holdings" (SearchKey = user
+//   object id; columns UserPrincipalName, Kind, Name, SnapshotTime). The
+//   producer is 09-SoD-Report.ps1 -HoldingsSnapshotPath (a CSV with exactly
+//   these columns, written to a gitignored path - it holds object ids and
+//   UPNs). Uploading it as the watchlist is a TENANT-TIME step after each
+//   report run. The union below is fuzzy (an absent watchlist adds no rows),
+//   so until the first upload a pair whose first half was granted more than
+//   14 days ago is missed here and only caught by the next 09-SoD-Report.ps1
+//   run.
+//   RULESET MIRROR: SodSides / SodRules below are generated from
+//   lab/iga/sod-rules.json (accessPackages + groups; directoryRoles are not
+//   access-package grants - role-assigned-outside-pim.kql and the report
+//   cover them). Regenerate both twins whenever that file changes:
+//     jq -r '.rules[] as $r | ("A","B") as $s | $r["side"+$s] as $d
+//       | (($d.accessPackages // [])[] | [$r.id,$s,"AccessPackage",.]),
+//         (($d.groups // [])[] | [$r.id,$s,"Group",.]) | @csv'
+//       lab/iga/sod-rules.json
+//
+// LICENSE
+//   Entitlement management needs Entra ID P2 or ID Governance (E5 trial).
+//   AuditLogs export; watchlists need Sentinel.
+//
+// MITRE ATT&CK
+//   T1098 Account Manipulation (Persistence, PrivilegeEscalation) - access
+//     that should not coexist; the business impact is fraud / drug
+//     diversion, which ATT&CK does not model.
+//
+// FALSE-POSITIVE NOTES
+//   - An approved exception (standards/exception-process.md): add it to
+//     sod-rules.json "exceptions" and to SodExceptions -> Low, never hidden.
+//   - Mover overlap: a nurse moving to pharmacy keeps nursing access until
+//     the mover flow removes it. That IS the violation window the rule
+//     exists for; close it by removing the old access, not by tuning.
+//   - Planned packages (access-catalog.json status "planned") never appear
+//     in logs until created; their rows are inert, not clean.
+//
+// TUNABLE
+//   LookBack 1h (grants judged per run); History 14d.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 1h · Lookback 14d · one alert per row · Severity column ·
+//   Entities: Account = UserPrincipalName / UserId. Sentinel only (14-day
+//   look-back and the watchlist).
+//
+// AUTOMATED RESPONSE
+//   Notify only. NOT a containment rule: disabling a clinician for an SoD
+//   conflict is a patient-safety event (ADR 0012). The fix is removing one
+//   side's assignment, decided by the access owner within one business day.
+// =============================================================================
+
+let LookBack = 1h;
+let History  = 14d;
+let SodRules = datatable(RuleId:string, RuleName:string, Risk:string) [
+    "SOD-01", "Medication administration vs controlled-substance dispensing", "High",
+    "SOD-02", "Prescribe vs dispense", "High",
+    "SOD-03", "Order vs approve (pharmacist verification) of medication orders", "High",
+    "SOD-04", "Pharmacy inventory and purchasing vs dispensing", "High",
+    "SOD-05", "Accounts payable processing vs vendor master data", "High",
+    "SOD-06", "Payroll entry vs payroll approval", "High",
+    "SOD-07", "EHR break-the-glass vs EHR audit-log administration", "High",
+    "SOD-08", "Identity administration vs access certification", "High",
+    "SOD-09", "Charge entry and coding vs payment posting and adjustments", "Medium"
+];
+let SodSides = datatable(RuleId:string, Side:string, Kind:string, Name:string) [
+    "SOD-01", "A", "AccessPackage", "Nurse - Clinical Apps",
+    "SOD-01", "A", "AccessPackage", "ICU - Critical Care Apps",
+    "SOD-01", "A", "AccessPackage", "ICU - Float Access",
+    "SOD-01", "A", "Group",         "All-Nurses",
+    "SOD-01", "A", "Group",         "All-ICU",
+    "SOD-01", "B", "AccessPackage", "Pharmacy - Controlled Substances Apps",
+    "SOD-01", "B", "Group",         "App-Pharmacy-Dispensing-Users",
+    "SOD-02", "A", "AccessPackage", "Prescriber - CPOE Ordering Apps",
+    "SOD-02", "B", "AccessPackage", "Pharmacy - Controlled Substances Apps",
+    "SOD-02", "B", "Group",         "App-Pharmacy-Dispensing-Users",
+    "SOD-03", "A", "AccessPackage", "Prescriber - CPOE Ordering Apps",
+    "SOD-03", "B", "AccessPackage", "Pharmacy - Order Verification Apps",
+    "SOD-04", "A", "AccessPackage", "Pharmacy - Inventory & Purchasing Apps",
+    "SOD-04", "B", "AccessPackage", "Pharmacy - Controlled Substances Apps",
+    "SOD-04", "B", "Group",         "App-Pharmacy-Dispensing-Users",
+    "SOD-05", "A", "AccessPackage", "Finance - Accounts Payable Apps",
+    "SOD-05", "B", "AccessPackage", "Finance - Vendor Master Data Apps",
+    "SOD-06", "A", "AccessPackage", "HR - Payroll Entry Apps",
+    "SOD-06", "B", "AccessPackage", "HR - Payroll Approval Apps",
+    "SOD-07", "A", "AccessPackage", "Nurse - Clinical Apps",
+    "SOD-07", "A", "AccessPackage", "ICU - Critical Care Apps",
+    "SOD-07", "A", "AccessPackage", "ICU - Float Access",
+    "SOD-07", "A", "AccessPackage", "Prescriber - CPOE Ordering Apps",
+    "SOD-07", "B", "Group",         "PIM-EHR-AuditLog-Admins",
+    "SOD-08", "A", "Group",         "Privileged-IAM-Admins",
+    "SOD-08", "A", "Group",         "PIM-Tier1-Helpdesk",
+    "SOD-08", "B", "Group",         "IGA-Access-Reviewers",
+    "SOD-09", "A", "AccessPackage", "Billing - Charge Entry & Coding Apps",
+    "SOD-09", "B", "AccessPackage", "Billing - Payment Posting & Adjustments Apps"
+];
+// Approved, unexpired exceptions (sod-rules.json "exceptions"): empty today.
+let SodExceptions = datatable(RuleId:string, UserPrincipalName:string, ExceptionId:string, Expires:datetime) [];
+let SodNames = toscalar(SodSides | summarize make_set(Name));
+let Events = AuditLogs
+    | where TimeGenerated > ago(History)
+    | where Result =~ "success"
+    // PIM-for-Groups eligibility (verify: activity strings - see header). No
+    // "group" term: Learn's strings are "... eligible member to role in PIM
+    // completed (...)"; the Category keeps directory-role events out.
+    | extend IsElig = Category == "GroupManagement" and LoggedByService =~ "PIM"
+                      and OperationName has "eligible member" and OperationName has "completed"
+    | where (Category == "EntitlementManagement"
+             and OperationName in~ ("Fulfill access package assignment", "Remove access package assignment"))
+         or (Category == "GroupManagement"
+             and OperationName in~ ("Add member to group", "Remove member from group"))
+         or IsElig
+    | mv-apply tr = TargetResources on (
+        summarize TargetUserId  = take_anyif(tostring(tr.id), tostring(tr.type) =~ "User"),
+                  TargetUserUpn = take_anyif(tostring(tr.userPrincipalName), tostring(tr.type) =~ "User")
+      )
+    // Every displayName / newValue / oldValue string in the targets, quotes
+    // stripped (new/old text is JSON-quoted twice: "\"All-Nurses\""). oldValue
+    // carries the group on a removal.
+    | extend Candidates = extract_all(@'"(?:displayName|newValue|oldValue)"\s*:\s*"(?:\\")?([^"\\]+)', tostring(TargetResources))
+    | extend Names = set_intersect(Candidates, SodNames)
+    | where array_length(Names) > 0
+    // Recipient: the User target. Only a package fulfilment may fall back to
+    // the actor (Learn: its actor IS the recipient); for a group add the actor
+    // is the admin, and a nested-group add has no User target at all (the
+    // detective report expands transitive membership).
+    | extend IsEm              = Category == "EntitlementManagement"
+    | extend UserId            = iff(IsEm, coalesce(TargetUserId, tostring(InitiatedBy.user.id)), TargetUserId)
+    | extend UserPrincipalName = tolower(iff(IsEm, coalesce(TargetUserUpn, tostring(InitiatedBy.user.userPrincipalName)),
+                                             TargetUserUpn))
+    | where isnotempty(UserId)
+    | extend State = iff(OperationName in~ ("Fulfill access package assignment", "Add member to group")
+                         or (IsElig and OperationName startswith "Add"), "Held", "Removed")
+    // Separate holding paths: an activation ending ("Remove member from group")
+    // must not cancel a standing eligibility, and vice versa.
+    | extend Path = iff(IsElig, "Eligible", "Member")
+    | extend GrantedBy = iff(IsEm,
+                             "entitlement management (Access Package Activity workbook)",
+                             coalesce(tostring(InitiatedBy.user.userPrincipalName), tostring(InitiatedBy.app.displayName)))
+    | mv-expand Name = Names to typeof(string)
+    | project EventTime = TimeGenerated, UserId, UserPrincipalName, Name, State, Path, OperationName, GrantedBy, CorrelationId;
+let Snapshot = union isfuzzy=true
+    (datatable(UserId:string, UserPrincipalName:string, Name:string, EventTime:datetime)[]),
+    (_GetWatchlist('sod_holdings')
+        | project UserId = tostring(SearchKey), UserPrincipalName = tolower(tostring(UserPrincipalName)),
+                  Name = tostring(Name), EventTime = coalesce(todatetime(SnapshotTime), ago(History)));
+// Current holdings: the latest event per user + name + path decides
+// (snapshot rows count as "Held" at their snapshot time); held on any path =
+// held.
+let Holdings = union (Events | project UserId, Name, EventTime, State, Path),
+                     (Snapshot | project UserId, Name, EventTime, State = "Held", Path = "Snapshot")
+    | summarize arg_max(EventTime, State) by UserId, Name, Path
+    | where State == "Held"
+    | summarize EventTime = min(EventTime) by UserId, Name
+    | join kind=inner SodSides on Name
+    | project UserId, RuleId, HeldSide = Side, HeldName = Name, HeldSince = EventTime;
+Events
+| where EventTime > ago(LookBack)
+| where State == "Held"
+| join kind=inner SodSides on Name
+| project GrantTime = EventTime, UserId, UserPrincipalName, RuleId, GrantedSide = Side, GrantedKind = Kind,
+          GrantedName = Name, GrantedVia = Path, OperationName, GrantedBy, CorrelationId
+| join kind=inner Holdings on UserId, RuleId
+| where HeldSide != GrantedSide
+| summarize ConflictingAccess = make_set(HeldName, 10), ConflictingSince = min(HeldSince)
+            by GrantTime, UserId, UserPrincipalName, RuleId, GrantedSide, GrantedKind, GrantedName,
+               GrantedVia, OperationName, GrantedBy, CorrelationId
+| lookup kind=leftouter SodRules on RuleId
+| join kind=leftouter (SodExceptions | where Expires > now() | project RuleId, UserPrincipalName = tolower(UserPrincipalName), ExceptionId)
+    on RuleId, UserPrincipalName
+| extend Excepted = isnotempty(ExceptionId)
+| extend Severity = iff(Excepted, "Low", Risk)
+| project TimeGenerated = GrantTime, Severity, RuleId, RuleName, UserPrincipalName, UserId, GrantedName, GrantedKind,
+          GrantedSide, GrantedVia, ConflictingAccess, ConflictingSince, GrantedBy, OperationName, Excepted, ExceptionId,
+          CorrelationId
+| sort by TimeGenerated desc

@@ -69,10 +69,10 @@ click what the run sheet says.
 | Run sheet | Stage | Whisperglass section | What gets built |
 |---|---|---|---|
 | [00 Before you start](00-before-you-start.md) | | | Windows, sign-ins, a dry run of every command |
-| [01 Sign-in rules](01-day1-sign-in-rules.md) | `day1` | Contoso 05 · Sign-in rules, Contoso 10 · Delivery | Ten Conditional Access policies, all report-only |
+| [01 Sign-in rules](01-day1-sign-in-rules.md) | `day1` | Contoso 05 · Sign-in rules, Contoso 10 · Delivery | Eleven Conditional Access policies (CA021 arrives in 02); nine enforced, CA002 and CA021 report-only |
 | [02 Privileged access](02-day2-privileged-access.md) | `day2` | Contoso 06 · Privileged access | Sixteen PIM tier groups, the Global Administrator policy, the help-desk admin unit |
 | [03 Governance](03-day3-governance.md) | `day3` | Contoso 03 · Joiner & mover | Four access packages, separation of duties, consent rules |
-| [04 Detection](04-sentinel-detection.md) | `sentinel` | Contoso 07 · Detect & respond | Sentinel with eleven lab rules plus Fusion |
+| [04 Detection](04-sentinel-detection.md) | `sentinel` | Contoso 07 · Detect & respond | Sentinel with seventeen lab rules plus Fusion |
 | [05 Directory](05-dc-directory.md) * | `dc` | Contoso 02 · Directory | DC01, the AD forest, the Cloud Sync agent, the HR provisioning app |
 | [06 Joiner](06-joiner-dana.md) * | | Contoso 01 · Source of truth, Contoso 03 · Joiner & mover | Dana's first day: HR row to AD to Entra to her apps |
 | [07 Apps](07-apps-sso.md) * | `apps` | Contoso 04 · Apps | Single sign-on and provisioning to AWS |

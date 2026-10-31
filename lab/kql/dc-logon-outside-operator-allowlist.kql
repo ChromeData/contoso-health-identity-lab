@@ -4,6 +4,12 @@
 // Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, hybrid)
 // SPL twin:  lab/splunk/detections/dc-logon-outside-operator-allowlist.spl
 // -----------------------------------------------------------------------------
+// DETECTOR ROLE (ADR 0023)
+//   Genuinely custom - NOT a Defender for Identity twin. It judges each DC01
+//   logon against the operator_ips allowlist (ADR 0013). MDI does not hold the
+//   lab's operator allowlist, so it cannot make this call. This is the lab's
+//   own detection.
+// -----------------------------------------------------------------------------
 // WHAT IT CATCHES
 //   ADR 0013 accepts, for the lab only, a public IP on DC01 with RDP (3389)
 //   and LDAPS (636) open to operator_ip_ranges and nothing else. Its

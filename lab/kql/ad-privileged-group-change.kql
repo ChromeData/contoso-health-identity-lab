@@ -2,6 +2,14 @@
 // Detection: Member added to a privileged Active Directory group
 // Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, hybrid)
 // -----------------------------------------------------------------------------
+// DETECTOR ROLE (ADR 0023)
+//   Microsoft Defender for Identity is the PRIMARY detector for sensitive-group
+//   changes: purpose-built and maintained by Microsoft
+//   (enable_defender_for_identity). This rule is its portable, offline-testable
+//   twin - the same logic over DC01 SecurityEvent, with an SPL twin and
+//   Kusto-emulator tests - and the post-trial fallback when the MDI licence
+//   lapses.
+// -----------------------------------------------------------------------------
 // WHAT IT CATCHES
 //   A member added to one of the AD groups lab/pam/pam-policy.json treats as
 //   Tier 0 (Domain Admins, Enterprise Admins, Schema Admins, Administrators,

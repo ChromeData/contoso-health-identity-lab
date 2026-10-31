@@ -1,0 +1,40 @@
+// The management commands this run sent before the first case (harness.py run).
+
+// scope: cluster
+.create database ContosoDetections persist (@"/kustodata/dbs/ContosoDetections/md", @"/kustodata/dbs/ContosoDetections/data")
+
+// scope: db
+.create table AuditLogs (TimeGenerated:datetime, ActivityDisplayName:string, AdditionalDetails:dynamic, Category:string, CorrelationId:string, Identity:string, InitiatedBy:dynamic, LoggedByService:string, OperationName:string, Result:string, ResultReason:string, ResultType:string, TargetResources:dynamic)
+
+// scope: db
+.create table SecurityEvent (TimeGenerated:datetime, AccessMask:string, Account:string, AccountDomain:string, Computer:string, EventData:string, EventID:int, IpAddress:string, LogonType:int, MemberName:string, MemberSid:string, Properties:string, Requester:string, RequestId:string, ServiceName:string, Status:string, SubjectDomainName:string, SubjectUserName:string, SubjectUserSid:string, TargetDomainName:string, TargetSid:string, TargetUserName:string, TargetUserSid:string, WorkstationName:string)
+
+// scope: db
+.create table SigninLogs (TimeGenerated:datetime, AppDisplayName:string, AppId:string, AuthenticationContextClassReferences:string, AuthenticationDetails:string, AuthenticationProtocol:string, Category:string, ClientAppUsed:string, ConditionalAccessPolicies:dynamic, ConditionalAccessStatus:string, CorrelationId:string, DeviceDetail:dynamic, Id:string, IPAddress:string, Location:string, LocationDetails:dynamic, OperationName:string, OriginalTransferMethod:string, ResourceDisplayName:string, ResultDescription:string, ResultType:string, RiskDetail:string, RiskEventTypes_V2:string, RiskLevel:string, RiskLevelDuringSignIn:string, RiskState:string, UserDisplayName:string, UserId:string, UserPrincipalName:string)
+
+// scope: db
+.create table AADNonInteractiveUserSignInLogs (TimeGenerated:datetime, AppDisplayName:string, AppId:string, AuthenticationContextClassReferences:string, AuthenticationDetails:string, AuthenticationProtocol:string, Category:string, ClientAppUsed:string, ConditionalAccessPolicies:string, ConditionalAccessStatus:string, CorrelationId:string, DeviceDetail:string, IPAddress:string, LocationDetails:string, OperationName:string, OriginalTransferMethod:string, ResourceDisplayName:string, ResultDescription:string, ResultType:string, RiskEventTypes_V2:string, RiskLevelDuringSignIn:string, UserId:string, UserPrincipalName:string)
+
+// scope: db
+.create table AADUserRiskEvents (TimeGenerated:datetime, CorrelationId:string, DetectionTimingType:string, Id:string, IpAddress:string, RiskDetail:string, RiskEventType:string, RiskLevel:string, RiskState:string, Source:string, UserId:string, UserPrincipalName:string)
+
+// scope: db
+.create table AADRiskyUsers (TimeGenerated:datetime, CorrelationId:string, Id:string, IsDeleted:bool, RiskDetail:string, RiskLevel:string, RiskState:string, UserPrincipalName:string)
+
+// scope: db
+.create table VaultCheckout_CL (TimeGenerated:datetime, Account:string, ErrorText:string, Library:string, Operation:string, Operator:string, RemoteAddress:string, RequestId:string, SourceHost:string, Ticket:string, TokenPolicies:string, VaultActor:string, VaultPath:string)
+
+// scope: db
+.create table Watchlist_operator_ips (SearchKey:string, IpRange:string, Owner:string, ExpiresOn:string)
+
+// scope: db
+.create table Watchlist_sod_holdings (SearchKey:string, UserPrincipalName:string, Name:string, SnapshotTime:string)
+
+// scope: db
+.create-or-alter function with (folder = "LogAnalyticsShims", docstring = "Harness shim of the Sentinel _GetWatchlist(alias) function: the rows of the Watchlist_<alias> store table, SearchKey plus the watchlist columns as top-level columns")
+_GetWatchlist(alias:string) {
+    union
+        (Watchlist_operator_ips | where alias == "operator_ips"),
+        (Watchlist_sod_holdings | where alias == "sod_holdings")
+}
+

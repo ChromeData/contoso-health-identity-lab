@@ -236,6 +236,17 @@ check "vault_feed_v2_requires_itdr" {
   }
 }
 
+# Defender for Identity's alerts reach this workspace through the Microsoft
+# Defender XDR connector, a Sentinel feature (ADR 0023). modules/monitoring
+# refuses the plan on the Log Analytics path; this states why up front. The
+# sensor and licence are human steps (the runbook), not a Terraform concern.
+check "defender_for_identity_requires_sentinel" {
+  assert {
+    condition     = !var.enable_defender_for_identity || var.enable_sentinel
+    error_message = "enable_defender_for_identity = true needs enable_sentinel (the Microsoft Defender XDR data connector is a Sentinel feature). The sensor on DC01 and the Defender licence are human steps: lab/docs/runbooks/deploy-defender-for-identity-dc01.md."
+  }
+}
+
 # The Intune VM works without premium (it still Entra-joins), but the CA005
 # demo does not: no pilot group, no Intune licence, no Conditional Access.
 check "intune_vm_requires_premium" {
@@ -532,6 +543,11 @@ module "monitoring" {
   # Second-wave rules + the extended vault feed columns (each its own flag).
   enable_itdr_detections_v2 = var.enable_itdr_detections_v2
   vault_feed_v2_columns     = var.vault_feed_v2_columns
+
+  # Defender for Identity (ADR 0023): the native AD-attack detector. The flag
+  # only adds the Defender XDR connector that lands MDI alerts in this
+  # workspace; the sensor on DC01 and the licence are human steps (runbook).
+  enable_defender_for_identity = var.enable_defender_for_identity
 
   # operator_ips watchlist (Sentinel + v2): the hosts DC01's NSG admits, so
   # only while enable_dc - otherwise the list (which may then hold a /24 for

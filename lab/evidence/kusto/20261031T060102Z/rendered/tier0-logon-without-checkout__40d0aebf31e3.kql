@@ -1,0 +1,200 @@
+// =============================================================================
+// Detection: Tier-0 logon on DC01 that PAM does not account for
+//            (no Vault check-out, RID-500 break-glass, or an unvaulted admin)
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, hybrid)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   Every Tier-0 logon on a domain controller that PAM does not account for.
+//   Three classes (the Class column):
+//   Vaulted - tier0-admin-01/02 are Domain Admins whose passwords only the
+//     PAM vault knows (lab/pam: Vault LDAP library = the CyberArk stand-in,
+//     exclusive check-out, password rotated on check-in). A legitimate logon
+//     ALWAYS sits inside a check-out window. One with no check-out around it
+//     means the credential was used outside PAM: a stolen hash/ticket
+//     (pass-the-hash, golden ticket), a password someone kept from an earlier
+//     session, or the vault being bypassed.
+//   BreakGlassAd - the RID-500 Administrator, matched by SID (a rename does
+//     not hide it). pam-policy.json keeps it OUT of the vault (offline, dual
+//     control), so every DC logon by it is a break-glass use and alerts.
+//   Unvaulted - ANY other account that gets special privileges (4672) on a
+//     DC: every member of Domain/Enterprise Admins, Administrators and the
+//     other pam-policy.json Tier-0 groups. An attacker who adds a new account
+//     to Domain Admins and logs on to DC01 lands here. Machine accounts,
+//     well-known service SIDs and the short PrivilegedServiceAllowList are
+//     the only exclusions. The ADD itself is ad-privileged-group-change.kql.
+//   This is the ITDR control that ties the on-prem Tier-0 plane to the PAM
+//   evidence.
+//
+//   Covered = some check-out of the SAME account has
+//     check-out time - Grace  <=  logon time  <=  session end + Grace
+//   where session end = the first check-in after the check-out, capped at
+//   check-out + MaxCheckout (Vault does not audit an expiry check-in, and the
+//   library TTL in lab/pam/lib.sh is 1 h).
+//
+// HOW THE VAULT EVIDENCE GETS HERE (designed + implemented in this lab)
+//   Vault file audit device (/vault/logs/audit.log, enabled by pam-up.sh)
+//     -> lab/scripts/monitoring/ingest-vault-audit.sh (operator laptop,
+//        --follow 60): keeps check-out / check-in rows only, resolves the
+//        HMAC'd account names with sys/audit-hash, adds a heartbeat row per run
+//     -> Azure Monitor Logs Ingestion API (DCE + DCR, Entra token via az login)
+//     -> custom table VaultCheckout_CL (all three created by
+//        modules/monitoring when enable_itdr_detections = true).
+//   Production equivalent: CyberArk Vault syslog / PTA -> AMA (CEF) -> Sentinel.
+//   DC01 Security events (4624 logon, 4672 special privileges) are collected
+//   by the Azure Monitor Agent + a DCR on vm-dc01, also created by
+//   modules/monitoring (collect_dc_security_events). verify: Microsoft Learn
+//   ("Collect Windows events with Azure Monitor Agent") says Security-log
+//   events from AMA reach the SecurityEvent table only when Microsoft
+//   Sentinel and its "Windows Security Events via AMA" connector are on the
+//   workspace; otherwise they land in Event. So this rule stays in
+//   itdr_exclude_rules until Sentinel is on AND DC01 rows have arrived, and
+//   the post-trial Log Analytics path needs an Event-table variant.
+//
+// FAIL-SAFE BY DESIGN
+//   A missing check-out row means ALERT, never "assume fine". If the Vault
+//   feed itself is down every Tier-0 logon alerts; VaultFeedHealthy tells the
+//   analyst which case it is (the ingest script writes a heartbeat row every
+//   run). Logons younger than IngestDelay are not judged yet, so a check-out
+//   still in flight through the ingest path is not a false alarm.
+//   A check-out RENEWED past the 1 h TTL (max_ttl 4 h) is not visible either
+//   (renewals are audited against an HMAC'd lease id) - late logons in a
+//   renewed session alert; the analyst confirms in Vault (status endpoint).
+//
+// TABLE / SOURCE
+//   SecurityEvent (AMA, Microsoft-SecurityEvent stream) + VaultCheckout_CL.
+//   verify: (see above) SecurityEvent via AMA needs Sentinel + the connector
+//   per Microsoft Learn; after the Sentinel trial the post-trial Log
+//   Analytics alert path needs the Event table instead.
+//   verify: DC01 audit policy logs Logon + Special Logon success (default on
+//   Windows Server DCs: `auditpol /get /subcategory:"Logon","Special Logon"`).
+//
+// LICENSE
+//   No Entra licence. AMA ingestion is billed per GB (a lab DC is tiny);
+//   free inside the Sentinel trial's daily allowance.
+//
+// MITRE ATT&CK
+//   T1078.002 Valid Accounts: Domain Accounts (DefenseEvasion, Persistence,
+//     PrivilegeEscalation, InitialAccess)
+//   T1550.002 Use Alternate Authentication Material: Pass the Hash
+//     (DefenseEvasion, LateralMovement)
+//
+// FALSE-POSITIVE NOTES
+//   - Clock skew between DC01 and the laptop running Vault beyond Grace (5m).
+//   - The Vault feed paused (VaultFeedHealthy = false): fix the feed, then
+//     re-check; do not close as benign without the check-out evidence.
+//   - Break-glass AD logon (Class BreakGlassAd) during a vault outage:
+//     expected to alert; that is the documented review trigger for the AD
+//     break-glass procedure.
+//   - A service account that legitimately holds special privileges on the DC
+//     (Class Unvaulted): onboard it to the vault, or add it to
+//     PrivilegedServiceAllowList with an owner and a pam-policy.json
+//     exclusion - never silently.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 3h (covers LogonWindow + IngestDelay +
+//   MaxCheckout + Grace of vault history) · one alert per row · High ·
+//   Entities: Account = Account / AccountDomain / AccountSid, Host = Host,
+//   IP = SourceIp.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; the containment playbook sees an Account with
+//   no Entra object id and takes the AD path: it does NOT act, it comments
+//   "AD disable required" + opens/updates the ServiceNow ticket. A human then
+//   runs lab/scripts/monitoring/Invoke-AdContainment.ps1 (AD is the authority
+//   for these accounts) and checks the account back in to Vault, which
+//   rotates the password.
+// =============================================================================
+
+let IngestDelay = 15m;   // ingest-vault-audit.sh --follow 60 + AMA latency budget
+let LogonWindow = 1h;    // logons judged per run: [now-75m, now-15m]
+let MaxCheckout = 1h;    // ldap/library/tier0-admins ttl (lab/pam/lib.sh)
+let Grace       = 5m;    // clock skew between DC01 and the Vault host
+// Accounts the PAM vault manages (lab/pam library tier0-admins): judged
+// against check-outs.
+let VaultedTier0 = dynamic(["tier0-admin-01", "tier0-admin-02"]);
+// Documented non-interactive accounts that may hold special privileges on a
+// DC without a check-out. Keep it SHORT: every entry is an exception with an
+// owner (pam-policy.json "exclusions"). Machine accounts ($) and the
+// well-known service SIDs are excluded below by pattern.
+let PrivilegedServiceAllowList = dynamic(["svc-vault-rotator"]);
+let DcHosts = dynamic(["DC01"]);
+let VaultHistory = LogonWindow + IngestDelay + MaxCheckout + Grace;
+let VaultEvents = VaultCheckout_CL
+    | where TimeGenerated > ago(VaultHistory)
+    | extend Account = tolower(Account);
+let FeedLastSeen = toscalar(VaultEvents | summarize max(TimeGenerated));
+let CheckOuts = VaultEvents
+    | where Operation == "check-out"
+    | project Account, OutTime = TimeGenerated, CheckoutRequestId = RequestId;
+let CheckIns = VaultEvents
+    | where Operation == "check-in"
+    | project Account, InTime = TimeGenerated;
+let Sessions = CheckOuts
+    | join kind=leftouter CheckIns on Account
+    | summarize InTime = minif(InTime, InTime >= OutTime) by Account, OutTime, CheckoutRequestId
+    | extend SessionEnd = iff(isnull(InTime) or InTime > OutTime + MaxCheckout,
+                              OutTime + MaxCheckout, InTime);
+let Logons = SecurityEvent
+    | where TimeGenerated between (ago(LogonWindow + IngestDelay) .. ago(IngestDelay))
+    | where EventID in (4624, 4672)
+    | extend Host = toupper(tostring(split(Computer, ".")[0]))
+    | where Host in (DcHosts)
+    // 4624 names the account in Target*, 4672 (special privileges) in Subject*.
+    | extend Account       = tolower(iff(EventID == 4672, SubjectUserName, TargetUserName))
+    | extend AccountDomain = iff(EventID == 4672, SubjectDomainName, TargetDomainName)
+    | extend AccountSid    = iff(EventID == 4672, SubjectUserSid, TargetUserSid)
+    // Not people: machine accounts, SYSTEM / LOCAL SERVICE / NETWORK SERVICE,
+    // the per-session window-manager and font-driver identities.
+    | where not(Account endswith "$")
+    | where AccountSid !in ("S-1-5-18", "S-1-5-19", "S-1-5-20", "S-1-0-0", "S-1-5-7")
+          and not(AccountSid startswith "S-1-5-90-") and not(AccountSid startswith "S-1-5-96-")
+    | where Account !in (PrivilegedServiceAllowList)
+    // Which judgement applies:
+    //   Vaulted      - a vault-managed Tier-0 account: alert unless a check-out covers it
+    //   BreakGlassAd - RID 500 (by SID, so a renamed Administrator still matches):
+    //                  excluded from the vault on purpose, so EVERY DC logon alerts
+    //   Unvaulted    - anyone else holding special privileges on a DC (4672): a new
+    //                  Domain Admin, or an admin nobody onboarded - Tier 0 outside PAM
+    | extend Class = case(Account in (VaultedTier0),  "Vaulted",
+                          AccountSid endswith "-500", "BreakGlassAd",
+                          EventID == 4672,            "Unvaulted",
+                          "")
+    | where isnotempty(Class)
+    | project LogonTime = TimeGenerated, EventID, Computer, Host, Account, AccountDomain,
+              AccountSid, LogonType, IpAddress, WorkstationName, Class;
+Logons
+| join kind=leftouter Sessions on Account
+| extend Covered = Class == "Vaulted"
+                   and isnotnull(OutTime)
+                   and LogonTime >= OutTime - Grace
+                   and LogonTime <= SessionEnd + Grace
+| summarize Covered = max(toint(Covered)),
+            LastOut = maxif(OutTime, OutTime <= LogonTime + Grace)
+            by LogonTime, EventID, Computer, Host, Account, AccountDomain, AccountSid,
+               LogonType, IpAddress, WorkstationName, Class
+| where Covered == 0
+// One row per account per 10 minutes: an RDP logon writes several 4624/4672.
+| summarize TimeGenerated   = max(LogonTime),
+            FirstLogon      = min(LogonTime),
+            UncoveredEvents = count(),
+            EventIds        = make_set(EventID),
+            LogonTypes      = make_set(LogonType, 10),
+            SourceIps       = make_set(IpAddress, 10),
+            Workstations    = make_set(WorkstationName, 10),
+            AccountSid      = take_any(AccountSid),
+            LastCheckoutBefore = max(LastOut)
+            by Account, AccountDomain, Host, Computer, Class, LogonBin = bin(LogonTime, 10m)
+| extend SourceIps = set_difference(SourceIps, dynamic(["", "-"]))
+| extend SourceIp = tostring(SourceIps[0])
+| extend VaultFeedLastSeen = FeedLastSeen
+| extend VaultFeedHealthy = isnotnull(VaultFeedLastSeen) and VaultFeedLastSeen > ago(IngestDelay + 15m)
+| extend Verdict = case(
+    Class == "BreakGlassAd", "RID-500 (AD break-glass) logon on a DC - always reviewed under the AD break-glass procedure",
+    Class == "Unvaulted",    "Account with Tier-0 privileges (4672) on a DC that the PAM vault does not manage - a new Domain Admin or an unvaulted admin",
+    VaultFeedHealthy,        "No Vault check-out covers this Tier-0 logon - credential used outside PAM",
+    "No check-out found AND the Vault feed is stale - check ingest-vault-audit.sh before assuming misuse")
+| extend Severity = "High"
+| project TimeGenerated, Severity, Verdict, Class, Account, AccountDomain, AccountSid, Host, Computer,
+          FirstLogon, UncoveredEvents, EventIds, LogonTypes, SourceIp, SourceIps, Workstations,
+          LastCheckoutBefore, VaultFeedHealthy, VaultFeedLastSeen
+| sort by TimeGenerated desc

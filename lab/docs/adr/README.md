@@ -43,6 +43,7 @@ incidents.
 | [0020](0020-pim-activation-design.md) | PIM activation: approver groups, eligibility expiry, activation caps (Tier 0 4 h, GA and PAA 2 h, Tier 1 8 h), Tier-1 approval only for Intune, User Administrator and the IGA group, authentication-context step-up in three separate changes, direct GA eligibility, AU-scoped service desk | Privileged access |
 | [0021](0021-configuration-drift-detection.md) | Configuration drift: a nightly read-only reconcile of the tenant against the committed baseline and the declared intent, findings as an issue (never an automatic revert), exceptions with an owner and an expiry | Delivery / detection |
 | [0022](0022-okta-coexistence-as-code.md) | Okta coexistence (acquired clinic) built as code: Okta trusts Entra as its OIDC IdP, a routing rule with the Okta fallback kept, a separate human-applied Okta root, the client secret never in state | Federation / M&A |
+| [0023](0023-defender-for-identity-native-ad-detection.md) | Defender for Identity is the primary detector for the native AD-attack signatures; the hand-written KQL rules are the portable/offline twins plus two correlations MDI cannot make (Vault check-out, operator allowlist). Staged behind `enable_defender_for_identity` (sensor + licence are human steps) | Detection / Tier 0 |
 
 ## Format
 

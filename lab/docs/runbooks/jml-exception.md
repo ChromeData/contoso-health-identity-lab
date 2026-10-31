@@ -1,7 +1,7 @@
 # Runbook: joiner / mover / leaver exceptions (L1 / L2)
 
 **Scenario:** Contoso Health lab (fictional 5,000-user hospital). **Status:**
-written against the lab code; not yet exercised (no tenant deployed).
+written against the lab code; not yet exercised in the tenant.
 
 ## The normal path (what an exception deviates from)
 

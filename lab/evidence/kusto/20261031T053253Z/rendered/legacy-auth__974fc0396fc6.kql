@@ -1,0 +1,84 @@
+// =============================================================================
+// Detection: Legacy authentication usage
+// Lab:       Contoso Health Identity Platform
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   Sign-ins using legacy / basic-auth protocols (POP, IMAP, SMTP AUTH, MAPI,
+//   EWS, ActiveSync, Outlook Anywhere, Outlook Service, Reporting Web
+//   Services, "Other clients"), interactive OR non-interactive. These
+//   protocols cannot enforce MFA and are the classic bypass for Conditional
+//   Access — they are the single most common foothold in password-spray
+//   compromise. The lab blocks them with a CA policy; this rule proves the
+//   block holds and surfaces anything still trying (an app or service account
+//   that needs modernising).
+//
+// TABLE / SOURCE
+//   union of:
+//     SigninLogs                        (interactive user sign-ins)
+//     AADNonInteractiveUserSignInLogs   (token refresh / background clients)
+//   Both from Microsoft Entra ID -> Diagnostic settings -> Log Analytics.
+//   Microsoft's "Identify legacy authentication use" steps say to repeat the
+//   check on the User sign-ins (non-interactive) tab, so query both tables.
+//   Identified via ClientAppUsed. Modern clients are "Browser" and "Mobile
+//   Apps and Desktop clients"; the list below covers every legacy protocol
+//   Microsoft documents for the CA Client apps condition (Exchange ActiveSync
+//   + Other clients). The commented-out negative filter also catches labels
+//   Microsoft adds later.
+//
+// LICENSE
+//   - SigninLogs + AADNonInteractiveUserSignInLogs export requires Entra ID P1.
+//   - Blocking legacy auth via Conditional Access requires Entra ID P1.
+//   - Runs as a Log Analytics scheduled query or a Microsoft Sentinel rule.
+//
+// FALSE-POSITIVE NOTES
+//   - Service accounts / multifunction printers / old line-of-business apps
+//     often still speak SMTP AUTH or EWS; expect a short allow-list during
+//     migration, tracked to an owner and an end date — not permanently muted.
+//   - A legacy attempt that FAILS (ResultType != "0") usually means CA already
+//     blocked it — good news; the Successes count is where to focus.
+//
+// SUGGESTED SENTINEL RULE
+//   As deployed by lab/terraform/modules/monitoring: Frequency 1h · Lookback
+//   24h · Trigger > 0 rows · suppressed 23 h after an alert · no entity
+//   mapping (summarized output). Suggested tuning (not deployed): alert
+//   hardest on Successes > 0.
+//
+// AUTOMATED RESPONSE (Logic App - lab/monitoring/playbook-notify.json)
+//   Shared by all five rules, Sentinel path only (the post-trial Log
+//   Analytics alerts just email the ag-identity-secops action group).
+//   Incident created -> automation rule (lab/terraform/modules/monitoring) ->
+//   (1) Teams adaptive card: incident severity, title, number, created time,
+//       status, description and an "Open in Sentinel" link;
+//   (2) ServiceNow incident: urgency/impact from severity (Low -> 3),
+//       category "inquiry"; (3) the INC number is commented back on the
+//       Sentinel incident for the audit trail.
+//   The incident is how the owning team is driven off basic auth.
+// =============================================================================
+
+// Explicit legacy-client list (clearest for the screen-share). verify: names
+// against your tenant — Microsoft occasionally relabels ClientAppUsed values.
+let LegacyClients = dynamic([
+    "Exchange ActiveSync", "IMAP4", "IMAP", "POP3", "POP",
+    "SMTP", "Authenticated SMTP", "MAPI", "MAPI Over HTTP",
+    "Exchange Web Services", "Exchange Online PowerShell",
+    "Outlook Anywhere (RPC over HTTP)", "Outlook Service", "AutoDiscover",
+    "Offline Address Book", "Reporting Web Services", "Other clients"
+]);
+// Same two tables as break-glass-signin.kql. Only string / datetime columns
+// are read below, so the LocationDetails type split documented there does
+// not apply and a plain union is enough.
+union SigninLogs, AADNonInteractiveUserSignInLogs
+| where TimeGenerated > ago(24h)
+| where ClientAppUsed in~ (LegacyClients)
+// Future-proof equivalent (catches new legacy labels automatically):
+// | where isnotempty(ClientAppUsed)
+//       and ClientAppUsed !in~ ("Browser", "Mobile Apps and Desktop clients")
+| summarize Attempts  = count(),
+            Successes = countif(ResultType == "0"),
+            Users     = make_set(UserPrincipalName, 50),
+            IPs       = make_set(IPAddress, 50),
+            Clients   = make_set(ClientAppUsed, 20),
+            Apps      = make_set(AppDisplayName, 20)
+        by bin(TimeGenerated, 1h)
+| extend StillSucceeding = Successes > 0
+| sort by TimeGenerated desc

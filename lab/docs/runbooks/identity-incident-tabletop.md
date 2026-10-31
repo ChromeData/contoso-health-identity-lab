@@ -1,9 +1,9 @@
 # Runbook: identity incident tabletop (twice a year)
 
 **Scenario:** Contoso Health lab, a fictional 5,000-user hospital.
-**Status:** written against the lab code, never exercised (no tenant). A
-tabletop needs no tenant to run as a discussion; the "inject" steps marked
-**[tenant]** are the ones that become live drills once one exists.
+**Status:** written against the lab code, never exercised. A
+tabletop runs as a discussion; the "inject" steps marked
+**[tenant]** are the ones that can now run as live drills in the lab tenant.
 
 **Purpose.** Prove, before a real incident, that the people in the RACI can
 run `compromised-identity.md` end to end, that the detections and the

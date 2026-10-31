@@ -9,9 +9,33 @@ const PAGES = path.join(path.dirname(new URL(import.meta.url).pathname), 'pages'
 const TERM = 'file://' + path.join(PAGES, 'term.html');
 const CARD = 'file://' + path.join(PAGES, 'card.html');
 const STEPS = 'file://' + path.join(PAGES, 'steps.html');
+const INTRO = `file://${REPO}/lab/scripts/demo/video/pages/intro.html`;
+const INTRO_RESULT_AUDIO = `${OUT}/clips/result-line.mp3`;
+const INTRO_FACE_CLIP = `${OUT}/clips/face.mp4`;
+const SR = 'file://' + path.join(PAGES, 'speedrun.html');
+const BIMGDIR = `${OUT}/build`;
 const BMAP = 'file://' + path.join(PAGES, 'build-map.html');
 const bmapGo = (r, i) => r.page.evaluate((i) => window.bmap.go(i), i);
 const BIMG = (n) => 'file://' + path.join(OUT, 'build', n + '.png');
+// The speed run: one real screen per key point, no maps (the maps come once each, right after).
+function srSlides() {
+  const im = (n) => `file://${BIMGDIR}/${n}.png`;
+  return [
+    { img: im('entra'), tag: 'BY HAND', kind: 'hand', n: 'Setup 1 of 6', h: 'Six real <em>sign-ups</em>', p: 'Microsoft, Azure, AWS, ServiceNow, Okta, GitHub. Each one a real account on a trial.' },
+    { img: im('domain'), tag: 'BY HAND', kind: 'hand', n: 'Setup 2 of 6', h: 'One <em>domain</em>', p: 'contosohealthlab.com, proven to Microsoft with a DNS record.' },
+    { glyph: 'PLAN · APPLY', tag: 'AS CODE', kind: 'code', n: 'Setup 3 of 6', h: 'Two <em>robot identities</em>', p: 'No passwords. GitHub signs a token, Entra trusts it, nothing to steal.' },
+    { img: im('github'), tag: 'AS CODE', kind: 'code', n: 'Setup 4 of 6', h: 'Every change is a <em>pull request</em>', p: '13 checks, a human approves, Terraform applies.' },
+    { img: im('dc01'), tag: 'AS CODE', kind: 'code', n: 'Setup 5 of 6', h: 'A Windows <em>domain controller</em>', p: 'Built by the pipeline, synced to the cloud by Cloud Sync.' },
+    { img: im('users'), tag: 'AS CODE', kind: 'code', n: 'Setup 6 of 6', h: 'Thirteen fake <em>staff</em>', p: 'A spreadsheet stands in for HR and feeds the directory.' },
+    { img: im('hrapp'), tag: 'REAL SCREEN', n: 'The lab', h: 'HR decides who gets <em>in</em> and who is <em>out</em>', p: 'Hired: an account, the right apps. Gone: everything off.' },
+    { img: im('ca'), tag: 'REAL SCREEN', n: 'Sign-in rules', h: 'Nine policies <em>enforced</em>', p: 'Each graduated from report-only by its own reviewed pull request.' },
+    { img: im('pim'), tag: 'REAL SCREEN', n: 'Privileged access', h: 'Admin power only while it is <em>used</em>', p: 'Eligible, not standing. Activation needs a reason and a ticket.' },
+    { glyph: 'ALERT', tag: 'REAL SCREEN', n: 'Detect and respond', h: 'Sentinel raises the <em>alarm</em>', p: 'Sixteen rules live: break-glass use, risky sign-ins, role changes outside PIM.' },
+    { glyph: 'PROOF', tag: 'REAL SCREEN', n: 'Proof', h: 'Evidence an auditor can <em>check</em>', p: 'Write-once store, hashed packs, a drift check against the code.' },
+    { img: im('aws'), tag: 'REAL SCREEN', n: 'Leaver', h: 'Gone from AWS in <em>nine minutes</em>', p: 'HR to AD to Entra to AWS, measured from timestamps.' },
+  ];
+}
+
 function buildMapData() {
   return {
     kick: 'How the lab was built', title: 'From six sign-ups to <em>one running tenant</em>', sub: 'The wiring is half the work. Read it left to right, like the lab map.',
@@ -20,8 +44,8 @@ function buildMapData() {
       { title: 'Sign-ups', kicker: 'Six platforms, by hand', goal: 'Real accounts on every platform', text: 'Every platform is a real account with a trial licence. Opening them is the one step a person has to do: a card, a phone, a verification mail.',
         bullets: ['Microsoft Entra: the cloud directory (E5, Governance and Intune trials)', 'Azure: the servers and storage, on a free-trial subscription', 'AWS, ServiceNow, Okta: the apps staff will sign in to', 'GitHub: every line of code, in a private repository'],
         chips: [{ text: 'BY HAND', kind: 'hand' }, { text: 'DONE', kind: 'done' }],
-        tiles: [{ name: 'Microsoft Entra', note: 'Cloud directory', img: BIMG('entra'), kind: 'hand' }, { name: 'Azure', note: 'Servers + storage', img: BIMG('azure'), kind: 'hand' }, { name: 'AWS', note: 'IAM Identity Center', img: BIMG('aws'), kind: 'hand' },
-                { name: 'ServiceNow', note: 'Developer instance', img: BIMG('servicenow'), kind: 'hand' }, { name: 'Okta', note: 'Integrator org', img: BIMG('okta'), kind: 'hand' }, { name: 'GitHub', note: 'Private repo', img: BIMG('github'), kind: 'hand' }],
+        tiles: [{ name: 'Microsoft Entra', note: 'Where every staff login lives', img: BIMG('entra'), kind: 'hand' }, { name: 'Azure', note: 'Hosts the server and the evidence files', img: BIMG('azure'), kind: 'hand' }, { name: 'AWS', note: 'The cloud console engineers sign into', img: BIMG('aws'), kind: 'hand' },
+                { name: 'ServiceNow', note: 'The IT help desk', img: BIMG('servicenow'), kind: 'hand' }, { name: 'Okta', note: "A partner clinic's own login system", img: BIMG('okta'), kind: 'hand' }, { name: 'GitHub', note: 'Where the code and the change history live', img: BIMG('github'), kind: 'hand' }],
         outs: ['<b>6</b> accounts', '<b>3</b> free trials', '<b>1</b> private repo'] },
       { title: 'The name', kicker: 'A verified domain', goal: 'Sign-ins look like the hospital', text: 'A real internet name, bought from a registrar and proven to Microsoft by a DNS record only the owner can set.',
         bullets: ['contosohealthlab.com, verified in Entra', 'Also the name of the on-site directory: corp.contosohealthlab.com', 'Without it, every account would end in onmicrosoft.com'],
@@ -33,11 +57,11 @@ function buildMapData() {
         chips: [{ text: 'AS CODE', kind: 'code' }, { text: 'DONE', kind: 'done' }],
         tiles: [{ name: 'PLAN identity', note: 'Proposes changes', glyph: 'PLAN', kind: 'code' }, { name: 'APPLY identity', note: 'Makes them', glyph: 'APPLY', kind: 'code' }, { name: 'GitHub trust', note: 'Minutes-long token, no secret', glyph: 'OIDC', kind: 'code' }],
         outs: ['<b>2</b> identities · <b>0</b> passwords', 'Refused from any other branch'] },
-      { title: 'The pipeline', kicker: '25 reviewed changes', goal: 'Reviewed, repeatable, provable', text: 'Every change is a pull request. Checks rehearse it, a person approves it, Terraform applies it. That is how all of the lab was built, in days.',
-        bullets: ['Day 1: sign-in rules, report-only', 'Day 2: admin tiers (PIM)', 'Day 3: access governance (packages, workflows)', 'Then: 11 detection rules, then the domain controller'],
+      { title: 'The pipeline', kicker: '64 reviewed changes', goal: 'Reviewed, repeatable, provable', text: 'Every change is a pull request. Checks rehearse it, a person approves it, Terraform applies it. That is how all of the lab was built, in days.',
+        bullets: ['Day 1: sign-in rules, report-only', 'Day 2: admin tiers (PIM)', 'Day 3: access governance (packages, workflows)', 'Then: 17 detection rules, then the domain controller, then single sign-on for AWS, ServiceNow and Okta, with automatic accounts for AWS'],
         chips: [{ text: 'AS CODE', kind: 'code' }, { text: 'DONE', kind: 'done' }],
         tiles: [{ name: 'Pull request', note: 'A change plus a reviewer', img: BIMG('github'), kind: 'code' }, { name: 'Checks', note: '13 mocked tests', glyph: '13 ✓', kind: 'code' }, { name: 'Approve', note: 'A person types it', glyph: 'approve', kind: 'hand' }, { name: 'Terraform apply', note: 'Makes the tenant match', glyph: 'TF', kind: 'code' }],
-        outs: ['<b>25</b> merged pull requests', '<b>13</b> checks on each one'] },
+        outs: ['<b>64</b> merged pull requests', '<b>13</b> checks on each one'] },
       { title: 'The directory', kicker: 'DC01 + Cloud Sync', goal: 'On-site accounts flow to the cloud', text: 'A Windows server in Azure was promoted to a domain controller, the on-site directory most hospitals still run. The Cloud Sync agent on it copies accounts up to Entra.',
         bullets: ['DC01: Windows Server 2022, created by the pipeline, shuts down nightly', 'Cloud Sync: copies the Workforce and Disabled folders every few minutes', 'One password in both places, carried as a scrambled hash'],
         chips: [{ text: 'AS CODE', kind: 'code' }, { text: 'AGENT BY SCRIPT', kind: 'hand' }, { text: 'DONE', kind: 'done' }],
@@ -71,43 +95,64 @@ const mapGo = (r, go) => r.page.evaluate((go) => { const b = document.createElem
 export function scenes(ids) {
   const userBlade = (id) => `${ENTRA}Microsoft_AAD_UsersAndTenants/UserProfileMenuBlade/~/overview/userId/${id}/hidePreviewBanner~/true`;
   return [
-  { id: '01-title', kind: 'local', beats: [
-    { say: "This is the Contoso Health identity lab: a made-up five-thousand-person hospital, running in a real Microsoft cloud tenant. Identity here means three things: who works here, what they can open, and proof of both. Everything you'll see is live.",
-      prep: card({ kick: 'Live lab tour', title: 'Contoso Health,<br>from hire to <em>proof</em>', sub: 'Who works here, what they can open, and proof of both. Built as code, running in a real Microsoft tenant.',
-        chips: ['HR-driven joiners &amp; leavers', 'Hybrid AD + Cloud Sync', 'Conditional Access', 'PIM tiers', 'Sentinel ITDR', 'WORM evidence'] }) },
-  ] },
-  { id: '01b-built', kind: 'local', beats: [
-    { say: "Before the tour, the part nobody shows you: the wiring. Here it is, left to right, the same way the lab map reads. Six stations, from the first sign-up to the first real person in the directory. The orange tiles were done by hand. The blue ones are code. And every tile with a screen on it is a real page from this lab.",
-      prep: async (r) => { await r.page.goto(BMAP); await r.ov('hideCursor', true); await r.page.evaluate((d) => window.bmap.init(d), buildMapData()); await sleep(600); } },
-    { say: "Station one: sign-ups. Six platforms, each one a real account. Microsoft Entra is the cloud directory, on a trial licence. Azure holds the servers and storage. AWS, ServiceNow and Okta are the apps the staff will use. GitHub holds every line of code, in a private repo. This is the one part that stays manual: a company's accounts are opened by a person, with a card and a phone.",
-      run: async (r) => { await bmapGo(r, 0); } },
-    { say: "Station two: the name. A real internet domain, contosohealthlab dot com, bought for eleven dollars and proven to Microsoft with a DNS record only the owner can set. From then on, sign-in names look like the hospital's, not like a trial.",
-      run: async (r) => { await bmapGo(r, 1); } },
-    { say: "Station three: the robot identities. One run from a laptop created two of them: one that plans changes, one that applies them. They have no passwords. When a change runs from GitHub, GitHub vouches for it with a token that lasts minutes, and Microsoft trusts it only from the approved path. We tested that by trying from somewhere else, and got refused.",
-      run: async (r) => { await bmapGo(r, 2); } },
-    { say: "Station four: the pipeline. Every change is a pull request. Thirteen checks rehearse it against a fake tenant. A person types approve. Terraform applies it. Twenty-five of those built the lab, in days: sign-in rules on day one, admin tiers on day two, access governance on day three, then the detection rules, then the server.",
-      run: async (r) => { await bmapGo(r, 3); } },
-    { say: "Station five: the directory. A Windows server in Azure, created by that pipeline, was promoted to a domain controller: the on-site directory most hospitals still run. Microsoft's Cloud Sync agent went onto it, and from then on every account it holds flows up to Entra, the cloud directory, every few minutes.",
-      run: async (r) => { await bmapGo(r, 4); } },
-    { say: "Station six: the people. Thirteen fake staff in a spreadsheet stand in for the HR system. They went through Microsoft's HR front door into the directory, each in the right department, then up to the cloud. Three IT people got separate admin logins, because admin power never sits on a daily account.",
-      run: async (r) => { await bmapGo(r, 5); } },
-    { say: "That's the wiring: six sign-ups, one pipeline, one tenant. I built it with an AI engineering assistant doing the heavy typing, and every change still went through the same review and the same tests. Now the tour. And there's a plain-English glossary in the repo for any term that goes by fast.",
-      run: async (r) => { await r.page.evaluate(() => window.bmap.overview(true)); } },
+  { id: '00-face', kind: 'clip', clip: INTRO_FACE_CLIP, beats: [] },
+  { id: '01-built', kind: 'local', beats: [
+    { say: "Entra is the directory, and E5 because the sign-in rules, admin controls and risk alerts all need it. Azure runs the servers. Then the apps staff sign in to. AWS is the cloud console, where I prove accounts appear and disappear on their own. ServiceNow is the help desk. Okta stands in for a partner clinic that signs in with its own identity provider. GitHub holds all the code, written as Terraform.",
+      audio: `${OUT}/clips/built-1.mp3`, prep: async (r) => { await r.page.goto(BMAP); await r.ov('hideCursor', true); await r.page.evaluate((d) => window.bmap.init(d), buildMapData()); await sleep(1400); await r.page.evaluate(() => window.bmap.overview(false)); await sleep(300); },
+      run: async (r, b) => { await b.until(0.02); await bmapGo(r, 0); } },
+    { say: "Two robot identities run the pipeline, one that proposes, one that applies. No passwords. GitHub vouches with a token that lasts minutes, and Microsoft only trusts it from the main branch. I tried it from another branch, it was refused, and I kept the refusal as proof.",
+      audio: `${OUT}/clips/built-3.mp3`,
+      run: async (r, b) => { await b.until(0.02); await bmapGo(r, 2); } },
+    { say: "Every change is a pull request. Tests run, a person types approve, Terraform makes the tenant match. Sign-in rules first, in report-only. Then admin tiers. Then access packages. Then detection and the domain controller. Then single sign-on for AWS, ServiceNow and Okta. Sixty-four merged.",
+      audio: `${OUT}/clips/built-4.mp3`,
+      run: async (r, b) => { await b.until(0.02); await bmapGo(r, 3); } },
+    { say: "Most hospitals still run on-site Active Directory, so the lab does too. Terraform built DC01 in Azure and a script made it a domain controller. Cloud Sync on it copies accounts up to Entra every few minutes. It shuts down every night to save money.",
+      audio: `${OUT}/clips/built-5.mp3`,
+      run: async (r, b) => { await b.until(0.02); await bmapGo(r, 4); } },
+    { say: "Thirteen fake staff in a spreadsheet stand in for HR. A script feeds each row through Microsoft's HR connector into Active Directory, and Cloud Sync carries them to the cloud. One leaver lands disabled. Three IT staff get separate admin logins.",
+      audio: `${OUT}/clips/built-6.mp3`,
+      run: async (r, b) => { await b.until(0.02); await bmapGo(r, 5); } },
+    { say: "That's the wiring. Every piece went through the same review, and all of it is in the repo. Now the lab itself.",
+      audio: `${OUT}/clips/built-close.mp3`,
+      run: async (r) => { await r.page.evaluate(() => { window.bmap.enterAll(); window.bmap.overview(false); }); } },
   ] },
   { id: '02-map', kind: 'local', beats: [
-    { say: "Here's the whole platform on one map. Read it left to right: it's a person's path through the hospital. Hired by HR, given an account, handed the access their job needs, checked at every sign-in, watched for attacks, and removed the day they leave. At the far end is the proof an auditor asks for.",
-      prep: async (r) => { await r.page.goto(MAP); await r.ov('hideCursor', true); await sleep(2500); await mapGo(r, 'overview'); await sleep(1200); } },
-    { say: "Above the line is delivery: how any change gets made. Nobody clicks settings into place by hand. A change is written as code, a person reviews it, and a pipeline applies it. That's not a shortcut, it's the senior way to run this: every change is reviewed, repeatable, and provable. The four steps are checks, a reviewer, a sign-in, and an apply.",
-      run: async (r, b) => { await mapGo(r, 'delivery'); await b.until(0.7); await r.define('The four steps', 'Checks run, a reviewer approves, the robot signs in, Terraform applies.'); } },
-    { say: "Rule one: access follows HR. If HR says you work here, you get in. If HR says you've left, you're out.",
-      run: async (r) => { await mapGo(r, 'station:source'); } },
-    { say: "Rule two: nobody keeps admin power when they're not using it.",
-      run: async (r) => { await mapGo(r, 'station:privileged'); } },
-    { say: "Rule three: every control can be proven the moment an auditor asks. Blue badges mark what's running in the tenant today. Let's walk it.",
-      run: async (r) => { await mapGo(r, 'station:proof'); } },
+    { say: "Now the lab itself. Ten stops, numbered seven to sixteen so you can find them on the map in the repo. Read it left to right, the way a person moves through the hospital: hired, given access, signing in, doing admin work, watched, leaving, and finally proven to an auditor. I'll walk each one properly in a minute. Here's the short version.",
+      audio: `${OUT}/clips/lab-0.mp3`, prep: async (r) => { await r.page.goto(MAP); await r.ov('hideCursor', true); await sleep(2500); await r.page.evaluate(() => { const st = document.createElement('style'); st.textContent = '@keyframes vin{from{opacity:0}to{opacity:1}} #map > g > * { animation: vin .6s ease both; }'; document.head.appendChild(st); document.querySelectorAll('#map > g > *').forEach((e, k) => { e.style.animationDelay = Math.min(k * 20, 1200) + 'ms'; }); }); await mapGo(r, 'overview'); await sleep(1600); },
+      run: async (r) => {} },
+    { say: "Seven, the source of truth. Everything starts with HR, the official list of who works here. In the lab a spreadsheet plays that part. Access flows out of that list and never back into it, so if HR says you've gone, you're gone.",
+      audio: `${OUT}/clips/lab-1.mp3`,
+      run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:source').catch(() => {}); } },
+    { say: "Eight, the directory. Two of them, kept in step. Active Directory on the Windows server is what the hospital's PCs still check against. Entra is the cloud copy every modern app checks. Cloud Sync carries accounts up from one to the other, so you fix a person once and it's fixed everywhere.",
+      audio: `${OUT}/clips/lab-2.mp3`,
+      run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:directory').catch(() => {}); } },
+    { say: "Nine, joiner and mover. A new nurse gets nurse systems on day one, automatically, because of her job title. Anything extra she asks for, a manager approves, and it expires on its own. A few combinations are blocked outright, because one person holding both would be a fraud risk.",
+      audio: `${OUT}/clips/lab-3.mp3`,
+      run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:joiner').catch(() => {}); } },
+    { say: "Ten, the apps. This is where staff actually go after they sign in. Engineers go to AWS to run servers. Everyone goes to ServiceNow to raise a ticket. And a partner clinic comes in through its own Okta. All three trust the hospital login instead of keeping their own passwords, and for AWS the account appears and disappears with HR.",
+      audio: `${OUT}/clips/lab-4.mp3`,
+      run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:apps').catch(() => {}); } },
+    { say: "Eleven, the sign-in rules. The checks at the door, every single time. Where you are, what device, how risky it looks, and whether you proved it's you with more than a password. Eleven rules, nine live. Every new one starts in report-only mode, and that's deliberate: a bad rule in a hospital locks out a clinician mid-shift.",
+      audio: `${OUT}/clips/lab-5.mp3`,
+      run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:signin').catch(() => {}); } },
+    { say: "Twelve, privileged access. Nobody keeps admin power all day. You ask for it, say why, hold it for a few hours, and it switches itself off. Server passwords live in a vault that rotates them and hands them out only against an approved ticket, and the admin works through a recorded session without ever seeing the password. Two honest exceptions: the two emergency accounts that sit outside every rule, and the account that built the lab, which still holds a standing role and is the next thing on the list to move to just-in-time.",
+      audio: `${OUT}/clips/lab-6.mp3`,
+      run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:privileged').catch(() => {}); } },
+    { say: "Thirteen, detect and respond. Every sign-in and every change lands in Sentinel. Splunk runs the same rules on synthetic test events, not a live feed yet, which shows the detections aren't tied to one product. Rules written as code raise the alarm, say an admin signing in from a new country. And a person approves the lockout before it happens, because locking out the wrong clinician is itself an incident.",
+      audio: `${OUT}/clips/lab-7.mp3`,
+      run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:detect').catch(() => {}); } },
+    { say: "Fourteen, the leaver, and the robot accounts. HR flips one field. The account goes off, sessions are cut, app access is gone, each step timed. Nine minutes from HR to AWS. The rule is two human owners per robot account so nothing is orphaned; the inventory found four that don't have them yet, and that's the list being worked.",
+      audio: `${OUT}/clips/lab-8.mp3`,
+      run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:leaver').catch(() => {}); } },
+    { say: "Fifteen, proof. Showing an auditor it works, on demand. Regular reviews of who has what, an evidence binder where every page is fingerprinted and stored where nobody can edit it, and a nightly check that nothing drifted from the approved setup.",
+      audio: `${OUT}/clips/lab-9.mp3`,
+      run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:proof').catch(() => {}); } },
+    { say: "And sixteen, delivery, runs above all of it: every change is code, reviewed and applied with no stored password. That's the lab at a glance. From here the narrated walkthrough takes over, station by station, on the real screens.",
+      audio: `${OUT}/clips/lab-10.mp3`,
+      run: async (r, b) => { await b.until(0.02); await mapGo(r, 'overview').catch(() => {}); } },
   ] },
   { id: '03-delivery', kind: 'local', beats: [
-    { say: "Here is the delivery history: twenty-five merged pull requests. A pull request is a proposed change, shown line by line, with someone named to review it. Merged means it was accepted into the live version. Read the titles like chapters. Day one turned on the sign-in rules in report-only mode. Day two built the admin tiers. Day three added access governance. Then came the detection rules, then the domain controller, then the scripts that wire it all together.",
+    { say: "Here is the delivery history: sixty-four merged pull requests. A pull request is a proposed change, shown line by line, with someone named to review it. Merged means it was accepted into the live version. Read the titles like chapters. Day one turned on the sign-in rules in report-only mode. Day two built the admin tiers. Day three added access governance. Then came the detection rules, then the domain controller, then the scripts that wire it all together.",
       prep: termOpen,
       run: async (r, b) => { await cmd(r, 'gh pr list --state merged --limit 40'); await out(r, T('prs.txt'), 22); await r.define('Pull request', 'A proposed change plus a reviewer. Merged means accepted.'); await b.until(0.55); await mark(r, 'Day 1'); await b.until(0.65); await mark(r, 'Day 2'); await b.until(0.72); await mark(r, 'Day 3'); await b.until(0.8); await mark(r, 'enable_sentinel'); await b.until(0.86); await mark(r, 'enable_dc'); await b.until(0.92); await mark(r, '^#3[5-7]|^#36'); } },
     { say: "Before any human looks, the proposal is tested. Thirteen checks run it against a mock copy of the tenant. Some are guard rails that stop a dangerous combination. This one refuses to demand the strongest sign-in for admin activation until the rule that provides it is actually switched on. Otherwise the demand would be hollow, and lock every admin out.",
@@ -181,7 +226,7 @@ export function scenes(ids) {
         for (const f of r.page.frames()) await f.evaluate(() => { for (const b of document.querySelectorAll('button[aria-label*="lose" i], button[title*="lose" i]')) { const t = (b.closest('div') || {}).innerText || ''; if (/policy plans|Migrate to Conditional Access/i.test(b.parentElement?.parentElement?.innerText || t)) b.click(); } }).catch(() => {});
         await sleep(800); await r.wheel(420, { x: 1000, y: 600 }); await sleep(1000); },
       run: async (r, b) => { await r.define('Conditional Access', 'Rules checked at every sign-in: who you are, what you must prove.'); await b.until(0.28); await r.ring({ text: /^CA001 - / , row: true }, 'Everyone: second factor'); await b.until(0.45); await r.ring({ text: /^CA002 - /, row: true }, 'Admins: phishing-resistant'); await b.until(0.68); await r.ring({ text: /^CA003 - /, row: true }, 'Old protocols blocked'); await b.until(0.85); await r.ring({ text: /^CA007 - /, row: true }, 'High risk: blocked'); } },
-    { say: "Every policy is in report-only mode for now, and that's deliberate. Report-only means it watches and logs what it would have done, without blocking anyone. Each one turns on through its own reviewed change, once the report shows it would not lock out a single clinician. And two break-glass accounts, emergency logins kept in a safe, are excluded from all of them, so there is always a way back in.",
+    { say: "Nine of the eleven are enforced now. Each one started in report-only, which watches and logs without blocking, and graduated through its own reviewed change once the report showed it would not lock out a clinician. Two stay report-only on purpose, because they demand passkeys the admins don't hold yet. And two break-glass accounts, emergency logins kept in a safe, are excluded from all of them, so there is always a way back in.",
       run: async (r, b) => { await r.ring({ text: 'State', exact: true }, 'Report-only').catch(() => {}); await r.define('Report-only', 'The rule logs what it would block, without blocking yet.'); await b.until(0.62); await r.unring(); await r.define('Break-glass account', 'An emergency login kept in a safe, excluded from every rule.'); } },
   ] },
   { id: '10-pim', kind: 'portal', beats: [
@@ -272,11 +317,6 @@ export function scenes(ids) {
       prep: async (r) => { await termOpen(r); await r.page.evaluate(() => { document.getElementById('scr').style.fontSize = '18px'; }); },
       run: async (r, b) => { await cmd(r, 'grep ^E lab/evidence/capture-log.csv | cut -c1-140');
         await out(r, T('elog.txt'), 8); await r.define('Hash', 'A fingerprint of a file. Change one byte and it changes.'); await b.until(0.55); await mark(r, '^E10|^E16a|^E06|^E03'); } },
-  ] },
-  { id: '16-next', kind: 'local', beats: [
-    { say: "What's left is wired, and waiting on one limit. A brand-new Microsoft tenant can hold only a few hundred objects for its first two days. When that lifts, single sign-on and automatic accounts for AWS, ServiceNow and Okta go live, along with the automated containment playbook and a managed laptop.",
-      prep: card({ kick: "What's next", title: 'Wired, and waiting on<br>one <em>tenant limit</em>', sub: 'New tenants are capped at 600 directory objects for their first 48 hours. These go live when it lifts.',
-        chips: ['SSO + SCIM: AWS · ServiceNow · Okta', 'Containment playbook', 'Intune device trust', 'CA graduations', 'Access reviews'] }) },
   ] },
   { id: '17-close', kind: 'local', beats: [
     { say: "Contoso Health. Access follows HR, admin power is temporary, and every change is proven. The glossary and every script are in the repo. Thanks for watching.",

@@ -1,7 +1,7 @@
 # Runbook: PIM activation support (L1 / L2)
 
 **Scenario:** Contoso Health lab (fictional 5,000-user hospital). **Status:**
-written against the lab code; not yet exercised (no tenant deployed).
+written against the lab code; not yet exercised in the tenant.
 
 ## The design you are supporting
 
@@ -10,7 +10,7 @@ written against the lab code; not yet exercised (no tenant deployed).
 | Group **Privileged-IAM-Admins** holds **User Administrator** actively; *membership* is the just-in-time part | `lab/terraform/modules/pim/main.tf` |
 | Activation needs MFA, a justification, approval, and lasts at most **PT4H** | same, `activation_rules` |
 | Approvers are the members of a role-assignable approver group per tier (`PIM-Approvers-Tier1` for this group, `PIM-Approvers-Tier0` for Tier 0), filled from `TF_PIM_APPROVER_OBJECT_IDS` | `lab/pipelines/README.md` §5 D, `modules/pim/approvers.tf` |
-| The same pattern covers more roles in tier groups (`enable_pim_tiers`, off by default): eight Tier-0 groups (`PIM-Tier0-*`) need approval and a ticket number and last at most 4 h (Privileged Authentication Administrator 2 h); seven Tier-1 groups (`PIM-Tier1-*`) last at most 8 h, one shift, with no approval except Intune (the standard also wants it on Exchange and SharePoint: exception E10 in `standards/exception-process.md`). Global Administrator is never a tier group: named people are eligible directly on the role (2 h, Tier-0 approval) | `modules/pim/tiers.tf`, `directory-roles.tf`, `variables.tf` |
+| The same pattern covers more roles in tier groups (`enable_pim_tiers`, off by default): eight Tier-0 groups (`PIM-Tier0-*`) need approval and a ticket number and last at most 4 h (Privileged Authentication Administrator 2 h); eight Tier-1 groups (`PIM-Tier1-*`) last at most 8 h, one shift, with no approval except Intune and IGA (the standard also wants it on Exchange and SharePoint: exception E10 in `standards/exception-process.md`). Global Administrator is never a tier group: named people are eligible directly on the role (2 h, Tier-0 approval) | `modules/pim/tiers.tf`, `directory-roles.tf`, `variables.tf` |
 | Tier-0 activation can require authentication context **c1** instead of plain MFA (`tier0_activation_auth_context_id`, empty by default). c1 is met only through CA021: the admin phishing-resistant strength, with a fresh sign-in every time. It is switched on only after CA021 is enforced ([graduate-a-ca-policy.md](graduate-a-ca-policy.md), [ADR 0020](../adr/0020-pim-activation-design.md)) | `modules/pim/tiers.tf`, `modules/conditional-access/admins.tf` |
 | Eligibility expires: **P365D** on this group and Tier 1, **P180D** on Tier 0. Renewal goes through L2 like a new grant. A direct *active* assignment (bypassing activation) must expire, shortest choice **P15D** | `modules/pim/main.tf`, `tiers.tf`, `variables.tf` |
 | Who is eligible is set after HR provisioning by `Set-PimGroupEligibility.ps1`. It has no default person: name the IT/IAM engineer's account explicitly (a clinical manager eligible for User Administrator is the SOD-08 conflict) | `lab/scripts/powershell/post-apply/` |

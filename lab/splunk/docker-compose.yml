@@ -63,7 +63,7 @@ services:
       SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN:?run ./splunk-up.sh first}
       # --- provisioning behaviour (splunk-ansible variables) ---------------------
       HIDE_PASSWORD: "true"          # keep the password out of the ansible log on stdout
-      SPLUNK_DISABLE_POPUPS: "true"  # clean UI for the screen recording
+      SPLUNK_DISABLE_POPUPS: "false" # "true" makes splunk-ansible call the REST API 10 s after start, which fails under amd64 emulation (GET OptInVersion) and restart-loops the container; dismiss the first-run popups by hand instead
       # The image recursively chowns $SPLUNK_HOME to the splunk user by default.
       # With the detections app bind-mounted from this git checkout that would
       # rewrite ownership of repo files on Linux hosts and can fail outright on
@@ -78,16 +78,19 @@ services:
       - "127.0.0.1:8088:8088"        # HTTP Event Collector (HTTPS, self-signed)
       - "127.0.0.1:8089:8089"        # management REST API (splunk-up.sh checks)
     volumes:
-      - splunk-etc:/opt/splunk/etc
+      # etc is NOT a volume: under Colima/vz the named volume came up empty instead of seeded from the image,
+      # so Splunk's own apps (splunk_httpinput for HEC) were missing and the start loop failed. Ansible re-creates
+      # the config from the environment on every start, so nothing in etc needs to persist.
       - splunk-var:/opt/splunk/var
       # Detections-as-code app. Not :ro so Splunk can write the app's local/
       # directory if someone edits an alert in the UI (that local/ dir is
       # gitignored - edit detections/*.spl instead and re-render).
-      - ./app/contoso_identity:/opt/splunk/etc/apps/contoso_identity
+      # The detections app is copied in AFTER first boot by splunk-up.sh (docker cp + restart). Mounting it here
+      # made /opt/splunk/etc non-empty before the image's /sbin/updateetc.sh ran, which then skipped seeding the
+      # stock config, so Splunk's own apps (splunk_httpinput for HEC) were missing and the start loop failed.
     # The image ships its own HEALTHCHECK (/sbin/checkstate.sh, 3 min start
     # period); splunk-up.sh waits on it.
     restart: unless-stopped
 
 volumes:
-  splunk-etc:
   splunk-var:

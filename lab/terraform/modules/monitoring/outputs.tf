@@ -55,3 +55,8 @@ output "dc_security_dcr_id" {
   description = "DCR collecting DC01 Security events (null unless collect_dc_security_events)."
   value       = one(azurerm_monitor_data_collection_rule.dc_security[*].id)
 }
+
+output "defender_for_identity_connector_id" {
+  description = "Microsoft Defender XDR data connector that carries MDI alerts into SecurityAlert (ADR 0023; null unless enable_sentinel + enable_defender_for_identity). The sensor, MDI workspace and licence are human steps - see the runbook."
+  value       = one(azurerm_sentinel_data_connector_microsoft_threat_protection.mdi[*].id)
+}

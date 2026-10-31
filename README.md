@@ -14,8 +14,8 @@ to departure.
 
 A narrated walkthrough will be recorded after the tenant run and linked here.
 
-> **Status (2026-10-21): nothing has run against a Microsoft tenant yet** - no
-> tenant exists. Every tenant feature sits behind a staging flag that defaults
+> **Status (2026-10-31): running in a real Microsoft Entra tenant.** Sixty-four reviewed changes applied by the pipeline; nine of eleven sign-in policies enforced; single sign-on and automatic accounts live for AWS, ServiceNow and Okta; a timed leaver removed from AWS in nine minutes (E52); evidence pack and a zero-drift config baseline captured (`lab/evidence/capture-log.csv`).
+> Earlier status (2026-10-21): no tenant existed; everything below was mocked. Every tenant feature sits behind a staging flag that defaults
 > to off, and anything only a live tenant can confirm is marked `verify:` in
 > the code. What has run, on the author's machine on 2026-10-20 and 21 (UTC):
 >
@@ -44,12 +44,15 @@ A narrated walkthrough will be recorded after the tenant run and linked here.
 >   0). The Kubernetes segment passed 12/12 pipeline stages and 64/64
 >   end-to-end checks on a throwaway kind cluster. The 22 KQL detections ran
 >   on the Azure Data Explorer Kusto emulator, a local KQL engine, against
->   synthetic tables and events: 22/22 rules and 223/223 cases passed
->   (`lab/evidence/kusto/20261021T001217Z/`). Sentinel's `_GetWatchlist` is
+>   synthetic tables and events: 22/22 rules and 277/277 cases passed
+>   (`lab/evidence/kusto/20261031T060102Z/`; the earlier 223-case run is
+>   `20261021T001217Z`). Sentinel's `_GetWatchlist` is
 >   shimmed there. **The emulator is not a Log Analytics workspace and not a
->   tenant**: no rule has been scheduled in Sentinel or fired.
-> - **Not run:** no SPL search has run on Splunk: the Splunk container is
->   BUILT and has never been started. No GitHub workflow has run yet.
+>   tenant**: that run scheduled nothing in Sentinel; the Sentinel rules came later (E15 enabled 11 plus Fusion, E15b added the ITDR set), 17 scheduled by Terraform in all.
+> - **Run on synthetic events:** every SPL twin fired on the local Splunk 10.4.4
+>   replay of the detection test cases: 22 of 22 saved searches returned rows
+>   (E59, E59a, E61). The tenant-backed Log Analytics replay still needs a live
+>   admin session. GitHub workflows have run: 64 merged pull requests.
 >
 > Hashed run records (a `SHA256SUMS` file each) are in
 > [`lab/evidence/`](lab/evidence/), with an index of what each one shows,
@@ -77,7 +80,7 @@ A narrated walkthrough will be recorded after the tenant run and linked here.
 | [Architecture decision records](lab/docs/adr/README.md) | 20 decisions, each with the options rejected, what it costs and what would change it |
 | [CISO brief](lab/docs/ciso-brief.md) | The ask: licensing, the open risk acceptance, named owners |
 | [Threat model](lab/docs/threat-model.md) | Public identity incidents, step by step, against the control and detection meant to stop each step, and the gap left |
-| [Break-glass drill runbook](lab/docs/runbooks/break-glass-drill.md) | How the emergency-access accounts are proven every quarter (not yet run: no tenant) |
+| [Break-glass drill runbook](lab/docs/runbooks/break-glass-drill.md) | How the emergency-access accounts are proven every quarter (not yet run in the tenant) |
 
 Also: [roadmap](lab/docs/roadmap.md), [risk register](lab/docs/risk-register.md),
 [vendor evaluation](lab/docs/vendor-evaluation.md),
@@ -113,12 +116,12 @@ Status words, used the same way everywhere in this repository:
 |---|---|---|---|---|
 | **Joiner / mover / leaver** | BUILT | HR feed → API-driven inbound provisioning **to on-prem AD** → Cloud Sync → Entra, with a mass-change guard. Birthright access from HR attributes (automatic assignment policies), Lifecycle Workflows (joiner, leaver, opt-in mover), requestable access packages with 180-day expiry. The leaver revokes sessions, removes access and hands over the workload identities the person owned; SaaS accounts are disabled by SCIM on the next provisioning cycle (or on demand). | ADR 0001, 0006 | [`lab/scripts`](lab/scripts), [`lab/iga`](lab/iga), [`modules/entitlement`](lab/terraform/modules/entitlement) |
 | **Hybrid AD (DC01)** | BUILT | Domain controller VM (NSG limited to the operator, auto-shutdown) and its promotion scripts, including the Vault rotation account's delegated rights | ADR 0013 | [`modules/dc-vm`](lab/terraform/modules/dc-vm), [`lab/scripts/dc`](lab/scripts/dc) |
-| **SSO + provisioning** | BUILT: AWS IAM Identity Center SAML + SCIM (created stopped), ServiceNow SAML (flag off), Clinical Portal OIDC, PAM broker sign-in, Okta coexistence (Entra side flag off; Okta side a separate, human-applied root). DESIGNED: ServiceNow provisioning | Apps as Terraform with one group assignment each; the AWS permission set is a separate, human-applied root. Moving existing apps off AD FS or Okta is a per-app runbook (ADR 0009, DESIGNED; the Okta runbook's Phase 1 is BUILT, ADR 0022). | ADR 0022 | [`modules/apps`](lab/terraform/modules/apps), [`lab/terraform/aws`](lab/terraform/aws), [`lab/terraform/okta`](lab/terraform/okta), [`okta-migration-runbook.md`](lab/docs/okta-migration-runbook.md) |
-| **Conditional Access as code** | BUILT | Every policy starts report-only and is graduated one per PR. Terraform creates 13: CA001–CA005 baseline, CA006/CA007 risk-based (High only), CA008 phishing-resistant workforce, CA009 security-info registration, CA010 device-code block, CA020 admin sign-in frequency, CA022 PAM broker + admin portals, CA060 shared clinical workstations. Three more are Graph scripts because the provider cannot express them: CA021, the PIM step-up on authentication context `c1`, and CA023, a step-up on context `c2` for protected actions (changing CA policies or named locations), both rendered by Terraform and written by script; and CA011, a Token Protection pilot. Passkey profiles, TAP and SMS/voice retirement are a desired-state script. Break-glass is excluded from every policy, and a test proves it. | ADR 0003, 0014, 0015, 0016 | [`modules/conditional-access`](lab/terraform/modules/conditional-access), [`passwordless-rollout-plan.md`](lab/docs/passwordless-rollout-plan.md) |
+| **SSO + provisioning** | RAN · tenant: AWS IAM Identity Center SAML + SCIM (E22, E23), ServiceNow SAML (E57), Okta coexistence (E58; the Okta side is a separate, human-applied root). BUILT: Clinical Portal OIDC, PAM broker sign-in. DESIGNED: ServiceNow provisioning | Apps as Terraform with one group assignment each; the AWS permission set is a separate, human-applied root. Moving existing apps off AD FS or Okta is a per-app runbook (ADR 0009, DESIGNED; the Okta runbook's Phase 1 is BUILT, ADR 0022). | ADR 0022 | [`modules/apps`](lab/terraform/modules/apps), [`lab/terraform/aws`](lab/terraform/aws), [`lab/terraform/okta`](lab/terraform/okta), [`okta-migration-runbook.md`](lab/docs/okta-migration-runbook.md) |
+| **Conditional Access as code** | BUILT | Every policy starts report-only and is graduated one per PR. In the tenant: 11 policies, 9 enforced, CA002 and CA021 report-only (they need passkeys). Terraform can create 13: CA001–CA005 baseline, CA006/CA007 risk-based (High only), CA008 phishing-resistant workforce, CA009 security-info registration, CA010 device-code block, CA020 admin sign-in frequency, CA022 PAM broker + admin portals, CA060 shared clinical workstations. Three more are Graph scripts because the provider cannot express them: CA021, the PIM step-up on authentication context `c1`, and CA023, a step-up on context `c2` for protected actions (changing CA policies or named locations), both rendered by Terraform and written by script; and CA011, a Token Protection pilot. Passkey profiles, TAP and SMS/voice retirement are a desired-state script. Break-glass is excluded from every policy, and a test proves it. | ADR 0003, 0014, 0015, 0016 | [`modules/conditional-access`](lab/terraform/modules/conditional-access), [`passwordless-rollout-plan.md`](lab/docs/passwordless-rollout-plan.md) |
 | **Zero standing admin (PIM)** | BUILT | PIM for Groups in tiers: 8 Tier-0 groups (approval by an approver group, 4 h, eligibility expires in 180 days; a step-up on authentication context `c1` once CA021 is enforced) and 8 Tier-1 groups (8 h, 365 days; Intune and IGA administration also need approval); Global Administrator eligible per named person (2 h); help desk scoped to an administrative unit; PIM for Azure resources; quarterly default-deny reviews of eligible members. Admin work uses separate cloud-only `adm-` accounts with no licence or mailbox, created from a reviewed register. Designed so break-glass is the only standing Global Administrator: the build account keeps its standing role until the last, opt-in post-apply step converts it to eligible. | ADR 0002, 0020 | [`modules/pim`](lab/terraform/modules/pim) |
 | **IGA** | BUILT (Entra). RAN · harness: midPoint campaign, 91/91 | Risk-tiered certification (birthright clinical access is never removed because a reviewer stayed silent), nine SoD rules (preventive links + a detective report), review KPIs, B2B guests with sponsors and expiry. midPoint, the SailPoint stand-in, runs a certification campaign end to end: reviewer routing, decisions, a deliberate no-response, automated remediation, hashed evidence. | ADR 0008, 0012 | [`lab/iga`](lab/iga), [`modules/entitlement`](lab/terraform/modules/entitlement), [`lab/pam/midpoint`](lab/pam/midpoint) |
 | **Non-human identity governance** | BUILT | NHI inventory against OWASP's NHI Top 10, shadow-admin path finder, app management and consent policies, a leaver hand-off that never gives a Tier-0 app to a manager, and an Entra Agent ID with a human sponsor (identity only: no permission, nothing calls it yet) | ADR 0018 | [`lab/scripts/powershell`](lab/scripts/powershell) |
-| **Identity threat detection and response** | BUILT. RAN · harness: the 22 KQL rules on the Kusto emulator (223 cases); the Vault audit feed, 63 checks | 22 KQL detections, deployable by Terraform behind flags, each with an SPL twin shipped as a Splunk app (never run on Splunk): 5 core, 11 ITDR (credentials and consent on workload identities, CA tampering, roles and privileged groups changed outside PIM, admin MFA changes, identity risk, and the AD plane: Tier-0 logons PAM cannot account for, privileged AD group changes, Kerberoasting, DCSync) and 6 more (device-code phishing, risky MFA registration, DC logon outside the operator allow-list, PAM vault misuse, SoD pair completed, PIM activation without step-up). The CI identity is recognised by immutable id only. Containment asks a named approver in Teams first. The harness drives real Vault audit events into the detection's table shape. All 22 KQL rules ran on a local KQL engine, the Azure Data Explorer Kusto emulator, against synthetic events (22/22 rules, 223/223 cases; [`lab/evidence/kusto`](lab/evidence/kusto)); that is not a Log Analytics workspace or a tenant, so no rule has been scheduled in Sentinel or fired. | ADR 0017 | [`lab/kql`](lab/kql), [`modules/monitoring`](lab/terraform/modules/monitoring), [`lab/monitoring`](lab/monitoring), [`lab/splunk`](lab/splunk) |
+| **Identity threat detection and response** | BUILT. RAN · harness: the 22 KQL rules on the Kusto emulator (277 cases); the Vault audit feed, 63 checks | 22 KQL detections, 17 of them scheduled in Sentinel by Terraform (5 held back in `itdr_exclude_rules`; Fusion is Sentinel's own rule and is not counted), each with an SPL twin shipped as a Splunk app (all 22 fired on the local synthetic replay, E61): 5 core, 11 ITDR (credentials and consent on workload identities, CA tampering, roles and privileged groups changed outside PIM, admin MFA changes, identity risk, and the AD plane: Tier-0 logons PAM cannot account for, privileged AD group changes, Kerberoasting, DCSync) and 6 more (device-code phishing, risky MFA registration, DC logon outside the operator allow-list, PAM vault misuse, SoD pair completed, PIM activation without step-up). The CI identity is recognised by immutable id only. Containment asks a named approver in Teams first. The native AD-attack signatures (Kerberoasting, DCSync, lateral movement, recon) are led by **Microsoft Defender for Identity**, staged behind `enable_defender_for_identity` (ADR 0023; the sensor and licence are human steps): the four `SecurityEvent` rules are its portable twins, and two rules stay custom because they correlate against the Vault check-out feed and the operator allowlist, which MDI cannot see. The detection layers: **Entra ID Protection** (cloud identity risk, live) + **Defender for Identity** (native AD attacks, staged) + **custom detection-as-code on Sentinel with Splunk twins** (portable). The harness drives real Vault audit events into the detection's table shape. All 22 KQL rules ran on a local KQL engine, the Azure Data Explorer Kusto emulator, against synthetic events (22/22 rules, 277/277 cases; [`lab/evidence/kusto`](lab/evidence/kusto)); that is not a Log Analytics workspace or a tenant. The 17 is the count Terraform schedules (22 minus the 5 in `itdr_exclude_rules`); E15 and E15b only record what was enabled at those dates (E15b: 15 lab rules plus Fusion), so neither capture proves all 17 at once. | ADR 0017, 0023 | [`lab/kql`](lab/kql), [`modules/monitoring`](lab/terraform/modules/monitoring), [`lab/monitoring`](lab/monitoring), [`lab/splunk`](lab/splunk) |
 | **PAM** | RAN · harness: Samba AD DC, 284/284; 500-account scale run, 79/79; dynamic database credentials, 60/60 | Vault discovers, onboards (dependency-gated), rotates and reconciles accounts in an AD-compatible directory (a Samba AD DC in the harness; DC01, Windows Server, at tenant time), 500 synthetic ones in the scale run (reconciliation GAP 0); exclusive, ticket-gated check-out for one named person, with two distinct approvers for Tier 0, neither the requester (dual control); Guacamole records SSH sessions (with an SSH CA) and RDP sessions with injected credentials, the RDP target in the harness being a Linux xrdp stand-in for the domain controller; a separate 3-node rehearsal cluster with a timed DR drill (test data, not the credential vault; restoring rotated credentials is not drilled); 1-hour database logins nobody holds standing. Tenant-time pieces are BUILT, not run: a Windows RDP session on DC01, the Windows dependency scan on DC01 and member servers, Entra sign-in to the broker, ServiceNow change validation against a real instance. | ADR 0007, 0019 | [`lab/pam`](lab/pam) |
 | **Workload identity on Kubernetes** | RAN · harness: kind cluster, 64/64. AKS mapping: BUILT | A pod gets its database password with no Kubernetes Secret, env var or manifest value; an admission policy binds the identity to one image digest. The Entra Workload ID equivalent is tested offline and never applied. | ADR 0010 | [`lab/k8s`](lab/k8s), [`lab/terraform/k8s`](lab/terraform/k8s) |
 | **Pipeline with no stored credentials** | BUILT (no workflow has run yet) | GitHub OIDC with two identities: read-only on PRs, write only behind a reviewer-gated environment. No PR can change the pipeline's own identities; a human applies those (the apply identity is still Tier 0, a recorded risk acceptance). TruffleHog, plan, Checkov (a failed check blocks the merge) and an AI review on PRs; offline test suites, and a nightly PAM harness run from a fresh clone, with no credential; actions SHA-pinned. | ADR 0004, 0005 | [`.github/workflows`](.github/workflows), [`lab/pipelines`](lab/pipelines) |
@@ -134,9 +137,9 @@ the documents use placeholders such as `<measured: HR-to-disable minutes>`.
 ## Real products, and the stand-ins
 
 Apart from the stand-ins below, everything is the real Microsoft, AWS and
-ServiceNow product, on free or trial licensing (the Okta coexistence is BUILT as
-code in `lab/terraform/okta/` and `modules/apps/okta.tf`, never applied against
-an Okta org). CyberArk, SailPoint and Saviynt are licensed to organisations and the
+ServiceNow product, on free or trial licensing (the Okta coexistence,
+`lab/terraform/okta/` and `modules/apps/okta.tf`, is applied against an Okta
+Integrator Free org, E58). CyberArk, SailPoint and Saviynt are licensed to organisations and the
 author holds no licence, so a named stand-in does the same job and is said to
 be one:
 
@@ -153,7 +156,7 @@ be one:
 | Evolveum midPoint | SailPoint / Saviynt |
 | Mock HR feed (CSV + script calling the real Entra inbound provisioning API) | Workday |
 | kind cluster with Vault Kubernetes auth | AKS with Entra Workload ID or CyberArk Secrets Manager |
-| Splunk Enterprise trial in a container, fed by a replay script (BUILT, never started) | Production Splunk, fed by the Azure add-on or Event Hub |
+| Splunk Enterprise trial in a container, fed by a replay script (BUILT, never run) | Production Splunk, fed by the Azure add-on or Event Hub |
 
 The full register, with what each stand-in can and cannot show, is in
 [`lab/docs/STAND-INS.md`](lab/docs/STAND-INS.md).
@@ -168,7 +171,7 @@ lab/scripts/             mock HR + JML lifecycle, post-apply Graph steps (one or
                          KPI / assessment scripts, drills, DC build, Intune, ITDR containment + vault feed, demo reset
 lab/iga/                 access catalog, birthright rules, SoD rules (SOD-01 to SOD-09)
 lab/kql/                 22 detections (the source for Sentinel rules, Log Analytics alerts and the SPL twins)
-lab/splunk/              second SIEM (BUILT, never started): compose, replay ingest, 22 SPL detections
+lab/splunk/              second SIEM (BUILT, never run): compose, replay ingest, 22 SPL detections
 lab/monitoring/          Sentinel playbooks (ARM): notify, approval-gated containment; the KQL emulator harness (ran 22/22)
 lab/pam/                 Vault · Guacamole · Conjur · midPoint (Docker, loopback-only), dynamic DB credentials,
                          HA/DR, and the harnesses with one runner (test/run-all.sh)
@@ -240,3 +243,16 @@ synthetic lab accounts only, no secret. All people and organisations are fiction
 ## License
 
 [MIT](LICENSE)
+
+## Known limitations, and the production fix for each
+
+Written down on purpose. A reviewer will find these in ten minutes; better they read them here first.
+
+| Limitation in the lab today | Why it is this way | What production does instead |
+|---|---|---|
+| **One person authors and approves.** The apply gate accepts a self-approval and records it as such (`APPLY_TWO_PERSON=false`). | One collaborator, and GitHub only enforces required reviewers on public or paid repos. | Set `APPLY_TWO_PERSON=true` (the gate then refuses the author), add a second approver account, and turn on branch protection with a required reviewer. The refusal path is already in `.github/scripts/apply-approval-gate.sh`. |
+| **Two sign-in policies are report-only** (CA002 phishing-resistant admins, CA021 step-up for Tier-0 activation). | No passkeys are registered yet; enforcing them first would lock every admin out. | Register two hardware keys per admin, run the passwordless rollout (`07-Passwordless-Rollout.ps1`), then graduate both through their own reviewed change. |
+| **The build account still holds a standing Global Administrator role.** | It created the tenant and the pipeline identities; removing it is the last step, not the first. | Make it eligible in PIM like every other admin, keep the two break-glass accounts as the only standing exceptions, and watch all three with the existing detection rules. |
+| **Splunk has run only on synthetic events.** All 22 SPL twins fire on the replayed detection test cases (E59 to E61); the Log Analytics replay still needs a live admin session. | The tenant-backed replay rides `az login`, which the lab's own 4-hour admin re-auth rule keeps killing. | Run `ingest-from-loganalytics.sh` once with a live admin session and record the tenant-backed row. |
+| **Several products are stand-ins** (HR system, CyberArk, SailPoint, Workday). | No free trials exist; each stand-in is named with what it replaces (`lab/docs/STAND-INS.md`). | Swap each stand-in for the real product behind the same interface; the code paths and runbooks do not change. |
+| **Four robot accounts have no owner yet.** | The inventory (`06-NHI-Inventory.ps1`) found them; assigning owners needs the business to name people. | Owners assigned in the access-package model, enforced by the nightly drift check. |

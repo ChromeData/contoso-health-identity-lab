@@ -807,6 +807,22 @@ variable "vault_feed_v2_columns" {
   default     = false
 }
 
+variable "enable_defender_for_identity" {
+  type        = bool
+  description = <<-EOT
+    Wire Microsoft Defender for Identity (MDI) alerts into this workspace via
+    the Microsoft Defender XDR connector (ADR 0023). This is the only MDI piece
+    Terraform can express; the sensor on DC01, the MDI workspace, the directory
+    service account and the Defender licence (free 90-day trial) are human
+    steps in lab/docs/runbooks/deploy-defender-for-identity-dc01.md. Needs
+    enable_sentinel. MDI is the native AD-attack detector; the four
+    SecurityEvent KQL rules are its portable twins (tier0-logon-without-checkout
+    and dc-logon-outside-operator-allowlist stay custom: correlations MDI
+    cannot make).
+  EOT
+  default     = false
+}
+
 variable "enable_itdr_containment" {
   type        = bool
   description = <<-EOT

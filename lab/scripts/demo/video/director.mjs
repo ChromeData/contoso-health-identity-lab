@@ -44,16 +44,39 @@ function ids() {
 
 // The Whisperglass lab map, with the tiles that now run in the tenant marked
 // "RAN · tenant" (blue) and the "nothing in a tenant yet" copy updated.
+const RAN_HARNESS = ['SPLUNK']; // proven on this machine's Splunk replay, not a tenant (E61)
 const RAN_TENANT = ['HR', 'AGENT', 'AD', 'SYNC', 'ENTRA', 'LCW', 'DYNGRP', 'BIRTH', 'AP', 'SOD', 'CABASE', 'CARISK', 'CASESS', 'BG', 'PIM', 'HDAU', 'KV', 'LA', 'LEAVER', 'NHI', 'EVID', 'WORM', 'KPI'];
+// Sheet mode: one white grid sheet, chips top-left, zoom top-right, compact panel bottom-left (pages/sheet.css + sheet.js).
+function injectSheet(s) {
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const css = fs.readFileSync(path.join(here, 'pages', 'sheet.css'), 'utf8'), js = fs.readFileSync(path.join(here, 'pages', 'sheet.js'), 'utf8');
+  const nums = fs.readFileSync(path.join(here, 'pages', 'sheet-numbers.js'), 'utf8');
+  const ovr = JSON.parse(fs.readFileSync(path.join(here, 'pages', 'map-overrides.json'), 'utf8'));
+  // plain names, purposes and definitions (the same file the map artifact uses)
+  const re = /(<script type="application\/json" id="lab-data">)([\s\S]*?)(<\/script>)/;
+  const d = JSON.parse(s.match(re)[2]);
+  for (const st of d.stations) if (ovr.stations[st.id]) st.purpose = ovr.stations[st.id];
+  for (const n of d.nodes) { if (ovr.nodes[n.id]) { n.definition = ovr.nodes[n.id][0]; n.analogy = ovr.nodes[n.id][1]; } if (ovr.names[n.id]) n.name = ovr.names[n.id]; }
+  s = s.replace(re, (_, a, __, c) => a + JSON.stringify(d).replace(/</g, '\\u003c') + c);
+  // numbering 7..16 on pills and chips, and a handle for sheet-numbers.js (safe to run twice)
+  s = s.replace('pillShape(pin, s.title, s.pillW, PILL_H);', 'pillShape(pin, (s.i + 7) + " · " + s.title, s.pillW + 46, PILL_H);');
+  s = s.replace('data-go="station:${esc(s.id)}">${esc(s.title)}</button>`))', 'data-go="station:${esc(s.id)}">${s.i + 7} ${esc(s.title)}</button>`))');
+  s = s.replace('data-go="delivery">Delivery</button>', 'data-go="delivery">16 Delivery</button>');
+  if (!s.includes('window.__lab = ')) s = s.replace('  function flyTo(', "  window.__lab = { flyTo, fitRect, select, W, L, NB, get cam() { return cam; }, panel: document.getElementById('panel'), chips: document.getElementById('chips'), svg };\n  function flyTo(");
+  s = s.replace(/<style id="sheet">[\s\S]*?<\/style>\n?/, '').replace(/<script id="sheetjs">[\s\S]*?<\/script>\n?/, '').replace(/<script id="sheetnum">[\s\S]*?<\/script>\n?/, '');
+  return s.replace('</body>', `<style id="sheet">\n${css}</style>\n<script id="sheetjs">\n${js}</script>\n<script id="sheetnum">\n${nums}</script>\n</body>`);
+}
 function buildMap() {
   const src = process.env.LAB_MAP_HTML || path.join(process.env.HOME, 'whisperglass/labs/contoso-health/map.html');
   let s = fs.readFileSync(src, 'utf8');
   const re = /(<script type="application\/json" id="lab-data">)([\s\S]*?)(<\/script>)/;
   const d = JSON.parse(s.match(re)[2]);
   for (const n of d.nodes) if (RAN_TENANT.includes(n.id)) n.status = 'RAN · tenant';
+  for (const n of d.nodes) if (RAN_HARNESS.includes(n.id)) n.status = 'RAN · harness';
   for (const st of d.delivery.steps) st.status = 'RAN · tenant';
   s = s.replace(re, (_, a, __, c) => a + JSON.stringify(d).replace(/</g, '\\u003c') + c);
   s = s.replace('RAN · tenant: none yet', 'RAN · tenant').replace('RAN · tenant: nothing yet.', 'RAN · tenant: running in the lab tenant now.').replace("Plan and apply haven't run: no tenant yet.", 'Plan and apply now run against the lab tenant.').replace(/Nothing has run in a Microsoft tenant yet: that's the\s+next step\./, 'Now running in a real Microsoft Entra tenant.');
+  s = injectSheet(s);
   fs.writeFileSync(path.join(OUT, 'map-video.html'), s);
   console.log('map-video.html written', RAN_TENANT.length, 'tiles marked RAN · tenant');
 }
@@ -65,7 +88,9 @@ const dur = (f) => parseFloat(execFileSync('ffprobe', ['-v', 'error', '-show_ent
 
 async function tts() {
   fs.mkdirSync(AUD, { recursive: true });
-  const all = scenes(ids()).flatMap((s) => s.beats.map((b, i) => ({ s: s.id, i, say: b.say })));
+  const all = scenes(ids()).filter((s) => s.kind !== 'clip').flatMap((s) => s.beats.map((b, i) => ({ s: s.id, i, say: b.say, audio: b.audio })));
+  // A beat may bring its own recording (b.audio): copied into the cache under its text hash, never synthesized.
+  for (const x of all) { if (x.audio && !fs.existsSync(path.join(AUD, hash(x.say) + '.mp3'))) fs.copyFileSync(x.audio, path.join(AUD, hash(x.say) + '.mp3')); }
   const todo = all.filter((x) => !fs.existsSync(path.join(AUD, hash(x.say) + '.mp3')));
   console.log(`${all.length} beats, ${todo.length} to synthesize`);
   const run = promisify(execFile);
@@ -97,6 +122,11 @@ async function record() {
   if (!fs.existsSync(STATE)) await exportState();
   const index = DRY ? null : JSON.parse(fs.readFileSync(path.join(AUD, 'index.json'), 'utf8'));
   for (const sc of scenes(I).filter((s) => !want.length || want.some((w) => s.id.startsWith(w)))) {
+    if (sc.kind === 'clip') {   // an external clip (e.g. the presenter): no recording, assemble.py drops it in as-is
+      fs.mkdirSync(path.join(OUT, 'raw'), { recursive: true });
+      fs.writeFileSync(path.join(OUT, 'raw', `${sc.id}.timeline.json`), JSON.stringify({ id: sc.id, clip: sc.clip, beats: [] }));
+      console.log(`[${sc.id}] clip ${sc.clip}`); continue;
+    }
     const r = new Rec(sc.id, sc.kind, { zoom: sc.zoom ?? (sc.kind === 'local' ? 1 : 1.25) });
     try {
       await r.open();
@@ -116,6 +146,7 @@ async function record() {
 
 if (cmd === 'ids') console.log(Object.keys(ids()).join(', '));
 else if (cmd === 'map') buildMap();
+else if (cmd === 'sheet') { const f = path.join(OUT, 'map-video.html'); fs.writeFileSync(f, injectSheet(fs.readFileSync(f, 'utf8'))); console.log('sheet injected'); }
 else if (cmd === 'tts') await tts();
 else if (cmd === 'record') await record();
 else if (cmd === 'state') await exportState();

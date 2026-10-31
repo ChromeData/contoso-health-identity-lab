@@ -1,0 +1,161 @@
+// =============================================================================
+// Detection: Device-code flow sign-in (device code phishing / token theft)
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack)
+// SPL twin:  lab/splunk/detections/device-code-signin.spl (same logic/window)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   Any sign-in that used the OAuth device authorization grant, or a token
+//   refresh from a session that STARTED with one. Device code phishing sends
+//   the victim a real Microsoft sign-in page with the attacker's code (a fake
+//   "Teams meeting" invite is the usual lure). The victim signs in and passes
+//   MFA, and the attacker's polling client receives the tokens. Microsoft
+//   Threat Intelligence reported Storm-2372 using it at scale (blog
+//   2025-02-13). A hospital has almost no legitimate use for the flow
+//   (shared-display devices at most), so CA010 blocks it with the
+//   authentication-flows condition (CISA SCuBA MS.AAD.3.9;
+//   modules/conditional-access, enable_device_code_block). CA010 is BUILT and
+//   stays report-only until it graduates (evidence-capture-plan.md, E38b).
+//   This rule is that policy's detective twin:
+//     before the policy is enforced -> every device-code session is seen;
+//     after                          -> Successes > 0 means the block has a
+//                                       gap (exclusion, report-only, an app
+//                                       outside its scope).
+//   Two signals, both in the sign-in logs:
+//     AuthenticationProtocol == "deviceCode"      the grant itself (usually
+//                                                  interactive, SigninLogs)
+//     OriginalTransferMethod == "deviceCodeFlow"  every later token from that
+//                                                  session (often non-
+//                                                  interactive refreshes), so
+//                                                  a stolen session that keeps
+//                                                  refreshing stays visible
+//   One row per user + source IP + signal over the look-back.
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : tokens were issued (Successes > 0) AND the user is privileged or
+//            PIM-eligible (PrivilegedUserIds, else the naming convention), or
+//            the sign-in carried medium/high sign-in risk.
+//   Medium : tokens were issued to anyone else.
+//   Low    : no tokens issued (blocked by CA or failed), or every app is on
+//            the SanctionedDeviceCodeAppIds list. Still alerted: blocked
+//            attempts are how a running phishing campaign shows up.
+//
+// TABLE / SOURCE
+//   SigninLogs + AADNonInteractiveUserSignInLogs. Microsoft Learn (table
+//   reference, checked 2026-10-20): AuthenticationProtocol is a string with
+//   the value deviceCode in both tables; OriginalTransferMethod is a string in
+//   both. The value "deviceCodeFlow" comes from the Graph beta signIn resource
+//   (originalTransferMethods: none, deviceCodeFlow, authenticationTransfer).
+//   verify: the exact OriginalTransferMethod text Log Analytics stores, on the
+//   first device-code test sign-in.
+//   Privileged users: PrivilegedUserIds, the same Terraform-rendered id list
+//   auth-method-changed-by-admin.kql uses (modules/monitoring
+//   var.privileged_user_ids, from Find-ShadowAdmins.ps1 -PrivilegedIdsPath).
+//
+// LICENSE
+//   Sign-in logs: Free per Learn's monitoring-and-health licensing table
+//   (verify: Free tenants can route them through diagnostic settings - see
+//   modules/entra-diagnostics main.tf LICENSING). Sign-in risk needs P2
+//   (else "hidden"). Blocking the flow with CA needs P1.
+//
+// MITRE ATT&CK
+//   T1528 Steal Application Access Token (CredentialAccess)
+//   T1566.002 Phishing: Spearphishing Link (InitialAccess)
+//   T1078.004 Valid Accounts: Cloud Accounts (DefenseEvasion, Persistence)
+//
+// FALSE-POSITIVE NOTES
+//   - Admins using device code for CLI tools on headless boxes (Azure CLI,
+//     Graph PowerShell -UseDeviceCode, the lab's own
+//     Invoke-BaselineAssessment.ps1 -UseDeviceCode). The CA block removes
+//     this habit; until then it is Medium, or High for a privileged account,
+//     on purpose.
+//   - Shared meeting-room or display devices that genuinely need the flow:
+//     put their client app ids in SanctionedDeviceCodeAppIds (Low, never
+//     hidden) and exclude them in the CA policy by the same list.
+//
+// TUNABLE
+//   LookBack 1h. SanctionedDeviceCodeAppIds empty. Privileged = object id in
+//   PrivilegedUserIds (break-glass, members / eligible members of the PIM
+//   groups, directory-role holders) OR the naming convention (bg-admin-NN,
+//   tier0-admin-NN). An empty id list only LOWERS severity for admins named
+//   otherwise; it never hides a row.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · one alert per row · Severity column ·
+//   Entities: Account = UserPrincipalName / UserId, IP = IPAddress.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; containment card on High (the signed-in USER:
+//   revoke refresh tokens - a device-code session lives on its refresh
+//   token, so revoking sessions is the actual fix). Then reset the user's
+//   MFA-protected session state and check for a device registered from the
+//   same IP (Storm-2372 registered devices after the phish).
+// =============================================================================
+
+let LookBack = 1h;
+let SanctionedDeviceCodeAppIds = dynamic([]);
+// Privileged users by OBJECT ID (rendered by modules/monitoring, as in
+// auth-method-changed-by-admin.kql; committed empty, so a standalone run falls
+// back to naming only).
+let PrivilegedUserIds = dynamic([]); // @@PRIVILEGED_USER_IDS@@
+// SCHEMA TRAP (as in break-glass-signin.kql): LocationDetails and the CA
+// policy list are dynamic in SigninLogs but string in the non-interactive
+// table, so each leg projects the same names and types before the union.
+union
+    (SigninLogs
+        | where TimeGenerated > ago(LookBack)
+        | where AuthenticationProtocol =~ "deviceCode" or OriginalTransferMethod =~ "deviceCodeFlow"
+        | project TimeGenerated, SignInType = "interactive", UserPrincipalName, UserId, IPAddress,
+                  AppDisplayName, AppId, ResourceDisplayName, AuthenticationProtocol,
+                  OriginalTransferMethod, ResultType, ConditionalAccessStatus, RiskLevelDuringSignIn,
+                  Country = tostring(LocationDetails.countryOrRegion),
+                  CaPolicyText = tostring(ConditionalAccessPolicies), CorrelationId),
+    (AADNonInteractiveUserSignInLogs
+        | where TimeGenerated > ago(LookBack)
+        | where AuthenticationProtocol =~ "deviceCode" or OriginalTransferMethod =~ "deviceCodeFlow"
+        | project TimeGenerated, SignInType = "non-interactive", UserPrincipalName, UserId, IPAddress,
+                  AppDisplayName, AppId, ResourceDisplayName, AuthenticationProtocol,
+                  OriginalTransferMethod, ResultType, ConditionalAccessStatus, RiskLevelDuringSignIn,
+                  Country = tostring(todynamic(tostring(LocationDetails)).countryOrRegion),
+                  CaPolicyText = tostring(ConditionalAccessPolicies), CorrelationId)
+| extend Via = iff(AuthenticationProtocol =~ "deviceCode", "device code grant",
+                   "token from a device-code session")
+| extend RiskN = case(RiskLevelDuringSignIn =~ "high", 3, RiskLevelDuringSignIn =~ "medium", 2,
+                      RiskLevelDuringSignIn =~ "low", 1, 0)
+// A report-only block policy logs "reportOnlyFailure" but lets the sign-in
+// through: proof the planned policy would have stopped it once enforced.
+| extend ReportOnlyWouldBlock = CaPolicyText has "reportOnlyFailure"
+| extend UserPrincipalName = tolower(UserPrincipalName)
+| summarize TimeGenerated   = max(TimeGenerated),
+            FirstSeen       = min(TimeGenerated),
+            SignIns         = count(),
+            Successes       = countif(ResultType == "0"),
+            CaBlocks        = countif(ConditionalAccessStatus == "failure"),
+            AnyReportOnlyWouldBlock = max(toint(ReportOnlyWouldBlock)),
+            MaxRiskN        = max(RiskN),
+            SignInTypes     = make_set(SignInType, 2),
+            Apps            = make_set(AppDisplayName, 10),
+            AppIds          = make_set(AppId, 10),
+            Resources       = make_set(ResourceDisplayName, 10),
+            ErrorCodes      = make_set(ResultType, 10),
+            Countries       = make_set(Country, 10),
+            CorrelationIds  = make_set(CorrelationId, 10)
+            by UserPrincipalName, UserId, IPAddress, Via
+| extend PrivilegedById   = isnotempty(UserId) and UserId in (PrivilegedUserIds)
+| extend PrivilegedByName = UserPrincipalName matches regex @"(?i)^(bg-admin-[0-9]{2}|tier0-admin-[0-9]{2})@"
+| extend PrivilegedTarget = PrivilegedById or PrivilegedByName
+| extend Sanctioned = array_length(SanctionedDeviceCodeAppIds) > 0
+                      and array_length(set_difference(AppIds, SanctionedDeviceCodeAppIds)) == 0
+| extend MaxSignInRisk = case(MaxRiskN == 3, "high", MaxRiskN == 2, "medium", MaxRiskN == 1, "low", "none")
+| extend Outcome = case(
+    Successes > 0, "SUCCEEDED - device-code tokens issued",
+    CaBlocks > 0,  "Blocked by CA",
+    "Failed - no tokens issued")
+| extend Severity = case(
+    Successes > 0 and (PrivilegedTarget or MaxRiskN >= 2), "High",
+    Successes > 0 and Sanctioned,                          "Low",
+    Successes > 0,                                         "Medium",
+    "Low")
+| project TimeGenerated, Severity, Outcome, Via, UserPrincipalName, UserId, IPAddress, PrivilegedTarget,
+          PrivilegedById, MaxSignInRisk, SignIns, Successes, CaBlocks, AnyReportOnlyWouldBlock, Sanctioned,
+          SignInTypes, Apps, AppIds, Resources, ErrorCodes, Countries, FirstSeen, CorrelationIds
+| sort by TimeGenerated desc
