@@ -1,0 +1,94 @@
+// =============================================================================
+// Detection: Sign-in from a blocked / high-risk country
+// Lab:       Contoso Health Identity Platform
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   Any sign-in attempt whose geo-IP country is on the organisation's BLOCK
+//   list (enforced by CA004, a Conditional Access policy backed by a "blocked
+//   countries" named location) or on the SOC's WATCH list (CA does not block
+//   it). Every row gets an Outcome. CA is enforced only AFTER first-factor
+//   authentication completes, so a wrong password never reaches CA
+//   (ConditionalAccessStatus "notApplied"). Those rows are spray noise, which
+//   failed-signin-spike.kql covers. They are NOT a CA gap. The thing to
+//   investigate is Outcome == "SUCCEEDED - CA gap": a SUCCESSFUL sign-in from
+//   a BLOCK-list country (a policy gap, an excluded app, report-only mode).
+//
+// TABLE / SOURCE
+//   SigninLogs  (Microsoft Entra ID -> Diagnostic settings -> Log Analytics).
+//   Geo comes from LocationDetails.countryOrRegion (falls back to the Location
+//   country code). Outcome comes from ConditionalAccessStatus + ResultType;
+//   the blocking policy names come from the ConditionalAccessPolicies array.
+//
+// LICENSE
+//   - SigninLogs export requires Microsoft Entra ID P1 (or P2).
+//   - Conditional Access (named locations, country block) requires Entra ID P1.
+//   - Runs as a Log Analytics scheduled query or a Microsoft Sentinel rule.
+//
+// FALSE-POSITIVE NOTES
+//   - Travelling staff / VPN exit nodes in a blocked region trigger legitimately;
+//     correlate with the user's normal pattern or a travel allow-list.
+//   - Geo-IP is approximate; border/datacenter IPs can misattribute country.
+//   - Keep BlockList in sync with the CA named location — drift here is a
+//     silent gap. Consider sourcing both from one Sentinel watchlist.
+//   - A spray from a listed country yields many "Failed first factor" rows.
+//     Triage by Outcome, not by row count.
+//
+// SUGGESTED SENTINEL RULE
+//   As deployed by lab/terraform/modules/monitoring: Frequency 5m · Lookback
+//   1h · Trigger > 0 rows · fixed Medium severity · Entities: Account=UPN,
+//   IP=IPAddress. Suggested tuning (not deployed): raise severity ONLY when
+//   Outcome == "SUCCEEDED - CA gap", not on Blocked == false.
+//
+// AUTOMATED RESPONSE (Logic App - lab/monitoring/playbook-notify.json)
+//   Shared by all five rules, Sentinel path only (the post-trial Log
+//   Analytics alerts just email the ag-identity-secops action group).
+//   Incident created -> automation rule (lab/terraform/modules/monitoring) ->
+//   (1) Teams adaptive card: incident severity, title, number, created time,
+//       status, description and an "Open in Sentinel" link;
+//   (2) ServiceNow incident: urgency/impact from severity (Medium -> 2),
+//       category "inquiry"; (3) the INC number is commented back on the
+//       Sentinel incident for the audit trail.
+//   NOT BUILT (production follow-up): on Outcome == "SUCCEEDED - CA gap", an
+//   approval-gated Graph revokeSignInSessions (manual equivalent:
+//   lab/scripts/powershell/04-Leaver.ps1).
+// =============================================================================
+
+// ISO 3166-1 alpha-2 codes. Keep in lockstep with the CA "blocked countries"
+// named location. verify against your tenant's actual list.
+// BLOCK list must match lab/terraform/envs/dev/lab.tfvars blocked_countries.
+// WATCH list: CA does not block these, but the SOC wants eyes on them. The
+// ListType column shows which list each hit came from.
+let BlockList = dynamic(["KP","IR","SY","CU"]);
+let WatchList = dynamic(["RU","CN"]);
+// Codes where the FIRST factor failed, so CA was never evaluated:
+// 50126 invalid username/password · 50034 user not found · 50053 locked
+// (smart lockout) or malicious IP · 50056 no password on record · 50057
+// account disabled. Any other failure (e.g. 50074/50076 MFA interrupt, 50055
+// expired password) may mean the password was right -> review, not noise.
+// verify: codes against the Entra AADSTS error-code reference for your tenant.
+let FirstFactorFailures = dynamic(["50126","50034","50053","50056","50057"]);
+SigninLogs
+| where TimeGenerated > ago(1h)
+| extend Country = coalesce(tostring(LocationDetails.countryOrRegion), Location)
+| where Country in~ (BlockList) or Country in~ (WatchList)
+// Which CA policies (if any) returned "failure" (= blocked) for this sign-in.
+// mv-apply with an inner summarize ALWAYS returns one row, so a sign-in that
+// slipped through (no blocking policy) is kept, with BlockingPolicies == [].
+| mv-apply CAP = ConditionalAccessPolicies on (
+      where tostring(CAP.result) == "failure"
+      | summarize BlockingPolicies = make_set(tostring(CAP.displayName))
+  )
+| extend ListType = iff(Country in~ (BlockList), "block", "watch")
+// Blocked = CA itself stopped the sign-in. Blocked == false alone is NOT a gap:
+// a wrong password is rejected before CA runs. Outcome tells them apart.
+| extend Blocked = ConditionalAccessStatus == "failure"
+| extend Outcome = case(
+      Blocked, "Blocked by CA",
+      ResultType == "0" and ListType == "block", "SUCCEEDED - CA gap",
+      ResultType == "0", "Succeeded - watch list",
+      ResultType in (FirstFactorFailures), "Failed first factor - CA not reached",
+      "Other failure - review (password may be valid)")
+| project TimeGenerated, UserPrincipalName, UserDisplayName, Country, ListType,
+          IPAddress, AppDisplayName, Outcome, Blocked, ConditionalAccessStatus,
+          BlockingPolicies, ResultType, ResultDescription, RiskLevelDuringSignIn
+| sort by TimeGenerated desc

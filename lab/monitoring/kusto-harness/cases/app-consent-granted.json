@@ -1,0 +1,143 @@
+{
+  "rule": "app-consent-granted",
+  "about": "Complements the itdr-cases.json rows (tenant-wide Tier-0 consent, single-user Mail.Read, single-user User.Read, RoleManagement app role, failed consent): the 'Add delegated permission grant' shape, an application permission that is NOT on the high-risk list (Medium by TenantWide alone), an admin consent to low-risk scopes (Medium by TenantWide alone), the CI apply identity granting a Tier-0 app role (Low), the IaC display name on another app (IacNameSpoof, High), a consent whose modifiedProperties is an EMPTY array (every Raw value null; mv-apply + summarize keeps the row) and the look-back edge.",
+  "defaults": {
+    "AuditLogs": {
+      "Category": "ApplicationManagement", "Result": "success", "CorrelationId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "InitiatedBy": {"user": {"id": "11111111-1111-1111-1111-111111111111", "displayName": null,
+                               "userPrincipalName": "mallory.admin@contosohealthlab.onmicrosoft.com",
+                               "ipAddress": "203.0.113.10", "roles": []}}
+    }
+  },
+  "cases": [
+    {
+      "id": "delegated-grant-mail-read-all-principals",
+      "kind": "positive",
+      "label": "'Add delegated permission grant' for Mail.Read to every user: the resource is the target, the client is a modified property; ConsentType is not read, so TenantWide stays false and this is Medium by HighRisk alone",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Add delegated permission grant",
+        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "Microsoft Graph", "type": "ServicePrincipal",
+          "modifiedProperties": [
+            {"displayName": "DelegatedPermissionGrant.Scope", "oldValue": null, "newValue": "\"Mail.Read User.Read\""},
+            {"displayName": "DelegatedPermissionGrant.ConsentType", "oldValue": null, "newValue": "\"AllPrincipals\""},
+            {"displayName": "ServicePrincipal.ObjectID", "oldValue": null, "newValue": "\"77777777-7777-7777-7777-777777777777\""},
+            {"displayName": "ServicePrincipal.DisplayName", "oldValue": null, "newValue": "\"Unknown Mail Sync\""}
+          ]}]
+      }]},
+      "expect": [{"Severity": "Medium", "GrantKind": "DelegatedGrant", "ClientApp": "Unknown Mail Sync", "ResourceApp": "Microsoft Graph",
+                  "TargetObjectId": "33333333-3333-3333-3333-333333333333", "Permissions": ["Mail.Read", "User.Read"],
+                  "HighRiskGranted": ["Mail.Read"], "IsAdminConsent": false, "OnBehalfOfAll": false, "TenantWide": false,
+                  "Actor": "mallory.admin@contosohealthlab.onmicrosoft.com", "ActorIp": "203.0.113.10", "IsIac": false, "IacNameSpoof": false}],
+      "expectRows": 1
+    },
+    {
+      "id": "application-permission-not-on-high-risk-list",
+      "kind": "positive",
+      "label": "An application permission (app role) User.Read.All: always tenant-wide, not on the high-risk list, Medium",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Add app role assignment to service principal",
+        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "Microsoft Graph", "type": "ServicePrincipal",
+          "modifiedProperties": [
+            {"displayName": "AppRole.Id", "oldValue": null, "newValue": "\"dddddddd-dddd-dddd-dddd-dddddddddddd\""},
+            {"displayName": "AppRole.Value", "oldValue": null, "newValue": "\"User.Read.All\""},
+            {"displayName": "ServicePrincipal.ObjectID", "oldValue": null, "newValue": "\"77777777-7777-7777-7777-777777777777\""},
+            {"displayName": "ServicePrincipal.DisplayName", "oldValue": null, "newValue": "\"Clinical Portal\""}
+          ]}]
+      }]},
+      "expect": [{"Severity": "Medium", "GrantKind": "ApplicationPermission", "ClientApp": "Clinical Portal", "ResourceApp": "Microsoft Graph",
+                  "Permissions": ["User.Read.All"], "HighRiskGranted": [], "TenantWide": true}]
+    },
+    {
+      "id": "admin-consent-low-risk-scopes",
+      "kind": "positive",
+      "label": "Admin consent on behalf of all users to openid profile User.Read offline_access: tenant-wide but low-risk, Medium",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Consent to application",
+        "TargetResources": [{"id": "77777777-7777-7777-7777-777777777777", "displayName": "Clinical Portal", "type": "ServicePrincipal",
+          "modifiedProperties": [
+            {"displayName": "ConsentContext.IsAdminConsent", "oldValue": null, "newValue": "\"True\""},
+            {"displayName": "ConsentContext.IsAppOnly", "oldValue": null, "newValue": "\"False\""},
+            {"displayName": "ConsentContext.OnBehalfOfAll", "oldValue": null, "newValue": "\"True\""},
+            {"displayName": "ConsentContext.Tags", "oldValue": null, "newValue": "\"[]\""},
+            {"displayName": "ConsentAction.Permissions", "oldValue": null,
+             "newValue": "\"[] => [[Id: dddddddd-dddd-dddd-dddd-dddddddddddd, ClientId: 77777777-7777-7777-7777-777777777777, PrincipalId: , ResourceId: 33333333-3333-3333-3333-333333333333, ConsentType: AllPrincipals, Scope: openid profile User.Read offline_access, CreatedDateTime: , LastModifiedDateTime ]]; \""},
+            {"displayName": "ConsentAction.Reason", "oldValue": null, "newValue": "\"\""}
+          ]}]
+      }]},
+      "expect": [{"Severity": "Medium", "GrantKind": "Consent", "ClientApp": "Clinical Portal", "ResourceApp": "",
+                  "IsAdminConsent": true, "OnBehalfOfAll": true, "TenantWide": true,
+                  "Permissions": ["openid", "profile", "User.Read", "offline_access"], "HighRiskGranted": []}]
+    },
+    {
+      "id": "tier0-app-role-by-iac",
+      "kind": "positive",
+      "label": "The CI apply identity (matched by servicePrincipalId, IacPrincipalIds rendered) grants RoleManagement.ReadWrite.Directory to a pipeline app: tenant-wide and high-risk, still Low",
+      "lets": {"IacPrincipalIds": ["44444444-4444-4444-4444-444444444444"]},
+      "tables": {"AuditLogs": [{
+        "OperationName": "Add app role assignment to service principal",
+        "InitiatedBy": {"app": {"appId": "66666666-6666-6666-6666-666666666666", "displayName": "gh-oidc-entra-apply (write)",
+                                "servicePrincipalId": "44444444-4444-4444-4444-444444444444", "servicePrincipalName": null,
+                                "ipAddress": "198.51.100.7"}},
+        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "Microsoft Graph", "type": "ServicePrincipal",
+          "modifiedProperties": [
+            {"displayName": "AppRole.Id", "oldValue": null, "newValue": "\"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee\""},
+            {"displayName": "AppRole.Value", "oldValue": null, "newValue": "\"RoleManagement.ReadWrite.Directory\""},
+            {"displayName": "ServicePrincipal.ObjectID", "oldValue": null, "newValue": "\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\""},
+            {"displayName": "ServicePrincipal.DisplayName", "oldValue": null, "newValue": "\"gh-oidc-iga-reporter\""}
+          ]}]
+      }]},
+      "expect": [{"Severity": "Low", "IsIac": true, "IacNameSpoof": false, "GrantKind": "ApplicationPermission", "TenantWide": true,
+                  "ClientApp": "gh-oidc-iga-reporter", "HighRiskGranted": ["RoleManagement.ReadWrite.Directory"],
+                  "Actor": "gh-oidc-entra-apply (write)", "ActorUpn": "", "ActorApp": "gh-oidc-entra-apply (write)", "ActorIp": "198.51.100.7"}]
+    },
+    {
+      "id": "iac-display-name-on-another-app",
+      "kind": "positive",
+      "label": "An app that only CARRIES the IaC display name (ids not in the rendered list) adds a single-user User.Read grant: IacNameSpoof, High instead of Low",
+      "lets": {"IacPrincipalIds": ["44444444-4444-4444-4444-444444444444"]},
+      "tables": {"AuditLogs": [{
+        "OperationName": "Add delegated permission grant",
+        "InitiatedBy": {"app": {"appId": "99999999-9999-9999-9999-999999999999", "displayName": "gh-oidc-entra-apply (write)",
+                                "servicePrincipalId": "88888888-8888-8888-8888-888888888888", "servicePrincipalName": null}},
+        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "Microsoft Graph", "type": "ServicePrincipal",
+          "modifiedProperties": [
+            {"displayName": "DelegatedPermissionGrant.Scope", "oldValue": null, "newValue": "\"User.Read\""},
+            {"displayName": "DelegatedPermissionGrant.ConsentType", "oldValue": null, "newValue": "\"Principal\""},
+            {"displayName": "ServicePrincipal.ObjectID", "oldValue": null, "newValue": "\"77777777-7777-7777-7777-777777777777\""},
+            {"displayName": "ServicePrincipal.DisplayName", "oldValue": null, "newValue": "\"Unknown Mail Sync\""}
+          ]}]
+      }]},
+      "expect": [{"Severity": "High", "IsIac": false, "IacNameSpoof": true, "TenantWide": false, "HighRiskGranted": [],
+                  "ActorApp": "gh-oidc-entra-apply (write)"}]
+    },
+    {
+      "id": "consent-with-empty-modified-properties",
+      "kind": "positive",
+      "label": "A 'Consent to application' whose modifiedProperties is []: no context, no permissions, the row survives as Low",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Consent to application",
+        "TargetResources": [{"id": "77777777-7777-7777-7777-777777777777", "displayName": "Unknown Mail Sync", "type": "ServicePrincipal",
+          "modifiedProperties": []}]
+      }]},
+      "expect": [{"Severity": "Low", "GrantKind": "Consent", "ClientApp": "Unknown Mail Sync", "IsAdminConsent": false,
+                  "OnBehalfOfAll": false, "TenantWide": false}],
+      "expectRows": 1
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A tenant-wide Mail.ReadWrite consent 2 h ago is outside the 1 h look-back",
+      "tables": {"AuditLogs": [{
+        "TimeGenerated": "ago:2h",
+        "OperationName": "Consent to application",
+        "TargetResources": [{"id": "77777777-7777-7777-7777-777777777777", "displayName": "Unknown Mail Sync", "type": "ServicePrincipal",
+          "modifiedProperties": [
+            {"displayName": "ConsentContext.IsAdminConsent", "oldValue": null, "newValue": "\"True\""},
+            {"displayName": "ConsentContext.OnBehalfOfAll", "oldValue": null, "newValue": "\"True\""},
+            {"displayName": "ConsentAction.Permissions", "oldValue": null,
+             "newValue": "\"[] => [[Id: dddddddd-dddd-dddd-dddd-dddddddddddd, ClientId: 77777777-7777-7777-7777-777777777777, PrincipalId: , ResourceId: 33333333-3333-3333-3333-333333333333, ConsentType: AllPrincipals, Scope: Mail.ReadWrite, CreatedDateTime: , LastModifiedDateTime ]]; \""}
+          ]}]
+      }]}
+    }
+  ]
+}

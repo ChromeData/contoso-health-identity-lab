@@ -1,0 +1,162 @@
+// =============================================================================
+// Detection: RDP / interactive (or internet network) logon on DC01 from an IP
+//            outside the operator allowlist
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, hybrid)
+// SPL twin:  lab/splunk/detections/dc-logon-outside-operator-allowlist.spl
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   ADR 0013 accepts, for the lab only, a public IP on DC01 with RDP (3389)
+//   and LDAPS (636) open to operator_ip_ranges and nothing else. Its
+//   consequence: "the allowlist is the only barrier between the internet and
+//   RDP/LDAPS on a DC". modules/dc-vm now accepts only single-host /32
+//   entries, but a reassigned home IP or carrier-grade NAT still lets the
+//   wrong person in without anyone noticing (the variable is sensitive, so
+//   the plan never shows it). This rule is the detective half ADR 0013
+//   listed as not written: DC01 Security events whose source IP is not on
+//   the allowlist.
+//     4624 LogonType 10 / 7  RDP logon / reconnect-unlock, from ANY source
+//                            outside the allowlist (a VNet address too: the
+//                            lab has no jump host, so RDP from inside the VNet
+//                            is lateral movement)
+//     4624 LogonType 3       network logon (NLA pre-auth, LDAPS bind) from a
+//                            PUBLIC address outside the allowlist
+//     4624 LogonType 8       NetworkCleartext: an LDAP SIMPLE bind (what
+//                            Vault's AD rotation and a password guesser on
+//                            636 use) from a PUBLIC address outside the
+//                            allowlist. verify: whether a simple bind over
+//                            LDAPS logs as type 8 or type 3 - check with one
+//                            bind against DC01 at tenant time; both are
+//                            covered here either way.
+//     4625 (same types)      failed attempts: the port answered someone it
+//                            should not - NSG drift even if nobody got in
+//   Rows are grouped per account + source IP over the look-back.
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : any successful logon (4624) - a Tier-0 asset accepted a
+//            credential from an unexpected source.
+//   Medium : failures only (4625) - exposure, not access. Triage the NSG
+//            first: az network nsg rule list --nsg-name nsg-vm-dc01
+//            -g <resource group>  (modules/dc-vm: nsg-<vm_name>).
+//   AllowlistLoaded = false means the operator_ips watchlist was empty or
+//   missing, so EVERY source alerts (fail-safe, like VaultFeedHealthy in
+//   tier0-logon-without-checkout.kql).
+//
+// TABLE / SOURCE
+//   SecurityEvent from DC01 (AMA + dcr-idlab-dc01-security in
+//   modules/monitoring, collect_dc_security_events; 4624 and 4625 are in its
+//   event list). Allowlist: Sentinel watchlist alias "operator_ips":
+//     IpRange   (SearchKey) IPv4 CIDR, e.g. a single /32 - same values as
+//                           operator_ip_ranges in envs/dev
+//     Owner     who the range belongs to
+//     ExpiresOn yyyy-mm-dd; an entry past this date (or without one) no
+//               longer counts, which enforces ADR 0013's time box in the
+//               detection as well as in the review date.
+//   The operator IP is sensitive (envs/dev marks the variable sensitive), so
+//   it lives only in the watchlist, never in this public file. Terraform
+//   OWNS the watchlist: azurerm_sentinel_watchlist.operator_ips and its items
+//   (lab/terraform/modules/monitoring/itdr_v2.tf) are rendered from
+//   operator_ip_ranges, one /32 row each, ExpiresOn = operator_ips_expires_on
+//   (ADR 0013's review date). To change the allowlist, edit
+//   operator_ip_ranges and apply - NEVER add rows to the watchlist by hand
+//   (a hand-made row can be wider than /32, has no expiry review, and the
+//   next apply does not own it). With the watchlist empty or missing the
+//   fail-safe makes every DC01 logon alert. union
+//   isfuzzy=true keeps the query valid where the watchlist or _GetWatchlist
+//   is missing (post-trial Log Analytics path). verify: both cases.
+//   verify: SecurityEvent.LogonType is an int column and IpAddress holds the
+//   client's public address for RDP through the NIC's public IP (inbound
+//   through an instance-level public IP keeps the source address).
+//
+// LICENSE
+//   No Entra licence. AMA ingestion per GB (tiny for one lab DC). Watchlists
+//   need Microsoft Sentinel.
+//
+// MITRE ATT&CK
+//   T1133 External Remote Services (InitialAccess, Persistence)
+//   T1021.001 Remote Services: Remote Desktop Protocol (LateralMovement)
+//   T1078.002 Valid Accounts: Domain Accounts (DefenseEvasion, Persistence,
+//     PrivilegeEscalation, InitialAccess)
+//
+// FALSE-POSITIVE NOTES
+//   - The operator's home IP changed (DHCP, travel, phone tether): the NSG
+//     would then block them too, so a SUCCESS here means the NSG is wider
+//     than the watchlist. Fix whichever one is wrong; they must match.
+//   - Guacamole (the PSM stand-in) and Vault's LDAPS bind both reach DC01
+//     from the operator laptop's public IP - covered by the same entry.
+//   - Azure run-command (how the forest is built) runs as SYSTEM on the VM
+//     and produces no network logon.
+//
+// TUNABLE
+//   LookBack 1h; DcHosts ["DC01"]; LogonTypes 10/7 always, 3 and 8 only from
+//   public addresses. Add 4778 (session reconnected, carries ClientAddress) to the
+//   DCR event list if reconnect noise or gaps show up.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · one alert per row · Severity column ·
+//   Entities: Account = Account / AccountDomain / AccountSid, Host = Host,
+//   IP = SourceIp.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident. High: the containment playbook sees an AD
+//   account and takes the AD path (comment + ServiceNow, no automatic
+//   action); a human runs Invoke-AdContainment.ps1 and closes the NSG rule
+//   or deallocates vm-dc01 (enable_dc = false is the fastest full stop).
+// =============================================================================
+
+let LookBack = 1h;
+let DcHosts  = dynamic(["DC01"]);
+let OperatorRanges = toscalar(
+    union isfuzzy=true
+        (datatable(IpRange:string, ExpiresOn:string)[]),
+        (_GetWatchlist('operator_ips')
+            | project IpRange = tostring(SearchKey), ExpiresOn = tostring(ExpiresOn))
+    | where isnotnull(todatetime(ExpiresOn)) and todatetime(ExpiresOn) > now()
+    | summarize make_set(IpRange));
+SecurityEvent
+| where TimeGenerated > ago(LookBack)
+| where EventID in (4624, 4625)
+| where LogonType in (10, 7, 3, 8)
+| extend Host = toupper(tostring(split(Computer, ".")[0]))
+| where Host in (DcHosts)
+// IPv4-mapped IPv6 ("::ffff:a.b.c.d") -> a.b.c.d; local / empty sources out.
+| extend SourceIp = trim_start(@"::ffff:", tostring(IpAddress))
+| where isnotempty(SourceIp) and SourceIp !in ("-", "127.0.0.1", "::1")
+| extend IsIpv4    = isnotnull(parse_ipv4(SourceIp))
+| extend IsPrivate = IsIpv4 and ipv4_is_private(SourceIp)
+// IPv6 sources can never be allowlisted (operator_ip_ranges is IPv4 only).
+| extend Allowlisted = IsIpv4 and coalesce(ipv4_is_in_any_range(SourceIp, OperatorRanges), false)
+| where not(Allowlisted)
+| where LogonType in (10, 7) or not(IsPrivate)
+| where not(TargetUserName endswith "$")
+| extend Kind = case(
+    EventID == 4624 and LogonType == 10, "RDP logon",
+    EventID == 4624 and LogonType == 7,  "RDP reconnect / unlock",
+    EventID == 4624 and LogonType == 8,  "Cleartext (LDAP simple) bind from a public IP",
+    EventID == 4624,                     "Network logon from a public IP (NLA or LDAPS bind)",
+    LogonType in (10, 7),                "Failed RDP logon",
+    LogonType == 8,                      "Failed cleartext (LDAP simple) bind from a public IP",
+    "Failed network logon from a public IP")
+| summarize TimeGenerated = max(TimeGenerated),
+            FirstSeen     = min(TimeGenerated),
+            Events        = count(),
+            Successes     = countif(EventID == 4624),
+            Failures      = countif(EventID == 4625),
+            Kinds         = make_set(Kind, 5),
+            LogonTypes    = make_set(LogonType, 4),
+            Workstations  = make_set(WorkstationName, 5),
+            AccountSid    = take_any(TargetUserSid),
+            IsPrivate     = take_any(IsPrivate)
+            by Account = tolower(TargetUserName), AccountDomain = TargetDomainName, Host, Computer, SourceIp
+| extend AllowlistLoaded = array_length(OperatorRanges) > 0
+| extend Tier0Account = Account matches regex @"^(tier0-admin-[0-9]{2}|administrator)$"
+| extend Verdict = case(
+    Successes > 0 and IsPrivate, "Logon on DC01 from inside the VNet - no jump host exists, treat as lateral movement",
+    Successes > 0,               "DC01 accepted a logon from a public IP outside the operator allowlist",
+    "Failed logons from outside the allowlist - the port is reachable: check the NSG")
+| extend Verdict = iff(AllowlistLoaded, Verdict,
+                       strcat(Verdict, " (operator_ips watchlist empty or missing: every source alerts)"))
+| extend Severity = iff(Successes > 0, "High", "Medium")
+| project TimeGenerated, Severity, Verdict, Account, AccountDomain, AccountSid, Tier0Account, Host, Computer,
+          SourceIp, IsPrivate, Successes, Failures, Events, Kinds, LogonTypes, Workstations, FirstSeen,
+          AllowlistLoaded
+| sort by TimeGenerated desc

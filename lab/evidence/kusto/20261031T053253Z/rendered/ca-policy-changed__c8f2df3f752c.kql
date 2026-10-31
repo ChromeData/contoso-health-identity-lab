@@ -1,0 +1,190 @@
+// =============================================================================
+// Detection: Conditional Access policy, named location or authentication
+//            strength added, changed, disabled or deleted
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   Every write to a Conditional Access policy, classified by how much it
+//   WEAKENS the control plane. In this lab CA is code (modules/conditional-
+//   access, CA001-CA008), so a change made by anyone other than the CI apply
+//   identity is drift by definition - and turning a policy off, moving it to
+//   report-only, or adding an exclusion is the classic way an attacker with a
+//   CA admin role clears the path before using stolen credentials.
+//     Deleted          : "Delete conditional access policy"
+//     Disabled         : state enabled|report-only -> disabled
+//     ToReportOnly     : state enabled -> enabledForReportingButNotEnforced
+//     ExclusionsChanged: excludeUsers / excludeGroups text differs (someone
+//                        added an account or group to the bypass list)
+//     Updated / Added  : anything else
+//   The same controls can be weakened WITHOUT touching a policy object, so
+//   two more object kinds are watched (T1556.009 tampering either way):
+//     Named locations ("Add|Update|Delete named location", Category Policy):
+//       NamedLocationDeleted, CountryRemoved (a country taken off a list -
+//       the blocked-countries location empties CA004), TrustedRangeAdded (a
+//       range newly trusted), NamedLocationAdded/Updated.
+//     Authentication strengths ("Authentication Strength Policy|Combination
+//       Configuration Create|Update|Delete", Category ApplicationManagement):
+//       AuthStrengthDeleted, PhishableCombinationAdded (a non-phishing-
+//       resistant combination added to e.g. the CA002 admin or CA008
+//       workforce strength), CombinationConfigChanged (e.g. the FIDO2 AAGUID
+//       allow-list), AuthStrengthAdded/Updated.
+//   Operation names: Microsoft Learn "audit log activity reference"
+//   (Conditional Access + Authentication Methods sections).
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : any Weakening change (list below) by anyone other than the CI
+//            apply identity, and ANY change by an app that carries the IaC
+//            display name without its immutable id (IacNameSpoof).
+//   Medium : any other update or a new object outside IaC (drift).
+//   Low    : the CI apply identity, matched by service principal / app id
+//            (a reviewed PR) - still alerted.
+//
+// TABLE / SOURCE
+//   AuditLogs, Category "Policy", LoggedByService "Conditional Access"
+//   (policies, named locations) and Category "ApplicationManagement",
+//   LoggedByService "Authentication Methods" (authentication strengths).
+//   The policy before/after travels as JSON text in modifiedProperties (one
+//   property, "ConditionalAccessPolicy", in the current schema; older tenants
+//   logged a separate "State" property - both are read). The state and the
+//   exclusion arrays are pulled out of that text with regexes that tolerate
+//   escaped quotes. verify: the property name and JSON keys (state,
+//   excludeUsers, excludeGroups) on the first portal edit in the lab tenant.
+//
+// LICENSE
+//   Conditional Access needs Entra ID P1; AuditLogs export needs a workspace.
+//
+// MITRE ATT&CK
+//   T1556.009 Modify Authentication Process: Conditional Access Policies
+//     (CredentialAccess, DefenseEvasion, Persistence)
+//   T1562.001 Impair Defenses: Disable or Modify Tools (DefenseEvasion)
+//
+// FALSE-POSITIVE NOTES
+//   - Emergency changes made with a break-glass account during an outage are
+//     expected to alert High - that IS the review trigger for break-glass use.
+//   - A Microsoft-managed policy update (Actor = a Microsoft service) shows as
+//     Medium; check ActorApp before escalating.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · one alert per row · Severity column ·
+//   Entities: Account = ActorUpn / ActorObjectId, IP = ActorIp.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; containment card on High (the ACTOR is the
+//   subject). Restoring the policy is `terraform apply` from main - the code
+//   is the source of truth, so the fix is a re-apply, not a portal edit.
+// =============================================================================
+
+let LookBack = 1h;
+// The CI apply identity, matched on IMMUTABLE ids (service principal object
+// id / application client id), never on its display name: anyone who owns or
+// administers an app can rename it "gh-oidc-entra-apply (write)", and a
+// display-name match would DOWNGRADE that attacker's changes.
+// modules/monitoring renders the list from var.iac_principal_ids (envs/
+// bootstrap output iac_principal_ids). Committed, it is empty: run as-is,
+// nothing counts as IaC - fail closed, severity can only go up.
+let IacPrincipalIds = dynamic(["44444444-4444-4444-4444-444444444444"]); // @@IAC_PRINCIPAL_IDS@@
+let IacDisplayName = "gh-oidc-entra-apply (write)"; // impersonation check ONLY, never trust
+let CaOps = dynamic(["Add conditional access policy", "Update conditional access policy",
+                     "Delete conditional access policy"]);
+let NamedLocationOps = dynamic(["Add named location", "Update named location", "Delete named location"]);
+let StrengthOps = dynamic(["Authentication Strength Policy Create", "Authentication Strength Policy Update",
+                           "Authentication Strength Policy Delete",
+                           "Authentication Strength Combination Configuration Create",
+                           "Authentication Strength Combination Configuration Update",
+                           "Authentication Strength Combination Configuration Delete"]);
+// Combinations that keep an authentication strength phishing-resistant
+// (CA002 admin / CA008 workforce). Anything else added to a strength is a
+// downgrade. verify: the allowedCombinations spelling in the audit record.
+let PhishingResistant = dynamic(["fido2", "windowsHelloForBusiness", "x509CertificateMultiFactor"]);
+let Weakening = dynamic(["Deleted", "Disabled", "ToReportOnly", "ExclusionsChanged",
+                         "NamedLocationDeleted", "CountryRemoved", "TrustedRangeAdded",
+                         "AuthStrengthDeleted", "PhishableCombinationAdded", "CombinationConfigChanged"]);
+AuditLogs
+| where TimeGenerated > ago(LookBack)
+| where (Category == "Policy" and (OperationName in~ (CaOps) or OperationName in~ (NamedLocationOps)))
+     or (Category == "ApplicationManagement" and OperationName in~ (StrengthOps))
+| where Result =~ "success"
+| extend ObjectKind = case(OperationName in~ (NamedLocationOps), "NamedLocation",
+                           OperationName in~ (StrengthOps),      "AuthStrength",
+                           "CaPolicy")
+| extend ActorUpn      = tostring(InitiatedBy.user.userPrincipalName)
+| extend ActorObjectId = tostring(InitiatedBy.user.id)
+| extend ActorApp      = tostring(InitiatedBy.app.displayName)
+| extend ActorIp       = iff(isnotempty(tostring(InitiatedBy.user.ipAddress)),
+                             tostring(InitiatedBy.user.ipAddress),
+                             tostring(InitiatedBy.app.ipAddress))
+| extend Actor         = iff(isnotempty(ActorUpn), ActorUpn, ActorApp)
+| extend PolicyName = tostring(TargetResources[0].displayName)
+| extend PolicyId   = tostring(TargetResources[0].id)
+| extend ModProps   = TargetResources[0].modifiedProperties
+| mv-apply mp = ModProps on (
+    summarize OldStateProp = take_anyif(tostring(mp.oldValue), tostring(mp.displayName) =~ "State"),
+              NewStateProp = take_anyif(tostring(mp.newValue), tostring(mp.displayName) =~ "State"),
+              OldText      = strcat_array(make_list(tostring(mp.oldValue)), " "),
+              NewText      = strcat_array(make_list(tostring(mp.newValue)), " ")
+  )
+// The regexes read "state":"enabled" / "excludeUsers":[...] with or without the
+// escaped quotes the audit record wraps them in. Inline literals: extract()
+// takes a constant pattern.
+| extend OldState = coalesce(extract(@'(?i)\\?"state\\?"\s*:\s*\\?"([A-Za-z]+)', 1, OldText), trim(@'"', OldStateProp))
+| extend NewState = coalesce(extract(@'(?i)\\?"state\\?"\s*:\s*\\?"([A-Za-z]+)', 1, NewText), trim(@'"', NewStateProp))
+| extend OldExclusions = strcat(extract(@'(?i)\\?"excludeUsers\\?"\s*:\s*(\[[^\]]*\])', 1, OldText),
+                                extract(@'(?i)\\?"excludeGroups\\?"\s*:\s*(\[[^\]]*\])', 1, OldText))
+| extend NewExclusions = strcat(extract(@'(?i)\\?"excludeUsers\\?"\s*:\s*(\[[^\]]*\])', 1, NewText),
+                                extract(@'(?i)\\?"excludeGroups\\?"\s*:\s*(\[[^\]]*\])', 1, NewText))
+// Named locations: countries taken OUT of a list (the blocked-countries
+// location CA004 uses), and a range newly marked trusted (or a new range on a
+// trusted location). verify: countriesAndRegions / ipRanges.cidrAddress /
+// isTrusted on the first portal edit.
+| extend OldCountries = extract_all(@'([A-Z]{2})', extract(@'(?i)countriesAndRegions\\?"\s*:\s*(\[[^\]]*\])', 1, OldText))
+| extend NewCountries = extract_all(@'([A-Z]{2})', extract(@'(?i)countriesAndRegions\\?"\s*:\s*(\[[^\]]*\])', 1, NewText))
+| extend CountriesRemoved = set_difference(iff(isnull(OldCountries), dynamic([]), OldCountries),
+                                           iff(isnull(NewCountries), dynamic([]), NewCountries))
+| extend OldTrusted = extract(@'(?i)isTrusted\\?"\s*:\s*(true|false)', 1, OldText)
+| extend NewTrusted = extract(@'(?i)isTrusted\\?"\s*:\s*(true|false)', 1, NewText)
+| extend OldRanges = extract_all(@'(?i)cidrAddress\\?"\s*:\s*\\?"([0-9A-Fa-f:./]+)', OldText)
+| extend NewRanges = extract_all(@'(?i)cidrAddress\\?"\s*:\s*\\?"([0-9A-Fa-f:./]+)', NewText)
+| extend RangesAdded = set_difference(iff(isnull(NewRanges), dynamic([]), NewRanges),
+                                      iff(isnull(OldRanges), dynamic([]), OldRanges))
+// Authentication strengths: a combination added that is not phishing-
+// resistant (e.g. "password,sms") silently weakens every CA policy using it.
+| extend OldCombos = extract_all(@'([A-Za-z0-9]+(?:,[A-Za-z0-9]+)*)', extract(@'(?i)allowedCombinations\\?"\s*:\s*(\[[^\]]*\])', 1, OldText))
+| extend NewCombos = extract_all(@'([A-Za-z0-9]+(?:,[A-Za-z0-9]+)*)', extract(@'(?i)allowedCombinations\\?"\s*:\s*(\[[^\]]*\])', 1, NewText))
+| extend CombosAdded = set_difference(iff(isnull(NewCombos), dynamic([]), NewCombos),
+                                      iff(isnull(OldCombos), dynamic([]), OldCombos))
+| extend PhishableAdded = set_difference(CombosAdded, PhishingResistant)
+| extend Change = case(
+    ObjectKind == "NamedLocation" and OperationName =~ "Delete named location", "NamedLocationDeleted",
+    ObjectKind == "NamedLocation" and OperationName =~ "Add named location",    "NamedLocationAdded",
+    ObjectKind == "NamedLocation" and array_length(CountriesRemoved) > 0,       "CountryRemoved",
+    ObjectKind == "NamedLocation" and NewTrusted =~ "true"
+        and (OldTrusted !~ "true" or array_length(RangesAdded) > 0),            "TrustedRangeAdded",
+    ObjectKind == "NamedLocation",                                               "NamedLocationUpdated",
+    ObjectKind == "AuthStrength" and OperationName has "Delete",                 "AuthStrengthDeleted",
+    ObjectKind == "AuthStrength" and array_length(PhishableAdded) > 0,           "PhishableCombinationAdded",
+    ObjectKind == "AuthStrength" and OperationName has "Combination Configuration", "CombinationConfigChanged",
+    ObjectKind == "AuthStrength" and OperationName has "Create",                 "AuthStrengthAdded",
+    ObjectKind == "AuthStrength",                                                "AuthStrengthUpdated",
+    OperationName =~ "Delete conditional access policy",                         "Deleted",
+    OperationName =~ "Add conditional access policy",                            "Added",
+    NewState =~ "disabled" and OldState !~ "disabled",                           "Disabled",
+    NewState =~ "enabledForReportingButNotEnforced" and OldState =~ "enabled",   "ToReportOnly",
+    OldExclusions != NewExclusions,                                              "ExclusionsChanged",
+    "Updated")
+| extend ActorSpId  = tostring(InitiatedBy.app.servicePrincipalId)
+| extend ActorAppId = tostring(InitiatedBy.app.appId)
+| extend IsIac = (isnotempty(ActorSpId) and ActorSpId in (IacPrincipalIds))
+              or (isnotempty(ActorAppId) and ActorAppId in (IacPrincipalIds))
+// The IaC name on an app that is NOT the IaC identity = someone impersonating
+// the pipeline to look routine. Always High.
+| extend IacNameSpoof = not(IsIac) and ActorApp =~ IacDisplayName
+| extend Severity = case(
+    IacNameSpoof, "High",
+    IsIac, "Low",
+    Change in (Weakening), "High",
+    "Medium")
+| project TimeGenerated, Severity, ObjectKind, Change, PolicyName, PolicyId, OldState, NewState,
+          OldExclusions, NewExclusions, CountriesRemoved, RangesAdded, NewTrusted, PhishableAdded,
+          Actor, ActorUpn, ActorObjectId, ActorApp, ActorSpId, ActorIp,
+          IsIac, IacNameSpoof, OperationName, CorrelationId
+| sort by TimeGenerated desc

@@ -38,6 +38,6 @@ Plain reading of the table: **Yes** means the lab did it in a real tenant and ha
 
 - **Configuration drift detection** against a committed zero-drift baseline, nightly (`Compare-IdentityConfig.ps1`, ADR 0021).
 - **Tamper-evident evidence**: every page fingerprinted and stored where nobody can edit it, mapped to the control it satisfies. Postings say "produce audit evidence"; none say tamper-evident.
-- **Detection as code with tests**: 22 rules, 223 emulator-tested cases, plus governance for AI agent identities.
+- **Detection as code with tests**: 22 rules, 261 emulator-tested cases, plus governance for AI agent identities.
 
 Lead with those three. They are the difference between "has done IAM" and "thinks like the person who owns it".

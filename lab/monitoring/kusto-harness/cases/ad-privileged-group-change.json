@@ -1,0 +1,103 @@
+{
+  "rule": "ad-privileged-group-change",
+  "about": "Complements the itdr-cases.json rows (Domain Admins 512, BUILTIN\\Administrators 544, Enterprise Admins 519, DnsAdmins by name, Tier1 Medium, four negatives): the remaining Tier-0 RIDs and BUILTIN SIDs (Schema Admins 518, Backup Operators 551, Key Admins 526, Group Policy Creator Owners 520), the NewMember fallback to MemberSid when MemberName is empty, case folding of the host and the actor, the case-insensitive Tier-1 name match, a BUILTIN group that is not on the list and the look-back edge.",
+  "defaults": {
+    "SecurityEvent": {
+      "Computer": "DC01.corp.test.local", "TimeGenerated": "ago:20m",
+      "SubjectUserName": "helpdesk-adm", "SubjectDomainName": "CORP",
+      "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+      "MemberName": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+      "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107"
+    }
+  },
+  "cases": [
+    {
+      "id": "schema-admins-4756-rid-518",
+      "kind": "positive",
+      "label": "Mallory added to Schema Admins (4756, universal group, RID 518): tier0, High",
+      "tables": {"SecurityEvent": [{
+        "EventID": 4756, "TargetUserName": "Schema Admins", "TargetDomainName": "CORP",
+        "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-518"
+      }]},
+      "expect": [{"Severity": "High", "GroupTier": "tier0", "GroupName": "Schema Admins",
+                  "GroupSid": "S-1-5-21-1000000001-2000000002-3000000003-518",
+                  "NewMember": "CN=Mallory,OU=Staff,DC=corp,DC=test,DC=local",
+                  "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+                  "Account": "helpdesk-adm", "AccountDomain": "CORP",
+                  "AccountSid": "S-1-5-21-1000000001-2000000002-3000000003-1104",
+                  "Host": "DC01", "Computer": "DC01.corp.test.local", "EventID": 4756}],
+      "expectRows": 1
+    },
+    {
+      "id": "backup-operators-4732-builtin-551",
+      "kind": "positive",
+      "label": "Mallory added to BUILTIN\\Backup Operators on the DC (4732, S-1-5-32-551): tier0, High",
+      "tables": {"SecurityEvent": [{
+        "EventID": 4732, "TargetUserName": "Backup Operators", "TargetDomainName": "Builtin", "TargetSid": "S-1-5-32-551"
+      }]},
+      "expect": [{"Severity": "High", "GroupTier": "tier0", "GroupName": "Backup Operators", "GroupSid": "S-1-5-32-551"}]
+    },
+    {
+      "id": "key-admins-4728-rid-526",
+      "kind": "positive",
+      "label": "Mallory added to Key Admins (4728, RID 526): tier0, High",
+      "tables": {"SecurityEvent": [{
+        "EventID": 4728, "TargetUserName": "Key Admins", "TargetDomainName": "CORP",
+        "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-526"
+      }]},
+      "expect": [{"Severity": "High", "GroupTier": "tier0", "GroupName": "Key Admins"}]
+    },
+    {
+      "id": "member-name-empty-falls-back-to-sid",
+      "kind": "positive",
+      "label": "A Domain Admins add whose MemberName is empty (the DC could not resolve the member): NewMember is the MemberSid",
+      "tables": {"SecurityEvent": [{
+        "EventID": 4728, "TargetUserName": "Domain Admins", "TargetDomainName": "CORP",
+        "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-512", "MemberName": ""
+      }]},
+      "expect": [{"Severity": "High", "GroupTier": "tier0", "GroupName": "Domain Admins",
+                  "NewMember": "S-1-5-21-1000000001-2000000002-3000000003-1107",
+                  "MemberSid": "S-1-5-21-1000000001-2000000002-3000000003-1107"}]
+    },
+    {
+      "id": "lowercase-host-uppercase-actor",
+      "kind": "positive",
+      "label": "Computer logged in lower case and the actor in upper case: Host DC01 still matches DcHosts, Account is lower-cased (Group Policy Creator Owners, RID 520)",
+      "tables": {"SecurityEvent": [{
+        "EventID": 4728, "Computer": "dc01.corp.test.local", "SubjectUserName": "TIER0-ADMIN-01",
+        "SubjectUserSid": "S-1-5-21-1000000001-2000000002-3000000003-1105",
+        "TargetUserName": "Group Policy Creator Owners", "TargetDomainName": "CORP",
+        "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-520"
+      }]},
+      "expect": [{"Severity": "High", "GroupTier": "tier0", "Host": "DC01", "Computer": "dc01.corp.test.local",
+                  "Account": "tier0-admin-01", "AccountSid": "S-1-5-21-1000000001-2000000002-3000000003-1105"}]
+    },
+    {
+      "id": "tier1-name-matched-case-insensitively",
+      "kind": "positive",
+      "label": "TIER1-SERVER-ADMINS in upper case (no fixed RID, matched by name with in~): tier1, Medium",
+      "tables": {"SecurityEvent": [{
+        "EventID": 4728, "TargetUserName": "TIER1-SERVER-ADMINS", "TargetDomainName": "CORP",
+        "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-1110"
+      }]},
+      "expect": [{"Severity": "Medium", "GroupTier": "tier1", "GroupName": "TIER1-SERVER-ADMINS"}]
+    },
+    {
+      "id": "builtin-remote-desktop-users-not-listed",
+      "kind": "negative",
+      "label": "BUILTIN\\Remote Desktop Users (S-1-5-32-555) on the DC is not a Tier-0 group of pam-policy.json",
+      "tables": {"SecurityEvent": [{
+        "EventID": 4732, "TargetUserName": "Remote Desktop Users", "TargetDomainName": "Builtin", "TargetSid": "S-1-5-32-555"
+      }]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A Domain Admins add 2 h ago is outside the 1 h look-back",
+      "tables": {"SecurityEvent": [{
+        "TimeGenerated": "ago:2h", "EventID": 4728, "TargetUserName": "Domain Admins", "TargetDomainName": "CORP",
+        "TargetSid": "S-1-5-21-1000000001-2000000002-3000000003-512"
+      }]}
+    }
+  ]
+}
