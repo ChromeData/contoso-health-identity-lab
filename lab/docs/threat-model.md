@@ -20,7 +20,7 @@ the Vault audit feed for the PAM anomaly detection (63 passed, 1 skipped; the
 detection's predicates re-stated in `jq`, not the KQL) and Kubernetes
 workload identity on kind (64/64). On 2026-10-21: the 22 KQL detections on
 the Azure Data Explorer Kusto emulator, a local KQL engine, with synthetic
-tables and events and a shimmed `_GetWatchlist` (22/22 rules, 261/261 cases
+tables and events and a shimmed `_GetWatchlist` (22/22 rules, 277/277 cases
 PASS). The emulator is not a Log Analytics workspace and not a tenant, so it
 shows the queries' logic, not that Sentinel schedules them or that a
 tenant's logs look like the synthetic rows. Their hashed run records

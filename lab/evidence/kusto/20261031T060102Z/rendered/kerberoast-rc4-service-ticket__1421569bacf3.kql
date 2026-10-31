@@ -1,0 +1,93 @@
+// =============================================================================
+// Detection: Kerberoasting - RC4 service tickets for user-account SPNs
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, hybrid)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   A Kerberos service ticket (4769) issued with RC4-HMAC (encryption type
+//   0x17) for a service that is a USER account with an SPN (not a computer
+//   account, not krbtgt). An RC4 ticket is encrypted with the NT hash of the
+//   service account's password, so whoever requested it can crack that
+//   password offline - Kerberoasting. Rubeus / Impacket GetUserSPNs ask for
+//   RC4 on purpose. In this lab svc-sql01 / svc-iis-app / svc-legacy-da are
+//   the SPN accounts (lab/pam discovery flags svc-legacy-da as "Kerberoastable
+//   Tier 0"); after onboarding Vault rotates them to long random passwords,
+//   which is the mitigation this detection backs up.
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : one requester asked for RC4 tickets for 3+ different services in
+//            the window (a roast sweep), or for an SPN account that is in a
+//            Tier-0 group (Tier0SpnAccounts).
+//   Medium : a single RC4 ticket for a user SPN (an old client can still ask
+//            for RC4 - check the requester before escalating).
+//
+// TABLE / SOURCE
+//   SecurityEvent 4769 from DC01 (already in dc_event_ids, telemetry.tf).
+//   Columns ServiceName, Status, TargetUserName (requester, user@REALM),
+//   IpAddress. TicketEncryptionType is NOT a SecurityEvent column (Microsoft
+//   Learn table reference), so it is read from the EventData XML. verify:
+//   EventData's <Data Name="TicketEncryptionType"> on the first DC01 4769
+//   (and that Status / ServiceName are populated for 4769). verify:
+//   SecurityEvent via AMA needs Microsoft Sentinel + the "Windows Security
+//   Events via AMA" connector (Microsoft Learn); without it the rows land in
+//   Event - keep the rule in itdr_exclude_rules until DC01 rows are in
+//   SecurityEvent. verify: "Audit Kerberos Service Ticket Operations" success
+//   is on for DC01.
+//
+// LICENSE
+//   No Entra licence. AMA ingestion billed per GB.
+//
+// MITRE ATT&CK
+//   T1558.003 Steal or Forge Kerberos Tickets: Kerberoasting
+//   Tactic: CredentialAccess
+//
+// FALSE-POSITIVE NOTES
+//   - Legacy clients / appliances that only speak RC4 (Medium, one service).
+//     Fix: set msDS-SupportedEncryptionTypes to AES on the service account.
+//   - Machine accounts ($) and krbtgt are excluded: their keys are random
+//     and not crackable this way.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · one alert per row · Severity column ·
+//   Entities: Account = Account / AccountDomain (the REQUESTER), IP = SourceIp,
+//   Host = Host.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident. The requester is an AD account: containment
+//   takes the AD path (Invoke-AdContainment.ps1 by a human). Also rotate the
+//   roasted service accounts now (lab/pam rotate.sh) - the hash may already
+//   be cracking.
+// =============================================================================
+
+let LookBack = 1h;
+let DcHosts = dynamic(["DC01"]);
+let SweepThreshold = 3;     // distinct services per requester per window
+// SPN accounts that are also Tier 0 (pam-policy.json): one RC4 ticket = High.
+let Tier0SpnAccounts = dynamic(["svc-legacy-da"]);
+SecurityEvent
+| where TimeGenerated > ago(LookBack)
+| where EventID == 4769
+| extend Host = toupper(tostring(split(Computer, ".")[0]))
+| where Host in (DcHosts)
+| extend TicketEncryptionType = extract(@'Name="TicketEncryptionType">([^<]+)<', 1, EventData)
+| where TicketEncryptionType =~ "0x17"          // RC4-HMAC
+| where Status =~ "0x0"                         // ticket actually issued
+| extend Service = tolower(ServiceName)
+| where not(Service endswith "$") and not(Service startswith "krbtgt")
+| extend Requester      = tolower(extract(@"^([^@]+)", 1, TargetUserName))
+| extend RequesterRealm = extract(@"@(.+)$", 1, TargetUserName)
+| where not(Requester endswith "$")
+| extend SourceIp = trim_start(@"::ffff:", IpAddress)
+| summarize TimeGenerated = max(TimeGenerated),
+            FirstSeen     = min(TimeGenerated),
+            Services      = make_set(Service, 50),
+            ServiceCount  = dcount(Service),
+            Tickets       = count(),
+            SourceIps     = make_set(SourceIp, 10)
+            by Requester, RequesterRealm, Host
+| extend Tier0Roasted = array_length(set_intersect(Services, Tier0SpnAccounts)) > 0
+| extend Account = Requester, AccountDomain = RequesterRealm
+| extend SourceIp = tostring(SourceIps[0])
+| extend Severity = iff(ServiceCount >= SweepThreshold or Tier0Roasted, "High", "Medium")
+| project TimeGenerated, Severity, Account, AccountDomain, Host, SourceIp, SourceIps,
+          ServiceCount, Services, Tier0Roasted, Tickets, FirstSeen
+| sort by TimeGenerated desc

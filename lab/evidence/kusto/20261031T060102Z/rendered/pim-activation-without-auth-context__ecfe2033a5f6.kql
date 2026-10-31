@@ -1,0 +1,185 @@
+// =============================================================================
+// Detection: Tier-0 PIM activation without the expected Conditional Access
+//            authentication context (step-up missing or not enforced)
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack)
+// SPL twin:  lab/splunk/detections/pim-activation-without-auth-context.spl
+// PREVIEW:   fields and activity strings below are partly unconfirmed - see
+//            the verify: items. Deploy after the first real activation.
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   modules/pim can require a CA authentication context (e.g. "c1") on
+//   activation of the Tier-0 PIM groups (tier0_activation_auth_context_id),
+//   so activating Security Administrator or Conditional Access Administrator
+//   means a fresh phishing-resistant sign-in (CA021: admin strength, sign-in
+//   every time - no compliant-device grant until privileged access
+//   workstations exist), enforced by a CA policy that targets the context.
+//   Microsoft Learn (PIM role
+//   settings, checked 2026-10-20) states the trap this rule closes: PIM falls
+//   back to plain MFA only when NO policy targets the context - the backup
+//   "isn't triggered if the Conditional Access policy is turned off, is in
+//   report-only mode, or has an eligible user excluded from the policy". In
+//   those states a Tier-0 role activates with whatever the session already
+//   had. Two verdicts:
+//     no step-up           : no successful sign-in by the user carried the
+//                            context in the 30 min before the request
+//     step-up not enforced : the context was present, but the named CA policy
+//                            only ran in report-only (or did not apply)
+//   For approval-gated activations (Tier 0 needs approval) the step-up
+//   happens at REQUEST time, so the anchor is the latest "requested" event
+//   for the same user and group in the 20 h before the "completed" event,
+//   else the completion itself.
+//
+// SEVERITY (dynamic - the Severity column)
+//   High for every row: a Tier-0 role became active without the control the
+//   PIM policy promises. (Today every lab CA policy is report-only, so this
+//   alerts on each Tier-0 activation once the context is configured - the
+//   intended evidence that the context policy must graduate first.)
+//
+// TABLE / SOURCE
+//   AuditLogs (PIM, as pim-activation.kql) + SigninLogs +
+//   AADNonInteractiveUserSignInLogs, column AuthenticationContextClassReferences
+//   (string in both tables - Microsoft Learn table reference). Its content is
+//   the Graph signIn property authenticationContextClassReferences, a
+//   collection of {id, detail}; detail is required | previouslySatisfied |
+//   notApplicable (Graph BETA resource authenticationContext).
+//   verify: the JSON text Log Analytics stores for it; the PIM activity
+//   strings "... requested (PIM activation)" / "... completed (PIM
+//   activation)" and that TargetResources names the activating User; whether
+//   PIM's 10-minute re-authentication reuse window logs the context as
+//   previouslySatisfied.
+//   ContextPolicies (tenant time): display name(s) of the CA policy that
+//   targets ExpectedContext. Empty = the policy check is skipped (PolicyCheck
+//   column says so) and only "no step-up" can fire.
+//
+// LICENSE
+//   PIM needs Entra ID P2 / ID Governance; authentication context and CA need
+//   P1. Sign-in logs: Free per Learn's licensing table (verify: routing them
+//   on a Free tenant - modules/entra-diagnostics main.tf LICENSING).
+//
+// MITRE ATT&CK
+//   T1078.004 Valid Accounts: Cloud Accounts (PrivilegeEscalation,
+//     DefenseEvasion, Persistence, InitialAccess)
+//   T1556.009 Modify Authentication Process: Conditional Access Policies
+//     (DefenseEvasion, CredentialAccess, Persistence) - when the gap is a
+//     weakened or excluded context policy
+//
+// FALSE-POSITIVE NOTES
+//   - The context policy is still report-only (the lab default): expected
+//     High until it is enforced - that is the point.
+//   - Activation through the Graph API with a token that already carries the
+//     context claim: there may be no fresh sign-in row. verify: what the sign-
+//     in log records for an API activation.
+//   - Sign-in log latency can exceed the audit log's; a step-up ingested late
+//     makes a false "no step-up" - re-run the query for the incident window
+//     before escalating.
+//
+// TUNABLE
+//   ExpectedContext "c1" (must equal tier0_activation_auth_context_id);
+//   ContextTargets = the Tier-0 PIM groups (modules/pim var.pim_tier_groups,
+//   tier 0); RequestWindow 20h, StepUpWindow 30m, Grace 5m, LookBack 1h -
+//   together inside the 1-day period.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 1h · Lookback 1d · one alert per row · Severity column ·
+//   Entities: Account = UserPrincipalName / UserId, IP = ActorIp.
+//
+// AUTOMATED RESPONSE
+//   Notify; containment card on High (the activating USER: revoke sessions,
+//   which also ends the activated role's token use). Then fix the cause:
+//   enforce the context policy or remove the exclusion (a CA change through
+//   the pipeline).
+// =============================================================================
+
+let LookBack        = 1h;
+let RequestWindow   = 20h;
+let StepUpWindow    = 30m;
+let Grace           = 5m;
+let ExpectedContext = "c1";
+let ContextTargets  = dynamic(["PIM-Tier0-Security-Admins", "PIM-Tier0-CA-Admins"]);
+let ContextPolicies = dynamic([]);
+let PimEvents = (Since:timespan, Stage:string) {
+    AuditLogs
+    | where TimeGenerated > ago(Since)
+    | where LoggedByService == "PIM"
+    | where Category in ("GroupManagement", "RoleManagement")
+    | where ActivityDisplayName has "PIM activation" and ActivityDisplayName has Stage
+    | mv-apply tr = TargetResources on (
+        summarize TargetGroup   = take_anyif(tostring(tr.displayName), tostring(tr.type) == "Group"),
+                  TargetRole    = take_anyif(tostring(tr.displayName), tostring(tr.type) == "Role"),
+                  TargetUserId  = take_anyif(tostring(tr.id), tostring(tr.type) == "User"),
+                  TargetUserUpn = take_anyif(tostring(tr.userPrincipalName), tostring(tr.type) == "User")
+      )
+    | extend ElevatedTo = iff(isnotempty(TargetGroup), TargetGroup, TargetRole)
+    | where ElevatedTo in (ContextTargets)
+    | extend UserId            = coalesce(TargetUserId, tostring(InitiatedBy.user.id))
+    | extend UserPrincipalName = tolower(coalesce(TargetUserUpn, tostring(InitiatedBy.user.userPrincipalName)))
+    | extend ActorIp           = tostring(InitiatedBy.user.ipAddress)
+};
+let Completed = PimEvents(LookBack, "completed")
+    | project CompletedTime = TimeGenerated, UserId, UserPrincipalName, ActorIp, ElevatedTo,
+              ActivityDisplayName, CorrelationId;
+let Requested = PimEvents(LookBack + RequestWindow, "requested")
+    | project RequestTime = TimeGenerated, UserId, ElevatedTo;
+let Anchored = Completed
+    | join kind=leftouter Requested on UserId, ElevatedTo
+    | extend RequestTime = iff(RequestTime between ((CompletedTime - RequestWindow) .. CompletedTime),
+                               RequestTime, datetime(null))
+    | summarize RequestTime = max(RequestTime)
+                by CompletedTime, UserId, UserPrincipalName, ActorIp, ElevatedTo, ActivityDisplayName, CorrelationId
+    | extend AnchorTime = coalesce(RequestTime, CompletedTime);
+// Sign-ins whose context list contains ExpectedContext. Each leg projects the
+// same string columns first (ConditionalAccessPolicies is dynamic in one
+// table and string in the other).
+let StepUps = union
+    (SigninLogs
+        | where TimeGenerated > ago(LookBack + RequestWindow + StepUpWindow)
+        | where ResultType == "0" and AuthenticationContextClassReferences has ExpectedContext
+        | project TimeGenerated, UserId, IPAddress, AppDisplayName,
+                  AcrText = tostring(AuthenticationContextClassReferences),
+                  CaText  = tostring(ConditionalAccessPolicies)),
+    (AADNonInteractiveUserSignInLogs
+        | where TimeGenerated > ago(LookBack + RequestWindow + StepUpWindow)
+        | where ResultType == "0" and AuthenticationContextClassReferences has ExpectedContext
+        | project TimeGenerated, UserId, IPAddress, AppDisplayName,
+                  AcrText = tostring(AuthenticationContextClassReferences),
+                  CaText  = tostring(ConditionalAccessPolicies))
+    | mv-apply acr = todynamic(AcrText) on (
+        where tostring(acr.id) == ExpectedContext
+        | summarize ContextDetail = strcat_array(make_set(tostring(acr.detail)), ",")
+      )
+    | where isnotempty(ContextDetail)
+    | mv-apply cap = todynamic(CaText) on (
+        summarize Enforced   = countif(tostring(cap.displayName) in (ContextPolicies) and tostring(cap.result) == "success"),
+                  ReportOnly = countif(tostring(cap.displayName) in (ContextPolicies) and tostring(cap.result) startswith "reportOnly")
+      )
+    | project UserId, StepUpTime = TimeGenerated, ContextDetail, Enforced, ReportOnly,
+              StepUpIp = IPAddress, StepUpApp = AppDisplayName;
+Anchored
+| join kind=leftouter StepUps on UserId
+| extend InWindow = isnotnull(StepUpTime)
+                    and StepUpTime between ((AnchorTime - StepUpWindow) .. (AnchorTime + Grace))
+| summarize StepUpSignIns  = countif(InWindow),
+            EnforcedHits   = countif(InWindow and Enforced > 0),
+            ReportOnlyHits = countif(InWindow and ReportOnly > 0),
+            ContextDetails = make_set_if(ContextDetail, InWindow, 5),
+            LastStepUp     = maxif(StepUpTime, InWindow),
+            StepUpIps      = make_set_if(StepUpIp, InWindow, 5),
+            StepUpApps     = make_set_if(StepUpApp, InWindow, 5)
+            by CompletedTime, RequestTime, AnchorTime, UserId, UserPrincipalName, ActorIp, ElevatedTo,
+               ActivityDisplayName, CorrelationId
+| extend PolicyCheck = iff(array_length(ContextPolicies) == 0,
+                           "skipped - set ContextPolicies to the CA policy targeting the context", "on")
+| extend Verdict = case(
+    StepUpSignIns == 0,
+        strcat("No sign-in satisfied authentication context ", ExpectedContext, " before this activation"),
+    array_length(ContextPolicies) > 0 and EnforcedHits == 0 and ReportOnlyHits > 0,
+        strcat("Context ", ExpectedContext, " present but its CA policy only ran in report-only"),
+    array_length(ContextPolicies) > 0 and EnforcedHits == 0,
+        strcat("Context ", ExpectedContext, " present but the CA policy did not apply (excluded?)"),
+    "")
+| where isnotempty(Verdict)
+| extend Severity = "High"
+| project TimeGenerated = CompletedTime, Severity, Verdict, UserPrincipalName, UserId, ActorIp, ElevatedTo,
+          RequestTime, AnchorTime, StepUpSignIns, EnforcedHits, ReportOnlyHits, ContextDetails, LastStepUp,
+          StepUpIps, StepUpApps, PolicyCheck, ActivityDisplayName, CorrelationId
+| sort by TimeGenerated desc

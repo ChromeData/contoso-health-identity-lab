@@ -1,0 +1,85 @@
+// =============================================================================
+// Detection: Failed sign-in spike from a single IP (password spray / brute force)
+// Lab:       Contoso Health Identity Platform
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   10+ failed sign-ins from ONE source IP within one fixed 10-minute clock bin
+//   (bin() floors TimeGenerated to :00, :10, :20, ...; the output TimeGenerated
+//   is the bin start). Two shapes fall out of the same query:
+//     - many distinct users, few attempts each  -> password spray
+//     - one user, many attempts                 -> brute force / credential stuffing
+//
+// TABLE / SOURCE
+//   SigninLogs  (Microsoft Entra ID -> Diagnostic settings -> Log Analytics).
+//   Covers interactive user sign-ins. For the non-interactive flood (legacy /
+//   token replay) union AADNonInteractiveUserSignInLogs — see legacy-auth.kql
+//   and break-glass-signin.kql for the union pattern.
+//
+// LICENSE
+//   - SigninLogs export to Log Analytics requires Microsoft Entra ID P1 (or P2).
+//     The free tier does NOT stream sign-in logs to a workspace.
+//   - Runs as a Log Analytics scheduled query or a Microsoft Sentinel rule.
+//
+// FALSE-POSITIVE NOTES
+//   - Shared egress NAT / corporate VPN / CGNAT can concentrate many users
+//     behind one IP; allow-list known corporate egress IPs (a watchlist).
+//   - A looping misconfigured client (old password cached) hammers one account
+//     — real, but operational not malicious; tune the single-user threshold.
+//   - MFA-required codes (e.g. 50074 / 50076) are "failures" but often benign
+//     interrupts; the credential-failure filter below narrows to real misses.
+//
+// TUNABLE THRESHOLDS
+//   FailureThreshold = 10 failures / IP / 10-minute clock bin. Window = 10m
+//   (per task spec).
+//   Known gap: the bins are tumbling, not sliding. A burst that straddles a
+//   bin boundary splits (9 at 12:09 + 9 at 12:10 = 18 in about a minute) and
+//   fires in neither bin. Change it in both twins at once (this file and
+//   lab/splunk/detections/failed-signin-spike.spl): hopping 10m windows on a
+//   5m step always catch 10+ failures that land inside any 5 minutes.
+//
+// SUGGESTED SENTINEL RULE
+//   As deployed by lab/terraform/modules/monitoring: Frequency 5m · Lookback
+//   1h · Trigger > 0 rows · Entities: IP=IPAddress only (UserList is a
+//   dynamic array and cannot map to an Account entity). Suggested tuning
+//   (not deployed): surface ErrorCodes in the incident for triage.
+//
+// AUTOMATED RESPONSE (Logic App - lab/monitoring/playbook-notify.json)
+//   Shared by all five rules, Sentinel path only (the post-trial Log
+//   Analytics alerts just email the ag-identity-secops action group).
+//   Incident created -> automation rule (lab/terraform/modules/monitoring) ->
+//   (1) Teams adaptive card: incident severity, title, number, created time,
+//       status, description and an "Open in Sentinel" link;
+//   (2) ServiceNow incident: urgency/impact from severity (Medium -> 2),
+//       category "inquiry"; (3) the INC number is commented back on the
+//       Sentinel incident for the audit trail.
+//   NOT BUILT (production follow-up): approval-gated Graph call to add the IP
+//   to a CA named location / block list.
+// =============================================================================
+
+let FailureThreshold = 10;   // failed sign-ins from one IP in one Window bin
+let Window = 10m;            // tumbling clock bin (:00, :10, ...), not sliding
+SigninLogs
+| where TimeGenerated > ago(1h)
+// ResultType is a STRING in SigninLogs; "0" == success, anything else is a
+// failed/aborted sign-in.
+| where ResultType != "0"
+// Optional: focus on real credential failures and drop benign MFA interrupts.
+// 50126 invalid username/password · 50053 account locked (smart lockout)
+// 50055 expired password · 50056 no/invalid password on record
+// (Comment this back in to cut MFA-prompt noise; verify codes for your tenant.)
+// | where ResultType in ("50126","50053","50055","50056")
+| summarize
+      FailedCount   = count(),
+      TargetedUsers = dcount(UserPrincipalName),
+      UserList      = make_set(UserPrincipalName, 25),
+      ErrorCodes    = make_set(ResultType, 10),
+      Apps          = make_set(AppDisplayName, 10),
+      Country       = any(tostring(LocationDetails.countryOrRegion)),
+      FirstSeen     = min(TimeGenerated),
+      LastSeen      = max(TimeGenerated)
+    by IPAddress, bin(TimeGenerated, Window)
+| where FailedCount >= FailureThreshold
+| extend Pattern = iff(TargetedUsers >= 5, "likely password spray", "likely brute force")
+| project TimeGenerated, IPAddress, Country, FailedCount, TargetedUsers, Pattern,
+          UserList, ErrorCodes, Apps, FirstSeen, LastSeen
+| sort by FailedCount desc

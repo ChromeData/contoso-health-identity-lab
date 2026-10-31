@@ -1,0 +1,253 @@
+{
+  "rule": "pim-group-member-added-outside-pim",
+  "about": "A member added to a role-holding / PIM-governed group outside a PIM activation: a Core Directory 'Add member to group' not written by MS-PIM, or an ACTIVE PIM-for-Groups membership ('Add member to role in PIM completed (permanent | timebound)'). Activity strings: Learn 'Microsoft Entra audit log activity reference' (Core Directory and PIM sections). Core Directory's shape names the group in the member's modifiedProperties (Group.ObjectID / Group.DisplayName, JSON-quoted); PIM's shape names it as a target of type Group. Run standalone (every id list empty) the lab's groups are matched by name; a case may render PrivilegedGroupIds / IacPrincipalIds. Break-Glass-Admins is High whoever the actor is; the Azure PIM group's standing members are its design (AzurePimEligibleMember, Medium).",
+  "defaults": {
+    "AuditLogs": {
+      "Category": "GroupManagement",
+      "LoggedByService": "Core Directory",
+      "Result": "success",
+      "Identity": "Tomas Herrera",
+      "CorrelationId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "InitiatedBy": {"user": {"id": "11111111-1111-1111-1111-111111111111", "displayName": null, "userPrincipalName": "tomas.herrera@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.50", "roles": []}}
+    }
+  },
+  "cases": [
+    {
+      "id": "direct-add-to-break-glass-admins",
+      "kind": "positive",
+      "label": "Tomas adds Lena to Break-Glass-Admins with a direct Core Directory 'Add member to group' (group named only in the member's Group.ObjectID / Group.DisplayName properties): Direct, break-glass, High",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Add member to group",
+        "ActivityDisplayName": "Add member to group",
+        "TargetResources": [
+          {"id": "22222222-2222-2222-2222-222222222222", "displayName": null, "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "groupType": null,
+           "modifiedProperties": [
+             {"displayName": "Group.ObjectID", "oldValue": null, "newValue": "\"33333333-3333-3333-3333-333333333333\""},
+             {"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"Break-Glass-Admins\""},
+             {"displayName": "Group.WellKnownObjectName", "oldValue": null, "newValue": null}]}
+        ]
+      }]},
+      "expect": [{"Severity": "High", "AssignmentPath": "Direct", "GroupName": "Break-Glass-Admins", "GroupId": "33333333-3333-3333-3333-333333333333",
+                  "IsBreakGlassGroup": true, "MemberType": "User", "MemberName": "lena.fischer@contosohealthlab.onmicrosoft.com",
+                  "MemberId": "22222222-2222-2222-2222-222222222222",
+                  "Actor": "tomas.herrera@contosohealthlab.onmicrosoft.com", "ActorUpn": "tomas.herrera@contosohealthlab.onmicrosoft.com",
+                  "ActorObjectId": "11111111-1111-1111-1111-111111111111", "ActorIp": "203.0.113.50",
+                  "IsIac": false, "IacNameSpoof": false, "OperationName": "Add member to group",
+                  "CorrelationId": "cccccccc-cccc-cccc-cccc-cccccccccccc"}],
+      "expectRows": 1
+    },
+    {
+      "id": "pim-tier-group-by-name-and-renamed-group-by-rendered-id",
+      "kind": "positive",
+      "label": "Two direct adds with the group as a target of type Group: PIM-Tier0-Global-Admins is caught by its name prefix; a role-holding group renamed Ops-Helpers is still caught by the rendered PrivilegedGroupIds (a service principal member)",
+      "lets": {"PrivilegedGroupIds": ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]},
+      "tables": {"AuditLogs": [
+        {
+          "OperationName": "Add member to group",
+          "ActivityDisplayName": "Add member to group",
+          "TimeGenerated": "ago:20m",
+          "TargetResources": [
+            {"id": "44444444-4444-4444-4444-444444444444", "displayName": "PIM-Tier0-Global-Admins", "type": "Group", "modifiedProperties": []},
+            {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Lena Fischer", "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "modifiedProperties": []}
+          ]
+        },
+        {
+          "OperationName": "Add member to group",
+          "ActivityDisplayName": "Add member to group",
+          "TimeGenerated": "ago:15m",
+          "TargetResources": [
+            {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "Ops-Helpers", "type": "Group", "modifiedProperties": []},
+            {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "displayName": "Clinical Portal", "type": "ServicePrincipal", "userPrincipalName": null, "modifiedProperties": []}
+          ]
+        }
+      ]},
+      "expect": [
+        {"Severity": "High", "AssignmentPath": "Direct", "GroupName": "PIM-Tier0-Global-Admins", "GroupId": "44444444-4444-4444-4444-444444444444",
+         "IsBreakGlassGroup": false, "MemberType": "User", "MemberName": "lena.fischer@contosohealthlab.onmicrosoft.com", "IsIac": false},
+        {"Severity": "High", "AssignmentPath": "Direct", "GroupName": "Ops-Helpers", "GroupId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+         "IsBreakGlassGroup": false, "MemberType": "ServicePrincipal", "MemberName": "Clinical Portal", "MemberId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}
+      ],
+      "expectRows": 2
+    },
+    {
+      "id": "pim-for-groups-active-membership-permanent-and-timebound",
+      "kind": "positive",
+      "label": "ACTIVE PIM-for-Groups memberships made in the PIM blade (logged by PIM, Identity MS-PIM): permanent on Privileged-IAM-Admins is High, time-bound on PIM-Tier0-Global-Admins expires and is Medium",
+      "tables": {"AuditLogs": [
+        {
+          "LoggedByService": "PIM",
+          "Identity": "MS-PIM",
+          "OperationName": "Add member to role in PIM completed (permanent)",
+          "ActivityDisplayName": "Add member to role in PIM completed (permanent)",
+          "TimeGenerated": "ago:20m",
+          "TargetResources": [
+            {"id": "55555555-5555-5555-5555-555555555555", "displayName": "Privileged-IAM-Admins", "type": "Group", "modifiedProperties": []},
+            {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Lena Fischer", "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "modifiedProperties": []}
+          ]
+        },
+        {
+          "LoggedByService": "PIM",
+          "Identity": "MS-PIM",
+          "OperationName": "Add member to role in PIM completed (timebound)",
+          "ActivityDisplayName": "Add member to role in PIM completed (timebound)",
+          "TimeGenerated": "ago:15m",
+          "TargetResources": [
+            {"id": "44444444-4444-4444-4444-444444444444", "displayName": "PIM-Tier0-Global-Admins", "type": "Group", "modifiedProperties": []},
+            {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Lena Fischer", "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "modifiedProperties": []}
+          ]
+        }
+      ]},
+      "expect": [
+        {"Severity": "High", "AssignmentPath": "PimPermanentActive", "GroupName": "Privileged-IAM-Admins", "GroupId": "55555555-5555-5555-5555-555555555555",
+         "MemberName": "lena.fischer@contosohealthlab.onmicrosoft.com", "Actor": "tomas.herrera@contosohealthlab.onmicrosoft.com", "IsIac": false},
+        {"Severity": "Medium", "AssignmentPath": "PimTimeboundActive", "GroupName": "PIM-Tier0-Global-Admins", "IsBreakGlassGroup": false}
+      ],
+      "expectRows": 2
+    },
+    {
+      "id": "iac-by-id-medium-except-break-glass",
+      "kind": "positive",
+      "label": "The CI apply identity, matched by its rendered servicePrincipalId: adding Lena to Privileged-IAM-Admins is Medium (IsIac), adding her to Break-Glass-Admins is High even for IaC",
+      "lets": {"IacPrincipalIds": ["88888888-8888-8888-8888-888888888888"]},
+      "tables": {"AuditLogs": [
+        {
+          "Identity": "gh-oidc-entra-apply (write)",
+          "InitiatedBy": {"app": {"appId": "99999999-9999-9999-9999-999999999999", "displayName": "gh-oidc-entra-apply (write)", "servicePrincipalId": "88888888-8888-8888-8888-888888888888", "servicePrincipalName": null}},
+          "OperationName": "Add member to group",
+          "ActivityDisplayName": "Add member to group",
+          "TimeGenerated": "ago:20m",
+          "TargetResources": [
+            {"id": "22222222-2222-2222-2222-222222222222", "displayName": null, "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "groupType": null,
+             "modifiedProperties": [
+               {"displayName": "Group.ObjectID", "oldValue": null, "newValue": "\"55555555-5555-5555-5555-555555555555\""},
+               {"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"Privileged-IAM-Admins\""}]}
+          ]
+        },
+        {
+          "Identity": "gh-oidc-entra-apply (write)",
+          "InitiatedBy": {"app": {"appId": "99999999-9999-9999-9999-999999999999", "displayName": "gh-oidc-entra-apply (write)", "servicePrincipalId": "88888888-8888-8888-8888-888888888888", "servicePrincipalName": null}},
+          "OperationName": "Add member to group",
+          "ActivityDisplayName": "Add member to group",
+          "TimeGenerated": "ago:15m",
+          "TargetResources": [
+            {"id": "22222222-2222-2222-2222-222222222222", "displayName": null, "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "groupType": null,
+             "modifiedProperties": [
+               {"displayName": "Group.ObjectID", "oldValue": null, "newValue": "\"33333333-3333-3333-3333-333333333333\""},
+               {"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"Break-Glass-Admins\""}]}
+          ]
+        }
+      ]},
+      "expect": [
+        {"Severity": "Medium", "AssignmentPath": "Direct", "GroupName": "Privileged-IAM-Admins", "IsBreakGlassGroup": false, "IsIac": true, "IacNameSpoof": false,
+         "Actor": "gh-oidc-entra-apply (write)", "ActorApp": "gh-oidc-entra-apply (write)", "ActorSpId": "88888888-8888-8888-8888-888888888888"},
+        {"Severity": "High", "AssignmentPath": "Direct", "GroupName": "Break-Glass-Admins", "IsBreakGlassGroup": true, "IsIac": true, "IacNameSpoof": false}
+      ],
+      "expectRows": 2
+    },
+    {
+      "id": "azure-pim-group-eligible-member-medium",
+      "kind": "positive",
+      "label": "A direct add to PIM-Azure-RG-Contributors is that group's intended path (it is only ELIGIBLE for the Azure role): AzurePimEligibleMember, Medium, never silent",
+      "tables": {"AuditLogs": [{
+        "OperationName": "Add member to group",
+        "ActivityDisplayName": "Add member to group",
+        "TargetResources": [
+          {"id": "22222222-2222-2222-2222-222222222222", "displayName": null, "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "groupType": null,
+           "modifiedProperties": [
+             {"displayName": "Group.ObjectID", "oldValue": null, "newValue": "\"66666666-6666-6666-6666-666666666666\""},
+             {"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"PIM-Azure-RG-Contributors\""}]}
+        ]
+      }]},
+      "expect": [{"Severity": "Medium", "AssignmentPath": "AzurePimEligibleMember", "GroupName": "PIM-Azure-RG-Contributors",
+                  "GroupId": "66666666-6666-6666-6666-666666666666", "IsBreakGlassGroup": false, "IsIac": false}],
+      "expectRows": 1
+    },
+    {
+      "id": "ms-pim-write-eligible-and-activation-are-not-standing",
+      "kind": "negative",
+      "label": "The PIM service's own 'Add member to group' (Identity MS-PIM), an ELIGIBLE PIM-for-Groups membership, and a PIM-for-Groups ACTIVATION (pim-activation's rule) are none of them a standing membership",
+      "tables": {"AuditLogs": [
+        {
+          "Identity": "MS-PIM",
+          "InitiatedBy": {"app": {"appId": null, "displayName": "MS-PIM", "servicePrincipalId": null, "servicePrincipalName": null}},
+          "OperationName": "Add member to group",
+          "ActivityDisplayName": "Add member to group",
+          "TimeGenerated": "ago:25m",
+          "TargetResources": [
+            {"id": "22222222-2222-2222-2222-222222222222", "displayName": null, "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "groupType": null,
+             "modifiedProperties": [
+               {"displayName": "Group.ObjectID", "oldValue": null, "newValue": "\"33333333-3333-3333-3333-333333333333\""},
+               {"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"Break-Glass-Admins\""}]}
+          ]
+        },
+        {
+          "LoggedByService": "PIM",
+          "Identity": "MS-PIM",
+          "OperationName": "Add eligible member to role in PIM completed (permanent)",
+          "ActivityDisplayName": "Add eligible member to role in PIM completed (permanent)",
+          "TimeGenerated": "ago:20m",
+          "TargetResources": [
+            {"id": "44444444-4444-4444-4444-444444444444", "displayName": "PIM-Tier0-Global-Admins", "type": "Group", "modifiedProperties": []},
+            {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Lena Fischer", "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "modifiedProperties": []}
+          ]
+        },
+        {
+          "LoggedByService": "PIM",
+          "Identity": "MS-PIM",
+          "OperationName": "Add member to role completed (PIM activation)",
+          "ActivityDisplayName": "Add member to role completed (PIM activation)",
+          "TimeGenerated": "ago:10m",
+          "TargetResources": [
+            {"id": "44444444-4444-4444-4444-444444444444", "displayName": "PIM-Tier0-Global-Admins", "type": "Group", "modifiedProperties": []},
+            {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Lena Fischer", "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "modifiedProperties": []}
+          ]
+        }
+      ]}
+    },
+    {
+      "id": "ordinary-group-add",
+      "kind": "negative",
+      "label": "An add to Clinical-Nurses, a group that holds no role and is on no list, is not this rule (a direct add and a permanent PIM-for-Groups membership)",
+      "tables": {"AuditLogs": [
+        {
+          "OperationName": "Add member to group",
+          "ActivityDisplayName": "Add member to group",
+          "TimeGenerated": "ago:20m",
+          "TargetResources": [
+            {"id": "22222222-2222-2222-2222-222222222222", "displayName": null, "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "groupType": null,
+             "modifiedProperties": [
+               {"displayName": "Group.ObjectID", "oldValue": null, "newValue": "\"77777777-7777-7777-7777-777777777777\""},
+               {"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"Clinical-Nurses\""}]}
+          ]
+        },
+        {
+          "LoggedByService": "PIM",
+          "Identity": "MS-PIM",
+          "OperationName": "Add member to role in PIM completed (permanent)",
+          "ActivityDisplayName": "Add member to role in PIM completed (permanent)",
+          "TimeGenerated": "ago:15m",
+          "TargetResources": [
+            {"id": "77777777-7777-7777-7777-777777777777", "displayName": "Clinical-Nurses", "type": "Group", "modifiedProperties": []},
+            {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Lena Fischer", "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "modifiedProperties": []}
+          ]
+        }
+      ]}
+    },
+    {
+      "id": "older-than-lookback",
+      "kind": "negative",
+      "label": "A direct add to Break-Glass-Admins 2 h ago is outside the 1 h look-back",
+      "tables": {"AuditLogs": [{
+        "TimeGenerated": "ago:2h",
+        "OperationName": "Add member to group",
+        "ActivityDisplayName": "Add member to group",
+        "TargetResources": [
+          {"id": "22222222-2222-2222-2222-222222222222", "displayName": null, "type": "User", "userPrincipalName": "lena.fischer@contosohealthlab.onmicrosoft.com", "groupType": null,
+           "modifiedProperties": [
+             {"displayName": "Group.ObjectID", "oldValue": null, "newValue": "\"33333333-3333-3333-3333-333333333333\""},
+             {"displayName": "Group.DisplayName", "oldValue": null, "newValue": "\"Break-Glass-Admins\""}]}
+        ]
+      }]}
+    }
+  ]
+}

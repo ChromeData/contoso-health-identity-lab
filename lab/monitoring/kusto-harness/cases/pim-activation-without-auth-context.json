@@ -1,131 +1,203 @@
 {
   "rule": "pim-activation-without-auth-context",
-  "about": "A Tier-0 PIM activation (PIM-Tier0-Security-Admins / PIM-Tier0-CA-Admins) with no sign-in that satisfied authentication context c1 in the 30 minutes before the request. AuthenticationContextClassReferences is a STRING in both sign-in tables (Learn); its JSON shape [{id, detail}] follows the Graph signIn property (verify: in the tenant). ContextPolicies is committed empty, so only the 'no step-up' verdict can fire here.",
+  "about": "A Tier-0 PIM activation (PIM-Tier0-Security-Admins / PIM-Tier0-CA-Admins) with no sign-in that satisfied authentication context c1 in the 30 minutes before the request. AuthenticationContextClassReferences is a STRING in both sign-in tables (Learn); its JSON shape [{id, detail}] follows the Graph signIn property (verify: in the tenant). ContextPolicies is committed empty, so only the 'no step-up' verdict can fire here. Every case has its OWN user (object id, UPN, IP) and its own correlation ids: the Kusto harness isolates cases anyway, but the Splunk replay (lab/splunk/replay-synthetic.py) lands every case in one index, and a shared user would let a negative case's c1 sign-in satisfy a positive case's activation. The 16 repeated-digit placeholder GUIDs are spent on 9 users, 3 groups and the CA policy, so the correlation ids are plain synthetic strings (no rule joins on CorrelationId).",
   "defaults": {
     "AuditLogs": {
-      "LoggedByService": "PIM", "Category": "GroupManagement", "Result": "success",
-      "CorrelationId": "11111111-1111-1111-1111-111111111111",
-      "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.120"}},
-      "TargetResources": [
-        {"id": "33333333-3333-3333-3333-333333333333", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
-        {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Sam Rivera", "type": "User", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com"}]
+      "LoggedByService": "PIM", "Category": "GroupManagement", "Result": "success", "Identity": "MS-PIM"
     },
     "SigninLogs": {
-      "UserId": "22222222-2222-2222-2222-222222222222", "UserPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com",
-      "IPAddress": "203.0.113.120", "AppDisplayName": "Azure Portal", "ResultType": "0",
+      "AppDisplayName": "Azure Portal", "ResultType": "0",
       "AuthenticationContextClassReferences": "[{\"id\":\"c1\",\"detail\":\"required\"}]",
-      "ConditionalAccessPolicies": [{"id": "44444444-4444-4444-4444-444444444444", "displayName": "CA021 - Tier-0 activation step-up", "result": "success"}],
-      "CorrelationId": "55555555-5555-5555-5555-555555555555", "TimeGenerated": "ago:13m"
+      "ConditionalAccessPolicies": [{"id": "dddddddd-dddd-dddd-dddd-dddddddddddd", "displayName": "CA021 - Tier-0 activation step-up", "result": "success"}],
+      "TimeGenerated": "ago:13m"
     },
     "AADNonInteractiveUserSignInLogs": {
-      "UserId": "22222222-2222-2222-2222-222222222222", "UserPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com",
-      "IPAddress": "203.0.113.120", "AppDisplayName": "Azure Portal", "ResultType": "0",
+      "AppDisplayName": "Azure Portal", "ResultType": "0",
       "AuthenticationContextClassReferences": "[{\"id\":\"c1\",\"detail\":\"previouslySatisfied\"}]",
-      "ConditionalAccessPolicies": "[{\"id\":\"44444444-4444-4444-4444-444444444444\",\"displayName\":\"CA021 - Tier-0 activation step-up\",\"result\":\"success\"}]",
-      "CorrelationId": "66666666-6666-6666-6666-666666666666", "TimeGenerated": "ago:13m"
+      "ConditionalAccessPolicies": "[{\"id\":\"dddddddd-dddd-dddd-dddd-dddddddddddd\",\"displayName\":\"CA021 - Tier-0 activation step-up\",\"result\":\"success\"}]",
+      "TimeGenerated": "ago:13m"
     }
   },
   "cases": [
     {
       "id": "no-step-up-at-all",
       "kind": "positive",
-      "label": "Requested and completed activation of PIM-Tier0-Security-Admins with no c1 sign-in",
+      "label": "Sam's requested and completed activation of PIM-Tier0-Security-Admins with no c1 sign-in",
       "tables": {"AuditLogs": [
-        {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m"},
-        {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}
+        {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m",
+         "CorrelationId": "pim-noctx-01-audit",
+         "InitiatedBy": {"user": {"id": "11111111-1111-1111-1111-111111111111", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.101"}},
+         "TargetResources": [
+           {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+           {"id": "11111111-1111-1111-1111-111111111111", "displayName": "Sam Rivera", "type": "User", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com"}]},
+        {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m",
+         "CorrelationId": "pim-noctx-01-audit",
+         "InitiatedBy": {"user": {"id": "11111111-1111-1111-1111-111111111111", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.101"}},
+         "TargetResources": [
+           {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+           {"id": "11111111-1111-1111-1111-111111111111", "displayName": "Sam Rivera", "type": "User", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com"}]}
       ]},
       "expect": [{"Severity": "High", "Verdict": "No sign-in satisfied authentication context c1 before this activation",
-                  "ElevatedTo": "PIM-Tier0-Security-Admins", "StepUpSignIns": 0, "ActorIp": "203.0.113.120",
+                  "ElevatedTo": "PIM-Tier0-Security-Admins", "StepUpSignIns": 0, "ActorIp": "203.0.113.101",
+                  "UserId": "11111111-1111-1111-1111-111111111111",
                   "UserPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com",
+                  "CorrelationId": "pim-noctx-01-audit",
                   "PolicyCheck": "skipped - set ContextPolicies to the CA policy targeting the context"}],
       "expectRows": 1
     },
     {
       "id": "step-up-too-early",
       "kind": "positive",
-      "label": "A c1 sign-in 3 h before the request is outside the 30-minute step-up window",
+      "label": "Ines's c1 sign-in 3 h before her request is outside the 30-minute step-up window",
       "tables": {
         "AuditLogs": [
-          {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m"},
-          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}],
-        "SigninLogs": [{"TimeGenerated": "ago:3h"}]
+          {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m",
+           "CorrelationId": "pim-noctx-02-audit",
+           "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "ines.moreau@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.102"}},
+           "TargetResources": [
+             {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+             {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Ines Moreau", "type": "User", "userPrincipalName": "ines.moreau@contosohealthlab.onmicrosoft.com"}]},
+          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m",
+           "CorrelationId": "pim-noctx-02-audit",
+           "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "ines.moreau@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.102"}},
+           "TargetResources": [
+             {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+             {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Ines Moreau", "type": "User", "userPrincipalName": "ines.moreau@contosohealthlab.onmicrosoft.com"}]}],
+        "SigninLogs": [
+          {"TimeGenerated": "ago:3h", "CorrelationId": "pim-noctx-02-signin",
+           "UserId": "22222222-2222-2222-2222-222222222222", "UserPrincipalName": "ines.moreau@contosohealthlab.onmicrosoft.com", "IPAddress": "203.0.113.102"}]
       },
-      "expect": [{"StepUpSignIns": 0, "Verdict": "No sign-in satisfied authentication context c1 before this activation"}]
+      "expect": [{"StepUpSignIns": 0, "Verdict": "No sign-in satisfied authentication context c1 before this activation",
+                  "UserId": "22222222-2222-2222-2222-222222222222", "UserPrincipalName": "ines.moreau@contosohealthlab.onmicrosoft.com"}],
+      "expectRows": 1
     },
     {
       "id": "other-context-and-failed-step-up",
       "kind": "positive",
-      "label": "A successful c2 sign-in and a FAILED c1 sign-in do not satisfy c1",
+      "label": "Kwame's successful c2 sign-in and FAILED c1 sign-in do not satisfy c1",
       "tables": {
         "AuditLogs": [
-          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}],
-        "SigninLogs": [{"AuthenticationContextClassReferences": "[{\"id\":\"c2\",\"detail\":\"required\"}]"},
-                       {"ResultType": "50158"}]
+          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m",
+           "CorrelationId": "pim-noctx-03-audit",
+           "InitiatedBy": {"user": {"id": "33333333-3333-3333-3333-333333333333", "userPrincipalName": "kwame.mensah@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.103"}},
+           "TargetResources": [
+             {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+             {"id": "33333333-3333-3333-3333-333333333333", "displayName": "Kwame Mensah", "type": "User", "userPrincipalName": "kwame.mensah@contosohealthlab.onmicrosoft.com"}]}],
+        "SigninLogs": [
+          {"AuthenticationContextClassReferences": "[{\"id\":\"c2\",\"detail\":\"required\"}]", "CorrelationId": "pim-noctx-03-signin-c2",
+           "UserId": "33333333-3333-3333-3333-333333333333", "UserPrincipalName": "kwame.mensah@contosohealthlab.onmicrosoft.com", "IPAddress": "203.0.113.103"},
+          {"ResultType": "50158", "CorrelationId": "pim-noctx-03-signin-failed",
+           "UserId": "33333333-3333-3333-3333-333333333333", "UserPrincipalName": "kwame.mensah@contosohealthlab.onmicrosoft.com", "IPAddress": "203.0.113.103"}]
       },
-      "expect": [{"StepUpSignIns": 0, "ElevatedTo": "PIM-Tier0-Security-Admins"}]
+      "expect": [{"StepUpSignIns": 0, "ElevatedTo": "PIM-Tier0-Security-Admins",
+                  "UserId": "33333333-3333-3333-3333-333333333333", "UserPrincipalName": "kwame.mensah@contosohealthlab.onmicrosoft.com"}],
+      "expectRows": 1
     },
     {
       "id": "ca-admins-group-completed-only",
       "kind": "positive",
-      "label": "PIM-Tier0-CA-Admins activation with no request record: anchored on the completion",
+      "label": "Yuki's PIM-Tier0-CA-Admins activation with no request record: anchored on the completion",
       "tables": {"AuditLogs": [{
         "OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)",
         "TimeGenerated": "ago:10m",
+        "CorrelationId": "pim-noctx-04-audit",
+        "InitiatedBy": {"user": {"id": "44444444-4444-4444-4444-444444444444", "userPrincipalName": "yuki.tanaka@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.104"}},
         "TargetResources": [
-          {"id": "77777777-7777-7777-7777-777777777777", "displayName": "PIM-Tier0-CA-Admins", "type": "Group"},
-          {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Sam Rivera", "type": "User", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com"}]
+          {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "displayName": "PIM-Tier0-CA-Admins", "type": "Group"},
+          {"id": "44444444-4444-4444-4444-444444444444", "displayName": "Yuki Tanaka", "type": "User", "userPrincipalName": "yuki.tanaka@contosohealthlab.onmicrosoft.com"}]
       }]},
-      "expect": [{"ElevatedTo": "PIM-Tier0-CA-Admins", "StepUpSignIns": 0}]
+      "expect": [{"ElevatedTo": "PIM-Tier0-CA-Admins", "StepUpSignIns": 0, "ActorIp": "203.0.113.104",
+                  "UserId": "44444444-4444-4444-4444-444444444444", "UserPrincipalName": "yuki.tanaka@contosohealthlab.onmicrosoft.com"}],
+      "expectRows": 1
     },
     {
       "id": "step-up-in-window",
       "kind": "negative",
-      "label": "A c1 sign-in a minute before the request satisfies the context",
+      "label": "Olivia's c1 sign-in a minute before her request satisfies the context",
       "tables": {
         "AuditLogs": [
-          {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m"},
-          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}],
-        "SigninLogs": [{}]
+          {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m",
+           "CorrelationId": "pim-noctx-05-audit",
+           "InitiatedBy": {"user": {"id": "55555555-5555-5555-5555-555555555555", "userPrincipalName": "olivia.bergstrom@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.105"}},
+           "TargetResources": [
+             {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+             {"id": "55555555-5555-5555-5555-555555555555", "displayName": "Olivia Bergstrom", "type": "User", "userPrincipalName": "olivia.bergstrom@contosohealthlab.onmicrosoft.com"}]},
+          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m",
+           "CorrelationId": "pim-noctx-05-audit",
+           "InitiatedBy": {"user": {"id": "55555555-5555-5555-5555-555555555555", "userPrincipalName": "olivia.bergstrom@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.105"}},
+           "TargetResources": [
+             {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+             {"id": "55555555-5555-5555-5555-555555555555", "displayName": "Olivia Bergstrom", "type": "User", "userPrincipalName": "olivia.bergstrom@contosohealthlab.onmicrosoft.com"}]}],
+        "SigninLogs": [
+          {"CorrelationId": "pim-noctx-05-signin",
+           "UserId": "55555555-5555-5555-5555-555555555555", "UserPrincipalName": "olivia.bergstrom@contosohealthlab.onmicrosoft.com", "IPAddress": "203.0.113.105"}]
       }
     },
     {
       "id": "step-up-non-interactive",
       "kind": "negative",
-      "label": "The c1 claim on a non-interactive sign-in (string CA list) also counts",
+      "label": "The c1 claim on Rafael's non-interactive sign-in (string CA list) also counts",
       "tables": {
         "AuditLogs": [
-          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}],
-        "AADNonInteractiveUserSignInLogs": [{}]
+          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m",
+           "CorrelationId": "pim-noctx-06-audit",
+           "InitiatedBy": {"user": {"id": "66666666-6666-6666-6666-666666666666", "userPrincipalName": "rafael.costa@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.106"}},
+           "TargetResources": [
+             {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+             {"id": "66666666-6666-6666-6666-666666666666", "displayName": "Rafael Costa", "type": "User", "userPrincipalName": "rafael.costa@contosohealthlab.onmicrosoft.com"}]}],
+        "AADNonInteractiveUserSignInLogs": [
+          {"CorrelationId": "pim-noctx-06-signin",
+           "UserId": "66666666-6666-6666-6666-666666666666", "UserPrincipalName": "rafael.costa@contosohealthlab.onmicrosoft.com", "IPAddress": "203.0.113.106"}]
       }
     },
     {
       "id": "step-up-with-empty-ca-list",
       "kind": "negative",
-      "label": "A c1 sign-in whose ConditionalAccessPolicies is [] still counts (relies on mv-apply keeping the row - probe mv-apply-empty-array-summarize)",
+      "label": "Amara's c1 sign-in whose ConditionalAccessPolicies is [] still counts (relies on mv-apply keeping the row - probe mv-apply-empty-array-summarize)",
       "tables": {
         "AuditLogs": [
-          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m"}],
-        "SigninLogs": [{"ConditionalAccessPolicies": []}]
+          {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m",
+           "CorrelationId": "pim-noctx-07-audit",
+           "InitiatedBy": {"user": {"id": "77777777-7777-7777-7777-777777777777", "userPrincipalName": "amara.diallo@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.107"}},
+           "TargetResources": [
+             {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+             {"id": "77777777-7777-7777-7777-777777777777", "displayName": "Amara Diallo", "type": "User", "userPrincipalName": "amara.diallo@contosohealthlab.onmicrosoft.com"}]}],
+        "SigninLogs": [
+          {"ConditionalAccessPolicies": [], "CorrelationId": "pim-noctx-07-signin",
+           "UserId": "77777777-7777-7777-7777-777777777777", "UserPrincipalName": "amara.diallo@contosohealthlab.onmicrosoft.com", "IPAddress": "203.0.113.107"}]
       }
     },
     {
       "id": "non-context-group-and-request-only",
       "kind": "negative",
-      "label": "An activation of a group outside ContextTargets, and a Tier-0 request that never completed",
+      "label": "Lukas's activation of a group outside ContextTargets, and his Tier-0 request that never completed",
       "tables": {"AuditLogs": [
         {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:10m",
+         "CorrelationId": "pim-noctx-08-audit-iam",
+         "InitiatedBy": {"user": {"id": "88888888-8888-8888-8888-888888888888", "userPrincipalName": "lukas.weber@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.108"}},
          "TargetResources": [
-           {"id": "88888888-8888-8888-8888-888888888888", "displayName": "Privileged-IAM-Admins", "type": "Group"},
-           {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Sam Rivera", "type": "User", "userPrincipalName": "sam.rivera@contosohealthlab.onmicrosoft.com"}]},
-        {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m"}
+           {"id": "cccccccc-cccc-cccc-cccc-cccccccccccc", "displayName": "Privileged-IAM-Admins", "type": "Group"},
+           {"id": "88888888-8888-8888-8888-888888888888", "displayName": "Lukas Weber", "type": "User", "userPrincipalName": "lukas.weber@contosohealthlab.onmicrosoft.com"}]},
+        {"OperationName": "Add member to role requested (PIM activation)", "ActivityDisplayName": "Add member to role requested (PIM activation)", "TimeGenerated": "ago:12m",
+         "CorrelationId": "pim-noctx-08-audit-tier0",
+         "InitiatedBy": {"user": {"id": "88888888-8888-8888-8888-888888888888", "userPrincipalName": "lukas.weber@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.108"}},
+         "TargetResources": [
+           {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+           {"id": "88888888-8888-8888-8888-888888888888", "displayName": "Lukas Weber", "type": "User", "userPrincipalName": "lukas.weber@contosohealthlab.onmicrosoft.com"}]}
       ]}
     },
     {
       "id": "older-than-lookback",
       "kind": "negative",
-      "label": "A completed Tier-0 activation 2 h ago",
+      "label": "Mei's completed Tier-0 activation 2 h ago",
       "tables": {"AuditLogs": [
-        {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:2h"}]}
+        {"OperationName": "Add member to role completed (PIM activation)", "ActivityDisplayName": "Add member to role completed (PIM activation)", "TimeGenerated": "ago:2h",
+         "CorrelationId": "pim-noctx-09-audit",
+         "InitiatedBy": {"user": {"id": "99999999-9999-9999-9999-999999999999", "userPrincipalName": "mei.chen@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.109"}},
+         "TargetResources": [
+           {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "displayName": "PIM-Tier0-Security-Admins", "type": "Group"},
+           {"id": "99999999-9999-9999-9999-999999999999", "displayName": "Mei Chen", "type": "User", "userPrincipalName": "mei.chen@contosohealthlab.onmicrosoft.com"}]}
+      ]}
     }
   ]
 }

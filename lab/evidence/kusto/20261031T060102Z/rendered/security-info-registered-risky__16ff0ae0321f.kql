@@ -1,0 +1,199 @@
+// =============================================================================
+// Detection: Security info (MFA / passwordless method) registered from an
+//            unfamiliar or risky context
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack)
+// SPL twin:  lab/splunk/detections/security-info-registered-risky.spl
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   A user registering their OWN authentication method (Authenticator, phone,
+//   passkey ...) where the sign-in around it looks wrong: risky, from a
+//   country the user has not signed in from in the last 14 days, or from an
+//   unmanaged device. This is the persistence step after a password or
+//   session is stolen (or after a social-engineered help-desk TAP, MGM 2023 /
+//   CISA AA23-320A): the attacker adds a method THEY own, and every later
+//   sign-in is "MFA satisfied". The admin-on-behalf version of the same move
+//   is auth-method-changed-by-admin.kql; this is the self-service half.
+//   The preventive control is a CA policy on the "Register security
+//   information" user action (passwordless-rollout-plan.md, "Not built");
+//   this rule watches the same moment from the log side.
+//     "User registered security info"                -> one method added
+//     "User registered all required security info"   -> interrupt-mode
+//                                                       registration finished
+//   The context sign-in is the user's successful sign-in - interactive OR
+//   non-interactive - in the hour before the registration (up to 5 min
+//   after), preferring the one from the same IP the audit record names.
+//   Non-interactive matters: the classic persistence move after token theft
+//   is to replay a stolen refresh/session token (logged only in
+//   AADNonInteractiveUserSignInLogs) and then register an authenticator.
+//   A registration with NO context sign-in at all (NoContext) is itself
+//   surfaced at Medium, never dropped.
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : the user is privileged or PIM-eligible (PrivilegedUserIds, else
+//            the naming convention) - every registration, risky or
+//            not, because admin methods are issued in person (help-desk runbook
+//            level V3) and must match that ticket; OR sign-in risk high; OR
+//            two or more of RiskySignIn / NewCountry / UnmanagedDevice.
+//   Medium : exactly one of RiskySignIn / NewCountry (UnmanagedDevice alone
+//            never alerts: most staff devices are not compliant yet); OR no
+//            context sign-in in either table (NoContext).
+//   (No row for a non-privileged registration with no risky signal.)
+//
+// TABLE / SOURCE
+//   AuditLogs (Category UserManagement; Microsoft lists the service as
+//   "Authentication Methods") + SigninLogs and
+//   AADNonInteractiveUserSignInLogs (context) + SigninLogs (14-day country
+//   baseline). Activity names: Microsoft Learn's combined-registration
+//   troubleshooting table spells them "User registered security
+//   information." and "User registered all required security information.",
+//   while tenants log "User registered security info" (Microsoft Q&A, 2026-
+//   06). The regex accepts both. verify: the exact OperationName, and whether
+//   InitiatedBy.user.ipAddress is populated, on the first registration in
+//   the lab tenant.
+//   DeviceDetail.isCompliant / isManaged and the "Temporary Access Pass"
+//   text in AuthenticationDetails: verify on the first TAP sign-in.
+//
+// LICENSE
+//   AuditLogs and sign-in logs: Free per Learn's monitoring-and-health
+//   licensing table (verify: Free tenants can route SignInLogs and
+//   AADNonInteractiveUserSignInLogs through diagnostic settings - see
+//   modules/entra-diagnostics main.tf LICENSING). Sign-in risk needs P2 (else
+//   "hidden" - RiskySignIn never fires, NewCountry still does).
+//
+// MITRE ATT&CK
+//   T1098.005 Account Manipulation: Device Registration (Persistence,
+//     PrivilegeEscalation)
+//   T1556.006 Modify Authentication Process: Multi-Factor Authentication
+//     (CredentialAccess, DefenseEvasion, Persistence)
+//
+// FALSE-POSITIVE NOTES
+//   - Travel: a real user adding a method abroad (NewCountry, Medium).
+//     Confirm with the user out of band, never by replying to the alert.
+//   - Joiners: a new hire registering with the joiner TAP has no 14-day
+//     baseline, so NewCountry cannot fire (NoBaseline = true in the output).
+//     Privileged joiners still alert High - match them to the V3 ticket.
+//   - Passwordless rollout waves (passwordless-rollout-plan.md) produce
+//     bursts of privileged registrations. They are expected High rows;
+//     close them against the rollout ticket, do not mute the rule.
+//   - NoContext (Medium): a sign-in ingested late or older than the 1-hour
+//     window. Check both sign-in tables for the user around RegTime; a
+//     registration nobody can tie to a sign-in is the token-replay pattern.
+//
+// TUNABLE
+//   LookBack 1h (the rule runs hourly; a record ingested more than an hour
+//   late is missed - widen LookBack and rely on incident grouping if that
+//   shows up). Baseline 14d (Sentinel's maximum look-back), BaselineGap 2h
+//   (the current session never counts as familiar), ContextWindow 1h.
+//   Privileged = object id in PrivilegedUserIds (Terraform-rendered, as in
+//   auth-method-changed-by-admin.kql) OR bg-admin-NN / tier0-admin-NN.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 1h · Lookback 14d (the country baseline) · one alert per row ·
+//   Severity column · Entities: Account = UserPrincipalName / UserId,
+//   IP = IPAddress (context sign-in IP, else the audit record's). Sentinel
+//   only: Log Analytics alerts cannot look back 14 d.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; containment card on High (the USER: revoke
+//   sessions). Deleting the new method is a manual step (Entra admin center
+//   > user > Authentication methods), after the user confirms it is not
+//   theirs - deleting a clinician's only key mid-shift locks them out.
+// =============================================================================
+
+let LookBack      = 1h;
+let Baseline      = 14d;
+let BaselineGap   = 2h;
+let ContextWindow = 1h;
+let Grace         = 5m;
+// Privileged users by OBJECT ID (rendered by modules/monitoring, as in
+// auth-method-changed-by-admin.kql; committed empty, so a standalone run falls
+// back to naming only).
+let PrivilegedUserIds = dynamic([]); // @@PRIVILEGED_USER_IDS@@
+let Registrations = AuditLogs
+    | where TimeGenerated > ago(LookBack)
+    | where Category =~ "UserManagement"
+    | where Result =~ "success"
+    | where OperationName matches regex @"(?i)^User registered (all required )?security info(rmation)?\.?$"
+    // Self-service: the user is the actor. The User target is the fallback.
+    | mv-apply tr = TargetResources on (
+        summarize TargetId  = take_anyif(tostring(tr.id), tostring(tr.type) =~ "User"),
+                  TargetUpn = take_anyif(tostring(tr.userPrincipalName), tostring(tr.type) =~ "User")
+      )
+    | extend UserId            = coalesce(tostring(InitiatedBy.user.id), TargetId)
+    | extend UserPrincipalName = tolower(coalesce(tostring(InitiatedBy.user.userPrincipalName), TargetUpn))
+    | extend RegIp             = tostring(InitiatedBy.user.ipAddress)
+    | extend Method            = extract(@"(?i)registered (.+?) (?:authentication )?method", 1, ResultReason)
+    | project RegTime = TimeGenerated, UserId, UserPrincipalName, RegIp, OperationName, ResultReason,
+              Method, CorrelationId,
+              RegKey = strcat(UserId, "|", tostring(TimeGenerated), "|", CorrelationId);
+// SCHEMA TRAP (as in device-code-signin.kql): LocationDetails and
+// DeviceDetail are dynamic in SigninLogs but string in the non-interactive
+// table, so each leg projects the same names and types before the union.
+let SignIns = union
+    (SigninLogs
+        | where TimeGenerated > ago(LookBack + ContextWindow)
+        | where ResultType == "0"
+        | project SignInTime = TimeGenerated, UserId, SignInIp = IPAddress, SignInType = "interactive",
+                  Country = tostring(LocationDetails.countryOrRegion),
+                  SignInRisk = RiskLevelDuringSignIn,
+                  RiskEvents = tostring(RiskEventTypes_V2),
+                  Managed = tostring(DeviceDetail.isCompliant) =~ "true" or tostring(DeviceDetail.isManaged) =~ "true",
+                  ViaTap = tostring(AuthenticationDetails) has "Temporary Access Pass",
+                  SignInApp = AppDisplayName),
+    (AADNonInteractiveUserSignInLogs
+        | where TimeGenerated > ago(LookBack + ContextWindow)
+        | where ResultType == "0"
+        | extend Dev = todynamic(tostring(DeviceDetail))
+        | project SignInTime = TimeGenerated, UserId, SignInIp = IPAddress, SignInType = "non-interactive",
+                  Country = tostring(todynamic(tostring(LocationDetails)).countryOrRegion),
+                  SignInRisk = RiskLevelDuringSignIn,
+                  RiskEvents = tostring(RiskEventTypes_V2),
+                  Managed = tostring(Dev.isCompliant) =~ "true" or tostring(Dev.isManaged) =~ "true",
+                  ViaTap = tostring(AuthenticationDetails) has "Temporary Access Pass",
+                  SignInApp = AppDisplayName);
+// The best context sign-in per registration: in the window, same IP first,
+// then the latest. Score = 1,000,000 for an IP match + seconds into the window.
+let Context = Registrations
+    | join kind=inner SignIns on UserId
+    | where SignInTime between ((RegTime - ContextWindow) .. (RegTime + Grace))
+    | extend Score = iff(isnotempty(RegIp) and SignInIp == RegIp, 1000000, 0)
+                     + datetime_diff('second', SignInTime, RegTime - ContextWindow)
+    | summarize arg_max(Score, SignInTime, SignInIp, SignInType, Country, SignInRisk, RiskEvents, Managed, ViaTap,
+                        SignInApp)
+                by RegKey;
+let CountryBaseline = SigninLogs
+    | where TimeGenerated between (ago(Baseline) .. ago(BaselineGap))
+    | where ResultType == "0"
+    | summarize KnownCountries = make_set(tostring(LocationDetails.countryOrRegion), 50),
+                BaselineSignIns = count()
+                by UserId;
+Registrations
+| join kind=leftouter Context on RegKey
+| join kind=leftouter CountryBaseline on UserId
+| extend NoContext  = isnull(SignInTime)
+| extend NoBaseline = isnull(BaselineSignIns) or BaselineSignIns == 0
+// coalesce(..., false): a registration with no context sign-in has null
+// context columns, and a null must not leak into Signals.
+| extend RiskySignIn = coalesce(SignInRisk in~ ("medium", "high")
+                                or RiskEvents has_any ("anonymizedIPAddress", "maliciousIPAddress",
+                                                       "suspiciousIPAddress", "unfamiliarFeatures"), false)
+| extend NewCountry = coalesce(not(NoBaseline) and isnotempty(Country)
+                               and not(set_has_element(KnownCountries, Country)), false)
+| extend UnmanagedDevice = coalesce(not(NoContext) and not(Managed), false)
+| extend PrivilegedById   = isnotempty(UserId) and UserId in (PrivilegedUserIds)
+| extend PrivilegedByName = UserPrincipalName matches regex @"(?i)^(bg-admin-[0-9]{2}|tier0-admin-[0-9]{2})@"
+| extend PrivilegedTarget = PrivilegedById or PrivilegedByName
+| extend Signals = toint(RiskySignIn) + toint(NewCountry) + toint(UnmanagedDevice)
+// NoContext: no sign-in in either table explains the registration - surfaced,
+// not hidden (a replayed token outside the window, or a log gap).
+| where PrivilegedTarget or RiskySignIn or NewCountry or NoContext
+| extend Severity = case(
+    PrivilegedTarget,     "High",
+    SignInRisk =~ "high", "High",
+    Signals >= 2,         "High",
+    "Medium")
+| project TimeGenerated = RegTime, Severity, UserPrincipalName, UserId, PrivilegedTarget, PrivilegedById,
+          OperationName, Method, ResultReason, RiskySignIn, SignInRisk, RiskEvents, NewCountry, Country,
+          KnownCountries, UnmanagedDevice, ViaTap, NoContext, NoBaseline, Signals, ContextSignInType = SignInType,
+          IPAddress = coalesce(SignInIp, RegIp), RegIp, SignInIp, SignInTime, SignInApp, CorrelationId
+| sort by TimeGenerated desc

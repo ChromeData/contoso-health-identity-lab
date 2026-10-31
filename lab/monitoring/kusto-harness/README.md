@@ -18,7 +18,7 @@ engine.
 whole raw table rows: 8 are stage-level rows (`afterSummarize`, aggregated
 rows in the middle of a rule) and 4 carry `joinRows` (rows of a rule's
 derived `let`). They are not failures, and they were not sent to the engine.
-The 261 cases do not include them. Each is listed with
+The 277 cases do not include them. Each is listed with
 its reason in `results.json` `skippedImports`, and the hand-written cases for
 the same rules (`tier0-logon-without-checkout` 8 skipped,
 `kerberoast-rc4-service-ticket` 3, `auth-method-changed-by-admin` 1) cover
@@ -251,7 +251,7 @@ constants.
   - `cases/_itdr-import-overrides.json` marks imported rows `xfail` by rule
     plus exact label. A stale override is reported, never applied elsewhere.
   - The record stores the import file's sha256.
-- Coverage from `harness.py check` (261 cases):
+- Coverage from `harness.py check` (277 cases):
 
   | | rules | cases | positives | negatives |
   |---|---|---|---|---|
@@ -471,7 +471,7 @@ First pass (harness build):
 Second pass (CODE NEEDED applied, placeholder ids, start-failure record;
 still no engine):
 
-- `harness.py check`: 261 cases over 22 rules, all valid, no `xfail` left.
+- `harness.py check`: 277 cases over 22 rules, all valid, no `xfail` left.
   `harness.py render`: 223 case files.
 - Ruff 0.15.14 (same rules) and `py_compile` on `harness.py`: clean.
   ShellCheck 0.11.0 `-S style` on `run.sh`: clean. Both refusal paths still

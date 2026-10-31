@@ -1,0 +1,169 @@
+// =============================================================================
+// Detection: Member added to a role-holding / PIM-governed group outside PIM
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack)
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   The way around the lab's own zero-standing-privilege design (ADR 0002):
+//   roles sit on role-assignable GROUPS (Break-Glass-Admins = standing Global
+//   Administrator, Privileged-IAM-Admins, the PIM-Tier* groups, the Azure
+//   PIM group), and elevation is a PIM-for-Groups membership ACTIVATION that
+//   expires. Anyone who can write group membership directly gets the group's
+//   role permanently, with no approval, no expiry and no activation alert
+//   (EXCEPT the Azure PIM group - see AZURE PIM GROUP below):
+//     "Add member to group" (Core Directory) on one of those groups, NOT
+//        written by MS-PIM (PIM activations write it as MS-PIM)    -> Direct
+//     "Add member to role in PIM completed (permanent)" on a group
+//        (PIM for Groups, an ACTIVE permanent membership)          -> PimPermanentActive
+//     "... completed (timebound)" (active, but expires)            -> PimTimeboundActive
+//   One "add attacker to Break-Glass-Admins" = Global Administrator that every
+//   CA policy excludes; break-glass-signin.kql would only see the attacker's
+//   account if it were named bg-admin-NN. This rule is the one that fires.
+//
+// AZURE PIM GROUP (PIM-Azure-RG-Contributors, modules/pim azure.tf)
+//   Different by design: the GROUP is ELIGIBLE for Contributor on the lab RG,
+//   and its people are ordinary STANDING members added directly (the module
+//   README's POST /groups/<id>/members/$ref). A new member gets no role - only
+//   the right to REQUEST an Azure PIM activation, which still needs MFA,
+//   justification and PIM-Approvers-Tier0 approval. So an add there is the
+//   intended operational path: AssignmentPath "AzurePimEligibleMember",
+//   Medium (it still widens who may ask for Tier 0, so it is never silent).
+//   The activation itself is in the Azure Activity Log / PIM audit, not here.
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : any add to Break-Glass-Admins (even by the CI apply identity: IaC
+//            only ever needs to create the two bg-admin members, once), any
+//            Direct or PimPermanentActive add to a role-HOLDING group not
+//            made by the CI apply identity, and anything by an app only
+//            NAMED like it (IacNameSpoof).
+//   Medium : the CI apply identity (matched by immutable id), a time-bound
+//            active PIM membership, or a member added to the Azure PIM group
+//            (AzurePimEligibleMember).
+//
+// WHICH GROUPS
+//   PrivilegedGroupIds is rendered by modules/monitoring from module outputs
+//   (groups + pim): Break-Glass-Admins, Privileged-IAM-Admins, every PIM tier
+//   group, the Azure PIM group, and the PIM approver groups (members approve
+//   Tier-0 activations; membership changes only by Terraform PR). Ids,
+//   because a display name can be changed by the very admin being detected.
+//   Run standalone (empty list), the name fallback below still covers the
+//   lab's groups - names are a fallback only.
+//
+// TABLE / SOURCE
+//   AuditLogs, Category "GroupManagement", LoggedByService "Core Directory"
+//   (direct adds) and "PIM" (PIM for Groups). Operation names: Microsoft Learn
+//   "audit log activity reference" (Core Directory + PIM sections).
+//   verify: on the first lab add, which TargetResources entry is the group
+//   (type "Group") and which the member; the query also reads the
+//   Group.ObjectID / Group.DisplayName modified properties for that reason.
+//
+// LICENSE
+//   PIM for Groups needs Entra ID P2 / Governance; the detection itself only
+//   needs AuditLogs in Log Analytics.
+//
+// MITRE ATT&CK
+//   T1098.003 Account Manipulation: Additional Cloud Roles (through a
+//     role-assignable group)
+//   T1098.007 Account Manipulation: Additional Local or Domain Groups -
+//     closest technique for cloud group membership
+//   Tactics: Persistence, PrivilegeEscalation
+//
+// FALSE-POSITIVE NOTES
+//   - envs/dev adding the two bg-admin accounts to Break-Glass-Admins on the
+//     first premium apply: High BY DESIGN, expected exactly twice; record it.
+//   - modules/groups / pim adding members the PR shows (Medium via the IaC
+//     identity's id).
+//   - A PIM-for-Groups ACTIVATION is not this rule (it is MS-PIM-written and
+//     appears in pim-activation.kql).
+//   - An operator adding a person to PIM-Azure-RG-Contributors: the intended
+//     path (Medium, AzurePimEligibleMember). Check it matches a reviewed
+//     request and that the person is an adm- account.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 5m · Lookback 1h · one alert per row · Severity column ·
+//   Entities: Account = ActorUpn / ActorObjectId, IP = ActorIp.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; containment card on High (the ACTOR is the
+//   subject: whoever can write privileged group membership holds Tier 0).
+//   Removing the member is a manual runbook step - the playbook never edits
+//   group membership.
+// =============================================================================
+
+let LookBack = 1h;
+// The CI apply identity, matched on IMMUTABLE ids (service principal object
+// id / application client id), never on its display name: anyone who owns or
+// administers an app can rename it "gh-oidc-entra-apply (write)", and a
+// display-name match would DOWNGRADE that attacker's changes.
+// modules/monitoring renders the list from var.iac_principal_ids (envs/
+// bootstrap output iac_principal_ids). Committed, it is empty: run as-is,
+// nothing counts as IaC - fail closed, severity can only go up.
+let IacPrincipalIds = dynamic(["88888888-8888-8888-8888-888888888888"]); // @@IAC_PRINCIPAL_IDS@@
+let IacDisplayName = "gh-oidc-entra-apply (write)"; // impersonation check ONLY, never trust
+// Role-holding / PIM-governed groups by object id (rendered by Terraform).
+let PrivilegedGroupIds = dynamic([]); // @@PRIVILEGED_GROUP_IDS@@
+let BreakGlassGroupIds = dynamic([]); // @@BREAK_GLASS_GROUP_IDS@@
+// PIM-Azure-RG-Contributors by object id (rendered by Terraform): standing
+// members are its design (the group is ELIGIBLE for the Azure role).
+let AzurePimGroupIds = dynamic([]); // @@AZURE_PIM_GROUP_IDS@@
+// Name fallback (standalone runs only; renameable, so never the only check).
+let PrivilegedGroupNames = dynamic(["Break-Glass-Admins", "Privileged-IAM-Admins", "PIM-Azure-RG-Contributors"]);
+let PimGroupOps = dynamic(["Add member to role in PIM completed (permanent)",
+                           "Add member to role in PIM completed (timebound)"]);
+AuditLogs
+| where TimeGenerated > ago(LookBack)
+| where Category == "GroupManagement"
+| where Result =~ "success"
+| where (OperationName =~ "Add member to group" and Identity !in ("MS-PIM", "MS-PIM-Fairfax"))
+     or (LoggedByService =~ "PIM" and OperationName in~ (PimGroupOps))
+| extend AssignmentPath = case(
+    OperationName =~ "Add member to role in PIM completed (permanent)", "PimPermanentActive",
+    OperationName =~ "Add member to role in PIM completed (timebound)", "PimTimeboundActive",
+    "Direct")
+| extend ActorUpn      = tostring(InitiatedBy.user.userPrincipalName)
+| extend ActorObjectId = tostring(InitiatedBy.user.id)
+| extend ActorApp      = tostring(InitiatedBy.app.displayName)
+| extend ActorIp       = iff(isnotempty(tostring(InitiatedBy.user.ipAddress)),
+                             tostring(InitiatedBy.user.ipAddress),
+                             tostring(InitiatedBy.app.ipAddress))
+| extend Actor         = iff(isnotempty(ActorUpn), ActorUpn, ActorApp)
+// The group: a target of type Group, or the Group.ObjectID / Group.DisplayName
+// modified properties on the member's entry (Core Directory's shape), read
+// from the serialized TargetResources so the order of entries does not matter.
+| mv-apply tr = TargetResources on (
+    summarize GroupIdFromTarget   = take_anyif(tostring(tr.id), tostring(tr.type) =~ "Group"),
+              GroupNameFromTarget = take_anyif(tostring(tr.displayName), tostring(tr.type) =~ "Group"),
+              MemberType          = take_anyif(tostring(tr.type), tostring(tr.type) in~ ("User", "ServicePrincipal", "Device")),
+              MemberId            = take_anyif(tostring(tr.id), tostring(tr.type) in~ ("User", "ServicePrincipal", "Device")),
+              MemberName          = take_anyif(iff(isnotempty(tostring(tr.userPrincipalName)), tostring(tr.userPrincipalName),
+                                                   tostring(tr.displayName)), tostring(tr.type) in~ ("User", "ServicePrincipal", "Device"))
+  )
+| extend TargetsText = tostring(TargetResources)
+| extend GroupIdFromProps   = extract(@'Group\.ObjectID"[^}]*?newValue[^0-9A-Fa-f}]*([0-9A-Fa-f-]{36})', 1, TargetsText)
+| extend GroupNameFromProps = extract(@'Group\.DisplayName"[^}]*?newValue"\s*:\s*"(?:\\")?([^"\\]+)', 1, TargetsText)
+| extend GroupId   = coalesce(GroupIdFromTarget, GroupIdFromProps)
+| extend GroupName = coalesce(GroupNameFromTarget, GroupNameFromProps)
+| extend IsBreakGlassGroup = GroupId in (BreakGlassGroupIds) or GroupName =~ "Break-Glass-Admins"
+// By id when rendered; by name only on a standalone run (empty id list).
+| extend IsAzurePimGroup = not(IsBreakGlassGroup) and (GroupId in (AzurePimGroupIds)
+                           or (array_length(AzurePimGroupIds) == 0 and GroupName =~ "PIM-Azure-RG-Contributors"))
+| extend AssignmentPath = iff(IsAzurePimGroup and AssignmentPath == "Direct", "AzurePimEligibleMember", AssignmentPath)
+| where GroupId in (PrivilegedGroupIds) or IsBreakGlassGroup
+     or GroupName in~ (PrivilegedGroupNames) or GroupName startswith "PIM-Tier"
+| extend ActorSpId  = tostring(InitiatedBy.app.servicePrincipalId)
+| extend ActorAppId = tostring(InitiatedBy.app.appId)
+| extend IsIac = (isnotempty(ActorSpId) and ActorSpId in (IacPrincipalIds))
+              or (isnotempty(ActorAppId) and ActorAppId in (IacPrincipalIds))
+// The IaC name on an app that is NOT the IaC identity = someone impersonating
+// the pipeline to look routine. Always High.
+| extend IacNameSpoof = not(IsIac) and ActorApp =~ IacDisplayName
+| extend Severity = case(
+    IacNameSpoof,                          "High",
+    IsBreakGlassGroup,                     "High",
+    IsIac,                                 "Medium",
+    AssignmentPath == "PimTimeboundActive", "Medium",
+    AssignmentPath == "AzurePimEligibleMember", "Medium",
+    "High")
+| project TimeGenerated, Severity, AssignmentPath, GroupName, GroupId, IsBreakGlassGroup,
+          MemberType, MemberName, MemberId, Actor, ActorUpn, ActorObjectId, ActorApp, ActorSpId,
+          ActorIp, IsIac, IacNameSpoof, OperationName, CorrelationId
+| sort by TimeGenerated desc
