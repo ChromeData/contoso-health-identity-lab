@@ -29,3 +29,6 @@ __pycache__/
 
 # Sign-up hand-back (identifiers for after-signup.sh) - never commit
 lab/setup/handback.env
+
+# Test runner output
+testResults.xml

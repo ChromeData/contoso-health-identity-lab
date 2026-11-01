@@ -9,6 +9,8 @@ const PAGES = path.join(path.dirname(new URL(import.meta.url).pathname), 'pages'
 const TERM = 'file://' + path.join(PAGES, 'term.html');
 const CARD = 'file://' + path.join(PAGES, 'card.html');
 const STEPS = 'file://' + path.join(PAGES, 'steps.html');
+const SHOT = 'file://' + path.join(PAGES, 'shot.html');
+const CODE = 'file://' + path.join(PAGES, 'code.html');
 const INTRO = `file://${REPO}/lab/scripts/demo/video/pages/intro.html`;
 const INTRO_RESULT_AUDIO = `${OUT}/clips/result-line.mp3`;
 const INTRO_FACE_CLIP = `${OUT}/clips/face.mp4`;
@@ -152,27 +154,27 @@ export function scenes(ids) {
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'overview').catch(() => {}); } },
   ] },
   { id: '03-delivery', kind: 'local', beats: [
-    { say: "Here is the delivery history: sixty-four merged pull requests. A pull request is a proposed change, shown line by line, with someone named to review it. Merged means it was accepted into the live version. Read the titles like chapters. Day one turned on the sign-in rules in report-only mode. Day two built the admin tiers. Day three added access governance. Then came the detection rules, then the domain controller, then the scripts that wire it all together.",
+    { audio: `${OUT}/clips/wk-03-0.mp3`, say: "Here is the delivery history: sixty-four merged pull requests. A pull request is a proposed change, shown line by line, with someone named to review it. Merged means it was accepted into the live version. Read the titles like chapters. Day one turned on the sign-in rules in report-only mode. Day two built the admin tiers. Day three added access governance. Then came the detection rules, the domain controller, and single sign-on for AWS, ServiceNow and Okta, with accounts pushed into AWS automatically. Everything after this is one run of the lab: I follow one nurse, Dana, from her first day to her last.",
       prep: termOpen,
       run: async (r, b) => { await cmd(r, 'gh pr list --state merged --limit 40'); await out(r, T('prs.txt'), 22); await r.define('Pull request', 'A proposed change plus a reviewer. Merged means accepted.'); await b.until(0.55); await mark(r, 'Day 1'); await b.until(0.65); await mark(r, 'Day 2'); await b.until(0.72); await mark(r, 'Day 3'); await b.until(0.8); await mark(r, 'enable_sentinel'); await b.until(0.86); await mark(r, 'enable_dc'); await b.until(0.92); await mark(r, '^#3[5-7]|^#36'); } },
-    { say: "Before any human looks, the proposal is tested. Thirteen checks run it against a mock copy of the tenant. Some are guard rails that stop a dangerous combination. This one refuses to demand the strongest sign-in for admin activation until the rule that provides it is actually switched on. Otherwise the demand would be hollow, and lock every admin out.",
+    { audio: `${OUT}/clips/wk-03-1.mp3`, say: "Before any human looks, the proposal is tested. Thirteen checks run it against a mock copy of the tenant. Some are guard rails that stop a dangerous combination. This one refuses to demand the strongest sign-in for admin activation until the rule that provides it is actually switched on. Otherwise the demand would be hollow, and lock every admin out.",
       run: async (r, b) => { await clear(r); await cmd(r, 'terraform test -var-file=lab.tfvars'); await out(r, T('tf-test.txt'), 9); await r.define('Mocked test', 'The change is rehearsed against a fake tenant first.'); await b.until(0.5); await mark(r, 'pim_auth_context_refused_while'); } },
-    { say: "Then it waits at a human gate. The pipeline opens an issue, and the owner types approve. Only then does the robot sign in to Azure, with a token that lasts minutes, and apply the change. There is no stored password anywhere in this pipeline.",
+    { audio: `${OUT}/clips/wk-03-2.mp3`, say: "Then it waits at a human gate. The pipeline opens an issue, and the owner types approve. Only then does the robot sign in to Azure, with a token that lasts minutes, and apply the change. There is no stored password anywhere in this pipeline.",
       run: async (r, b) => { await clear(r); await cmd(r, 'gh run view 40549067405');
         await out(r, T('apply-run-view.txt').split('\n').filter((l) => !/ubuntu-latest|^approval \(human gate\): \.github#1|^terraform apply \(prod, reviewer-gated\): \.github#1/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n'), 25);
         await mark(r, 'approval \\(human gate\\)'); await r.define('Apply', 'Terraform makes the tenant match the approved code.'); await b.until(0.45); await cmd(r, "gh issue view 34 --comments | grep -E '^(author|approve|Approved)'");
         await out(r, T('issue34.txt'), 12); await unmark(r); await mark(r, '^approve$|Approved by'); } },
-    { say: "And that trust is tested, not assumed. A throwaway branch, a temporary copy of the code made just for this test, tried to sign in as the pipeline's identity. Microsoft refused it, because the robot is only trusted when it runs from the approved production path. That refusal is saved as evidence.",
+    { audio: `${OUT}/clips/wk-03-3.mp3`, say: "And that trust is tested, not assumed. A throwaway branch, a temporary copy of the code made just for this test, tried to sign in as the pipeline's identity. Microsoft refused it, because the robot is only trusted when it runs from the approved production path. That refusal is saved as evidence.",
       run: async (r) => { await clear(r); await cmd(r, 'grep ^E03 lab/evidence/capture-log.csv | fold -s -w 100');
         await out(r, T('e03.txt'), 10); await mark(r, 'AADSTS700213|environment:prod'); await r.define('Throwaway branch', 'A copy of the code made only for a test, then deleted.'); } },
   ] },
   { id: '04-hr-feed', kind: 'local', beats: [
-    { say: "Meet Dana Okafor, a new registered nurse. HR is the source of truth, so her record is what starts everything. Here it goes to Microsoft's inbound provisioning API, the front door for HR data, in a standard package called SCIM: her name, title, department, manager, and hire date.",
+    { audio: `${OUT}/clips/wk-04-0.mp3`, say: "The run starts with a hire. Meet Dana Okafor, a newly hired registered nurse. HR is the source of truth, so her record is what starts everything. Here it goes to Microsoft's inbound provisioning API, the front door for HR data, in a standard package called SCIM: her name, title, department, manager, and hire date.",
       prep: async (r) => { await termOpen(r); await r.page.evaluate(() => { window.term.title('pwsh — lab/scripts/mock-hr'); document.getElementById('scr').style.fontSize = '18px'; }); },
       run: async (r, b) => { await cmd(r, './Invoke-InboundProvisioning.ps1 -CsvPath dana.csv -UpnDomain contosohealthlab.com -WhatIf');
         await out(r, T('hr-whatif.txt').split('\n').filter((l) => !/What if:|--- \[WhatIf\]|Content-Type|Dry run/.test(l)).join('\n'), 14);
         await r.define('SCIM', "The standard format for sending 'here is a person' between systems."); await b.until(0.5); await mark(r, '"title"|"department"|"hireDate"|"userName"'); } },
-    { say: "Before anything is sent, a guard counts the changes. A push that would disable, or move, more than ten people stops cold, because a broken HR export looks exactly like a mass layoff. Here the limit is set to zero on purpose, to show it refusing.",
+    { audio: `${OUT}/clips/wk-04-1.mp3`, say: "Before anything is sent, a guard counts the changes. A push that would disable, or move, more than ten people stops cold, because a broken HR export looks exactly like a mass layoff. Here the limit is set to zero on purpose, to show it refusing.",
       run: async (r, b) => { await clear(r); await cmd(r, './Invoke-InboundProvisioning.ps1 -StatusFilter leaver -MaxChanges 0 -WhatIf');
         await out(r, T('hr-guard.txt').replace(/\/Users\/[^:]+\/lab/, 'lab'), 10); await b.until(0.35); await mark(r, 'Mass-change guard: this run|Nothing was sent'); } },
   ] },
@@ -226,7 +228,7 @@ export function scenes(ids) {
         for (const f of r.page.frames()) await f.evaluate(() => { for (const b of document.querySelectorAll('button[aria-label*="lose" i], button[title*="lose" i]')) { const t = (b.closest('div') || {}).innerText || ''; if (/policy plans|Migrate to Conditional Access/i.test(b.parentElement?.parentElement?.innerText || t)) b.click(); } }).catch(() => {});
         await sleep(800); await r.wheel(420, { x: 1000, y: 600 }); await sleep(1000); },
       run: async (r, b) => { await r.define('Conditional Access', 'Rules checked at every sign-in: who you are, what you must prove.'); await b.until(0.28); await r.ring({ text: /^CA001 - / , row: true }, 'Everyone: second factor'); await b.until(0.45); await r.ring({ text: /^CA002 - /, row: true }, 'Admins: phishing-resistant'); await b.until(0.68); await r.ring({ text: /^CA003 - /, row: true }, 'Old protocols blocked'); await b.until(0.85); await r.ring({ text: /^CA007 - /, row: true }, 'High risk: blocked'); } },
-    { say: "Nine of the eleven are enforced now. Each one started in report-only, which watches and logs without blocking, and graduated through its own reviewed change once the report showed it would not lock out a clinician. Two stay report-only on purpose, because they demand passkeys the admins don't hold yet. And two break-glass accounts, emergency logins kept in a safe, are excluded from all of them, so there is always a way back in.",
+    { say: "Every policy is in report-only mode for now, and that's deliberate. Report-only means it watches and logs what it would have done, without blocking anyone. Each one turns on through its own reviewed change, once the report shows it would not lock out a single clinician. And two break-glass accounts, emergency logins kept in a safe, are excluded from all of them, so there is always a way back in.",
       run: async (r, b) => { await r.ring({ text: 'State', exact: true }, 'Report-only').catch(() => {}); await r.define('Report-only', 'The rule logs what it would block, without blocking yet.'); await b.until(0.62); await r.unring(); await r.define('Break-glass account', 'An emergency login kept in a safe, excluded from every rule.'); } },
   ] },
   { id: '10-pim', kind: 'portal', beats: [
@@ -295,6 +297,11 @@ export function scenes(ids) {
       prep: async (r) => { await r.unring(); },
       run: async (r) => { await r.click({ text: /Directory role assigned outside PIM/, nth: 0 }); await sleep(6000); await r.settle(200); } },
   ] },
+  { id: '12b-splunk', kind: 'local', beats: [
+    { audio: `${OUT}/clips/wk-12b-0.mp3`, say: "One more thing on detection. These rules are not tied to Microsoft. The same twenty-two detections were rewritten for Splunk, a different security tool, and replayed against test events here. All twenty-two fired. That proves the detections are the lab's own logic, not a feature of one vendor the hospital would lose by switching tools.",
+      prep: async (r) => { await r.page.goto(SHOT); await r.ov('hideCursor', true); await r.page.evaluate((src) => window.shot(src), BIMG('splunk')); await sleep(600); },
+      run: async (r, b) => { await b.until(0.9); } },
+  ] },
   { id: '13-leaver', kind: 'portal', beats: [
     { say: "When HR says someone is gone, the same path runs in reverse. Priya Nair's HR record was marked as a leaver. The provisioning app disabled her in Active Directory, moved her to the Disabled folder, and Cloud Sync carried that up to the cloud.",
       prep: async (r) => { await r.chip('Leaver', 'No way back in, timed'); await r.goto(userBlade(ids.priya), 12000); await r.settle(); },
@@ -313,14 +320,38 @@ export function scenes(ids) {
       run: async (r, b) => { await b.until(0.15); await r.ring({ text: /version-level immutability/i, nth: 0 }, '2190 days · WORM'); await b.until(0.6); await r.ring({ text: /Enable versioning for blobs/i, nth: 0 }, 'Overwrite = new version').catch(() => {}); } },
   ] },
   { id: '15-evidence', kind: 'local', beats: [
-    { say: "Every step leaves a numbered evidence row: what happened, when, a fingerprint of the file, and where it is stored. The before baseline, the admin settings read back, the WORM test, and even the test where the pipeline's own identity was refused.",
+    { audio: `${OUT}/clips/wk-15-0.mp3`, say: "Every step leaves a numbered evidence row: what happened, when, a fingerprint of the file, and where it is stored. And here is the row that closes Dana's story. The day HR marked her a leaver, the lab timed every hop: disabled on-site in seven seconds, out of the cloud in under three minutes, and gone from AWS in nine, each number from a real timestamp.",
       prep: async (r) => { await termOpen(r); await r.page.evaluate(() => { document.getElementById('scr').style.fontSize = '18px'; }); },
       run: async (r, b) => { await cmd(r, 'grep ^E lab/evidence/capture-log.csv | cut -c1-140');
-        await out(r, T('elog.txt'), 8); await r.define('Hash', 'A fingerprint of a file. Change one byte and it changes.'); await b.until(0.55); await mark(r, '^E10|^E16a|^E06|^E03'); } },
+        await out(r, T('elog.txt'), 8); await r.define('Hash', 'A fingerprint of a file. Change one byte and it changes.'); await b.until(0.55); await mark(r, '^E52|^E06|^E03'); } },
   ] },
   { id: '17-close', kind: 'local', beats: [
-    { say: "Contoso Health. Access follows HR, admin power is temporary, and every change is proven. The glossary and every script are in the repo. Thanks for watching.",
+    { audio: `${OUT}/clips/wk-17-0.mp3`, say: "Contoso Health. One nurse hired by HR and set up on her own, admin power that switches itself off, an attacker's moves caught by name, and a leaver gone from AWS in nine minutes, measured. Sixty-four reviewed changes, nine sign-in rules enforced, every step proven in a store nobody can edit. The glossary and every script are in the repo. Thanks for watching.",
       prep: card({ kick: 'Contoso Health identity lab', title: 'Access follows HR.<br>Admin power is <em>temporary</em>.<br>Every change is proven.', sub: 'Glossary: lab/docs/glossary.md', chips: [] }) },
+  ] },
+  { id: '20-tf-pipeline', kind: 'local', beats: [
+    { say: "Nothing in this lab is clicked together in a portal. It is all written as code, in Terraform, like this. This file defines the two robot identities that run the pipeline, and notice there are no passwords anywhere. GitHub proves who they are with a short-lived token, and Microsoft only trusts it from the exact branch and environment named here. One identity can read and propose changes from a pull request. The other can make them, and only from the protected production path.",
+      audio: `${OUT}/clips/wk-20-0.mp3`,
+      prep: async (r) => { await r.page.goto(CODE); await r.ov('hideCursor', true); const src = fs.readFileSync(path.join(REPO, 'lab/terraform/modules/pipeline-identity/main.tf'), 'utf8').split('\n').slice(0, 33).join('\n'); await r.page.evaluate(({ f, c }) => window.code({ file: f, code: c }), { f: 'terraform/modules/pipeline-identity/main.tf', c: src }); await sleep(700); },
+      run: async (r, b) => { await b.until(0.95); } },
+  ] },
+  { id: '21-tf-pim', kind: 'local', beats: [
+    { say: "And here is privileged access, written the same way. This is a tiered admin model, not a single all-powerful account. Tier zero is the control plane, the roles that can change security itself, and activating one needs approval, a ticket, and multi-factor, for four hours at most. Tier one is the service desk, time-boxed to a shift. Change any of it, and the change is a reviewed pull request with a history, not a setting someone quietly flipped.",
+      audio: `${OUT}/clips/wk-21-0.mp3`,
+      prep: async (r) => { await r.page.goto(CODE); await r.ov('hideCursor', true); const src = fs.readFileSync(path.join(REPO, 'lab/terraform/modules/pim/tiers.tf'), 'utf8').split('\n').slice(0, 31).join('\n'); await r.page.evaluate(({ f, c }) => window.code({ file: f, code: c }), { f: 'terraform/modules/pim/tiers.tf', c: src }); await sleep(700); },
+      run: async (r, b) => { await b.until(0.95); } },
+  ] },
+  { id: '22-splunk-search', kind: 'local', beats: [
+    { say: "This is Splunk, a different security tool, running on my own machine, not Microsoft's cloud. The same identity events are flowing in. Here, nearly a thousand of them, broken down by what happened: failed sign-ins, vault check-outs, credential reads.",
+      audio: `${OUT}/clips/wk-22-0.mp3`,
+      prep: async (r) => { await r.page.goto(SHOT); await r.ov('hideCursor', true); await r.page.evaluate((src) => window.shot(src), BIMG('splunk')); await sleep(600); },
+      run: async (r, b) => { await b.until(0.95); } },
+  ] },
+  { id: '23-splunk-rules', kind: 'local', beats: [
+    { say: "And here are all twenty-two detection rules, rewritten in Splunk's own language. Break-glass sign-ins, Kerberoasting, a directory role granted outside the just-in-time system, separation-of-duties violations. I replayed the test attacks, and every one of the twenty-two fired. The point is that the detections are my logic, portable, not a feature of one vendor the hospital would lose by switching tools.",
+      audio: `${OUT}/clips/wk-23-0.mp3`,
+      prep: async (r) => { await r.page.goto(SHOT); await r.ov('hideCursor', true); await r.page.evaluate((src) => window.shot(src), BIMG('splunk-rules')); await sleep(600); },
+      run: async (r, b) => { await b.until(0.95); } },
   ] },
   ];
 }

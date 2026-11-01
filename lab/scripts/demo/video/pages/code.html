@@ -1,0 +1,54 @@
+<!doctype html><html><head><meta charset=utf8><title>code</title>
+<style>
+  :root{--bg:#1e1e1e;--chrome:#252526;--tab:#1e1e1e;--tabbar:#2d2d2d;--side:#333333;--ink:#d4d4d4;--ln:#858585;--accent:#0a7aca}
+  html,body{margin:0;height:100%;background:#181818;font-family:"SF Mono",Menlo,Consolas,monospace}
+  .win{height:100%;display:flex;flex-direction:column;background:var(--bg)}
+  .top{height:34px;background:var(--chrome);display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid #000}
+  .dot{width:12px;height:12px;border-radius:50%}
+  .r{background:#ff5f56}.y{background:#ffbd2e}.g{background:#27c93f}
+  .tabs{height:36px;background:var(--tabbar);display:flex;align-items:stretch}
+  .tab{display:flex;align-items:center;gap:8px;padding:0 16px;background:var(--tab);color:var(--ink);font-size:13px;border-right:1px solid #000}
+  .tab .ic{color:#519aba}
+  .body{flex:1;display:flex;min-height:0}
+  .act{width:48px;background:var(--side)}
+  .code{flex:1;overflow:hidden;padding:14px 0 14px 0;font-size:17px;line-height:1.5}
+  table{border-collapse:collapse;width:100%}
+  td.n{color:var(--ln);text-align:right;padding:0 16px 0 18px;width:1%;white-space:nowrap;user-select:none}
+  td.c{color:var(--ink);white-space:pre;padding-right:24px}
+  .cm{color:#6a9955}.st{color:#ce9178}.kw{color:#569cd6}.ty{color:#4ec9b0}.nu{color:#b5cea8}.fn{color:#dcdcaa}
+  .fname{color:var(--ink);font-size:13px;opacity:.75;margin-left:auto;padding-right:6px}
+</style></head>
+<body><div class="win">
+  <div class="top"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="fname" id="path"></span></div>
+  <div class="tabs"><div class="tab"><span class="ic">◆</span><span id="tab">main.tf</span></div></div>
+  <div class="body"><div class="act"></div><div class="code" id="code"></div></div>
+</div>
+<script>
+const esc=(s)=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const KW=/\b(resource|module|variable|locals|data|output|provider|terraform|for|in|if|true|false|null|count|for_each|dynamic|depends_on)\b/g;
+function hl(line){
+  // split code vs trailing comment at first # or // not inside quotes
+  let inq=false, ci=-1;
+  for(let i=0;i<line.length;i++){const ch=line[i]; if(ch==='"')inq=!inq; if(!inq&&(ch==='#'||(ch==='/'&&line[i+1]==='/'))){ci=i;break;}}
+  let codePart=ci>=0?line.slice(0,ci):line, cm=ci>=0?line.slice(ci):'';
+  // whole-line comment
+  let out=esc(codePart)
+    .replace(/"[^"]*"/g,m=>'\u0001st\u0002'+m+'\u0001/\u0002')             // strings
+    .replace(KW,m=>'\u0001kw\u0002'+m+'\u0001/\u0002')                      // keywords
+    .replace(/\b(\d+[a-zA-Z]*)\b/g,m=>'\u0001nu\u0002'+m+'\u0001/\u0002');  // numbers/durations
+  // resource "type" "name" -> type in teal
+  out=out.replace(/(\u0001kw\u0002(?:resource|data)\u0001\/\u0002\s+)(\u0001st\u0002"[^"]*"\u0001\/\u0002)/,(m,a,b)=>a+b.replace('st\u0002','ty\u0002'));
+  out=out.replace(/\u0001(\w+)\u0002/g,'<span class="$1">').replace(/\u0001\/\u0002/g,'</span>');
+  if(cm) out+='<span class="cm">'+esc(cm)+'</span>';
+  return out||'&nbsp;';
+}
+window.code=function(opts){
+  document.getElementById('path').textContent='contoso-health-identity-lab › '+opts.file;
+  document.getElementById('tab').textContent=opts.file.split('/').pop();
+  const lines=opts.code.replace(/\s+$/,'').split('\n');
+  let rows=lines.map((l,i)=>'<tr><td class="n">'+(i+1)+'</td><td class="c">'+hl(l)+'</td></tr>').join('');
+  const el=document.getElementById('code'); el.innerHTML='<table>'+rows+'</table>';
+  // auto-fit height
+  let fs=17; while(el.scrollHeight>el.clientHeight&&fs>10){fs-=0.5;el.style.fontSize=fs+'px';}
+};
+</script></body></html>

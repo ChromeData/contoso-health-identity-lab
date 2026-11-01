@@ -21,7 +21,7 @@ On the Mac they are Keychain items. On Windows use Credential Manager (`cmdkey`)
 
 | Name | What it is |
 |---|---|
-| `contoso-lab-admin` | Tenant admin password (MichaelWilliams@ContosoHealthLab.onmicrosoft.com) |
+| `contoso-lab-admin` | Tenant admin password (<your-admin-upn>) |
 | `contoso-lab-aws-root`, `contoso-lab-aws-idlab-admin` | AWS root and the SSO admin profile |
 | `contoso-lab-servicenow-admin`, `contoso-lab-servicenow` | ServiceNow developer instance |
 | `contoso-lab-okta-token` | Okta API token |
