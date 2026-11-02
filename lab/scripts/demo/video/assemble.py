@@ -36,8 +36,8 @@ index = json.load(open(os.path.join(OUT, 'audio/index.json')))
 tls = sorted(glob.glob(os.path.join(OUT, 'raw/*.timeline.json')))
 tls = [t for t in tls if os.path.basename(t)[:2].isdigit()]
 if '--only' in args:   # preview a subset, e.g. --only 01,02,05
-    keep = args[args.index('--only') + 1].split(',')
-    tls = [t for t in tls if os.path.basename(t)[:2] in keep]
+    keep = args[args.index('--only') + 1].split(',')   # scenes play in the order listed
+    tls = [t for k in keep for t in tls if os.path.basename(t)[:2] == k]
 os.makedirs(os.path.join(OUT, 'scenes'), exist_ok=True)
 
 scene_files, subs = [], []   # subs: (scene_idx, local_start, local_end, text)
