@@ -215,15 +215,60 @@ jobs:
           terraform plan -input=false -no-color -lock-timeout=120s -var-file=lab.tfvars -out=tfplan
         working-directory: ${{ env.TF_WORKING_DIR }}
 
+      # What the saved plan above is about to change, in plain English, printed
+      # here BEFORE the apply runs (and kept for the Apply summary below, in
+      # both tenses). Reads the same tfplan file the apply uses; `terraform
+      # show` does not refresh or touch the tenant. Same safety rules as
+      # terraform-plan.yml: the JSON plan (every variable value in clear text)
+      # stays in RUNNER_TEMP, is never printed, and is deleted on exit.
+      # continue-on-error: a summary bug never blocks or fails the apply.
+      - name: What this apply will change (plain English)
+        id: summary
+        continue-on-error: true
+        run: |
+          plan_json="${RUNNER_TEMP}/plan.json"
+          trap 'rm -f "$plan_json" "${RUNNER_TEMP}"/plain-*.md.tmp' EXIT
+          terraform show -json tfplan > "$plan_json"
+          script="${GITHUB_WORKSPACE}/.github/scripts/plain-plan.py"
+          python3 "$script" "$plan_json" > "${RUNNER_TEMP}/plain-plan.md.tmp"
+          python3 "$script" --applied "$plan_json" > "${RUNNER_TEMP}/plain-applied.md.tmp"
+          mv "${RUNNER_TEMP}/plain-plan.md.tmp" "${RUNNER_TEMP}/plain-plan.md"
+          mv "${RUNNER_TEMP}/plain-applied.md.tmp" "${RUNNER_TEMP}/plain-applied.md"
+          cat "${RUNNER_TEMP}/plain-plan.md"
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
       - name: terraform apply
+        id: apply
         run: terraform apply -input=false -no-color -auto-approve tfplan
         working-directory: ${{ env.TF_WORKING_DIR }}
 
+      # Plain-English result first ("Applied: ..." from the summary step), then
+      # the technical lines. Only says "Applied" when the apply step succeeded.
       - name: Apply summary
         if: always()
+        env:
+          APPLY_OUTCOME: ${{ steps.apply.outcome }}
         run: |
+          applied="${RUNNER_TEMP}/plain-applied.md"
+          planned="${RUNNER_TEMP}/plain-plan.md"
           {
             echo "## Terraform apply — \`${{ env.TF_WORKING_DIR }}\`"
+            echo ""
+            case "${APPLY_OUTCOME}" in
+              success)
+                if [ -s "$applied" ]; then
+                  cat "$applied"
+                else
+                  echo "**Applied.** (No plain-English summary this time; the \"terraform plan\" step log lists the changes.)"
+                fi ;;
+              failure|cancelled)
+                echo "**The apply did not finish (${APPLY_OUTCOME}).** Some of these planned changes may not be live; the \"terraform apply\" step log shows where it stopped."
+                if [ -s "$planned" ]; then echo ""; cat "$planned"; fi ;;
+              *)
+                echo "**Nothing was applied.** The run stopped before the apply step (see the steps above)." ;;
+            esac
+            echo ""
+            echo "**Technical details**"
             echo ""
             echo "- commit: \`${{ github.sha }}\`"
             echo "- actor:  \`${{ github.actor }}\`"

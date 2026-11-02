@@ -454,8 +454,11 @@ with no PR and no review, lock the WORM store irreversibly.
       on). The publish script does it; verify in Settings.
 
 ### G. Smoke test
-- [ ] Open a trivial PR under `lab/terraform/**` → confirm the plan comment, the
-      Checkov/TruffleHog checks, and the AI-review comment appear.
+- [ ] Open a trivial PR under `lab/terraform/**` → confirm the plan comment
+      (plain-English summary on top from `.github/scripts/plain-plan.py`, the
+      raw plan under *Technical details*), the Checkov/TruffleHog checks, and
+      the AI-review comment appear. The summary's tests run offline:
+      `python3 -m unittest discover -s .github/scripts/tests`.
 - [ ] Open a docs-only PR (e.g. edit `lab/docs/*.md`) → confirm `terraform plan`
       and `checkov (IaC scan)` show *Skipped*, `trufflehog (secret scan)` runs,
       and the PR is mergeable (not stuck on *Pending*).

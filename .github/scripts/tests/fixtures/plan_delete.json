@@ -1,0 +1,1235 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.5",
+  "variables": {
+    "alert_email": {
+      "value": "secops-oncall@contoso-health.example"
+    },
+    "operator_ip_ranges": {
+      "value": [
+        "203.0.113.24/32"
+      ]
+    },
+    "tenant_id": {
+      "value": "11111111-2222-4333-8444-555555555555"
+    }
+  },
+  "planned_values": {
+    "root_module": {
+      "child_modules": [
+        {
+          "address": "module.apps[0]",
+          "resources": [
+            {
+              "address": "module.apps[0].azuread_service_principal.servicenow[0]",
+              "mode": "managed",
+              "type": "azuread_service_principal",
+              "name": "servicenow",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "display_name": "Contoso Health - ServiceNow",
+                "id": "/servicePrincipals/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+                "object_id": "3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+                "client_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c01",
+                "app_role_assignment_required": true,
+                "timeouts": null
+              },
+              "sensitive_values": {},
+              "index": 0
+            },
+            {
+              "address": "module.apps[0].azuread_service_principal_token_signing_certificate.servicenow[0]",
+              "mode": "managed",
+              "type": "azuread_service_principal_token_signing_certificate",
+              "name": "servicenow",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "display_name": "CN=Contoso Health - ServiceNow SAML signing",
+                "end_date": "2028-01-15T00:00:00Z",
+                "service_principal_id": "/servicePrincipals/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+                "timeouts": null
+              },
+              "sensitive_values": {},
+              "index": 0
+            }
+          ]
+        },
+        {
+          "address": "module.conditional_access[0]",
+          "resources": [
+            {
+              "address": "module.conditional_access[0].azuread_conditional_access_policy.block_legacy_auth",
+              "mode": "managed",
+              "type": "azuread_conditional_access_policy",
+              "name": "block_legacy_auth",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "conditions": [
+                  {
+                    "applications": [
+                      {
+                        "included_applications": [
+                          "All"
+                        ],
+                        "excluded_applications": []
+                      }
+                    ],
+                    "client_app_types": [
+                      "all"
+                    ],
+                    "users": [
+                      {
+                        "included_users": [
+                          "All"
+                        ],
+                        "excluded_groups": [
+                          "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e99"
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "display_name": "CA003 - Block legacy authentication",
+                "grant_controls": [
+                  {
+                    "built_in_controls": [
+                      "block"
+                    ],
+                    "operator": "OR"
+                  }
+                ],
+                "id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c01",
+                "object_id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c01",
+                "session_controls": [],
+                "state": "enabled",
+                "timeouts": null
+              },
+              "sensitive_values": {}
+            }
+          ]
+        },
+        {
+          "address": "module.groups[0]",
+          "resources": [
+            {
+              "address": "module.groups[0].azuread_group.app_access[\"servicenow\"]",
+              "mode": "managed",
+              "type": "azuread_group",
+              "name": "app_access",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "administrative_unit_ids": [],
+                "assignable_to_role": false,
+                "auto_subscribe_new_members": false,
+                "behaviors": [],
+                "description": "Grants App-ServiceNow-Users [Managed by Terraform - lab/terraform]",
+                "display_name": "App-ServiceNow-Users",
+                "dynamic_membership": [],
+                "external_senders_allowed": false,
+                "hide_from_address_lists": false,
+                "hide_from_outlook_clients": false,
+                "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                "mail": "",
+                "mail_enabled": false,
+                "mail_nickname": "app-servicenow-users",
+                "members": [],
+                "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                "onpremises_group_type": "",
+                "owners": [],
+                "prevent_duplicate_names": false,
+                "provisioning_options": [],
+                "security_enabled": true,
+                "theme": "",
+                "timeouts": null,
+                "types": [],
+                "visibility": "",
+                "writeback_enabled": false
+              },
+              "sensitive_values": {},
+              "index": "servicenow"
+            },
+            {
+              "address": "module.groups[0].azuread_group.app_access[\"aws\"]",
+              "mode": "managed",
+              "type": "azuread_group",
+              "name": "app_access",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "administrative_unit_ids": [],
+                "assignable_to_role": false,
+                "auto_subscribe_new_members": false,
+                "behaviors": [],
+                "description": "Grants App-AWS-IdentityCenter-Users [Managed by Terraform - lab/terraform]",
+                "display_name": "App-AWS-IdentityCenter-Users",
+                "dynamic_membership": [],
+                "external_senders_allowed": false,
+                "hide_from_address_lists": false,
+                "hide_from_outlook_clients": false,
+                "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                "mail": "",
+                "mail_enabled": false,
+                "mail_nickname": "app-aws-identitycenter-users",
+                "members": [],
+                "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                "onpremises_group_type": "",
+                "owners": [],
+                "prevent_duplicate_names": false,
+                "provisioning_options": [],
+                "security_enabled": true,
+                "theme": "",
+                "timeouts": null,
+                "types": [],
+                "visibility": "",
+                "writeback_enabled": false
+              },
+              "sensitive_values": {},
+              "index": "aws"
+            }
+          ]
+        },
+        {
+          "address": "module.keyvault",
+          "resources": [
+            {
+              "address": "module.keyvault.azurerm_key_vault.idlab",
+              "mode": "managed",
+              "type": "azurerm_key_vault",
+              "name": "idlab",
+              "provider_name": "registry.terraform.io/hashicorp/azurerm",
+              "schema_version": 0,
+              "values": {
+                "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.KeyVault/vaults/kv-idlab",
+                "name": "kv-idlab",
+                "location": "eastus2",
+                "resource_group_name": "rg-idlab",
+                "sku_name": "standard",
+                "tenant_id": "11111111-2222-4333-8444-555555555555",
+                "timeouts": null
+              },
+              "sensitive_values": {}
+            },
+            {
+              "address": "module.keyvault.azurerm_user_assigned_identity.kv_reader",
+              "mode": "managed",
+              "type": "azurerm_user_assigned_identity",
+              "name": "kv_reader",
+              "provider_name": "registry.terraform.io/hashicorp/azurerm",
+              "schema_version": 0,
+              "values": {
+                "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-idlab-kv-reader",
+                "name": "id-idlab-kv-reader",
+                "principal_id": "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c01",
+                "client_id": "6b5a4c3d-2e1f-4a0b-9c8d-7e6f5a4b3c01",
+                "tenant_id": "11111111-2222-4333-8444-555555555555",
+                "location": "eastus2",
+                "resource_group_name": "rg-idlab",
+                "timeouts": null
+              },
+              "sensitive_values": {}
+            }
+          ]
+        },
+        {
+          "address": "module.monitoring[0]",
+          "resources": [
+            {
+              "address": "module.monitoring[0].azurerm_monitor_action_group.identity_secops",
+              "mode": "managed",
+              "type": "azurerm_monitor_action_group",
+              "name": "identity_secops",
+              "provider_name": "registry.terraform.io/hashicorp/azurerm",
+              "schema_version": 0,
+              "values": {
+                "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/microsoft.insights/actionGroups/ag-identity-secops",
+                "name": "ag-identity-secops",
+                "short_name": "idsecops",
+                "enabled": true,
+                "resource_group_name": "rg-idlab",
+                "location": "global",
+                "email_receiver": [
+                  {
+                    "name": "secops",
+                    "email_address": "secops-oncall@contoso-health.example",
+                    "use_common_alert_schema": true
+                  }
+                ],
+                "tags": {},
+                "timeouts": null
+              },
+              "sensitive_values": {
+                "email_receiver": [
+                  {
+                    "email_address": true
+                  }
+                ],
+                "tags": {}
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "module.apps[0].azuread_app_role_assignment.servicenow_users[0]",
+      "module_address": "module.apps[0]",
+      "mode": "managed",
+      "type": "azuread_app_role_assignment",
+      "name": "servicenow_users",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "delete"
+        ],
+        "before": {
+          "app_role_id": "18d14569-c3bd-439b-9a66-3a2aee01d14f",
+          "id": "/servicePrincipals/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01/appRoleAssignedTo/AbCdEfGh",
+          "principal_display_name": "App-ServiceNow-Users",
+          "principal_object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "principal_type": "Group",
+          "resource_display_name": "Contoso Health - ServiceNow",
+          "resource_object_id": "3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+          "timeouts": null
+        },
+        "after": null,
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": false
+      },
+      "index": 0,
+      "action_reason": "delete_because_count_index"
+    },
+    {
+      "address": "module.apps[0].azuread_service_principal.servicenow[0]",
+      "module_address": "module.apps[0]",
+      "mode": "managed",
+      "type": "azuread_service_principal",
+      "name": "servicenow",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "display_name": "Contoso Health - ServiceNow",
+          "id": "/servicePrincipals/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+          "object_id": "3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+          "client_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c01",
+          "app_role_assignment_required": true,
+          "timeouts": null
+        },
+        "after": {
+          "display_name": "Contoso Health - ServiceNow",
+          "id": "/servicePrincipals/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+          "object_id": "3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+          "client_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c01",
+          "app_role_assignment_required": true,
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "index": 0
+    },
+    {
+      "address": "module.apps[0].azuread_service_principal_token_signing_certificate.servicenow[0]",
+      "module_address": "module.apps[0]",
+      "mode": "managed",
+      "type": "azuread_service_principal_token_signing_certificate",
+      "name": "servicenow",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "delete",
+          "create"
+        ],
+        "before": {
+          "display_name": "CN=Contoso Health - ServiceNow SAML signing",
+          "end_date": "2027-01-15T00:00:00Z",
+          "id": "3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01/tokenSigningCertificate/7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2901",
+          "key_id": "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2901",
+          "service_principal_id": "/servicePrincipals/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+          "start_date": "2024-01-15T00:00:00Z",
+          "thumbprint": "A1B2C3D4E5F60718293A4B5C6D7E8F9012345678",
+          "value": "MIIC8DCCAdigAwIBAgIQ-FAKE-CERT-BODY",
+          "timeouts": null
+        },
+        "after": {
+          "display_name": "CN=Contoso Health - ServiceNow SAML signing",
+          "end_date": "2028-01-15T00:00:00Z",
+          "service_principal_id": "/servicePrincipals/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+          "timeouts": null
+        },
+        "after_unknown": {
+          "id": true,
+          "key_id": true,
+          "start_date": true,
+          "thumbprint": true,
+          "value": true
+        },
+        "before_sensitive": {
+          "value": true
+        },
+        "after_sensitive": {},
+        "replace_paths": [
+          [
+            "end_date"
+          ]
+        ]
+      },
+      "index": 0,
+      "action_reason": "replace_because_cannot_update"
+    },
+    {
+      "address": "module.conditional_access[0].azuread_conditional_access_policy.block_device_code_flow",
+      "module_address": "module.conditional_access[0]",
+      "mode": "managed",
+      "type": "azuread_conditional_access_policy",
+      "name": "block_device_code_flow",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "delete"
+        ],
+        "before": {
+          "conditions": [
+            {
+              "applications": [
+                {
+                  "included_applications": [
+                    "All"
+                  ],
+                  "excluded_applications": []
+                }
+              ],
+              "client_app_types": [
+                "all"
+              ],
+              "users": [
+                {
+                  "included_users": [
+                    "All"
+                  ],
+                  "excluded_groups": [
+                    "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e99"
+                  ]
+                }
+              ]
+            }
+          ],
+          "display_name": "CA010 - Block device code flow for all users",
+          "grant_controls": [
+            {
+              "built_in_controls": [
+                "block"
+              ],
+              "operator": "OR"
+            }
+          ],
+          "id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c02",
+          "object_id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c02",
+          "session_controls": [],
+          "state": "enabled",
+          "timeouts": null
+        },
+        "after": null,
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": false
+      },
+      "action_reason": "delete_because_no_resource_config"
+    },
+    {
+      "address": "module.conditional_access[0].azuread_conditional_access_policy.block_legacy_auth",
+      "module_address": "module.conditional_access[0]",
+      "mode": "managed",
+      "type": "azuread_conditional_access_policy",
+      "name": "block_legacy_auth",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "conditions": [
+            {
+              "applications": [
+                {
+                  "included_applications": [
+                    "All"
+                  ],
+                  "excluded_applications": []
+                }
+              ],
+              "client_app_types": [
+                "all"
+              ],
+              "users": [
+                {
+                  "included_users": [
+                    "All"
+                  ],
+                  "excluded_groups": [
+                    "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e99"
+                  ]
+                }
+              ]
+            }
+          ],
+          "display_name": "CA003 - Block legacy authentication",
+          "grant_controls": [
+            {
+              "built_in_controls": [
+                "block"
+              ],
+              "operator": "OR"
+            }
+          ],
+          "id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c01",
+          "object_id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c01",
+          "session_controls": [],
+          "state": "enabledForReportingButNotEnforced",
+          "timeouts": null
+        },
+        "after": {
+          "conditions": [
+            {
+              "applications": [
+                {
+                  "included_applications": [
+                    "All"
+                  ],
+                  "excluded_applications": []
+                }
+              ],
+              "client_app_types": [
+                "all"
+              ],
+              "users": [
+                {
+                  "included_users": [
+                    "All"
+                  ],
+                  "excluded_groups": [
+                    "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e99"
+                  ]
+                }
+              ]
+            }
+          ],
+          "display_name": "CA003 - Block legacy authentication",
+          "grant_controls": [
+            {
+              "built_in_controls": [
+                "block"
+              ],
+              "operator": "OR"
+            }
+          ],
+          "id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c01",
+          "object_id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c01",
+          "session_controls": [],
+          "state": "enabled",
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "module.groups[0].azuread_group.app_access[\"aws\"]",
+      "module_address": "module.groups[0]",
+      "mode": "managed",
+      "type": "azuread_group",
+      "name": "app_access",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "administrative_unit_ids": [],
+          "assignable_to_role": false,
+          "auto_subscribe_new_members": false,
+          "behaviors": [],
+          "description": "Grants App-AWS-IdentityCenter-Users [Managed by Terraform - lab/terraform]",
+          "display_name": "App-AWS-IdentityCenter-Users",
+          "dynamic_membership": [],
+          "external_senders_allowed": false,
+          "hide_from_address_lists": false,
+          "hide_from_outlook_clients": false,
+          "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "mail": "",
+          "mail_enabled": false,
+          "mail_nickname": "app-aws-identitycenter-users",
+          "members": [],
+          "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "onpremises_group_type": "",
+          "owners": [],
+          "prevent_duplicate_names": false,
+          "provisioning_options": [],
+          "security_enabled": true,
+          "theme": "",
+          "timeouts": null,
+          "types": [],
+          "visibility": "",
+          "writeback_enabled": false
+        },
+        "after": {
+          "administrative_unit_ids": [],
+          "assignable_to_role": false,
+          "auto_subscribe_new_members": false,
+          "behaviors": [],
+          "description": "Grants App-AWS-IdentityCenter-Users [Managed by Terraform - lab/terraform]",
+          "display_name": "App-AWS-IdentityCenter-Users",
+          "dynamic_membership": [],
+          "external_senders_allowed": false,
+          "hide_from_address_lists": false,
+          "hide_from_outlook_clients": false,
+          "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "mail": "",
+          "mail_enabled": false,
+          "mail_nickname": "app-aws-identitycenter-users",
+          "members": [],
+          "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "onpremises_group_type": "",
+          "owners": [],
+          "prevent_duplicate_names": false,
+          "provisioning_options": [],
+          "security_enabled": true,
+          "theme": "",
+          "timeouts": null,
+          "types": [],
+          "visibility": "",
+          "writeback_enabled": false
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "index": "aws"
+    },
+    {
+      "address": "module.groups[0].azuread_group.app_access[\"servicenow\"]",
+      "module_address": "module.groups[0]",
+      "mode": "managed",
+      "type": "azuread_group",
+      "name": "app_access",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "administrative_unit_ids": [],
+          "assignable_to_role": false,
+          "auto_subscribe_new_members": false,
+          "behaviors": [],
+          "description": "Grants App-ServiceNow-Users [Managed by Terraform - lab/terraform]",
+          "display_name": "App-ServiceNow-Users",
+          "dynamic_membership": [],
+          "external_senders_allowed": false,
+          "hide_from_address_lists": false,
+          "hide_from_outlook_clients": false,
+          "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "mail": "",
+          "mail_enabled": false,
+          "mail_nickname": "app-servicenow-users",
+          "members": [],
+          "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "onpremises_group_type": "",
+          "owners": [],
+          "prevent_duplicate_names": false,
+          "provisioning_options": [],
+          "security_enabled": true,
+          "theme": "",
+          "timeouts": null,
+          "types": [],
+          "visibility": "",
+          "writeback_enabled": false
+        },
+        "after": {
+          "administrative_unit_ids": [],
+          "assignable_to_role": false,
+          "auto_subscribe_new_members": false,
+          "behaviors": [],
+          "description": "Grants App-ServiceNow-Users [Managed by Terraform - lab/terraform]",
+          "display_name": "App-ServiceNow-Users",
+          "dynamic_membership": [],
+          "external_senders_allowed": false,
+          "hide_from_address_lists": false,
+          "hide_from_outlook_clients": false,
+          "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "mail": "",
+          "mail_enabled": false,
+          "mail_nickname": "app-servicenow-users",
+          "members": [],
+          "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "onpremises_group_type": "",
+          "owners": [],
+          "prevent_duplicate_names": false,
+          "provisioning_options": [],
+          "security_enabled": true,
+          "theme": "",
+          "timeouts": null,
+          "types": [],
+          "visibility": "",
+          "writeback_enabled": false
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "index": "servicenow"
+    },
+    {
+      "address": "module.keyvault.azurerm_key_vault.idlab",
+      "module_address": "module.keyvault",
+      "mode": "managed",
+      "type": "azurerm_key_vault",
+      "name": "idlab",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.KeyVault/vaults/kv-idlab",
+          "name": "kv-idlab",
+          "location": "eastus2",
+          "resource_group_name": "rg-idlab",
+          "sku_name": "standard",
+          "tenant_id": "11111111-2222-4333-8444-555555555555",
+          "timeouts": null
+        },
+        "after": {
+          "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.KeyVault/vaults/kv-idlab",
+          "name": "kv-idlab",
+          "location": "eastus2",
+          "resource_group_name": "rg-idlab",
+          "sku_name": "standard",
+          "tenant_id": "11111111-2222-4333-8444-555555555555",
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "module.keyvault.azurerm_role_assignment.kv_secrets_user",
+      "module_address": "module.keyvault",
+      "mode": "managed",
+      "type": "azurerm_role_assignment",
+      "name": "kv_secrets_user",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": [
+          "delete"
+        ],
+        "before": {
+          "condition": null,
+          "condition_version": null,
+          "delegated_managed_identity_resource_id": null,
+          "description": null,
+          "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.KeyVault/vaults/kv-idlab/providers/Microsoft.Authorization/roleAssignments/2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091",
+          "name": "2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091",
+          "principal_id": "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c01",
+          "principal_type": "ServicePrincipal",
+          "role_definition_id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6",
+          "role_definition_name": "Key Vault Secrets User",
+          "scope": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.KeyVault/vaults/kv-idlab",
+          "skip_service_principal_aad_check": null,
+          "timeouts": null
+        },
+        "after": null,
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": false
+      },
+      "action_reason": "delete_because_no_resource_config"
+    },
+    {
+      "address": "module.keyvault.azurerm_user_assigned_identity.kv_reader",
+      "module_address": "module.keyvault",
+      "mode": "managed",
+      "type": "azurerm_user_assigned_identity",
+      "name": "kv_reader",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-idlab-kv-reader",
+          "name": "id-idlab-kv-reader",
+          "principal_id": "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c01",
+          "client_id": "6b5a4c3d-2e1f-4a0b-9c8d-7e6f5a4b3c01",
+          "tenant_id": "11111111-2222-4333-8444-555555555555",
+          "location": "eastus2",
+          "resource_group_name": "rg-idlab",
+          "timeouts": null
+        },
+        "after": {
+          "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-idlab-kv-reader",
+          "name": "id-idlab-kv-reader",
+          "principal_id": "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c01",
+          "client_id": "6b5a4c3d-2e1f-4a0b-9c8d-7e6f5a4b3c01",
+          "tenant_id": "11111111-2222-4333-8444-555555555555",
+          "location": "eastus2",
+          "resource_group_name": "rg-idlab",
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "module.monitoring[0].azurerm_monitor_action_group.identity_secops",
+      "module_address": "module.monitoring[0]",
+      "mode": "managed",
+      "type": "azurerm_monitor_action_group",
+      "name": "identity_secops",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/microsoft.insights/actionGroups/ag-identity-secops",
+          "name": "ag-identity-secops",
+          "short_name": "idsecops",
+          "enabled": true,
+          "resource_group_name": "rg-idlab",
+          "location": "global",
+          "email_receiver": [
+            {
+              "name": "secops",
+              "email_address": "old-oncall@contoso-health.example",
+              "use_common_alert_schema": true
+            }
+          ],
+          "tags": {},
+          "timeouts": null
+        },
+        "after": {
+          "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/microsoft.insights/actionGroups/ag-identity-secops",
+          "name": "ag-identity-secops",
+          "short_name": "idsecops",
+          "enabled": true,
+          "resource_group_name": "rg-idlab",
+          "location": "global",
+          "email_receiver": [
+            {
+              "name": "secops",
+              "email_address": "secops-oncall@contoso-health.example",
+              "use_common_alert_schema": true
+            }
+          ],
+          "tags": {},
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {
+          "email_receiver": [
+            {
+              "email_address": true
+            }
+          ],
+          "tags": {}
+        },
+        "after_sensitive": {
+          "email_receiver": [
+            {
+              "email_address": true
+            }
+          ],
+          "tags": {}
+        }
+      }
+    }
+  ],
+  "prior_state": {
+    "format_version": "1.0",
+    "terraform_version": "1.16.5",
+    "values": {
+      "root_module": {
+        "child_modules": [
+          {
+            "address": "module.apps[0]",
+            "resources": [
+              {
+                "address": "module.apps[0].azuread_service_principal.servicenow[0]",
+                "mode": "managed",
+                "type": "azuread_service_principal",
+                "name": "servicenow",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "display_name": "Contoso Health - ServiceNow",
+                  "id": "/servicePrincipals/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+                  "object_id": "3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+                  "client_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c01",
+                  "app_role_assignment_required": true,
+                  "timeouts": null
+                },
+                "sensitive_values": {},
+                "index": 0
+              },
+              {
+                "address": "module.apps[0].azuread_service_principal_token_signing_certificate.servicenow[0]",
+                "mode": "managed",
+                "type": "azuread_service_principal_token_signing_certificate",
+                "name": "servicenow",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "display_name": "CN=Contoso Health - ServiceNow SAML signing",
+                  "end_date": "2027-01-15T00:00:00Z",
+                  "id": "3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01/tokenSigningCertificate/7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2901",
+                  "key_id": "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2901",
+                  "service_principal_id": "/servicePrincipals/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+                  "start_date": "2024-01-15T00:00:00Z",
+                  "thumbprint": "A1B2C3D4E5F60718293A4B5C6D7E8F9012345678",
+                  "value": "MIIC8DCCAdigAwIBAgIQ-FAKE-CERT-BODY",
+                  "timeouts": null
+                },
+                "sensitive_values": {
+                  "value": true
+                },
+                "index": 0
+              },
+              {
+                "address": "module.apps[0].azuread_app_role_assignment.servicenow_users[0]",
+                "mode": "managed",
+                "type": "azuread_app_role_assignment",
+                "name": "servicenow_users",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "app_role_id": "18d14569-c3bd-439b-9a66-3a2aee01d14f",
+                  "id": "/servicePrincipals/3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01/appRoleAssignedTo/AbCdEfGh",
+                  "principal_display_name": "App-ServiceNow-Users",
+                  "principal_object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                  "principal_type": "Group",
+                  "resource_display_name": "Contoso Health - ServiceNow",
+                  "resource_object_id": "3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b01",
+                  "timeouts": null
+                },
+                "sensitive_values": {},
+                "index": 0
+              }
+            ]
+          },
+          {
+            "address": "module.conditional_access[0]",
+            "resources": [
+              {
+                "address": "module.conditional_access[0].azuread_conditional_access_policy.block_legacy_auth",
+                "mode": "managed",
+                "type": "azuread_conditional_access_policy",
+                "name": "block_legacy_auth",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "conditions": [
+                    {
+                      "applications": [
+                        {
+                          "included_applications": [
+                            "All"
+                          ],
+                          "excluded_applications": []
+                        }
+                      ],
+                      "client_app_types": [
+                        "all"
+                      ],
+                      "users": [
+                        {
+                          "included_users": [
+                            "All"
+                          ],
+                          "excluded_groups": [
+                            "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e99"
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "display_name": "CA003 - Block legacy authentication",
+                  "grant_controls": [
+                    {
+                      "built_in_controls": [
+                        "block"
+                      ],
+                      "operator": "OR"
+                    }
+                  ],
+                  "id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c01",
+                  "object_id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c01",
+                  "session_controls": [],
+                  "state": "enabledForReportingButNotEnforced",
+                  "timeouts": null
+                },
+                "sensitive_values": {}
+              },
+              {
+                "address": "module.conditional_access[0].azuread_conditional_access_policy.block_device_code_flow",
+                "mode": "managed",
+                "type": "azuread_conditional_access_policy",
+                "name": "block_device_code_flow",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "conditions": [
+                    {
+                      "applications": [
+                        {
+                          "included_applications": [
+                            "All"
+                          ],
+                          "excluded_applications": []
+                        }
+                      ],
+                      "client_app_types": [
+                        "all"
+                      ],
+                      "users": [
+                        {
+                          "included_users": [
+                            "All"
+                          ],
+                          "excluded_groups": [
+                            "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e99"
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "display_name": "CA010 - Block device code flow for all users",
+                  "grant_controls": [
+                    {
+                      "built_in_controls": [
+                        "block"
+                      ],
+                      "operator": "OR"
+                    }
+                  ],
+                  "id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c02",
+                  "object_id": "e1d2c3b4-a5f6-4e7d-8c9b-0a1f2e3d4c02",
+                  "session_controls": [],
+                  "state": "enabled",
+                  "timeouts": null
+                },
+                "sensitive_values": {}
+              }
+            ]
+          },
+          {
+            "address": "module.groups[0]",
+            "resources": [
+              {
+                "address": "module.groups[0].azuread_group.app_access[\"servicenow\"]",
+                "mode": "managed",
+                "type": "azuread_group",
+                "name": "app_access",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "administrative_unit_ids": [],
+                  "assignable_to_role": false,
+                  "auto_subscribe_new_members": false,
+                  "behaviors": [],
+                  "description": "Grants App-ServiceNow-Users [Managed by Terraform - lab/terraform]",
+                  "display_name": "App-ServiceNow-Users",
+                  "dynamic_membership": [],
+                  "external_senders_allowed": false,
+                  "hide_from_address_lists": false,
+                  "hide_from_outlook_clients": false,
+                  "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                  "mail": "",
+                  "mail_enabled": false,
+                  "mail_nickname": "app-servicenow-users",
+                  "members": [],
+                  "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                  "onpremises_group_type": "",
+                  "owners": [],
+                  "prevent_duplicate_names": false,
+                  "provisioning_options": [],
+                  "security_enabled": true,
+                  "theme": "",
+                  "timeouts": null,
+                  "types": [],
+                  "visibility": "",
+                  "writeback_enabled": false
+                },
+                "sensitive_values": {},
+                "index": "servicenow"
+              },
+              {
+                "address": "module.groups[0].azuread_group.app_access[\"aws\"]",
+                "mode": "managed",
+                "type": "azuread_group",
+                "name": "app_access",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "administrative_unit_ids": [],
+                  "assignable_to_role": false,
+                  "auto_subscribe_new_members": false,
+                  "behaviors": [],
+                  "description": "Grants App-AWS-IdentityCenter-Users [Managed by Terraform - lab/terraform]",
+                  "display_name": "App-AWS-IdentityCenter-Users",
+                  "dynamic_membership": [],
+                  "external_senders_allowed": false,
+                  "hide_from_address_lists": false,
+                  "hide_from_outlook_clients": false,
+                  "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                  "mail": "",
+                  "mail_enabled": false,
+                  "mail_nickname": "app-aws-identitycenter-users",
+                  "members": [],
+                  "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                  "onpremises_group_type": "",
+                  "owners": [],
+                  "prevent_duplicate_names": false,
+                  "provisioning_options": [],
+                  "security_enabled": true,
+                  "theme": "",
+                  "timeouts": null,
+                  "types": [],
+                  "visibility": "",
+                  "writeback_enabled": false
+                },
+                "sensitive_values": {},
+                "index": "aws"
+              }
+            ]
+          },
+          {
+            "address": "module.keyvault",
+            "resources": [
+              {
+                "address": "module.keyvault.azurerm_key_vault.idlab",
+                "mode": "managed",
+                "type": "azurerm_key_vault",
+                "name": "idlab",
+                "provider_name": "registry.terraform.io/hashicorp/azurerm",
+                "schema_version": 0,
+                "values": {
+                  "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.KeyVault/vaults/kv-idlab",
+                  "name": "kv-idlab",
+                  "location": "eastus2",
+                  "resource_group_name": "rg-idlab",
+                  "sku_name": "standard",
+                  "tenant_id": "11111111-2222-4333-8444-555555555555",
+                  "timeouts": null
+                },
+                "sensitive_values": {}
+              },
+              {
+                "address": "module.keyvault.azurerm_user_assigned_identity.kv_reader",
+                "mode": "managed",
+                "type": "azurerm_user_assigned_identity",
+                "name": "kv_reader",
+                "provider_name": "registry.terraform.io/hashicorp/azurerm",
+                "schema_version": 0,
+                "values": {
+                  "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-idlab-kv-reader",
+                  "name": "id-idlab-kv-reader",
+                  "principal_id": "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c01",
+                  "client_id": "6b5a4c3d-2e1f-4a0b-9c8d-7e6f5a4b3c01",
+                  "tenant_id": "11111111-2222-4333-8444-555555555555",
+                  "location": "eastus2",
+                  "resource_group_name": "rg-idlab",
+                  "timeouts": null
+                },
+                "sensitive_values": {}
+              },
+              {
+                "address": "module.keyvault.azurerm_role_assignment.kv_secrets_user",
+                "mode": "managed",
+                "type": "azurerm_role_assignment",
+                "name": "kv_secrets_user",
+                "provider_name": "registry.terraform.io/hashicorp/azurerm",
+                "schema_version": 0,
+                "values": {
+                  "condition": null,
+                  "condition_version": null,
+                  "delegated_managed_identity_resource_id": null,
+                  "description": null,
+                  "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.KeyVault/vaults/kv-idlab/providers/Microsoft.Authorization/roleAssignments/2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091",
+                  "name": "2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091",
+                  "principal_id": "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c01",
+                  "principal_type": "ServicePrincipal",
+                  "role_definition_id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6",
+                  "role_definition_name": "Key Vault Secrets User",
+                  "scope": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/Microsoft.KeyVault/vaults/kv-idlab",
+                  "skip_service_principal_aad_check": null,
+                  "timeouts": null
+                },
+                "sensitive_values": {}
+              }
+            ]
+          },
+          {
+            "address": "module.monitoring[0]",
+            "resources": [
+              {
+                "address": "module.monitoring[0].azurerm_monitor_action_group.identity_secops",
+                "mode": "managed",
+                "type": "azurerm_monitor_action_group",
+                "name": "identity_secops",
+                "provider_name": "registry.terraform.io/hashicorp/azurerm",
+                "schema_version": 0,
+                "values": {
+                  "id": "/subscriptions/8f2e4d6c-1a3b-4c5d-9e8f-0a1b2c3d4e5f/resourceGroups/rg-idlab/providers/microsoft.insights/actionGroups/ag-identity-secops",
+                  "name": "ag-identity-secops",
+                  "short_name": "idsecops",
+                  "enabled": true,
+                  "resource_group_name": "rg-idlab",
+                  "location": "global",
+                  "email_receiver": [
+                    {
+                      "name": "secops",
+                      "email_address": "old-oncall@contoso-health.example",
+                      "use_common_alert_schema": true
+                    }
+                  ],
+                  "tags": {},
+                  "timeouts": null
+                },
+                "sensitive_values": {
+                  "email_receiver": [
+                    {
+                      "email_address": true
+                    }
+                  ],
+                  "tags": {}
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "configuration": {
+    "root_module": {}
+  },
+  "relevant_attributes": [],
+  "timestamp": "2026-11-02T18:00:00Z",
+  "applyable": true,
+  "complete": true,
+  "errored": false
+}
