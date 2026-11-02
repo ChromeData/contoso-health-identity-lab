@@ -128,6 +128,24 @@ variable "session_duration" {
   }
 }
 
+# ---- Patient portal stand-in (patient-portal.tf) -----------------------------
+
+variable "patient_portal_bucket_suffix" {
+  type        = string
+  description = <<-EOT
+    Makes the patient-portal bucket name globally unique:
+    contoso-health-patient-portal-<suffix>. Empty (default) = the account id
+    the profile signs into. Set it only if that name is already taken.
+  EOT
+  default     = ""
+
+  validation {
+    # The prefix is 30 characters; S3 allows 63 in all.
+    condition     = var.patient_portal_bucket_suffix == "" || can(regex("^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$", var.patient_portal_bucket_suffix))
+    error_message = "patient_portal_bucket_suffix must be empty or 1-32 lowercase letters, digits and hyphens, starting and ending with a letter or digit."
+  }
+}
+
 # ---- Tagging ----------------------------------------------------------------
 
 variable "tags" {

@@ -22,6 +22,10 @@ assignment, which used to be pure console clicks:
 | Policy on the permission set | `aws_ssoadmin_managed_policy_attachment.view_only` | `arn:aws:iam::aws:policy/job-function/ViewOnlyAccess` (AWS managed, job-function; the partition comes from `data.aws_partition`) |
 | Account assignment | `aws_ssoadmin_account_assignment.view_only_users` | group → permission set → `var.target_account_id` (default: the profile's own account) |
 
+Plus one small stand-in for the patient portal the cloud engineers run: a
+private S3 bucket with two objects (see
+[Patient portal stand-in](#patient-portal-stand-in-patient-portaltf)).
+
 Provider: **hashicorp/aws `~> 6.0`** (6.69.1 current on 2026-10-19).
 
 ---
@@ -210,6 +214,54 @@ the group, its members, or the SAML/SCIM configuration.
 
 ---
 
+## Patient portal stand-in (`patient-portal.tf`)
+
+Something real behind the AWS door. The hospital's patient portal is run by
+the cloud engineers, who get AWS through the **IT - Cloud Engineering Apps**
+package (`modules/entitlement`). This bucket stands in for the portal: no
+patient data, no web hosting, no compute, effectively $0.
+
+| Object | Terraform | Value |
+|---|---|---|
+| Bucket | `aws_s3_bucket.patient_portal` | `contoso-health-patient-portal-<account id>` (or `-<patient_portal_bucket_suffix>`); tags `App=PatientPortal`, `Owner=CloudEngineering`, `Environment=lab` |
+| Lock-down | `aws_s3_bucket_public_access_block`, `_ownership_controls`, `_versioning`, `_server_side_encryption_configuration`, `_lifecycle_configuration`, `_policy` | all four public-access blocks on, ACLs off, versioned, SSE-KMS with the AWS managed `aws/s3` key and a Bucket Key, noncurrent versions expire after 30 days, TLS only |
+| Objects | `aws_s3_object.patient_portal` | `index.html` ("Contoso Health patient portal (lab)") and `status.json` |
+
+**What a cloud engineer sees.** ViewOnlyAccess (AWS managed policy, v48)
+allows `s3:ListAllMyBuckets` and `s3:ListBucket`, so the bucket and both
+object names show in the S3 console. It has no `s3:GetObject`, so opening or
+downloading an object is **AccessDenied**. That is by design: reading or
+changing the portal belongs to a stronger permission set (see *Natural next
+step* below). The bucket policy adds one read for ViewOnlyAccess sessions,
+`s3:GetBucketLocation`, which the managed policy lacks and the console uses
+to open a bucket (verify: whether the console still needs it).
+
+**Apply it.** The lab's `ViewOnlyAccess` permission set and its assignment
+were made in the console (E24), not by this root, so a full plan would try to
+create them a second time. Either adopt them first (the `import` blocks above,
+then a full plan), or create only the portal. It needs an admin session in the
+lab account; the `idlab-admin` profile stopped working when the identity
+source moved to Entra (`lab/docs/your-turn/07-apps-sso.md`, heads-up).
+
+```bash
+cd lab/terraform/aws
+terraform init
+terraform plan -out portal.tfplan \
+  -target=aws_s3_object.patient_portal \
+  -target=aws_s3_bucket_policy.patient_portal \
+  -target=aws_s3_bucket_lifecycle_configuration.patient_portal   # expect: 9 to add
+terraform apply portal.tfplan
+terraform output patient_portal_console_url
+```
+
+**Verify.** As a cloud engineer (private window): myapps.microsoft.com → AWS
+tile → the account → **ViewOnlyAccess** → open `patient_portal_console_url`.
+The bucket shows `index.html` and `status.json`; **Open** on either is
+AccessDenied. **Teardown:** `terraform destroy -target=aws_s3_bucket.patient_portal`
+removes the bucket, its objects and old versions (`force_destroy`, lab only).
+
+---
+
 ## Verify list
 
 Run each check with `--profile idlab-admin --region <region>`. Values come
@@ -279,6 +331,10 @@ exercised. A mutation check confirmed the assertions bite: adding
 `StringLike`, makes the suite fail. The permission-set grant in `main.tf` is
 covered only incidentally, through the same mocked applies. Checkov 3.3.20 on
 this directory reports 0 failed.
+`tests/patient_portal.tftest.hcl` (added 2026-11-02, same versions) pins the
+portal bucket: private, versioned, SSE-KMS, tagged, exactly `index.html` and
+`status.json`, a TLS-only policy whose one Allow is `s3:GetBucketLocation`.
+Both files together: **12 passed, 0 failed**.
 
 **Not verified (needs a live AWS account):**
 - The real apply.
