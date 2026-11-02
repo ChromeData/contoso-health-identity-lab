@@ -18,6 +18,8 @@ FP = FF.replace('ffmpeg', 'ffprobe')
 XF = 0.5          # crossfade between scenes (s)
 LEAD = 0.5        # narration delay at the start of a scene
 GAP = 0.15        # narration delay inside a scene
+TAIL = 0.3        # breath after a line before the next beat (the recorder holds 0.35 s)
+FIT_MAX = 1.5     # fastest a beat's footage may play to close a gap after a shorter line
 args = sys.argv[1:]
 intro = args[args.index('--intro') + 1] if '--intro' in args else None
 name = args[args.index('--out') + 1] if '--out' in args else 'contoso-health-lab-demo.mp4'
@@ -55,7 +57,14 @@ for si, tlf in enumerate(tls):
     for i, b in enumerate(beats):
         s, e = max(0.0, b['vStart']), b['vEnd']; L = e - s
         delay = LEAD if i == 0 else GAP
-        fc.append(f"[0:v]trim=start={s:.3f}:end={e:.3f},setpts=PTS-STARTPTS,fps=30,scale=1920:1080:flags=lanczos,setsar=1,format=yuv420p[v{i}]")
+        # Fit the footage to the narration when they were recorded apart (a re-voiced line over an older
+        # portal recording): a long line holds the last frame, a short one plays the footage faster.
+        need = delay + aud[i]['dur'] + TAIL
+        speed = min(FIT_MAX, L / (need + 0.6)) if L > need + 1.0 else 1.0
+        hold = max(0.0, need - L / speed)
+        fit = (f",setpts=PTS/{speed:.4f}" if speed > 1 else '') + (f",tpad=stop_mode=clone:stop_duration={hold:.3f}" if hold > 0.05 else '')
+        L = L / speed + (hold if hold > 0.05 else 0)
+        fc.append(f"[0:v]trim=start={s:.3f}:end={e:.3f},setpts=PTS-STARTPTS{fit},fps=30,scale=1920:1080:flags=lanczos,setsar=1,format=yuv420p[v{i}]")
         fc.append(f"[{i+1}:a]aresample=48000,aformat=channel_layouts=stereo,adelay={int(delay*1000)}:all=1,apad,atrim=0:{L:.3f},asetpts=PTS-STARTPTS[a{i}]")
         cat += f'[v{i}][a{i}]'
         # subtitles: split the beat's text into short chunks, timed by length

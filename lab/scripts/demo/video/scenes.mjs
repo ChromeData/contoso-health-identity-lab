@@ -94,84 +94,68 @@ export function scenes(ids) {
   return [
   { id: '00-face', kind: 'clip', clip: INTRO_FACE_CLIP, beats: [] },
   { id: '01-built', kind: 'local', beats: [
-    { say: "Entra is the directory, and E5 because the sign-in rules, admin controls and risk alerts all need it. Azure runs the servers. Then the apps staff sign in to. AWS is the cloud console, where I prove accounts appear and disappear on their own. ServiceNow is the help desk. Okta stands in for a partner clinic that signs in with its own identity provider. GitHub holds all the code, written as Terraform.",
-      audio: `${OUT}/clips/built-1.mp3`, prep: async (r) => { await r.page.goto(BMAP); await r.ov('hideCursor', true); await r.page.evaluate((d) => window.bmap.init(d), buildMapData()); await sleep(1400); await r.page.evaluate(() => window.bmap.overview(false)); await sleep(300); },
+    { say: "First, the buildings. Entra is the badge system: one badge per person, and it decides which doors open. Azure is the server room, where the lab's machines sit. Then the doors in other buildings: AWS, the cloud most companies also use; ServiceNow, the IT help desk; and Okta, a clinic the hospital bought that keeps its own login. GitHub holds the blueprints.", audio: `${OUT}/clips/km/01-built-0.mp3`, prep: async (r) => { await r.page.goto(BMAP); await r.ov('hideCursor', true); await r.page.evaluate((d) => window.bmap.init(d), buildMapData()); await sleep(1400); await r.page.evaluate(() => window.bmap.overview(false)); await sleep(300); },
       run: async (r, b) => { await b.until(0.02); await bmapGo(r, 0); } },
-    { say: "Every change is a pull request. Tests run, a person types approve, and Terraform applies it with a short-lived token and no stored password. Sign-in rules first, in report-only. Then admin tiers. Then access packages. Then detection and the domain controller. Then single sign-on for AWS, ServiceNow and Okta. Sixty-four merged.",
-      audio: `${OUT}/clips/built-4.mp3`,
+    { say: "The blueprints are code, in Terraform. Every change is a proposed edit, called a pull request. Tests check it, a person approves it, and only then is it built, with no stored password. That's how the whole lab went up: sign-in rules first, then admin power, then access, then the cameras, the server and the outside doors. Sixty-four changes, all reviewed.", audio: `${OUT}/clips/km/01-built-1.mp3`,
       run: async (r, b) => { await b.until(0.02); await bmapGo(r, 2); } },
-    { say: "Most hospitals still run on-site Active Directory, so the lab does too. Terraform built DC01 in Azure and a script made it a domain controller. Cloud Sync on it copies accounts up to Entra every few minutes. It shuts down every night to save money.",
-      audio: `${OUT}/clips/built-5.mp3`,
+    { say: "Most hospitals still keep an older badge list, Active Directory, that their PCs check. So the lab has one, on a Windows server in the server room. Cloud Sync copies everyone up to Entra every few minutes, so one change shows up everywhere. The server shuts down at night to save money.", audio: `${OUT}/clips/km/01-built-2.mp3`,
       run: async (r, b) => { await b.until(0.02); await bmapGo(r, 3); } },
-    { say: "Thirteen fake staff in a spreadsheet stand in for HR. A script feeds each row through Microsoft's HR connector into Active Directory, and Cloud Sync carries them to the cloud. One leaver lands disabled. Three IT staff get separate admin logins.",
-      audio: `${OUT}/clips/built-6.mp3`,
+    { say: "Then the people. Thirteen fake staff in a spreadsheet play HR. Each row flows into the badge list and up to the cloud. One of them arrives already gone, so her badge starts switched off. Three IT staff get a second, separate badge for admin work.", audio: `${OUT}/clips/km/01-built-3.mp3`,
       run: async (r, b) => { await b.until(0.02); await bmapGo(r, 4); } },
-    { say: "That's the wiring. Every piece went through the same review, and all of it is in the repo. Now the lab itself.",
-      audio: `${OUT}/clips/built-close.mp3`,
+    { say: "That's the building work. Now the lab itself: one person's path, from hire to proof.", audio: `${OUT}/clips/km/01-built-4.mp3`,
       run: async (r) => { await r.page.evaluate(() => { window.bmap.enterAll(); window.bmap.overview(false); }); } },
   ] },
   { id: '02-map', kind: 'local', beats: [
-    { say: "Now the lab itself. Ten stops, numbered seven to sixteen so you can find them on the map in the repo. Read it left to right, the way a person moves through the hospital: hired, given access, signing in, doing admin work, watched, leaving, and finally proven to an auditor. I'll walk each one properly in a minute. Here's the short version.",
-      audio: `${OUT}/clips/lab-0.mp3`, prep: async (r) => { await r.page.goto(MAP); await r.ov('hideCursor', true); await sleep(2500); await r.page.evaluate(() => { const st = document.createElement('style'); st.textContent = '@keyframes vin{from{opacity:0}to{opacity:1}} #map > g > * { animation: vin .6s ease both; }'; document.head.appendChild(st); document.querySelectorAll('#map > g > *').forEach((e, k) => { e.style.animationDelay = Math.min(k * 20, 1200) + 'ms'; }); }); await mapGo(r, 'overview'); await sleep(1600); },
+    { say: "Here's the whole lab on one page. Read it left to right, the way a person moves through the hospital: hired, given doors, checked at every door, doing admin work, watched, leaving, and proven to an auditor. The stops are numbered seven to sixteen. Short version first.", audio: `${OUT}/clips/km/02-map-0.mp3`, prep: async (r) => { await r.page.goto(MAP); await r.ov('hideCursor', true); await sleep(2500); await r.page.evaluate(() => { const st = document.createElement('style'); st.textContent = '@keyframes vin{from{opacity:0}to{opacity:1}} #map > g > * { animation: vin .6s ease both; }'; document.head.appendChild(st); document.querySelectorAll('#map > g > *').forEach((e, k) => { e.style.animationDelay = Math.min(k * 20, 1200) + 'ms'; }); }); await mapGo(r, 'overview'); await sleep(1600); },
       run: async (r) => {} },
-    { say: "Seven, the source of truth. Everything starts with HR, the official list of who works here. In the lab a spreadsheet plays that part. Access flows out of that list and never back into it, so if HR says you've gone, you're gone.",
-      audio: `${OUT}/clips/lab-1.mp3`,
+    { say: "Seven, HR. HR is the official list of who works here, so every badge starts and ends there. Access flows out of that list, never back into it. If HR says you've gone, you're gone.", audio: `${OUT}/clips/km/02-map-1.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:source').catch(() => {}); } },
-    { say: "Eight, the directory. Two of them, kept in step. Active Directory on the Windows server is what the hospital's PCs still check against. Entra is the cloud copy every modern app checks. Cloud Sync carries accounts up from one to the other, so you fix a person once and it's fixed everywhere.",
-      audio: `${OUT}/clips/lab-2.mp3`,
+    { say: "Eight, the badge list. Two copies kept in step: the older one hospital PCs check, and Entra, the one every modern app checks. Fix a person once, and it's fixed everywhere.", audio: `${OUT}/clips/km/02-map-2.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:directory').catch(() => {}); } },
-    { say: "Nine, joiner and mover. A new nurse gets nurse systems on day one, automatically, because of her job title. Anything extra she asks for, a manager approves, and it expires on its own. A few combinations are blocked outright, because one person holding both would be a fraud risk.",
-      audio: `${OUT}/clips/lab-3.mp3`,
+    { say: "Nine, first-day doors. A new nurse's job title decides which doors her badge opens, on day one, automatically. Anything extra needs a manager's yes, and it expires. Some pairs of doors never go together, because one person holding both is a fraud risk.", audio: `${OUT}/clips/km/02-map-3.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:joiner').catch(() => {}); } },
-    { say: "Ten, the apps. This is where staff actually go after they sign in. Engineers go to AWS to run servers. Everyone goes to ServiceNow to raise a ticket. And a partner clinic comes in through its own Okta. All three trust the hospital login instead of keeping their own passwords, and for AWS the account appears and disappears with HR.",
-      audio: `${OUT}/clips/lab-4.mp3`,
+    { say: "Ten, doors in other buildings. AWS, ServiceNow and Okta all accept the hospital badge instead of keeping their own passwords. Nobody does work inside AWS here. It's there to prove the badge opens a door Microsoft doesn't own, and locks it again when you leave.", audio: `${OUT}/clips/km/02-map-4.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:apps').catch(() => {}); } },
-    { say: "Eleven, the sign-in rules. The checks at the door, every single time. Where you are, what device, how risky it looks, and whether you proved it's you with more than a password. Eleven rules, nine live. Every new one starts in report-only mode, and that's deliberate: a bad rule in a hospital locks out a clinician mid-shift.",
-      audio: `${OUT}/clips/lab-5.mp3`,
+    { say: "Eleven, the guard at every door. A badge alone isn't enough: the guard checks where you are, your device, how risky it looks, and a second proof that it's you. Eleven rules, nine live. Each new one starts by only watching, because a bad rule in a hospital locks a nurse out mid-shift.", audio: `${OUT}/clips/km/02-map-5.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:signin').catch(() => {}); } },
-    { say: "Twelve, privileged access. Nobody keeps admin power all day. You ask for it, say why, hold it for a few hours, and it switches itself off. Server passwords live in a vault that rotates them and hands them out only against an approved ticket, and the admin works through a recorded session without ever seeing the password. Two honest exceptions: the two emergency accounts that sit outside every rule, and the account that built the lab, which still holds a standing role and is the next thing on the list to move to just-in-time.",
-      audio: `${OUT}/clips/lab-6.mp3`,
+    { say: "Twelve, the master key. Nobody carries admin power all day. You borrow it, say why, and it switches itself off. Server passwords sit in a vault, handed out only against an approved ticket, through a recorded session. Two honest exceptions: the emergency badges, and the account that built the lab, which is next on the list to fix.", audio: `${OUT}/clips/km/02-map-6.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:privileged').catch(() => {}); } },
-    { say: "Thirteen, detect and respond. Every sign-in and every change lands in Sentinel. Splunk runs the same rules on synthetic test events, not a live feed yet, which shows the detections aren't tied to one product. Rules written as code raise the alarm, say an admin signing in from a new country. And a person approves the lockout before it happens, because locking out the wrong clinician is itself an incident.",
-      audio: `${OUT}/clips/lab-7.mp3`,
+    { say: "Thirteen, the cameras. Every badge swipe and every change is recorded in Sentinel, and rules raise an alarm on anything odd, like an admin signing in from a new country. Splunk, a second camera system many hospitals already own, runs the same rules on test footage. And a person approves any lockout first, because locking out the wrong nurse is its own incident.", audio: `${OUT}/clips/km/02-map-7.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:detect').catch(() => {}); } },
-    { say: "Fourteen, the leaver, and the robot accounts. HR flips one field. The account goes off, sessions are cut, app access is gone, each step timed. Nine minutes from HR to AWS. The rule is two human owners per robot account so nothing is orphaned; the inventory found four that don't have them yet, and that's the list being worked.",
-      audio: `${OUT}/clips/lab-8.mp3`,
+    { say: "Fourteen, leaving. HR flips one field, and her badge stops working everywhere: account off, sessions cut, outside doors closed. Nine minutes from HR to AWS, timed. Machines carry badges too, apps and scripts, so each one needs two human owners. The inventory found four without, and that's the list being worked.", audio: `${OUT}/clips/km/02-map-8.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:leaver').catch(() => {}); } },
-    { say: "Fifteen, proof. Showing an auditor it works, on demand. Regular reviews of who has what, an evidence binder where every page is fingerprinted and stored where nobody can edit it, and a nightly check that nothing drifted from the approved setup.",
-      audio: `${OUT}/clips/lab-9.mp3`,
+    { say: "Fifteen, proof. Showing an auditor it works, on demand: regular reviews of who has what, a logbook where every page is fingerprinted and nobody can edit it, and a nightly check that nothing drifted from the blueprints.", audio: `${OUT}/clips/km/02-map-9.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:proof').catch(() => {}); } },
-    { say: "And sixteen, delivery, runs above all of it: every change is code, reviewed and applied with no stored password. That's the lab at a glance. From here the narrated walkthrough takes over, station by station, on the real screens.",
-      audio: `${OUT}/clips/lab-10.mp3`,
+    { say: "And sixteen, the blueprints, under all of it: every change is code, reviewed before it's built. That's the lab at a glance. Now the real screens, one piece at a time.", audio: `${OUT}/clips/km/02-map-10.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'overview').catch(() => {}); } },
   ] },
   { id: '03-delivery', kind: 'local', beats: [
-    { audio: `${OUT}/clips/wk-03-0.mp3`, say: "Here is the delivery history: sixty-four merged pull requests. A pull request is a proposed change, shown line by line, with someone named to review it. Merged means it was accepted into the live version. Read the titles like chapters. Day one turned on the sign-in rules in report-only mode. Day two built the admin tiers. Day three added access governance. Then came the detection rules, the domain controller, and single sign-on for AWS, ServiceNow and Okta, with accounts pushed into AWS automatically. Everything after this is one run of the lab: I follow one nurse, Dana, from her first day to her last.",
+    { say: "Piece one, the blueprints. This is the change history: sixty-four approved changes. Each one is a pull request, a proposed edit shown line by line before anything is built. Read the titles like chapters: sign-in rules, then admin power, then access, then the cameras, the server and the outside doors. From here I follow one nurse, Dana, from her first day to her last.", audio: `${OUT}/clips/km/03-delivery-0.mp3`,
       prep: termOpen,
       run: async (r, b) => { await cmd(r, 'gh pr list --state merged --limit 40'); await out(r, T('prs.txt'), 22); await r.define('Pull request', 'A proposed change plus a reviewer. Merged means accepted.'); await b.until(0.55); await mark(r, 'Day 1'); await b.until(0.65); await mark(r, 'Day 2'); await b.until(0.72); await mark(r, 'Day 3'); await b.until(0.8); await mark(r, 'enable_sentinel'); await b.until(0.86); await mark(r, 'enable_dc'); await b.until(0.92); await mark(r, '^#3[5-7]|^#36'); } },
-    { audio: `${OUT}/clips/wk-03-1.mp3`, say: "Before any human looks, the proposal is tested. Thirteen checks run it against a mock copy of the tenant. Some are guard rails that stop a dangerous combination. This one refuses to demand the strongest sign-in for admin activation until the rule that provides it is actually switched on. Otherwise the demand would be hollow, and lock every admin out.",
+    { say: "Before a person even looks, the change is tested. Thirteen checks run it against a fake copy of the hospital. Some are guard rails. This one refuses to demand the strongest sign-in for admins until the rule that provides it is switched on. Otherwise every admin would be locked out.", audio: `${OUT}/clips/km/03-delivery-1.mp3`,
       run: async (r, b) => { await clear(r); await cmd(r, 'terraform test -var-file=lab.tfvars'); await out(r, T('tf-test.txt'), 9); await r.define('Mocked test', 'The change is rehearsed against a fake tenant first.'); await b.until(0.5); await mark(r, 'pim_auth_context_refused_while'); } },
-    { audio: `${OUT}/clips/wk-03-2.mp3`, say: "Then it waits at a human gate. The pipeline opens an issue, and the owner types approve. Only then does the robot sign in to Azure, with a token that lasts minutes, and apply the change. There is no stored password anywhere in this pipeline.",
+    { say: "Then it stops at a human gate. A person types approve, and only then is the change built, signing in with a pass that lasts minutes, with no stored password. One honest caveat: here I'm both the author and the approver. In production that's a different person, enforced by the system.", audio: `${OUT}/clips/km/03-delivery-2.mp3`,
       run: async (r, b) => { await clear(r); await cmd(r, 'gh run view 40549067405');
         await out(r, T('apply-run-view.txt').split('\n').filter((l) => !/ubuntu-latest|^approval \(human gate\): \.github#1|^terraform apply \(prod, reviewer-gated\): \.github#1/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n'), 25);
         await mark(r, 'approval \\(human gate\\)'); await r.define('Apply', 'Terraform makes the tenant match the approved code.'); await b.until(0.45); await cmd(r, "gh issue view 34 --comments | grep -E '^(author|approve|Approved)'");
         await out(r, T('issue34.txt'), 12); await unmark(r); await mark(r, '^approve$|Approved by'); } },
-    { audio: `${OUT}/clips/wk-03-3.mp3`, say: "And that trust is tested, not assumed. A throwaway branch, a temporary copy of the code made just for this test, tried to sign in as the pipeline's identity. Microsoft refused it, because the robot is only trusted when it runs from the approved production path. That refusal is saved as evidence.",
+    { say: "And the gate is tested, not assumed. A throwaway copy of the code tried to build anyway. Microsoft refused it, because only the approved path is trusted. That refusal is kept as evidence.", audio: `${OUT}/clips/km/03-delivery-3.mp3`,
       run: async (r) => { await clear(r); await cmd(r, 'grep ^E03 lab/evidence/capture-log.csv | fold -s -w 100');
         await out(r, T('e03.txt'), 10); await mark(r, 'AADSTS700213|environment:prod'); await r.define('Throwaway branch', 'A copy of the code made only for a test, then deleted.'); } },
   ] },
   { id: '04-hr-feed', kind: 'local', beats: [
-    { audio: `${OUT}/clips/wk-04-0.mp3`, say: "The run starts with a hire. Meet Dana Okafor, a newly hired registered nurse. HR is the source of truth, so her record is what starts everything. Here it goes to Microsoft's inbound provisioning API, the front door for HR data, in a standard package called SCIM: her name, title, department, manager, and hire date.",
+    { say: "Piece two, hired. Meet Dana Okafor, a new registered nurse. Everything starts with HR, so her record is the first thing that moves. It goes to Microsoft's front door for HR data, in a standard format called SCIM: her name, title, department, manager and start date.", audio: `${OUT}/clips/km/04-hr-feed-0.mp3`,
       prep: async (r) => { await termOpen(r); await r.page.evaluate(() => { window.term.title('pwsh — lab/scripts/mock-hr'); document.getElementById('scr').style.fontSize = '18px'; }); },
       run: async (r, b) => { await cmd(r, './Invoke-InboundProvisioning.ps1 -CsvPath dana.csv -UpnDomain contosohealthlab.com -WhatIf');
         await out(r, T('hr-whatif.txt').split('\n').filter((l) => !/What if:|--- \[WhatIf\]|Content-Type|Dry run/.test(l)).join('\n'), 14);
         await r.define('SCIM', "The standard format for sending 'here is a person' between systems."); await b.until(0.5); await mark(r, '"title"|"department"|"hireDate"|"userName"'); } },
-    { audio: `${OUT}/clips/wk-04-1.mp3`, say: "Before anything is sent, a guard counts the changes. A push that would disable, or move, more than ten people stops cold, because a broken HR export looks exactly like a mass layoff. Here the limit is set to zero on purpose, to show it refusing.",
+    { say: "Before anything is sent, a guard counts the changes. If a push would switch off or move more than ten people, it stops, because a broken HR file looks exactly like a mass layoff. Here the limit is set to zero on purpose, so you can see it refuse.", audio: `${OUT}/clips/km/04-hr-feed-1.mp3`,
       run: async (r, b) => { await clear(r); await cmd(r, './Invoke-InboundProvisioning.ps1 -StatusFilter leaver -MaxChanges 0 -WhatIf');
         await out(r, T('hr-guard.txt').replace(/\/Users\/[^:]+\/lab/, 'lab'), 10); await b.until(0.35); await mark(r, 'Mass-change guard: this run|Nothing was sent'); } },
   ] },
   { id: '05-hr-app', kind: 'portal', beats: [
-    { say: "In the tenant, the HR provisioning app receives Dana. Its log shows every record it processed and wrote into the on-site directory, Active Directory. Filtering on her employee number shows her being created, and the updates that followed.",
+    { say: "In the badge system, HR's front door receives Dana. Its log shows every record it processed and wrote into the badge list. Filter on her employee number and you see her created, and every update after.", audio: `${OUT}/clips/km/05-hr-app-0.mp3`,
       prep: async (r) => { await r.chip('Source of truth', 'HR owns who works here');
         await r.goto(`${ENTRA}Microsoft_AAD_IAM/ManagedAppMenuBlade/~/ProvisioningManagement/appId/${ids.hrAppId}/objectId/${ids.hrSpId}`, 12000); await r.settle();
         await r.click({ text: 'Provisioning logs', exact: true }); await sleep(6000); await r.settle(); },
@@ -180,61 +164,61 @@ export function scenes(ids) {
         await r.ring({ text: /Source ID 100492/, nth: 0, row: true }, 'Dana · HR → AD').catch(() => {}); } },
   ] },
   { id: '06-ad', kind: 'local', beats: [
-    { say: "This is a live query on DC01, the lab's domain controller: the server that holds those accounts. The command travels through Azure's run-command, so no password ever appears on a screen or in a log. Thirteen staff, each filed in their department's folder, which Active Directory calls an organizational unit.",
+    { say: "This is the badge list itself, Active Directory, queried live on the server. The command goes through Azure, so no password ever shows on screen. Thirteen staff, each filed in their department's folder.", audio: `${OUT}/clips/km/06-ad-0.mp3`,
       prep: async (r) => { await termOpen(r); await r.page.evaluate(() => window.term.title('zsh — DC01 via managed run command')); },
       run: async (r, b) => { await cmd(r, 'lab/scripts/dc/run-on-dc.py ad-roster.ps1'); await out(r, T('ad-roster.txt').replace(/^run command .*$/m, 'run command lab-c21e072e: ad-roster.ps1 on vm-dc01'), 6); await r.define('Organizational unit', 'A folder in Active Directory. Here, one per department.'); await b.until(0.7); await mark(r, 'dana.okafor'); } },
-    { say: "And Priya Nair, who has left, is disabled and parked in the Disabled folder.",
+    { say: "And Priya Nair, who has already left, sits switched off in the Disabled folder.", audio: `${OUT}/clips/km/06-ad-1.mp3`,
       run: async (r) => { await unmark(r); await mark(r, 'priya.nair'); } },
   ] },
   { id: '07-directory', kind: 'portal', beats: [
-    { say: "DC01 itself is a virtual machine: a computer rented in Azure instead of sitting in a server room. It runs Windows Server 2022, it was created by the same pipeline, and it shuts itself down on a schedule to keep the lab cheap.",
+    { say: "Piece three, the badge list. Hospitals still run this older list because their PCs check it. Here it lives on DC01, a Windows server rented in Azure, the server room. The blueprints created it, and it shuts itself down at night to keep costs down.", audio: `${OUT}/clips/km/07-directory-0.mp3`,
       prep: async (r) => { await r.chip('Directory', 'AD is the master, Entra is the hub');
         await r.goto(`https://portal.azure.com/#@ContosoHealthLab.onmicrosoft.com/resource${ids.vmId}/overview`, 14000); await r.settle(); },
       run: async (r, b) => { await r.ring({ text: 'vm-dc01', exact: true, nth: 0 }); await r.define('Virtual machine', 'A computer rented in the cloud, not in a server room.'); await b.until(0.4); await r.ring({ text: /Windows Server 2022 Datacenter/, nth: 0 }, 'Domain controller'); } },
-    { say: "Microsoft Entra Cloud Sync is the bridge. It's a small agent installed on DC01 that copies accounts up to Entra ID, the cloud directory, every few minutes. The connection is healthy. It copies only the Workforce and Disabled folders, and it carries a scrambled form of each password, so people have one password in both places.",
+    { say: "Cloud Sync is the bridge. A small agent on that server copies everyone up to Entra every few minutes. The connection is healthy. It carries a scrambled form of each password, so staff have one password for both. Fix a person once, fixed everywhere.", audio: `${OUT}/clips/km/07-directory-1.mp3`,
       prep: async (r) => { await r.unring(); await r.goto(`${ENTRA}Microsoft_AAD_Connect_Provisioning/AADConnectMenuBlade/~/CloudSync`, 12000); await r.settle(); },
       run: async (r, b) => { await r.ring({ text: 'corp.contosohealthlab.com', row: true }); await r.define('Cloud Sync', 'The bridge that copies on-site accounts into the cloud directory.'); await b.until(0.45); await r.ring({ text: 'Healthy', exact: true }, 'Healthy'); } },
   ] },
   { id: '08-joiner', kind: 'portal', beats: [
-    { say: "Here's Dana in Entra ID, the cloud directory. Nobody created her here by hand. Trace the path: HR record, into Active Directory, over the Cloud Sync bridge, into the cloud. Her job title and department came from HR, and her hire date made the whole trip, which matters next.",
+    { say: "Piece four, first-day doors. Here's Dana in Entra, the badge system. Nobody typed her in. She came from HR, through the badge list, across the bridge. Her job title and department came with her, and so did her start date, which matters next.", audio: `${OUT}/clips/km/08-joiner-0.mp3`,
       prep: async (r) => { await r.chip('Joiner & mover', 'Access follows HR'); await r.goto(userBlade(ids.dana), 12000); await r.settle(); },
       run: async (r, b) => { await r.ring({ text: 'Dana Okafor', exact: true, nth: 0 }); await b.until(0.22); await r.unring(); await r.click({ role: 'tab', name: 'Properties' }); await sleep(2500);
         await r.wheel(330, { x: 1100, y: 560 }); await sleep(1300);
         await r.ring({ text: 'On-premises sync enabled', exact: true }, 'Synced from AD').catch(() => {}); await b.until(0.58);
         await r.ring({ text: 'Registered Nurse', exact: true }, 'Job title from HR').catch(() => {}); await b.until(0.8);
         await r.ring({ text: 'Employee hire date', exact: true }, 'Hire date from HR').catch(() => {}); } },
-    { say: "An access package is a bundle of access for one job: the apps and groups it needs, wrapped with rules about who gets it and for how long. There are four. Nurse Clinical Apps and ICU Critical Care are given automatically from the HR department and job title. ICU Float is requested, needs a manager's approval, and expires after a hundred and eighty days. Pharmacy Controlled Substances is request-only. Because Dana is in Nursing, she got the nurse package on her own: no ticket, no request. Four nurses, four assignments.",
+    { say: "An access package is a bundle of doors for one job, with rules for who gets it and for how long. There are four. Nurse and ICU are handed out automatically from HR's job title. ICU Float needs a manager's yes and expires after a hundred and eighty days. Pharmacy is request-only. Dana is a nurse, so her badge opened the nurse doors on its own: the IT help desk, ServiceNow, and AWS. No ticket.", audio: `${OUT}/clips/km/08-joiner-1.mp3`,
       prep: async (r) => { await r.unring(); await r.goto(`${ENTRA}Microsoft_AAD_ERM/DashboardBlade/~/elmEntitlement`, 12000); await r.settle(); },
       run: async (r, b) => { await r.define('Access package', 'A bundle of access for one job, with rules on who gets it and for how long.'); await b.until(0.28); await r.ring({ text: 'Nurse - Clinical Apps', row: true }, 'Automatic'); await b.until(0.38); await r.ring({ text: 'ICU - Critical Care Apps', row: true }, 'Automatic'); await b.until(0.5); await r.ring({ text: 'ICU - Float Access', row: true }, 'Request · approval · 180 days'); await b.until(0.63); await r.ring({ text: /Pharmacy - Controlled Substances/, row: true }, 'Request only'); await b.until(0.75); await r.ring({ text: 'Nurse - Clinical Apps', row: true }, 'Dana · 4 active'); } },
-    { say: "Some doors never open together. The nurse package and the pharmacy package are marked incompatible, so nobody can hold both. That's called separation of duties, and the system enforces it rather than a manager remembering to.",
+    { say: "Some doors never open together. Nurse and pharmacy are marked incompatible, so no one can hold both. That's separation of duties, and the system enforces it, not a manager's memory.", audio: `${OUT}/clips/km/08-joiner-2.mp3`,
       prep: async (r) => { await r.unring(); await r.click({ text: 'Nurse - Clinical Apps', exact: true }); await sleep(5000); await r.settle(200);
         await r.click({ text: /^Separation of duties$/i }); await sleep(3500); await r.click({ text: 'Incompatible With', exact: true }); await sleep(2500); },
       run: async (r, b) => { await b.until(0.3); await r.ring({ text: /Pharmacy - Controlled Substances/, row: true }, 'Never together').catch(() => {}); await b.until(0.55); await r.define('Separation of duties', 'Two kinds of access that must never sit on one person.'); } },
-    { say: "Lifecycle workflows are checklists that run on HR dates: a joiner workflow on a nursing hire's first day, and a leaver workflow that runs the moment HR says someone has gone.",
+    { say: "Lifecycle workflows are checklists that run on HR dates: one on a nurse's first day, and one the moment HR says someone has gone.", audio: `${OUT}/clips/km/08-joiner-3.mp3`,
       prep: async (r) => { await r.unring(); await r.goto(`${ENTRA}Microsoft_AAD_LifecycleManagement/CommonMenuBlade/~/workflows`, 12000); await r.settle(); },
       run: async (r, b) => { await r.define('Lifecycle workflow', 'A checklist that runs on an HR date: first day, or last.'); await r.ring({ text: /Contoso - Joiner/, row: true }, 'Day 1'); await b.until(0.55); await r.ring({ text: /Contoso - Leaver/, row: true }, 'Real time'); } },
   ] },
   { id: '09-signin', kind: 'portal', beats: [
-    { say: "Conditional Access is the bouncer at every sign-in. Each policy is one rule: who it applies to, and what it demands. There are eleven. Everyone must prove it's them with a second factor. Admins need the phishing-resistant kind, like a security key. Old protocols that cannot do a second factor are blocked. And a sign-in that looks high-risk is stopped.",
+    { say: "Piece five, the guard at every door. This is Conditional Access: each policy is one rule for who it covers and what it demands. There are eleven. Everyone proves it's them with a second step. Admins need the phishing-proof kind, like a security key. Old sign-in methods that can't do that are blocked, and anything that looks high-risk is turned away.", audio: `${OUT}/clips/km/09-signin-0.mp3`,
       prep: async (r) => { await r.chip('Sign-in rules', 'No lockout'); await r.goto(`${ENTRA}Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies`, 12000); await r.settle();
         for (const f of r.page.frames()) await f.evaluate(() => { for (const b of document.querySelectorAll('button[aria-label*="lose" i], button[title*="lose" i]')) { const t = (b.closest('div') || {}).innerText || ''; if (/policy plans|Migrate to Conditional Access/i.test(b.parentElement?.parentElement?.innerText || t)) b.click(); } }).catch(() => {});
         await sleep(800); await r.wheel(420, { x: 1000, y: 600 }); await sleep(1000); },
       run: async (r, b) => { await r.define('Conditional Access', 'Rules checked at every sign-in: who you are, what you must prove.'); await b.until(0.28); await r.ring({ text: /^CA001 - / , row: true }, 'Everyone: second factor'); await b.until(0.45); await r.ring({ text: /^CA002 - /, row: true }, 'Admins: phishing-resistant'); await b.until(0.68); await r.ring({ text: /^CA003 - /, row: true }, 'Old protocols blocked'); await b.until(0.85); await r.ring({ text: /^CA007 - /, row: true }, 'High risk: blocked'); } },
-    { say: "Every policy is in report-only mode for now, and that's deliberate. Report-only means it watches and logs what it would have done, without blocking anyone. Each one turns on through its own reviewed change, once the report shows it would not lock out a single clinician. And two break-glass accounts, emergency logins kept in a safe, are excluded from all of them, so there is always a way back in.",
+    { say: "Nine of the eleven are live. Each started by only watching and logging what it would have blocked, and went live through its own reviewed change once it was clear no nurse would be locked out. Two are still watching on purpose: they need passkeys the admins don't have yet. And two emergency badges, kept in a safe, are exempt, so there's always a way back in.", audio: `${OUT}/clips/km/09-signin-1.mp3`,
       run: async (r, b) => { await r.ring({ text: 'State', exact: true }, 'Report-only').catch(() => {}); await r.define('Report-only', 'The rule logs what it would block, without blocking yet.'); await b.until(0.62); await r.unring(); await r.define('Break-glass account', 'An emergency login kept in a safe, excluded from every rule.'); } },
   ] },
   { id: '10-pim', kind: 'portal', beats: [
-    { say: "Admin power is tiered, and never permanent. The tool is Privileged Identity Management, PIM. Instead of being an admin all day, you're eligible, and you switch the power on for a short window when you need it. Tier zero holds the roles that could change security itself. Switching one on needs a ticket number, a second factor, and another person's approval, for four hours at most.",
+    { say: "Admin power works like a master key on loan. The tool is PIM, Privileged Identity Management. You're allowed to borrow the key, but you don't carry it. The most powerful keys, the ones that could change security itself, need a ticket, a second proof and someone else's approval, for four hours at most. Two exceptions: the emergency badges, and the account that built the lab, which is next to fix.", audio: `${OUT}/clips/km/10-pim-0.mp3`,
       prep: async (r) => { await r.chip('Privileged access', 'No standing privilege'); await r.goto(`${ENTRA}Microsoft_Azure_PIMCommon/CommonMenuBlade/~/aadgroup`, 12000); await r.settle(); },
       run: async (r, b) => { await r.define('PIM', 'Admin power you switch on for a short window. It switches itself off.'); await r.type({ css: 'input[placeholder*="Search by group"]' }, 'PIM-Tier', 90); await sleep(3000); await r.ring({ text: 'PIM-Tier0-CA-Admins', row: true }, 'Tier 0 · approval + ticket · 4h'); } },
-    { say: "Tier one is the service desk. Raj Patel has a separate admin account, and it is eligible for Helpdesk, but only over the everyday workforce accounts. He cannot touch another admin, and he cannot touch an executive.",
+    { say: "The help desk gets a smaller key. Raj Patel has a separate admin badge that can borrow help-desk power, but only over everyday staff. He can't touch another admin or an executive.", audio: `${OUT}/clips/km/10-pim-1.mp3`,
       prep: async (r) => { await r.unring(); await r.click({ css: 'input[placeholder*="Search by group"]' }); await r.page.keyboard.press('Meta+A'); await r.page.keyboard.type('PIM-Tier1', { delay: 30 }); await sleep(2500);
         await r.click({ text: 'PIM-Tier1-Helpdesk', exact: true }); await sleep(5000); await r.settle(200);
         await r.click({ text: 'Assignments', exact: true }); await sleep(4000); await r.click({ text: 'Eligible assignments', exact: true }); await sleep(3000); },
       run: async (r, b) => { await b.until(0.25); await r.ring({ text: /adm-raj\.patel/, nth: 0, row: true }, 'Eligible · not active').catch(() => {}); await b.until(0.6); await r.define('Eligible vs active', 'Eligible: may switch it on. Active: it is on, with an end time.'); } },
   ] },
   { id: '11-pim-live', kind: 'fresh', beats: [
-    { say: "Now watch it live. Raj signs in as his admin account with a Temporary Access Pass: a one-time code issued for this demo that works exactly once, so there is no password to steal.",
+    { say: "Piece six, the master key, live. Raj signs in to his admin badge with a one-time pass that works exactly once, so there's no password to steal.", audio: `${OUT}/clips/km/11-pim-live-0.mp3`,
       prep: async (r) => { await r.chip('Privileged access', 'Live activation');
         // One-time pass, held only in this process's memory.
         r.secret = execFileSync('pwsh', ['-NoProfile', '-File', path.join(path.dirname(new URL(import.meta.url).pathname), 'issue-tap.ps1'), '-Upn', ids.rajUpn, '-TenantId', ids.tenantId], { encoding: 'utf8' }).trim();
@@ -243,19 +227,19 @@ export function scenes(ids) {
       run: async (r) => { await r.define('Temporary Access Pass', 'A one-time code that signs you in once, instead of a password.'); await r.type({ css: 'input[name=loginfmt]' }, ids.rajUpn, 55); await r.click({ css: 'input[type=submit]' }); await sleep(4500);
         const box = await r.find({ css: 'input[name=accesspass], input#accesspass, input[type=password]' }); await r.click({ css: 'input[name=accesspass], input#accesspass, input[type=password]' });
         await r.page.keyboard.type(r.secret, { delay: 60 }); r.secret = null; await sleep(400); await r.click({ css: 'input[type=submit]' }); } , minHold: 0 },
-    { say: "Under My roles, he holds no admin rights at all. Just one eligible group, Helpdesk. He clicks Activate.",
+    { say: "Under My roles, he holds no admin power at all. Just one key he's allowed to borrow: Helpdesk. He clicks Activate.", audio: `${OUT}/clips/km/11-pim-live-1.mp3`,
       prep: async (r) => { for (let i = 0; i < 10; i++) { const t = await r.page.locator('body').innerText().catch(() => ''); if (/Stay signed in/i.test(t)) { await r.page.locator('#idBtn_Back, input[value="No"]').first().click().catch(() => {}); }
           if (/Skip for now|Ask later|Not now/i.test(t)) await r.page.getByText(/Skip for now|Ask later|Not now/i).first().click().catch(() => {});
           if (/ActivationMenuBlade/.test(r.page.url()) && /Eligible assignments|PIM-Tier1-Helpdesk/i.test(t + (await Promise.all(r.page.frames().map((f) => f.locator('body').innerText().catch(() => '')))).join(' '))) break; await sleep(4000); }
         await sleep(5000); await r.settle(); },
       run: async (r, b) => { await r.ring({ text: 'PIM-Tier1-Helpdesk', row: true }, 'Eligible'); await b.until(0.75); await r.unring();
         await r.click((f) => f.getByRole('button', { name: 'Activate', exact: true }).first()); } },
-    { say: "He asks for one hour instead of the eight allowed, and types a reason, which lands in the audit log. Tier one needs no approver, so this takes seconds.",
+    { say: "He asks for one hour, not the eight allowed, and types a reason, which goes in the audit log. This level needs no approver, so it takes seconds.", audio: `${OUT}/clips/km/11-pim-live-2.mp3`,
       prep: async (r) => { await sleep(4000); await r.settle(200); },
       run: async (r, b) => { await r.click({ css: 'input[aria-label*="slider value"]' }); await r.page.keyboard.press('Meta+A'); await r.page.keyboard.type('1', { delay: 120 }); await r.page.keyboard.press('Tab');
         await b.until(0.3); await r.type({ css: 'textarea' }, 'INC-4821: unlock a nurse on 4 West before shift change', 40); await b.until(0.8);
         await r.click((f) => f.getByRole('button', { name: 'Activate', exact: true }).last()); } },
-    { say: "He's active now, with an end time. When it passes, the power simply disappears. No one has to remember to take it away.",
+    { say: "He's active now, with an end time. When it passes, the key simply goes back. Nobody has to remember to take it away.", audio: `${OUT}/clips/km/11-pim-live-3.mp3`,
       prep: async (r) => {
         // PIM reloads the browser by itself once the activation stages finish; wait that out first.
         const allText = async () => (await Promise.all(r.page.frames().map((f) => f.locator('body').innerText().catch(() => '')))).join(' ');
@@ -271,54 +255,54 @@ export function scenes(ids) {
       run: async (r, b) => { await b.until(0.1); await r.ring({ text: 'PIM-Tier1-Helpdesk', row: true }, 'Active · ends in 1 hour').catch(() => {}); } },
   ] },
   { id: '12-detect', kind: 'portal', beats: [
-    { say: "Detection. Microsoft Defender is the security console where incidents are worked. Microsoft Sentinel is the alarm system behind it: every sign-in and every settings change is written to a log store, and rules read that log looking for trouble. Eleven rules were written for this hospital. Five are everyday watches: a break-glass login, a sign-in from a blocked country, a flood of failed passwords from one address, old protocols still being tried, and every admin activation.",
+    { say: "Piece seven, the cameras. Microsoft Sentinel records every badge swipe and every settings change, and alarm rules read that record looking for trouble. Defender is the desk where alarms get worked. Twenty-two rules were written for this hospital, and seventeen run live here: things like an emergency badge being used, a sign-in from a blocked country, or a flood of wrong passwords.", audio: `${OUT}/clips/km/12-detect-0.mp3`,
       prep: async (r) => { await r.chip('Detect & respond', 'Contained in minutes'); await r.goto(`https://security.microsoft.com/sentinel/analytics?tid=${ids.tenantId}`, 16000); await r.settle(); },
       run: async (r, b) => { await r.define('Sentinel', 'The alarm system: rules that read the logs and raise incidents.'); await b.until(0.3); await r.ring({ text: 'Active rules', exact: true }, '11 rules for this hospital').catch(() => {}); await b.until(0.6); await r.unring();
         await r.type({ css: 'input[placeholder*="Search by ID"]' }, 'Contoso -', 70); await sleep(3500); await r.ring({ text: /^Contoso - /, nth: 0, row: true }, 'Everyday watches').catch(() => {}); } },
-    { say: "The other six are identity threat detection, ITDR for short: the moves an attacker makes once they're inside. An admin role handed out without PIM. A privileged group gaining a member outside PIM. An app being given permissions. A credential added to an app, which is a back door. A sign-in rule changed outside the pipeline. And an admin changing someone else's sign-in method. Each is a known attacker move: get standing power, or plant a way back in.",
+    { say: "Most watch for what an attacker does once inside: admin power handed out without the loan system, someone slipped into a powerful group, a secret back door added to an app, a door rule changed outside the blueprints. Each is a known move: get permanent power, or plant a way back in.", audio: `${OUT}/clips/km/12-detect-1.mp3`,
       prep: async (r) => { await r.unring(); await r.click({ css: 'input[placeholder*="Search by ID"]' }); await r.page.keyboard.press('Meta+A'); await r.page.keyboard.type('ITDR', { delay: 40 }); await sleep(3500); },
       run: async (r, b) => { await r.define('ITDR', "Identity threat detection: spotting an attacker's moves inside the directory."); await b.until(0.22);
         for (let i = 0; i < 6; i++) { await r.ring({ text: /^Contoso ITDR/, nth: i, row: true }).catch(() => {}); await b.until(0.22 + 0.12 * (i + 1)); } } },
-    { say: "And these incidents are real. While the lab was being built, a role was handed to the sync service account directly, and an app was granted permissions. Both were legitimate setup steps, and Sentinel flagged both anyway. And this very demo raised two more: the one-time pass issued to Raj, and his activation. That is the point: the rules don't know who you are.",
+    { say: "And these alarms are real. While I built the lab, two legitimate setup steps tripped them, and the cameras flagged both anyway. This demo set off two more: the one-time pass issued to Raj, and his key loan. The rules don't care who you are.", audio: `${OUT}/clips/km/12-detect-2.mp3`,
       prep: async (r) => { await r.unring(); await r.goto(`https://security.microsoft.com/incidents?tid=${ids.tenantId}`, 16000); await r.settle();
         // Defender sometimes adds a default "Priority score" filter that hides low-score incidents: clear it.
         for (const f of r.page.frames()) { const x = f.getByRole('button', { name: /^Clear priority/i }).first(); if (await x.isVisible().catch(() => false)) await x.click().catch(() => {}); }
         await sleep(4000); await r.settle(); },
       run: async (r, b) => { await r.define('Incident', 'One case: its alerts, the accounts involved, and the raw log lines.'); await r.ring({ text: /Directory role assigned outside PIM/, nth: 0, row: true }, 'High'); await b.until(0.4); await r.ring({ text: /Permission granted to an applicati/, nth: 0, row: true }, 'App permissions'); await b.until(0.62); await r.ring({ text: /Authentication method changed/, nth: 0, row: true }, 'The pass issued to Raj').catch(() => {}); await b.until(0.8); await r.ring({ text: /PIM activation/, nth: 0, row: true }, "Raj's activation").catch(() => {}); } },
-    { say: "Each incident opens with its alerts, the accounts involved, and the raw log evidence, ready for an analyst to work.",
+    { say: "Each alarm opens with what fired, who was involved, and the raw evidence, ready for an analyst.", audio: `${OUT}/clips/km/12-detect-3.mp3`,
       prep: async (r) => { await r.unring(); },
       run: async (r) => { await r.click({ text: /Directory role assigned outside PIM/, nth: 0 }); await sleep(6000); await r.settle(200); } },
   ] },
   { id: '12b-splunk', kind: 'local', beats: [
-    { audio: `${OUT}/clips/wk-12b-0.mp3`, say: "One more thing on detection. These rules are not tied to Microsoft. The same twenty-two detections were rewritten for Splunk, a different security tool, and replayed against test events here. All twenty-two fired. That proves the detections are the lab's own logic, not a feature of one vendor the hospital would lose by switching tools.",
+    { say: "One more thing on the cameras. These rules aren't tied to Microsoft. All twenty-two were rewritten for Splunk, a second camera system, and replayed against test footage. Every one fired. So the hospital keeps its detections even if it switches brands.", audio: `${OUT}/clips/km/12b-splunk-0.mp3`,
       prep: async (r) => { await r.page.goto(SHOT); await r.ov('hideCursor', true); await r.page.evaluate((src) => window.shot(src), BIMG('splunk')); await sleep(600); },
       run: async (r, b) => { await b.until(0.9); } },
   ] },
   { id: '13-leaver', kind: 'portal', beats: [
-    { say: "When HR says someone is gone, the same path runs in reverse. Priya Nair's HR record was marked as a leaver. The provisioning app disabled her in Active Directory, moved her to the Disabled folder, and Cloud Sync carried that up to the cloud.",
+    { say: "Piece nine, leaving. The same path runs in reverse, and this time it was timed. HR flipped Dana to leaver. Seven seconds later her badge was off in the badge list. Under three minutes later, off in the cloud. And at nine minutes, AWS had removed her too. Nobody filed a ticket.", audio: `${OUT}/clips/km/13-leaver-0.mp3`,
       prep: async (r) => { await r.chip('Leaver', 'No way back in, timed'); await r.goto(userBlade(ids.priya), 12000); await r.settle(); },
       run: async (r, b) => { await r.define('Leaver', 'HR marks someone gone; the account is disabled everywhere, automatically.'); await r.ring({ text: 'Priya Nair', exact: true, nth: 0 }); await b.until(0.55); await r.ring({ text: /^\W*Disabled$/, nth: 0 }, 'Disabled by HR'); } },
-    { say: "Her cloud account is disabled, and she holds no groups, apps, or roles. Nobody filed a ticket for any of it.",
+    { say: "Priya is the other case. HR sent her already marked as gone, so her badge was created switched off, with no doors at all. A leaver who never gets a working day one.", audio: `${OUT}/clips/km/13-leaver-1.mp3`,
       run: async (r) => { await r.ring({ text: 'Group memberships', exact: true }); } },
   ] },
   { id: '14-worm', kind: 'portal', beats: [
-    { say: "Proof goes into a write-once evidence store. WORM stands for write once, read many: once a file is in, nobody can delete or alter it. Every capture, baseline, and verification run lands here.",
+    { say: "Proof goes into a logbook nobody can edit. The term is WORM, write once, read many: once a page is in, it can't be deleted or changed. Every capture and every check lands here.", audio: `${OUT}/clips/km/14-worm-0.mp3`,
       prep: async (r) => { await r.chip('Proof', 'Proof on demand'); await r.goto(`https://portal.azure.com/#@ContosoHealthLab.onmicrosoft.com/resource${ids.stId}/containersList`, 14000); await r.settle();
         await r.click({ text: 'evidence', exact: true }); await sleep(6000); await r.settle(); },
       run: async (r, b) => { await r.define('WORM store', 'Write once, read many: evidence nobody can delete or change.'); await b.until(0.3); await r.ring({ text: 'captures', exact: true, row: true }, 'Hashed evidence'); } },
-    { say: "The retention policy is six years, the HIPAA documentation window. Anyone who writes evidence can add, but cannot delete, and an overwrite only creates a new version next to the old one.",
+    { say: "It keeps everything for six years, the HIPAA record window. Anyone writing evidence can add pages, never remove them, and a rewrite only adds a new version beside the old one.", audio: `${OUT}/clips/km/14-worm-1.mp3`,
       prep: async (r) => { await r.unring(); await r.goto(`https://portal.azure.com/#@ContosoHealthLab.onmicrosoft.com/resource${ids.stId}/dataProtection`, 12000); await r.settle();
         await r.reveal({ text: /version-level immutability/i, nth: 0 }); await sleep(800); },
       run: async (r, b) => { await b.until(0.15); await r.ring({ text: /version-level immutability/i, nth: 0 }, '2190 days · WORM'); await b.until(0.6); await r.ring({ text: /Enable versioning for blobs/i, nth: 0 }, 'Overwrite = new version').catch(() => {}); } },
   ] },
   { id: '15-evidence', kind: 'local', beats: [
-    { audio: `${OUT}/clips/wk-15-0.mp3`, say: "Every step leaves a numbered evidence row: what happened, when, a fingerprint of the file, and where it is stored. And here is the row that closes Dana's story. The day HR marked her a leaver, the lab timed every hop: disabled on-site in seven seconds, out of the cloud in under three minutes, and gone from AWS in nine, each number from a real timestamp.",
+    { say: "Piece ten, the logbook. Every step leaves a numbered row: what happened, when, a fingerprint of the file, and where it's stored. Here's the row that closes Dana's story: off on-site in seven seconds, out of the cloud in under three minutes, gone from AWS in nine. Every number comes from a real timestamp.", audio: `${OUT}/clips/km/15-evidence-0.mp3`,
       prep: async (r) => { await termOpen(r); await r.page.evaluate(() => { document.getElementById('scr').style.fontSize = '18px'; }); },
       run: async (r, b) => { await cmd(r, 'grep ^E lab/evidence/capture-log.csv | cut -c1-140');
         await out(r, T('elog.txt'), 8); await r.define('Hash', 'A fingerprint of a file. Change one byte and it changes.'); await b.until(0.55); await mark(r, '^E52|^E06|^E03'); } },
   ] },
   { id: '17-close', kind: 'local', beats: [
-    { audio: `${OUT}/clips/wk-17-0.mp3`, say: "Contoso Health. One nurse hired by HR and set up on her own, admin power that switches itself off, an attacker's moves caught by name, and a leaver gone from AWS in nine minutes, measured. Sixty-four reviewed changes, nine sign-in rules enforced, every step proven in a store nobody can edit. The glossary and every script are in the repo. Thanks for watching.",
+    { say: "That's Contoso Health. One badge per person, made from HR on day one, opening the right doors in every building, checked at each one, watched by two camera systems, and gone from every building within nine minutes of leaving, with a logbook to prove it. Sixty-four reviewed changes. The code is available on request. Thanks for watching.", audio: `${OUT}/clips/km/17-close-0.mp3`,
       prep: card({ kick: 'Contoso Health identity lab', title: 'Access follows HR.<br>Admin power is <em>temporary</em>.<br>Every change is proven.', sub: 'Glossary: lab/docs/glossary.md', chips: [] }) },
   ] },
   { id: '20-tf-pipeline', kind: 'local', beats: [
@@ -334,14 +318,12 @@ export function scenes(ids) {
       run: async (r, b) => { await b.until(0.95); } },
   ] },
   { id: '22-splunk-search', kind: 'local', beats: [
-    { say: "This is Splunk, a different security tool, running on my own machine, not Microsoft's cloud. The same identity events are flowing in. Here, nearly a thousand of them, broken down by what happened: failed sign-ins, vault check-outs, credential reads.",
-      audio: `${OUT}/clips/wk-22-0.mp3`,
+    { say: "Piece eight, a second camera system. This is Splunk, the one many hospitals already own, running on my own machine, not Microsoft's cloud. The same kinds of events flow in, nearly a thousand of them: failed sign-ins, vault check-outs, password reads. This is test footage, not a live feed.", audio: `${OUT}/clips/km/22-splunk-search-0.mp3`,
       prep: async (r) => { await r.page.goto(SHOT); await r.ov('hideCursor', true); await r.page.evaluate((src) => window.shot(src), BIMG('splunk')); await sleep(600); },
       run: async (r, b) => { await b.until(0.95); } },
   ] },
   { id: '23-splunk-rules', kind: 'local', beats: [
-    { say: "And here are all twenty-two detection rules, rewritten in Splunk's own language. Break-glass sign-ins, Kerberoasting, a directory role granted outside the just-in-time system, separation-of-duties violations. I replayed the test attacks, and every one of the twenty-two fired. The point is that the detections are my logic, portable, not a feature of one vendor the hospital would lose by switching tools.",
-      audio: `${OUT}/clips/wk-23-0.mp3`,
+    { say: "And here are all twenty-two alarm rules, rewritten in Splunk's own language: emergency-badge sign-ins, attacks on service passwords, admin power granted outside the loan system, and forbidden pairs of doors. I replayed the test attacks, and all twenty-two fired. The logic is mine, and it moves with the hospital.", audio: `${OUT}/clips/km/23-splunk-rules-0.mp3`,
       prep: async (r) => { await r.page.goto(SHOT); await r.ov('hideCursor', true); await r.page.evaluate((src) => window.shot(src), BIMG('splunk-rules')); await sleep(600); },
       run: async (r, b) => { await b.until(0.95); } },
   ] },
