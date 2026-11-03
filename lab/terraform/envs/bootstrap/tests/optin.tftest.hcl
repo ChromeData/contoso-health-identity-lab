@@ -4,7 +4,9 @@
 # app-management roles land on APPLY (write) and PLAN (read-only) only when
 # enable_app_management_roles is set, and the Identity Protection categories
 # join the Entra diagnostic setting only when enable_identity_protection_logs
-# is set. Run with HashiCorp Terraform 1.16.5 (lab/terraform/README.md).
+# is set; HR-SYNC (hr-feed.yml's identity) exists only with enable_hr_sync,
+# and the PLAN main-ref credential (config-drift) is always there.
+# Run with HashiCorp Terraform 1.16.5 (lab/terraform/README.md).
 
 mock_provider "azuread" {
   # app_role_ids must name every role the module can grant, or the lookup
@@ -35,8 +37,14 @@ mock_provider "azuread" {
         "Policy.ReadWrite.ApplicationConfiguration"   = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
         "AppRoleAssignment.ReadWrite.All"             = "ffffffff-ffff-ffff-ffff-ffffffffffff"
         "Synchronization.Read.All"                    = "00000000-0000-0000-0000-000000000000"
+        "SynchronizationData-User.Upload.OwnedBy"     = "a0a0a0a0-0000-4000-8000-00000000000c"
+        "AuditLog.Read.All"                           = "a0a0a0a0-0000-4000-8000-00000000000d"
       }
     }
+  }
+  # The HR provisioning app HR-SYNC is made an owner of (looked up by client id).
+  mock_data "azuread_application" {
+    defaults = { object_id = "a0a0a0a0-0000-4000-8000-00000000000e" }
   }
 }
 mock_provider "azurerm" {
@@ -73,6 +81,42 @@ run "defaults_add_nothing" {
   assert {
     condition     = !contains(module.entra_diagnostics[0].categories, "RiskyUsers")
     error_message = "risk categories must not be exported by default"
+  }
+  assert {
+    condition     = output.github_oidc_hr_sync_client_id == null && output.github_oidc_subjects.hr_sync == null && length(output.pipeline_graph_roles.hr_sync) == 0
+    error_message = "HR-SYNC must not exist by default"
+  }
+  # config-drift.yml (schedule on main) signs in as PLAN: the main-ref
+  # subject must be in every bootstrap apply, or it fails with AADSTS700213.
+  assert {
+    condition     = output.github_oidc_subjects.plan_main == "repo:example-owner@1000001/contoso-health-identity-lab@2000002:ref:refs/heads/main"
+    error_message = "PLAN must trust the main-branch ref (config-drift)"
+  }
+}
+
+run "hr_sync_opt_in" {
+  command = plan
+
+  variables {
+    enable_hr_sync                = true
+    hr_provisioning_app_client_id = "a0a0a0a0-0000-4000-8000-00000000000f"
+  }
+
+  assert {
+    condition     = output.github_oidc_subjects.hr_sync == "repo:example-owner@1000001/contoso-health-identity-lab@2000002:ref:refs/heads/hr-feed"
+    error_message = "HR-SYNC must trust exactly the hr-feed branch"
+  }
+  assert {
+    condition     = output.pipeline_graph_roles.hr_sync == tolist(["AuditLog.Read.All", "SynchronizationData-User.Upload.OwnedBy"])
+    error_message = "HR-SYNC = least-privileged upload (.OwnedBy) + provisioning-log read"
+  }
+  assert {
+    condition     = alltrue([for r in output.pipeline_graph_roles.plan : !strcontains(r, "Write") && !strcontains(r, "Upload")])
+    error_message = "enabling HR-SYNC must not widen the PLAN identity"
+  }
+  assert {
+    condition     = length(azurerm_role_assignment.state) == 2 && !contains([for k, v in azurerm_role_assignment.state : k], "hr_sync")
+    error_message = "HR-SYNC gets no Azure RBAC and no Terraform state access"
   }
 }
 

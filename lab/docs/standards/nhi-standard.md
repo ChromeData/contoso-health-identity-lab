@@ -26,7 +26,8 @@
 
 | NHI (lab) | Type | Credential | Rules met | Rules not met |
 |---|---|---|---|---|
-| `gh-oidc-entra-plan (read-only)` | App + SP | Federated, subject `…:pull_request` | N2, N3, N6 (read-only) | **N1**: no `owners` in `modules/pipeline-identity/main.tf` |
+| `gh-oidc-entra-plan (read-only)` | App + SP | Federated, subjects `…:pull_request` and `…:ref:refs/heads/main` (config-drift) | N2, N3, N6 (read-only) | **N1**: no `owners` in `modules/pipeline-identity/main.tf` |
+| `HR-SYNC (gh-oidc hr-feed upload)` (opt-in, `enable_hr_sync`) | App + SP | Federated, subject `…:ref:refs/heads/hr-feed` | N2, N3; N6: `SynchronizationData-User.Upload.OwnedBy` (only the HR provisioning app it owns) + `AuditLog.Read.All`, no Azure RBAC | **N1**; it can create and disable workforce accounts through the provisioning job, so the `hr-feed` branch ruleset (only the HR owner pushes) is its real gate |
 | `gh-oidc-entra-apply (write)` | App + SP, **Tier 0** | Federated, subject `…:environment:prod` | N2, N3; gated by the `prod` reviewer and a main-only deployment branch | **N1**; N6 needs a risk acceptance: lab acceptance in [ADR 0005](../adr/0005-risk-acceptance-apply-identity-tier0.md), register E1. The opt-in `enable_app_management_roles` adds `AppRoleAssignment.ReadWrite.All`, a second Tier-0 permission |
 | `midpoint-reader` (manual, `lab/pam/README.md`) | App + SP | **Client secret** | Read-only Graph scopes | **N2**, N1; not in Terraform. `Set-AppGovernancePolicy.ps1` would cap any new secret on it at 90 days (never run) |
 | Containment playbook identity (`pb-identity-contain`, ADR 0017) | System-assigned managed identity | None (managed) | N4; N6: four Graph app roles, each justified in `Deploy-ContainmentPlaybook.ps1` | The opt-in `-GrantDisableRole` adds a **standing** Authentication Administrator assignment outside PIM: exception E7. Whoever can edit the Logic App in `rg-identity-lab` controls that role |

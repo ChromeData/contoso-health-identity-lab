@@ -20,7 +20,15 @@
 #      identity-drift is opened or updated (closed again by a clean run).
 #
 # IDENTITY: the same read-only PLAN app as terraform-plan.yml, over GitHub
-# OIDC (azure/login), NO stored credential, NO secret. The Graph token is
+# OIDC (azure/login), NO stored credential, NO secret. This job runs on main
+# (schedule / workflow_dispatch), so its token's subject is
+# repo:OWNER@ID/REPO@ID:ref:refs/heads/main, not :pull_request: PLAN trusts it
+# through its second federated credential, github-main-drift
+# (modules/pipeline-identity plan_main; tests/hr_sync.tftest.hcl pins it).
+# AADSTS700213 "No matching federated identity record ... ref:refs/heads/main"
+# means envs/bootstrap has not been applied since that credential was added:
+# run the bootstrap apply (a human, locally), then re-run this workflow.
+# PLAN's Graph roles stay the read-only allow-list. The Graph token is
 # minted by `az account get-access-token`, masked, handed to Connect-MgGraph
 # in the same step and never written anywhere. The PLAN app's Graph roles
 # (modules/pipeline-identity plan_graph_roles) cover every section except

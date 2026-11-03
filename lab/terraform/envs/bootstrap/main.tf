@@ -4,7 +4,8 @@
 # The trust anchor of the pipeline, applied LOCALLY by a human admin - once,
 # and again only when the pipeline's own permissions must change.
 #
-#   * GitHub OIDC PLAN + APPLY app registrations (modules/pipeline-identity)
+#   * GitHub OIDC PLAN + APPLY app registrations (modules/pipeline-identity),
+#     and the opt-in HR-SYNC app for .github/workflows/hr-feed.yml
 #   * Their Azure RBAC: what each may do to the subscription and to state
 #   * The tenant's Entra diagnostic setting (modules/entra-diagnostics): no
 #     envs/dev PR can edit or remove the log export
@@ -42,6 +43,14 @@ module "pipeline_identity" {
   # Opt-in: app-management roles for modules/apps (envs/dev enable_sso_apps).
   extra_apply_graph_roles = var.enable_app_management_roles ? local.app_management_apply_roles : []
   extra_plan_graph_roles  = var.enable_app_management_roles ? local.app_management_plan_roles : []
+
+  # Opt-in: HR-SYNC, the hr-feed branch's identity (HR rows -> bulkUpload,
+  # provisioning-log read). No Azure RBAC at all: hr-feed.yml signs in with
+  # allow-no-subscriptions and only calls Microsoft Graph.
+  hr_sync_enabled               = var.enable_hr_sync
+  hr_provisioning_app_client_id = var.hr_provisioning_app_client_id
+  hr_sync_upload_scope          = var.hr_sync_upload_scope
+  hr_sync_log_read_graph_roles  = var.hr_sync_log_read_graph_roles
 }
 
 locals {

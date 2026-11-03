@@ -116,3 +116,33 @@ variable "enable_identity_protection_logs" {
   EOT
   default     = false
 }
+
+variable "enable_hr_sync" {
+  type        = bool
+  description = <<-EOT
+    Create HR-SYNC, the identity .github/workflows/hr-feed.yml signs in as
+    (GitHub OIDC, subject ...:ref:refs/heads/hr-feed only): upload of HR rows
+    to the API-driven inbound provisioning app + provisioning-log read. It can
+    create and disable workforce accounts, so protect the hr-feed branch with
+    a ruleset first (lab/scripts/mock-hr/README.md). Off by default.
+  EOT
+  default     = false
+}
+
+variable "hr_provisioning_app_client_id" {
+  type        = string
+  description = "Client (app) id of the HR provisioning app (handback.env: the last segment of HR_PROV_JOB_ID, API2AD.<tenant>.<client id>). HR-SYNC is made its owner when hr_sync_upload_scope = \"owned\"."
+  default     = ""
+}
+
+variable "hr_sync_upload_scope" {
+  type        = string
+  description = "\"owned\" (default, least privileged: SynchronizationData-User.Upload.OwnedBy + ownership of the HR provisioning app) or \"tenant\" (SynchronizationData-User.Upload). See modules/pipeline-identity/main.tf."
+  default     = "owned"
+}
+
+variable "hr_sync_log_read_graph_roles" {
+  type        = list(string)
+  description = "Read-only Graph roles HR-SYNC reads the provisioning log with (run summary). Default AuditLog.Read.All; add Directory.Read.All only if the first run's summary says the log is not readable. Read roles only (validated in the module)."
+  default     = ["AuditLog.Read.All"]
+}
