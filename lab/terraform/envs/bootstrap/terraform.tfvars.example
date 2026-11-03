@@ -47,3 +47,12 @@ enable_identity_protection_logs = false
 enable_hr_sync                = false
 hr_provisioning_app_client_id = ""
 hr_sync_upload_scope          = "owned"
+
+# EVIDENCE (.github/workflows/evidence-pack.yml, main only): read-only Graph
+# for the evidence pack + create-only access to the WORM evidence container.
+# The account name is envs/dev's evidence_storage_account_name output. After
+# the apply: set the EVIDENCE_CLIENT_ID repo variable
+# (terraform output -raw github_oidc_evidence_client_id).
+enable_evidence_pack          = false
+evidence_storage_account_name = "stidlabevidence7f3a"
+evidence_resource_group_name  = "rg-identity-lab"

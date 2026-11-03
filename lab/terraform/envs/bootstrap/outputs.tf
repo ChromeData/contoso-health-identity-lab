@@ -29,18 +29,29 @@ output "iac_principal_ids" {
 }
 
 output "github_oidc_subjects" {
-  description = "The federated subject claims (immutable repo:OWNER@OWNER-ID/REPO@REPO-ID form) - must match the emitted sub exactly. hr_sync is null until enable_hr_sync."
+  description = "The federated subject claims (immutable repo:OWNER@OWNER-ID/REPO@REPO-ID form) - must match the emitted sub exactly. hr_sync is null until enable_hr_sync, evidence until enable_evidence_pack."
   value = {
     plan      = module.pipeline_identity.plan_federated_subject
     plan_main = module.pipeline_identity.plan_main_federated_subject
     apply     = module.pipeline_identity.apply_federated_subject
     hr_sync   = module.pipeline_identity.hr_sync_federated_subject
+    evidence  = module.pipeline_identity.evidence_federated_subject
   }
 }
 
 output "github_oidc_hr_sync_client_id" {
   description = "HR_SYNC_CLIENT_ID for .github/workflows/hr-feed.yml (null until enable_hr_sync)."
   value       = module.pipeline_identity.hr_sync_application_client_id
+}
+
+output "github_oidc_evidence_client_id" {
+  description = "EVIDENCE_CLIENT_ID for .github/workflows/evidence-pack.yml (null until enable_evidence_pack)."
+  value       = module.pipeline_identity.evidence_application_client_id
+}
+
+output "evidence_writer_scope" {
+  description = "The evidence container EVIDENCE may add files to (null until enable_evidence_pack)."
+  value       = one(azurerm_role_assignment.evidence_writer[*].scope)
 }
 
 # azuread cannot add an owner to a service principal it does not manage, and
@@ -74,10 +85,11 @@ output "entra_diagnostic_setting_id" {
 }
 
 output "pipeline_graph_roles" {
-  description = "Effective Graph application roles of the PLAN, APPLY and HR-SYNC identities (evidence: what the pipeline can do, after any opt-in widening)."
+  description = "Effective Graph application roles of the PLAN, APPLY, HR-SYNC and EVIDENCE identities (evidence: what the pipeline can do, after any opt-in widening)."
   value = {
-    plan    = module.pipeline_identity.plan_graph_roles
-    apply   = module.pipeline_identity.apply_graph_roles
-    hr_sync = module.pipeline_identity.hr_sync_graph_roles
+    plan     = module.pipeline_identity.plan_graph_roles
+    apply    = module.pipeline_identity.apply_graph_roles
+    hr_sync  = module.pipeline_identity.hr_sync_graph_roles
+    evidence = module.pipeline_identity.evidence_graph_roles
   }
 }

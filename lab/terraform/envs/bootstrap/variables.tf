@@ -146,3 +146,33 @@ variable "hr_sync_log_read_graph_roles" {
   description = "Read-only Graph roles HR-SYNC reads the provisioning log with (run summary). Default AuditLog.Read.All; add Directory.Read.All only if the first run's summary says the log is not readable. Read roles only (validated in the module)."
   default     = ["AuditLog.Read.All"]
 }
+
+variable "enable_evidence_pack" {
+  type        = bool
+  description = <<-EOT
+    Create EVIDENCE, the identity .github/workflows/evidence-pack.yml signs in
+    as (GitHub OIDC, subject ...:ref:refs/heads/main only): six read-only Graph
+    roles for Export-EvidencePack.ps1, and Storage Blob Data Contributor on the
+    evidence container with a create-only ABAC condition (no overwrite, no
+    delete). Needs evidence_storage_account_name. Off by default.
+  EOT
+  default     = false
+}
+
+variable "evidence_storage_account_name" {
+  type        = string
+  description = "The WORM evidence storage account (envs/dev output evidence_storage_account_name; the TF_EVIDENCE_STORAGE_ACCOUNT_NAME repo variable). Required with enable_evidence_pack."
+  default     = ""
+}
+
+variable "evidence_resource_group_name" {
+  type        = string
+  description = "Resource group of the evidence storage account (envs/dev: rg-identity-lab)."
+  default     = "rg-identity-lab"
+}
+
+variable "evidence_container_name" {
+  type        = string
+  description = "The evidence container EVIDENCE may add files to (modules/evidence-store container_name)."
+  default     = "evidence"
+}

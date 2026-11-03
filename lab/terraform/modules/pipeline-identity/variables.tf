@@ -226,3 +226,43 @@ variable "hr_sync_log_read_graph_roles" {
     error_message = "hr_sync_log_read_graph_roles accepts read-only roles only (<Resource>.Read[Basic][.All|...]); the upload permission comes from hr_sync_upload_scope."
   }
 }
+
+# -----------------------------------------------------------------------------
+# EVIDENCE identity (opt-in): .github/workflows/evidence-pack.yml exports the
+# evidence pack (read-only Graph) and files it in the WORM evidence store.
+# See main.tf for each role's use and the trust boundary.
+# -----------------------------------------------------------------------------
+variable "evidence_enabled" {
+  type        = bool
+  description = "Create the EVIDENCE app registration, service principal, federated credential (ref:refs/heads/main) and its read-only Graph roles. Off by default: a new identity is a deliberate, human bootstrap apply. Its storage grant is made in envs/bootstrap."
+  default     = false
+}
+
+variable "evidence_app_display_name" {
+  type        = string
+  description = "Display name of the EVIDENCE app registration."
+  default     = "EVIDENCE (gh-oidc evidence pack)"
+}
+
+variable "evidence_graph_roles" {
+  type        = list(string)
+  description = "Read-only Graph APPLICATION roles EVIDENCE exports the evidence pack with: the six Export-EvidencePack.ps1 reads (main.tf lists what each covers). Read roles only (validated)."
+  default = [
+    "AuditLog.Read.All",
+    "AccessReview.Read.All",
+    "Policy.Read.All",
+    "RoleManagement.Read.Directory",
+    "PrivilegedAssignmentSchedule.Read.AzureADGroup",
+    "Directory.Read.All",
+  ]
+
+  # Same allow-list shape as extra_plan_graph_roles: read verbs only, so this
+  # list can never become a write path into the tenant.
+  validation {
+    condition = alltrue([
+      for r in var.evidence_graph_roles :
+      can(regex("^[A-Za-z]+(\\.[A-Za-z]+)*\\.(Read|ReadBasic)(\\.(All|Directory|AzureADGroup|OwnedBy|Hidden))?$", r))
+    ])
+    error_message = "evidence_graph_roles accepts read-only roles only (<Resource>.Read[Basic][.All|.Directory|.AzureADGroup|.OwnedBy|.Hidden]); the evidence pack never changes the tenant."
+  }
+}

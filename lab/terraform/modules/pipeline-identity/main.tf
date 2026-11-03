@@ -9,6 +9,9 @@
 #   * HR-SYNC identity (opt-in, hr_sync_enabled) - uploads HR rows to the
 #                      API-driven inbound provisioning app and reads the
 #                      provisioning log, trusted only from the hr-feed BRANCH.
+#   * EVIDENCE identity (opt-in, evidence_enabled) - reads the auditor
+#                      evidence pack from Graph (read-only roles) and files it
+#                      in the WORM evidence store, trusted only from MAIN.
 #
 # Why separate apps: PR runs can read/plan without ever being able to mutate
 # the tenant; only a run inside the gated prod environment can obtain write
@@ -53,6 +56,7 @@ locals {
   plan_main_subject = "repo:${local.github_repo_path}:ref:refs/heads/main"
   apply_subject     = "repo:${local.github_repo_path}:environment:${var.prod_environment_name}"
   hr_sync_subject   = "repo:${local.github_repo_path}:ref:refs/heads/${var.hr_sync_branch}"
+  evidence_subject  = "repo:${local.github_repo_path}:ref:refs/heads/main"
 }
 
 # -----------------------------------------------------------------------------
@@ -308,4 +312,101 @@ resource "azuread_application_owner" "hr_sync_owns_provisioning_app" {
   count           = local.hr_sync_owns_app ? 1 : 0
   application_id  = "/applications/${data.azuread_application.hr_provisioning[0].object_id}"
   owner_object_id = azuread_service_principal.hr_sync[0].object_id
+}
+
+# =============================================================================
+# EVIDENCE identity (evidence pack -> WORM store, ref:refs/heads/main) - OPT-IN
+# =============================================================================
+# .github/workflows/evidence-pack.yml (workflow_dispatch, main only) signs in
+# as this app, runs lab/scripts/powershell/Export-EvidencePack.ps1 app-only
+# (the seven read-only Graph collections + the SHA-256 manifest) and uploads
+# the pack to the WORM evidence container under a dated prefix.
+#
+# Why a fourth app instead of PLAN: PLAN also trusts the main ref, but it is
+# reachable from every same-repo pull request and holds a different read set
+# (plan refresh); the evidence reads (audit log, access-review decisions, MFA
+# registration, PIM-for-Groups history) are not Terraform's business, and the
+# storage write must never be reachable from a PR. EVIDENCE has:
+#
+#   Graph  evidence_graph_roles - application READ roles only (validated
+#          allow-list, like PLAN's extras): exactly what the script reads.
+#            AuditLog.Read.All              directoryAudits (PIM activity log)
+#                                           + the userRegistrationDetails
+#                                           report (MFA coverage)
+#            AccessReview.Read.All          access-review definitions,
+#                                           instances, decisions
+#            Policy.Read.All                Conditional Access policies
+#            RoleManagement.Read.Directory  role definitions (beta
+#                                           isPrivileged), role assignments,
+#                                           PIM-for-roles schedule requests /
+#                                           instances
+#            PrivilegedAssignmentSchedule.Read.AzureADGroup
+#                                           PIM-for-Groups schedule requests /
+#                                           instances
+#            Directory.Read.All             group lookups by mailNickname and
+#                                           the expanded principal (user,
+#                                           group or app) on role and PIM rows
+#          verify: on the first run, that Directory.Read.All is needed for the
+#          $expand=principal rows (the narrower set would be GroupMember.Read.All
+#          + User.Read.All + Application.Read.All); a failed artifact names
+#          its 403 in the manifest.
+#   Azure  ONE data-plane grant, made in envs/bootstrap (azurerm, human
+#          apply): Storage Blob Data Contributor on the evidence container
+#          with an ABAC condition that allows creating NEW blobs and reading
+#          them back, never overwriting, deleting or re-tiering one. No
+#          subscription role, no Terraform state access.
+#
+# TRUST BOUNDARY: the main-branch REF. Any workflow file on main can sign in
+# as EVIDENCE (main holds reviewed, merged code only; the same boundary as
+# PLAN's config-drift credential). Worst case with this identity: read the
+# directory and audit data above, and add files to the evidence container,
+# which WORM keeps and the blob logs record. It cannot change the tenant,
+# and it cannot remove or alter evidence.
+# -----------------------------------------------------------------------------
+locals {
+  evidence_roles = var.evidence_enabled ? distinct(var.evidence_graph_roles) : []
+}
+
+resource "azuread_application" "evidence" {
+  count            = var.evidence_enabled ? 1 : 0
+  display_name     = var.evidence_app_display_name
+  sign_in_audience = "AzureADMyOrg"
+
+  required_resource_access {
+    resource_app_id = local.microsoft_graph_app_id
+
+    dynamic "resource_access" {
+      for_each = toset(local.evidence_roles)
+      content {
+        id   = data.azuread_service_principal.msgraph.app_role_ids[resource_access.value]
+        type = "Role"
+      }
+    }
+  }
+}
+
+resource "azuread_service_principal" "evidence" {
+  count     = var.evidence_enabled ? 1 : 0
+  client_id = azuread_application.evidence[0].client_id
+}
+
+# Federated credential: trust GitHub tokens ONLY from runs on main
+# (workflow_dispatch of main carries ref:refs/heads/main).
+resource "azuread_application_federated_identity_credential" "evidence_main" {
+  #checkov:skip=CKV_AZURE_249:The subject is pinned to this repository's main branch (local.evidence_subject, the immutable owner/repo form); Checkov's subject pattern does not recognise that form.
+  count          = var.evidence_enabled ? 1 : 0
+  application_id = azuread_application.evidence[0].id
+  display_name   = "github-main-evidence"
+  description    = "GitHub Actions OIDC - runs on main (evidence pack: read-only Graph, new files in the WORM store)"
+  audiences      = [local.github_oidc_audience]
+  issuer         = local.github_oidc_issuer
+  subject        = local.evidence_subject
+}
+
+resource "azuread_app_role_assignment" "evidence" {
+  for_each = toset(local.evidence_roles)
+
+  app_role_id         = data.azuread_service_principal.msgraph.app_role_ids[each.value]
+  principal_object_id = azuread_service_principal.evidence[0].object_id
+  resource_object_id  = data.azuread_service_principal.msgraph.object_id
 }

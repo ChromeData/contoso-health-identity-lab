@@ -75,3 +75,24 @@ output "hr_provisioning_service_principal_object_id" {
   description = "Object id of the HR provisioning app's service principal (the bulkUpload target). Null unless hr_sync_upload_scope = \"owned\"."
   value       = one(data.azuread_service_principal.hr_provisioning[*].object_id)
 }
+
+# EVIDENCE (null when evidence_enabled = false).
+output "evidence_application_client_id" {
+  description = "Client (app) id of the EVIDENCE identity - set as the EVIDENCE_CLIENT_ID repo variable for evidence-pack.yml. Null when disabled."
+  value       = one(azuread_application.evidence[*].client_id)
+}
+
+output "evidence_service_principal_object_id" {
+  description = "Object id of the EVIDENCE service principal (the principal of the evidence-container grant in envs/bootstrap). Null when disabled."
+  value       = one(azuread_service_principal.evidence[*].object_id)
+}
+
+output "evidence_federated_subject" {
+  description = "Subject claim the EVIDENCE credential trusts (the main-branch ref). Null when disabled."
+  value       = one(azuread_application_federated_identity_credential.evidence_main[*].subject)
+}
+
+output "evidence_graph_roles" {
+  description = "Effective Graph application roles of the EVIDENCE identity (empty when disabled) - for the risk register and the NHI inventory."
+  value       = sort(local.evidence_roles)
+}

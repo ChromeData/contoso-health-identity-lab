@@ -5,7 +5,9 @@
 # and again only when the pipeline's own permissions must change.
 #
 #   * GitHub OIDC PLAN + APPLY app registrations (modules/pipeline-identity),
-#     and the opt-in HR-SYNC app for .github/workflows/hr-feed.yml
+#     the opt-in HR-SYNC app for .github/workflows/hr-feed.yml and the opt-in
+#     EVIDENCE app for .github/workflows/evidence-pack.yml (with its one
+#     create-only grant on the WORM evidence container)
 #   * Their Azure RBAC: what each may do to the subscription and to state
 #   * The tenant's Entra diagnostic setting (modules/entra-diagnostics): no
 #     envs/dev PR can edit or remove the log export
@@ -51,6 +53,11 @@ module "pipeline_identity" {
   hr_provisioning_app_client_id = var.hr_provisioning_app_client_id
   hr_sync_upload_scope          = var.hr_sync_upload_scope
   hr_sync_log_read_graph_roles  = var.hr_sync_log_read_graph_roles
+
+  # Opt-in: EVIDENCE, evidence-pack.yml's identity (main ref only): read-only
+  # Graph for the evidence pack. Its only Azure right is the create-only
+  # grant on the evidence container below.
+  evidence_enabled = var.enable_evidence_pack
 }
 
 locals {
@@ -237,4 +244,73 @@ check "identity_protection_logs_need_workspace" {
     condition     = !var.enable_identity_protection_logs || var.log_analytics_workspace_id != ""
     error_message = "enable_identity_protection_logs = true has no effect until log_analytics_workspace_id is set (second bootstrap run)."
   }
+}
+
+# -----------------------------------------------------------------------------
+# EVIDENCE (evidence-pack.yml): add new files to the WORM evidence container,
+# read them back, never overwrite, delete or re-tier one. Human-applied here
+# because envs/dev's APPLY identity may not hand out storage data roles
+# (delegable_role_ids above), the same reason the operator's E05 grant is a
+# human step.
+#
+# Storage Blob Data Contributor at CONTAINER scope + an ABAC condition. The
+# condition denies, inside the evidence container, the three data actions
+# that could change or remove a blob:
+#   blobs/delete  delete (WORM refuses it anyway while retention runs; this
+#                 also covers expired blobs)
+#   blobs/write   overwrite, metadata, tier, tags-with-write: everything
+#                 except creating a new blob
+# What is left is blobs/read (the read-back check) and blobs/add/action,
+# which Azure Storage documents as "create a new blob" only: a Put Blob or
+# Put Block List to a NEW name. An upload to an existing name needs
+# blobs/write and is refused. (move/action, rename, exists only with a
+# hierarchical namespace, which version-level WORM rules out here.)
+# Stricter than E05 (the operator may overwrite, which WORM turns into a new
+# retained version); this identity may not even do that.
+#   verify: on the first run, with a canary: a new name uploads, the same
+#   name again is refused (403 or 409), a delete is refused.
+# Residual (accepted for the lab, as for E05): the role's control-plane
+# actions on the container (read, write metadata, delete - refused while it
+# holds retained blobs) and generateUserDelegationKey. A custom role with only
+# blobs/read + blobs/add/action would remove them; ABAC is kept to match E05.
+# -----------------------------------------------------------------------------
+data "azurerm_storage_account" "evidence" {
+  count               = var.enable_evidence_pack ? 1 : 0
+  name                = var.evidence_storage_account_name
+  resource_group_name = var.evidence_resource_group_name
+
+  lifecycle {
+    precondition {
+      condition     = can(regex("^[a-z0-9]{3,24}$", var.evidence_storage_account_name))
+      error_message = "enable_evidence_pack needs evidence_storage_account_name: the WORM account (envs/dev output evidence_storage_account_name, repo variable TF_EVIDENCE_STORAGE_ACCOUNT_NAME)."
+    }
+  }
+}
+
+locals {
+  evidence_create_only_condition = <<-EOT
+    (
+     (
+      !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete'})
+      AND
+      !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write'})
+     )
+     OR
+     (
+      @Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringNotEquals '${var.evidence_container_name}'
+     )
+    )
+  EOT
+}
+
+resource "azurerm_role_assignment" "evidence_writer" {
+  count = var.enable_evidence_pack ? 1 : 0
+
+  scope                = "${data.azurerm_storage_account.evidence[0].id}/blobServices/default/containers/${var.evidence_container_name}"
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = module.pipeline_identity.evidence_service_principal_object_id
+  principal_type       = "ServicePrincipal"
+  condition_version    = "2.0"
+  condition            = local.evidence_create_only_condition
+  description          = "EVIDENCE (evidence-pack.yml): create new blobs in the WORM evidence container and read them back; never overwrite, delete or re-tier one."
 }
