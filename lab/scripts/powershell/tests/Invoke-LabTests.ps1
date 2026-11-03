@@ -35,6 +35,13 @@
                                        the MS.AAD map against the CA / flag / KQL code
       Reset-DemoState (lab/scripts/demo) -WhatIf writes nothing, only the two HR
                                        rows change, birthright left to HR attributes
+      Invoke-InboundProvisioning,      (lab/scripts/mock-hr, hr-feed.yml) mass-change
+      HrFeedPipeline                   guards, hire date, named rows, app-only token
+                                       (never printed), result file; the diff in HR
+                                       words; the plain-English summary (names, title,
+                                       department only) and its bounded log wait
+      Remove-DemoHire (lab/scripts/dc) one Workforce/Disabled account by employeeID,
+                                       never protected or out-of-scope accounts
       ScriptAnalyzerScope              analyzer suppressions are per function,
                                        justified, never per file
     Passing proves the logic does what the comments say. It does not prove the

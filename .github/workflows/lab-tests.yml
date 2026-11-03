@@ -164,4 +164,5 @@ jobs:
         run: |
           set -euo pipefail
           bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
+          bash lab/scripts/demo/tests/reset-demo-hire.test.sh
           (cd lab/splunk && ./render-savedsearches.sh --check)
