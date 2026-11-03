@@ -1,8 +1,10 @@
 # Pester 5 tests for ../mock-hr/Invoke-InboundProvisioning.ps1 - the HR
 # mass-change guards (risk register R10: mass disable AND mass department /
-# title change) and the hire-date mapping every birthright rule depends on.
-# Every run is -WhatIf: nothing is sent, no Graph connection; the guards must
-# trip BEFORE any payload anyway.
+# title change), the hire-date mapping every birthright rule depends on, and
+# the pipeline path hr-feed.yml uses (-EmployeeId, -ResultPath, -HidePayload,
+# -UseAzureCliToken). Guard and mapping runs are -WhatIf: nothing is sent, no
+# Graph connection; the guards must trip BEFORE any payload anyway. The
+# app-only runs answer az, Connect-MgGraph and Invoke-MgGraphRequest with mocks.
 
 BeforeAll {
     $script:Inbound = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' 'mock-hr' 'Invoke-InboundProvisioning.ps1'))
@@ -114,4 +116,134 @@ Describe 'Invoke-InboundProvisioning.ps1 hire date -> employeeHireDate' {
     }
 }
 
-AfterAll { Remove-Variable -Name InboundOut -Scope Global -ErrorAction SilentlyContinue }
+Describe 'Invoke-InboundProvisioning.ps1 pipeline path (hr-feed.yml): named rows, result file, no payload echo' {
+    BeforeAll {
+        # Shipped-shape feed plus one demo hire and one leaver.
+        $script:PipeFeed = Join-Path $TestDrive 'pipe-feed.csv'
+        Set-Content -LiteralPath $script:PipeFeed -Value @(
+            'employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate',
+            '# comment lines are stripped',
+            '400100,Joan,Ferris,Information Technology,IT Director,,active,2017-05-08,',
+            '400104,Sam,Rivera,Information Technology,Cloud Engineer,400100,joiner,2026-11-09,',
+            '400105,Lee,Park,Information Technology,Service Desk Analyst,400100,leaver,2024-01-08,2026-11-01')
+        $script:Sp = '11111111-1111-1111-1111-111111111111'
+        $script:Job = 'API2AD.00000000000000000000000000000000.22222222-2222-2222-2222-222222222222'
+    }
+    BeforeEach {
+        $global:InboundOut = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $global:InboundOut.Add([string]$Object) }
+        Mock Invoke-MgGraphRequest { throw 'tests must never call Graph' }
+        Mock Connect-MgGraph { throw 'tests must never connect' }
+        $script:Result = Join-Path $TestDrive ("result-" + [guid]::NewGuid().ToString('N') + '.json')
+    }
+
+    It '-EmployeeId sends only the named rows; -ResultPath records a dry run (ids + status, never names)' {
+        & $script:Inbound -CsvPath $script:PipeFeed -StatePath (Get-StatePath) -EmployeeId 400104 -ResultPath $script:Result -WhatIf -WarningAction SilentlyContinue
+        $raw = @($global:InboundOut | Where-Object { $_ -match '^\s*\{' }) -join "`n"
+        $ops = @(($raw | ConvertFrom-Json -AsHashtable)['Operations'])
+        $ops.Count | Should -Be 1
+        $ops[0]['bulkId'] | Should -Be '400104'
+        $r = Get-Content -LiteralPath $script:Result -Raw | ConvertFrom-Json -AsHashtable
+        $r['outcome'] | Should -Be 'dry-run'
+        @($r['selected']).Count | Should -Be 1
+        $r['selected'][0]['employeeId'] | Should -Be '400104'
+        $r['batches'][0]['employeeIds'] | Should -Be @('400104')
+        (Get-Content -LiteralPath $script:Result -Raw) | Should -Not -Match 'Rivera|Sam|sam\.rivera|2026-11-09'
+    }
+
+    It 'an -EmployeeId that is not in the feed stops the run (a typo is never "nothing to send")' {
+        { & $script:Inbound -CsvPath $script:PipeFeed -StatePath (Get-StatePath) -EmployeeId 499999 -ResultPath $script:Result -WhatIf } | Should -Throw '*499999*Nothing was sent*'
+        (Get-Content -LiteralPath $script:Result -Raw | ConvertFrom-Json).outcome | Should -Be 'invalid'
+        Should -Invoke Invoke-MgGraphRequest -Times 0
+    }
+
+    It '-HidePayload prints no SCIM JSON (no UPN, ids or hire date in the log)' {
+        & $script:Inbound -CsvPath $script:PipeFeed -StatePath (Get-StatePath) -EmployeeId 400104 -HidePayload -WhatIf -WarningAction SilentlyContinue
+        $text = $global:InboundOut -join "`n"
+        $text | Should -Match 'payload not printed'
+        $text | Should -Not -Match 'userName|sam\.rivera|hireDate|2026-11-09|"400104"'
+    }
+
+    It 'a guard refusal is recorded for the summary (outcome refused, kind, count)' {
+        $f = New-Feed -Leavers 11
+        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -ResultPath $script:Result -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*Mass-change guard*'
+        $r = Get-Content -LiteralPath $script:Result -Raw | ConvertFrom-Json
+        $r.outcome | Should -Be 'refused'
+        $r.refusal.kind | Should -Be 'mass-disable'
+        $r.refusal.count | Should -Be 11
+        $r.refusal.threshold | Should -Be 10
+    }
+
+    It 'an invalid row is recorded as invalid with its kind (bad start date)' {
+        $f = Join-Path $TestDrive 'bad-date.csv'
+        Set-Content -LiteralPath $f -Value @('employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate', '400106,Bad,Date,Information Technology,Cloud Engineer,400100,joiner,9/11/2026,')
+        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -ResultPath $script:Result -WhatIf } | Should -Throw '*no valid startDate*'
+        $r = Get-Content -LiteralPath $script:Result -Raw | ConvertFrom-Json
+        $r.outcome | Should -Be 'invalid'
+        $r.refusal.kind | Should -Be 'bad-start-date'
+    }
+}
+
+Describe 'Invoke-InboundProvisioning.ps1 -UseAzureCliToken (app-only, GitHub OIDC)' {
+    BeforeAll {
+        $script:PipeFeed2 = Join-Path $TestDrive 'pipe-feed2.csv'
+        Set-Content -LiteralPath $script:PipeFeed2 -Value @(
+            'employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate',
+            '400104,Sam,Rivera,Information Technology,Cloud Engineer,400100,joiner,2026-11-09,')
+        $script:Sp = '11111111-1111-1111-1111-111111111111'
+        $script:Job = 'API2AD.00000000000000000000000000000000.22222222-2222-2222-2222-222222222222'
+        $global:HrFakeToken = 'eyFAKE.token.never-printed'
+    }
+    BeforeEach {
+        $global:InboundOut = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $global:InboundOut.Add([string]$Object) }
+        Mock az { $global:LASTEXITCODE = 0; $global:HrFakeToken }
+        Mock Connect-MgGraph {}
+        Mock Get-MgContext { [pscustomobject]@{ Scopes = @('SynchronizationData-User.Upload.OwnedBy', 'AuditLog.Read.All'); AuthType = 'UserProvidedAccessToken' } }
+        Mock Invoke-MgGraphRequest {}
+        $script:Result = Join-Path $TestDrive ("result-" + [guid]::NewGuid().ToString('N') + '.json')
+        $script:SavedGha = $env:GITHUB_ACTIONS
+        $env:GITHUB_ACTIONS = $null
+    }
+    AfterEach { $env:GITHUB_ACTIONS = $script:SavedGha }
+
+    It 'takes a Graph token from the Azure CLI, connects with it as a SecureString, and never prints it' {
+        & $script:Inbound -CsvPath $script:PipeFeed2 -StatePath (Get-StatePath) -ServicePrincipalId $script:Sp -JobId $script:Job -UseAzureCliToken -HidePayload -ResultPath $script:Result -Confirm:$false -WarningAction SilentlyContinue
+        Should -Invoke az -Times 1 -ParameterFilter { $args -contains 'get-access-token' -and $args -contains 'ms-graph' }
+        Should -Invoke Connect-MgGraph -Times 1 -ParameterFilter { $AccessToken -is [securestring] -and [System.Net.NetworkCredential]::new('', $AccessToken).Password -eq $global:HrFakeToken }
+        Should -Invoke Invoke-MgGraphRequest -Times 1 -ParameterFilter { $Method -eq 'POST' -and $Uri -like "*/servicePrincipals/$($script:Sp)/synchronization/jobs/$($script:Job)/bulkUpload" -and $ContentType -eq 'application/scim+json' }
+        ($global:InboundOut -join "`n") | Should -Not -Match ([regex]::Escape($global:HrFakeToken))
+        ($global:InboundOut -join "`n") | Should -Not -Match 'does not list'   # .OwnedBy satisfies the scope check
+        $r = Get-Content -LiteralPath $script:Result -Raw | ConvertFrom-Json
+        $r.outcome | Should -Be 'sent'
+        $r.batches[0].accepted | Should -BeTrue
+        (Get-Content -LiteralPath $script:Result -Raw) | Should -Match '"sentAtUtc":\s*"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"'   # raw JSON: ConvertFrom-Json re-renders dates
+        $r.jobId | Should -Be $script:Job
+    }
+
+    It 'masks the token in GitHub Actions (::add-mask::) - the only place it is ever written' {
+        $env:GITHUB_ACTIONS = 'true'
+        & $script:Inbound -CsvPath $script:PipeFeed2 -StatePath (Get-StatePath) -ServicePrincipalId $script:Sp -JobId $script:Job -UseAzureCliToken -HidePayload -Confirm:$false -WarningAction SilentlyContinue
+        $hits = @($global:InboundOut | Where-Object { $_ -match [regex]::Escape($global:HrFakeToken) })
+        $hits.Count | Should -Be 1
+        $hits[0] | Should -BeExactly "::add-mask::$($global:HrFakeToken)"
+    }
+
+    It 'stops before sending when the Azure CLI has no session' {
+        Mock az { $global:LASTEXITCODE = 1 }
+        { & $script:Inbound -CsvPath $script:PipeFeed2 -StatePath (Get-StatePath) -ServicePrincipalId $script:Sp -JobId $script:Job -UseAzureCliToken -Confirm:$false } | Should -Throw '*No Microsoft Graph token from the Azure CLI*'
+        Should -Invoke Invoke-MgGraphRequest -Times 0
+    }
+
+    It 'a refused upload (403) is recorded with its HTTP status and the run exits 1' {
+        Mock Invoke-MgGraphRequest { throw [System.Exception]::new('Response status code does not indicate success: Forbidden (403).') }
+        & $script:Inbound -CsvPath $script:PipeFeed2 -StatePath (Get-StatePath) -ServicePrincipalId $script:Sp -JobId $script:Job -UseAzureCliToken -HidePayload -ResultPath $script:Result -Confirm:$false -WarningAction SilentlyContinue
+        $LASTEXITCODE | Should -Be 1
+        $r = Get-Content -LiteralPath $script:Result -Raw | ConvertFrom-Json
+        $r.outcome | Should -Be 'failed'
+        $r.batches[0].httpStatus | Should -Be 403
+        $r.batches[0].accepted | Should -BeFalse
+    }
+}
+
+AfterAll { Remove-Variable -Name InboundOut, HrFakeToken -Scope Global -ErrorAction SilentlyContinue }

@@ -118,7 +118,9 @@ These **federated credentials** are created by Terraform in
 | App | Credential subject (`sub`) | Why |
 |---|---|---|
 | PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:pull_request` | same-repo PRs can plan (read-only); fork PRs get no OIDC token |
+| PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | the nightly `config-drift.yml` runs on main (schedule); still read-only. Missing = AADSTS700213 on every scheduled run |
 | APPLY app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:environment:prod` | only the `prod` deploy can apply |
+| HR-SYNC app (opt-in) | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/hr-feed` | `hr-feed.yml` uploads changed HR rows (SCIM bulkUpload) and reads the provisioning log; nothing else. Protect the branch with a ruleset |
 
 Why the numeric ids: GitHub.com emits this immutable form by default for repos
 created (or renamed / transferred) after 2026-07-15, and because the ids are
@@ -126,8 +128,9 @@ never reused it also blocks subject recycling (a deleted, re-registered owner
 or repo name cannot mint a matching token). verify: confirm both subjects with
 GitHub's OIDC subject preview before the first PR.
 
-Optional extra PLAN subject if you also want plan on branch pushes:
-`repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main`.
+The main-ref PLAN subject is created by default (config-drift). HR-SYNC
+exists only with `enable_hr_sync = true` in envs/bootstrap
+(`lab/scripts/mock-hr/README.md`, *HR changes through GitHub Actions*).
 
 Issuer / audience for all of them:
 
@@ -308,6 +311,9 @@ privacy-only exceptions follow the list):
 - [ ] `AZURE_SUBSCRIPTION_ID`
 - [ ] `AZURE_PLAN_CLIENT_ID`  (PLAN app client ID)
 - [ ] `AZURE_APPLY_CLIENT_ID` (APPLY app client ID)
+- [ ] (HR feed, optional) `HR_SYNC_CLIENT_ID` (bootstrap output `github_oidc_hr_sync_client_id`),
+      `HR_PROV_SP_ID`, `HR_PROV_JOB_ID` (the HR provisioning app, `lab/setup/handback.env`),
+      `HR_UPN_DOMAIN`; optional `HR_FEED_WAIT_SECONDS` (default 180)
 - [ ] `AZURE_OPENAI_ENDPOINT`    e.g. `https://contoso-health-aoai.openai.azure.com`
 - [ ] `AZURE_OPENAI_DEPLOYMENT`  e.g. `gpt-5.4-mini` (**verify:** a current GA
       chat model in your region at deploy time; gpt-4o is Deprecated/Legacy per
@@ -478,6 +484,7 @@ with no PR and no review, lock the WORM store irreversibly.
 | `../../.github/workflows/k8s-identity.yml` | PR touching `lab/k8s/**` or `lab/terraform/k8s/**` (or manual): runs `../k8s/ci/pipeline.sh` on an ephemeral kind cluster, no cloud credentials (§7) |
 | `../../.github/workflows/lab-tests.yml` | every PR and main, **no credentials**: `terraform fmt`, `init -backend=false` + `validate` in every root and module, every mocked `terraform test`; PSScriptAnalyzer + the Pester suites (`lab/scripts/powershell/tests`, ITDR, PAM dependency scan) with pinned modules; the vault-ingest shell test and the Splunk savedsearches drift check |
 | `../../.github/workflows/pam-harness.yml` | manual and nightly, **no credentials**: `lab/pam/test/run-all.sh` (default suites) from a fresh clone on a fresh runner: no `.env`, no `.secrets/`, no Docker volumes. Its console output and per-suite job summary are the third-party-timestamped run of the PAM harness. BUILT, not run (no workflow has run yet) |
+| `../../.github/workflows/hr-feed.yml` | push to the `hr-feed` branch changing `lab/scripts/mock-hr/hr_feed.csv` (or manual, dry run by default): **HR-SYNC app (OIDC), no secrets**: sends only the changed rows to Entra API-driven inbound provisioning (mass-change guard first), waits up to 3 min for the provisioning log, writes a plain-English job summary (names, title, department only). `actions: read` finds the last successful send (the diff base). Concurrency group `hr-feed`, never cancelled |
 | `../../.github/workflows/config-drift.yml` | nightly and manual, **PLAN app (read-only, OIDC), no secrets**: `Export-IdentityConfig.ps1 -Public` then `Compare-IdentityConfig.ps1` against `lab/config-baseline/`; snapshot + findings as a run artifact, Markdown in the job summary, one `identity-drift` issue on drift (closed by the next clean run). Needs `issues: write` on the job. Succeeds with a notice while the baseline is the placeholder. BUILT, not run |
 
 **Not planned or applied by CI: `lab/terraform/aws/`.** The AWS IAM Identity

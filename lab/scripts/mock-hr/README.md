@@ -41,7 +41,9 @@ once the account exists: Lifecycle Workflows, access packages, CA and PIM.
 |---|---|
 | `hr_feed.csv` | Sample roster: Dana Okafor (protagonist) + joiners, actives, a mover, and a leaver, plus the IT personas: Joan Ferris (IT Director), Ava Lin (IAM Engineer), Raj Patel (Service Desk Analyst) and Mei Tanaka (Access Governance Lead). Their workforce accounts get no admin role; their separate `adm-` accounts come from `lab/iga/admin-accounts.json` (`New-AdminAccounts.ps1`). Column contract is documented in the file header. |
 | `.gitignore` | Keeps `.state/` (the mass-change guard's last-pushed roster) out of git. |
-| `Invoke-InboundProvisioning.ps1` | Reads the CSV, maps each row to a SCIM Enterprise User, chunks into ≤50-record batches, and POSTs SCIM `bulkUpload` payloads to the provisioning job. |
+| `Invoke-InboundProvisioning.ps1` | Reads the CSV, maps each row to a SCIM Enterprise User, chunks into ≤50-record batches, and POSTs SCIM `bulkUpload` payloads to the provisioning job. `-EmployeeId`, `-UseAzureCliToken`, `-ResultPath` and `-HidePayload` are the pipeline path (below). |
+| `Get-HrFeedChange.ps1` | Compares the CSV with an earlier version: who was hired, left, moved, came back, was updated or deleted. The first step of `hr-feed.yml`. |
+| `Write-HrFeedSummary.ps1` | Waits (bounded) for the provisioning log and writes the plain-English run summary. The last step of `hr-feed.yml`. |
 | `README.md` | This file. |
 
 ## Key constraints (baked into the script)
@@ -147,6 +149,107 @@ Connect-MgGraph -Scopes 'SynchronizationData-User.Upload'   # signed-in user mus
 ```
 
 Then continue the lifecycle with `../powershell/02-Joiner.ps1` (day-1 access).
+
+## HR changes through GitHub Actions
+
+[`.github/workflows/hr-feed.yml`](../../../.github/workflows/hr-feed.yml) is
+the same push without a laptop sign-in: the `hr-feed` branch plays the HR
+system. Edit `hr_feed.csv` on that branch, commit, push, and GitHub Actions
+sends **only the rows that commit changed** to the provisioning job, signed in
+as **HR-SYNC** over GitHub OIDC (no password or secret anywhere).
+
+**Hire someone:** on `hr-feed`, add a row and push:
+
+```
+400104,Sam,Rivera,Information Technology,Cloud Engineer,400100,joiner,2026-11-09,
+```
+
+**They leave:** change `joiner` to `leaver` (and set `endDate`), push again.
+A department or job-title edit is a mover. Deleting a row sends nothing:
+HR marks leavers, it never deletes them.
+
+**What the run shows.** The step names read as the story (read the change,
+sign in, send, wait for Microsoft), and the job summary is one line per
+person, with the technical details folded underneath:
+
+> **HR change sent to Microsoft**
+> - **Hired:** Sam Rivera, Cloud Engineer (Information Technology) — account created in Active Directory
+>
+> **Next:** Cloud Sync copies the change from Active Directory to Entra ID on its next run (about every 20 minutes); AWS follows by SCIM after that.
+
+The run waits up to 3 minutes (`HR_FEED_WAIT_SECONDS`) for the provisioning
+log. Microsoft's log can lag several minutes, so "not logged yet" is a note,
+not a failure; a failure Microsoft logged turns the run red. The summary
+prints first and last name, job title and department only (never the
+employee id, UPN, manager, dates or a token), and the log prints no SCIM
+payload. The mass-change guard counts this push's rows: more than 10 people
+switched off, or more than 10 department/title changes against the previous
+version of the file, stops the run before anything is sent.
+
+**Preview without sending:** *Actions → hr-feed → Run workflow*, keep
+*dry run* ticked (any branch, no sign-in). With dry run off it sends the
+employee ids you list, on `hr-feed` only.
+
+**Retakes:** `lab/scripts/demo/reset-demo-hire.sh 400104` (dry run;
+`--apply` does it) removes the row on `hr-feed` and deletes the AD account on
+DC01; Cloud Sync and SCIM clean up downstream. Record again once the Entra
+user is gone (about 20 minutes).
+
+### One-time setup (an admin, after this is merged)
+
+1. **Create and protect the branch.** `git push origin origin/main:refs/heads/hr-feed`.
+   Then *Settings → Rules → Rulesets → New branch ruleset* on `hr-feed`:
+   restrict updates (bypass: repository admin), block force pushes and
+   deletion. Whoever can push to `hr-feed` can create and disable workforce
+   accounts through HR-SYNC.
+2. **Bootstrap apply** (local, as the tenant admin; this also adds the PLAN
+   `ref:refs/heads/main` credential the nightly config-drift run needs). In
+   `lab/terraform/envs/bootstrap/terraform.tfvars`:
+   ```hcl
+   enable_hr_sync                = true
+   hr_provisioning_app_client_id = "<last segment of HR_PROV_JOB_ID: API2AD.<tenant>.<client id>>"
+   ```
+   ```bash
+   az login --tenant <tenant id>
+   cd lab/terraform/envs/bootstrap
+   terraform init -backend-config="storage_account_name=<state account>"
+   terraform plan -out hr-sync.tfplan    # expect: HR-SYNC app + SP + federated credential,
+                                         # 2 app role assignments, 1 application owner,
+                                         # PLAN github-main-drift (if not applied before)
+   terraform apply hr-sync.tfplan
+   ```
+3. **Owner of the provisioning service principal** (the `.OwnedBy` upload
+   permission only reaches apps HR-SYNC owns; Terraform can own the app
+   registration but not the service principal): read, then run, the command
+   the apply printed:
+   ```bash
+   terraform output -raw hr_sync_service_principal_owner_command
+   eval "$(terraform output -raw hr_sync_service_principal_owner_command)"
+   ```
+4. **Consent check:** *Enterprise applications → HR-SYNC → Permissions* shows
+   `SynchronizationData-User.Upload.OwnedBy` and `AuditLog.Read.All` as
+   *Granted* (Terraform's app role assignments are the admin consent).
+5. **Repository variables** (identifiers, not secrets; `AZURE_TENANT_ID`
+   exists already):
+   ```bash
+   gh variable set HR_SYNC_CLIENT_ID --body "$(terraform output -raw github_oidc_hr_sync_client_id)"
+   gh variable set HR_PROV_SP_ID  --body "<HR_PROV_SP_ID>"     # lab/setup/handback.env
+   gh variable set HR_PROV_JOB_ID --body "<HR_PROV_JOB_ID>"    # lab/setup/handback.env
+   gh variable set HR_UPN_DOMAIN  --body "<your verified domain>"
+   ```
+6. **Smoke test:** a dry run from *Actions → hr-feed → Run workflow*, then the
+   real push.
+
+*verify (first real run):* whether owning the app registration plus the
+service principal is enough for `SynchronizationData-User.Upload.OwnedBy`
+(Microsoft documents only the case where the caller created the app). A 403
+in the summary means it is not: set `hr_sync_upload_scope = "tenant"`
+(`SynchronizationData-User.Upload`) and apply again. The provisioning-log
+read uses `AuditLog.Read.All` alone; its Graph page also lists
+`Directory.Read.All`, so a "log not readable" line means set
+`hr_sync_log_read_graph_roles = ["AuditLog.Read.All", "Directory.Read.All"]`
+and apply again (the narrower `ProvisioningLog.Read.All` is the candidate to
+try instead, once proven).
 
 ## A note on "mover"
 
