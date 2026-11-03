@@ -73,6 +73,14 @@
     AuditLog.Read.All                 directoryAudits (PIM activities) + MFA report
     Directory.Read.All                principal/role lookups
 
+    APP-ONLY (-UseAzureCliToken, the pipeline path): the same reads as
+    APPLICATION permissions. .github/workflows/evidence-pack.yml signs in as
+    the EVIDENCE identity (modules/pipeline-identity evidence_graph_roles):
+    AuditLog.Read.All, AccessReview.Read.All, Policy.Read.All,
+    RoleManagement.Read.Directory, PrivilegedAssignmentSchedule.Read.AzureADGroup,
+    Directory.Read.All - read-only, nothing else. RoleEligibilitySchedule.Read.Directory
+    above is listed for completeness; no artifact reads eligibility schedules.
+
     API versions: CA policies, access reviews and PIM schedules are v1.0.
     The MFA userRegistrationDetails report and some directoryAudit filters are
     served from both v1.0 and beta; cmdlet calls below use whatever the installed
@@ -104,6 +112,19 @@
 .PARAMETER EvidenceRoot
     lab/evidence, where the companion evidence lives. Default: two levels up.
 
+.PARAMETER UseAzureCliToken
+    App-only sign-in for pipelines: take a Microsoft Graph token from the
+    Azure CLI session (`az account get-access-token --resource-type ms-graph`;
+    in GitHub Actions, azure/login over OIDC as EVIDENCE) and connect with it,
+    always that identity, never a leftover context. The token is masked in
+    Actions and stays in this process: never in argv, a file or the output.
+
+.PARAMETER GeneratedBy
+    What the manifest records as generatedBy. Default: the signed-in account
+    (delegated) or the app id (app-only). The pipeline passes its run, e.g.
+    "EVIDENCE app, GitHub Actions run 123 (commit abc1234)", which also dates
+    the companion hashes to that commit.
+
 .PARAMETER WhatIf
     Standard. Reports what it WOULD export and writes nothing.
 
@@ -111,6 +132,10 @@
     Connect-MgGraph -Scopes 'RoleManagement.Read.Directory','PrivilegedAssignmentSchedule.Read.AzureADGroup','AccessReview.Read.All','Policy.Read.All','AuditLog.Read.All','Directory.Read.All'
     ./Export-EvidencePack.ps1 -WhatIf
     ./Export-EvidencePack.ps1
+.EXAMPLE
+    # Pipeline (evidence-pack.yml): app-only as EVIDENCE, into the runner's temp folder.
+    ./Export-EvidencePack.ps1 -UseAzureCliToken -OutputDirectory $env:RUNNER_TEMP/evidence-pack/pack `
+        -GeneratedBy "EVIDENCE app, GitHub Actions run $env:GITHUB_RUN_ID"
 
 .OUTPUTS
     Writes the artifacts + manifest.json + SUMMARY.md into -OutputDirectory and
@@ -149,7 +174,15 @@ param(
 
     [Parameter()]
     [ValidateNotNullOrEmpty()]
-    [string]$EvidenceRoot = (Join-Path $PSScriptRoot '..' '..' 'evidence')
+    [string]$EvidenceRoot = (Join-Path $PSScriptRoot '..' '..' 'evidence'),
+
+    # App-only sign-in from the Azure CLI session (azure/login over OIDC).
+    [Parameter()]
+    [switch]$UseAzureCliToken,
+
+    # Recorded as the manifest's generatedBy (the pipeline names its run).
+    [Parameter()]
+    [string]$GeneratedBy = ''
 )
 
 # Operator console output. Write-Host on purpose (colour, -NoNewline); every
@@ -164,12 +197,40 @@ function Write-Console {
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Connect-GraphFromAzureCli {
+    # App-only: the Azure CLI is already signed in as an app (azure/login over
+    # GitHub OIDC). The token never leaves this process: masked in Actions,
+    # handed to Connect-MgGraph as a SecureString, then dropped. Same as
+    # mock-hr/Invoke-InboundProvisioning.ps1, through Write-Console for the
+    # analyzer; one copy each in Set-AutoAssignmentPolicies.ps1 and
+    # Export-EvidencePack.ps1 (parity-tested).
+    $global:LASTEXITCODE = 0
+    $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {
+        throw 'No Microsoft Graph token from the Azure CLI. Sign it in first (azure/login with OIDC in GitHub Actions, or az login locally).'
+    }
+    $token = ([string]$token).Trim()
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Console "::add-mask::$token" }
+    # NetworkCredential.SecurePassword: the same SecureString as
+    # ConvertTo-SecureString -AsPlainText, without the analyzer error rule.
+    Connect-MgGraph -AccessToken ([System.Net.NetworkCredential]::new('', $token).SecurePassword) -NoWelcome | Out-Null
+    Remove-Variable -Name token
+}
+
 $requiredScopes = @(
     'RoleManagement.Read.Directory', 'PrivilegedAssignmentSchedule.Read.AzureADGroup',
     'AccessReview.Read.All', 'Policy.Read.All', 'AuditLog.Read.All', 'Directory.Read.All'
 )
+if ($UseAzureCliToken) {
+    # App-only (pipeline): always this identity, never a leftover context.
+    Write-Console 'Signing in to Microsoft Graph app-only (token from the Azure CLI session)...' -ForegroundColor Yellow
+    Connect-GraphFromAzureCli
+}
 $ctx = $null; try { $ctx = Get-MgContext } catch { $ctx = $null }
-if (-not $ctx) { Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes; $ctx = Get-MgContext }
+if (-not $ctx) {
+    if ($UseAzureCliToken) { throw 'No Microsoft Graph context after the app-only sign-in.' }
+    Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes; $ctx = Get-MgContext
+}
 $missingScopes = @($requiredScopes | Where-Object { $ctx.Scopes -and $_ -notin $ctx.Scopes })
 if ($missingScopes) { Write-Warning "Current Graph context does not list: $($missingScopes -join ', '). Calls needing them will return 403 and lookups may report 'not found' (Disconnect-MgGraph, then re-run to reconnect with all scopes)." }
 
@@ -677,7 +738,7 @@ $manifest = [pscustomobject]@{
         organization    = 'Contoso Health'
         tenantId        = if ($ctx) { $ctx.TenantId } else { $null }
         generatedUtc    = (Get-Date).ToUniversalTime().ToString('o')
-        generatedBy     = if ($ctx) { $ctx.Account } else { $null }
+        generatedBy     = if ($GeneratedBy) { $GeneratedBy } elseif ($ctx -and $ctx.Account) { $ctx.Account } elseif ($ctx -and $ctx.PSObject.Properties['ClientId'] -and $ctx.ClientId) { "app $($ctx.ClientId) (app-only)" } else { $null }
         hashAlgorithm   = 'SHA256'
         toolVersion     = '1.0.0'
     }

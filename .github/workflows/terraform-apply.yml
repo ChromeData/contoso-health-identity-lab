@@ -314,7 +314,9 @@ jobs:
           }
           # -Confirm:$false: the human gate was the approval job; the script's
           # own refusals still apply. Package names and rule text only in the
-          # log; the Graph token is masked and never printed.
+          # log; the Graph token is masked and never printed. The pinned
+          # module first (a different one on the runner image would load instead).
+          Import-Module Microsoft.Graph.Authentication -RequiredVersion 2.41.2 -ErrorAction Stop
           $global:LASTEXITCODE = 0
           ./lab/scripts/powershell/post-apply/Set-AutoAssignmentPolicies.ps1 -UseAzureCliToken -Confirm:$false `
             -SummaryPath $plain -SummaryDetailsPath $tech | Format-Table -AutoSize Package, Action, Detail | Out-String -Width 4096

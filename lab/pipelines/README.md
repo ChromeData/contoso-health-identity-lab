@@ -122,6 +122,7 @@ These **federated credentials** are created by Terraform in
 | PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | the nightly `config-drift.yml` runs on main (schedule); still read-only. Missing = AADSTS700213 on every scheduled run |
 | APPLY app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:environment:prod` | only the `prod` deploy can apply |
 | HR-SYNC app (opt-in) | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/hr-feed` | `hr-feed.yml` uploads changed HR rows (SCIM bulkUpload) and reads the provisioning log; nothing else. Protect the branch with a ruleset |
+| EVIDENCE app (opt-in) | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | `evidence-pack.yml` (manual, main only) reads the evidence pack (six read-only Graph roles) and adds it to the WORM evidence container (create-only ABAC grant); nothing else |
 
 Why the numeric ids: GitHub.com emits this immutable form by default for repos
 created (or renamed / transferred) after 2026-07-15, and because the ids are
@@ -131,7 +132,9 @@ GitHub's OIDC subject preview before the first PR.
 
 The main-ref PLAN subject is created by default (config-drift). HR-SYNC
 exists only with `enable_hr_sync = true` in envs/bootstrap
-(`lab/scripts/mock-hr/README.md`, *HR changes through GitHub Actions*).
+(`lab/scripts/mock-hr/README.md`, *HR changes through GitHub Actions*),
+EVIDENCE only with `enable_evidence_pack = true`
+(`lab/evidence/README.md`, *Evidence pack from GitHub Actions*).
 
 Issuer / audience for all of them:
 
@@ -315,6 +318,13 @@ privacy-only exceptions follow the list):
 - [ ] (HR feed, optional) `HR_SYNC_CLIENT_ID` (bootstrap output `github_oidc_hr_sync_client_id`),
       `HR_PROV_SP_ID`, `HR_PROV_JOB_ID` (the HR provisioning app, `lab/setup/handback.env`),
       `HR_UPN_DOMAIN`; optional `HR_FEED_WAIT_SECONDS` (default 180)
+- [ ] (Evidence pack, optional) `EVIDENCE_CLIENT_ID` (bootstrap output
+      `github_oidc_evidence_client_id`); it also reads `AZURE_TENANT_ID`,
+      `AZURE_SUBSCRIPTION_ID` and `TF_EVIDENCE_STORAGE_ACCOUNT_NAME`. Optional:
+      `EVIDENCE_RUNNER` (a self-hosted runner label on a network the evidence
+      store's firewall admits; default `ubuntu-latest`, which it refuses),
+      `EVIDENCE_RESOURCE_GROUP` (default `rg-identity-lab`),
+      `EVIDENCE_CONTAINER_NAME` (default `evidence`)
 - [ ] `AZURE_OPENAI_ENDPOINT`    e.g. `https://contoso-health-aoai.openai.azure.com`
 - [ ] `AZURE_OPENAI_DEPLOYMENT`  e.g. `gpt-5.4-mini` (**verify:** a current GA
       chat model in your region at deploy time; gpt-4o is Deprecated/Legacy per
@@ -486,6 +496,7 @@ with no PR and no review, lock the WORM store irreversibly.
 | `../../.github/workflows/lab-tests.yml` | every PR and main, **no credentials**: `terraform fmt`, `init -backend=false` + `validate` in every root and module, every mocked `terraform test`; PSScriptAnalyzer + the Pester suites (`lab/scripts/powershell/tests`, ITDR, PAM dependency scan) with pinned modules; the vault-ingest shell test and the Splunk savedsearches drift check |
 | `../../.github/workflows/pam-harness.yml` | manual and nightly, **no credentials**: `lab/pam/test/run-all.sh` (default suites) from a fresh clone on a fresh runner: no `.env`, no `.secrets/`, no Docker volumes. Its console output and per-suite job summary are the third-party-timestamped run of the PAM harness. BUILT, not run (no workflow has run yet) |
 | `../../.github/workflows/hr-feed.yml` | push to the `hr-feed` branch changing `lab/scripts/mock-hr/hr_feed.csv` (or manual, dry run by default): **HR-SYNC app (OIDC), no secrets**: sends only the changed rows to Entra API-driven inbound provisioning (mass-change guard first), waits up to 3 min for the provisioning log, writes a plain-English job summary (names, title, department only). `actions: read` finds the last successful send (the diff base). Concurrency group `hr-feed`, never cancelled |
+| `../../.github/workflows/evidence-pack.yml` | manual, **main only**, **EVIDENCE app (OIDC), no secrets**: `Export-EvidencePack.ps1 -UseAzureCliToken` (seven read-only Graph collections, SHA-256 manifest), then `Publish-EvidencePack.ps1` files every file as a new blob in the WORM evidence container under `evidence-packs/<UTC date>/<time>-run<id>-<attempt>/` (overwrite refused, each file read back and re-hashed, the store's retention lock read per file), then a plain-English job summary (counts only) with a portal link. The pack never goes to GitHub artifacts. Concurrency group `evidence-pack`, never cancelled. BUILT, not run |
 | `../../.github/workflows/config-drift.yml` | nightly and manual, **PLAN app (read-only, OIDC), no secrets**: `Export-IdentityConfig.ps1 -Public` then `Compare-IdentityConfig.ps1` against `lab/config-baseline/`; snapshot + findings as a run artifact, Markdown in the job summary, one `identity-drift` issue on drift (closed by the next clean run). Needs `issues: write` on the job. Succeeds with a notice while the baseline is the placeholder. BUILT, not run |
 
 **Not planned or applied by CI: `lab/terraform/aws/`.** The AWS IAM Identity

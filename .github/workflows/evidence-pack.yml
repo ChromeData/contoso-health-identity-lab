@@ -1,0 +1,225 @@
+# =============================================================================
+# evidence-pack.yml  —  Contoso Health Identity Platform (lab/)
+# -----------------------------------------------------------------------------
+# The logbook. One click (Actions -> evidence-pack -> Run workflow, on main)
+# pulls the auditor evidence pack out of Microsoft Entra, read-only, and files
+# it in the locked (WORM) evidence store, where nobody can change or delete
+# it for the retention period. The job summary says that in plain English:
+#
+#   ## Evidence pack filed — 7 records, each fingerprinted
+#   (one line per record with its entry count)
+#   Stored in the locked evidence store: nobody can change or delete these
+#   files for N days.  [Open the evidence store in the Azure portal]
+#
+# with the technical details (store, folder, every SHA-256, the retention
+# lock as the store reported it) folded underneath. Counts only: never a
+# name, UPN, object id or token in the summary or the log. The pack files
+# themselves (they do name people) exist only in this job's temp folder,
+# which the runner empties, and in the private WORM container.
+#
+# WHAT RUNS
+#   1. Export-EvidencePack.ps1 -UseAzureCliToken: the seven Graph reads
+#      (PIM activations and live assignments, the PIM audit trail,
+#      access-review decisions, Conditional Access, MFA registration,
+#      privileged role holders), each written as JSON and SHA-256 hashed in
+#      manifest.json, plus SUMMARY.md (control mapping). Companion evidence
+#      committed under lab/evidence is hashed into the same manifest.
+#   2. Publish-EvidencePack.ps1: every file re-checked against the manifest,
+#      uploaded as a NEW blob under evidence-packs/<UTC date>/<time>-run<id>-<attempt>/
+#      (--overwrite false), read back and re-hashed, retention lock read
+#      from the store.
+#   3. Write-EvidencePackSummary.ps1: the plain-English job summary.
+#
+# IDENTITY: EVIDENCE (modules/pipeline-identity, envs/bootstrap
+# enable_evidence_pack) over GitHub OIDC: NO stored secret. Its federated
+# credential trusts only repo:OWNER@ID/REPO@ID:ref:refs/heads/main, so it
+# signs in on main and nowhere else (the step check below only explains a
+# refusal; the credential is the control). Graph: six application READ
+# roles. Azure: Storage Blob Data Contributor on the evidence container with
+# an ABAC condition that allows creating new blobs and reading them, never
+# overwriting or deleting one. No subscription role (allow-no-subscriptions),
+# no Terraform state. Tokens come from `az account get-access-token`, are
+# masked, and live only in the memory of the step that uses them.
+#
+# NETWORK: the evidence account's firewall admits only TF_OPERATOR_IP_RANGES.
+# A GitHub-hosted runner is outside it, so the upload is refused there (the
+# summary says so in plain words) until the run comes from an allowed
+# network: repository variable EVIDENCE_RUNNER = the label of a self-hosted
+# runner on that network (the job keeps the Azure CLI profile and the Graph
+# modules in its own temp folder, so a self-hosted runner's own sign-ins and
+# modules are untouched). lab/evidence/README.md, "Evidence pack from GitHub
+# Actions", lists the options.
+#
+# ONE-TIME SETUP: bootstrap apply with enable_evidence_pack (+ the account
+# name), then repo variables EVIDENCE_CLIENT_ID (and AZURE_TENANT_ID,
+# AZURE_SUBSCRIPTION_ID, TF_EVIDENCE_STORAGE_ACCOUNT_NAME, which exist
+# already). Until then a run stops with a summary that names what is missing.
+#
+# Supply chain: actions pinned to full commit SHAs (the same pins as the
+# other workflows); Microsoft.Graph modules pinned to lab-tests.yml's version.
+# =============================================================================
+
+name: evidence-pack
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# One pack at a time; a running upload is never cancelled.
+concurrency:
+  group: evidence-pack
+  cancel-in-progress: false
+
+jobs:
+  file:
+    name: File the evidence pack in the locked store
+    runs-on: ${{ vars.EVIDENCE_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      id-token: write   # GitHub OIDC token for the EVIDENCE sign-in (no secret)
+      contents: read    # checkout: the scripts + the committed companion evidence
+    env:
+      EVIDENCE_ACCOUNT: ${{ vars.TF_EVIDENCE_STORAGE_ACCOUNT_NAME }}
+      EVIDENCE_CONTAINER: ${{ vars.EVIDENCE_CONTAINER_NAME || 'evidence' }}
+    steps:
+      - name: Get the code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check the one-time setup
+        id: setup
+        shell: pwsh
+        env:
+          EVIDENCE_CLIENT_ID: ${{ vars.EVIDENCE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          TF_EVIDENCE_STORAGE_ACCOUNT_NAME: ${{ vars.TF_EVIDENCE_STORAGE_ACCOUNT_NAME }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # This job's Azure CLI profile lives in its own temp folder (the
+          # runner empties it), never the runner user's own ~/.azure.
+          "AZURE_CONFIG_DIR=$(Join-Path $env:RUNNER_TEMP 'azure')" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'evidence-pack') -Force | Out-Null
+          $now = [datetime]::UtcNow
+          "prefix=evidence-packs/$($now.ToString('yyyy-MM-dd'))/$($now.ToString('HHmmss'))Z-run$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)" >> $env:GITHUB_OUTPUT
+          "trigger=manual run on ``$($env:GITHUB_REF_NAME)`` ($($env:GITHUB_SHA.Substring(0, 7))), GitHub Actions run $($env:GITHUB_RUN_ID)" >> $env:GITHUB_OUTPUT
+          if ($env:GITHUB_REF -ne 'refs/heads/main') {
+            "refused=not-main" >> $env:GITHUB_OUTPUT
+            Write-Output "::error::The evidence pack is filed from main only (EVIDENCE trusts nothing else). Run the workflow on main."
+            exit 1
+          }
+          $missing = @('EVIDENCE_CLIENT_ID', 'AZURE_TENANT_ID', 'TF_EVIDENCE_STORAGE_ACCOUNT_NAME' | Where-Object { -not [Environment]::GetEnvironmentVariable($_) })
+          if ($missing) {
+            "missing_setup=$($missing -join ', ')" >> $env:GITHUB_OUTPUT
+            Write-Output "::error::One-time setup not finished: set the repository variable(s) $($missing -join ', ') (lab/evidence/README.md)."
+            exit 1
+          }
+
+      - name: Install the pinned Microsoft Graph modules (for this run only)
+        shell: pwsh
+        run: |
+          # Saved into this job's temp folder and put first on PSModulePath, so
+          # a self-hosted runner's own modules are never changed. PSGallery can
+          # be slow on a fresh runner: retry (as lab-tests.yml does).
+          $dir = Join-Path $env:RUNNER_TEMP 'psmodules'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          for ($i = 1; $i -le 4; $i++) {
+            try {
+              if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default -ErrorAction Stop }
+              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
+              foreach ($m in 'Microsoft.Graph.Authentication', 'Microsoft.Graph.Identity.Governance', 'Microsoft.Graph.Identity.SignIns', 'Microsoft.Graph.Reports') {
+                if (-not (Test-Path -LiteralPath (Join-Path $dir $m '2.41.2'))) { Save-Module -Name $m -RequiredVersion 2.41.2 -Repository PSGallery -Path $dir -Force -ErrorAction Stop }
+              }
+              break
+            } catch {
+              if ($i -eq 4) { throw }
+              Write-Warning "Save-Module failed (attempt $i): $($_.Exception.Message); retrying"
+              Start-Sleep -Seconds (10 * $i)
+            }
+          }
+          "PSModulePath=$dir$([System.IO.Path]::PathSeparator)$env:PSModulePath" >> $env:GITHUB_ENV
+
+      - name: Sign in to Microsoft as EVIDENCE (GitHub OIDC, no password)
+        id: login
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ vars.EVIDENCE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Collect the evidence from Microsoft Entra (read-only)
+        id: export
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # The pinned version first: a different Microsoft.Graph on the runner
+          # image would otherwise load first and clash with 2.41.2's assemblies.
+          Import-Module Microsoft.Graph.Authentication -RequiredVersion 2.41.2 -ErrorAction Stop
+          $pack = Join-Path $env:RUNNER_TEMP 'evidence-pack' 'pack'
+          # The files name people; they stay in this temp folder and go only
+          # to the WORM container. The log shows file names and counts.
+          $null = ./lab/scripts/powershell/Export-EvidencePack.ps1 -UseAzureCliToken -OutputDirectory $pack `
+            -GeneratedBy "EVIDENCE app, GitHub Actions run $($env:GITHUB_RUN_ID) (commit $($env:GITHUB_SHA.Substring(0, 7)))"
+          # A record that could not be collected is filed as an honest error
+          # stub (the gap is evidence too) and flagged here; none at all means
+          # the sign-in has no Graph read rights yet: stop before filing.
+          $m = Get-Content -LiteralPath (Join-Path $pack 'manifest.json') -Raw | ConvertFrom-Json -AsHashtable
+          $own = @($m['artifacts'] | Where-Object { $_ -and -not $_.Contains('source') -and [string]$_['file'] -like '*.json' })
+          $failed = @($own | Where-Object { $_['status'] -eq 'failed' })
+          foreach ($f in $failed) { Write-Output "::warning::$($f['file']) could not be collected; its error stub is filed instead (the manifest records why)." }
+          if ($own.Count -and $failed.Count -eq $own.Count) {
+            Write-Output "::error::None of the $($own.Count) records could be collected: check EVIDENCE's Graph permissions (admin consent). Nothing was filed."
+            exit 1
+          }
+
+      # GitHub's OIDC token is short-lived: a fresh sign-in before the upload,
+      # so a long export cannot leave the Azure CLI unable to get a storage
+      # token (AADSTS700024). Same EVIDENCE app, same main-ref subject.
+      - name: Sign in again for the evidence store (fresh OIDC token)
+        id: login_store
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ vars.EVIDENCE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: File it in the locked evidence store (new files only)
+        id: publish
+        shell: pwsh
+        env:
+          PREFIX: ${{ steps.setup.outputs.prefix }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP 'evidence-pack'
+          $global:LASTEXITCODE = 0
+          ./lab/scripts/powershell/Publish-EvidencePack.ps1 -PackDirectory (Join-Path $work 'pack') -StorageAccountName $env:EVIDENCE_ACCOUNT `
+            -ContainerName $env:EVIDENCE_CONTAINER -Prefix $env:PREFIX -ResultPath (Join-Path $work 'published.json') `
+            -RunId "$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)" -Commit $env:GITHUB_SHA -Confirm:$false
+          exit $LASTEXITCODE
+
+      - name: Tell the story (plain English)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        env:
+          SIGN_IN: ${{ steps.login.outcome }}
+          MISSING: ${{ steps.setup.outputs.missing_setup }}
+          REFUSED: ${{ steps.setup.outputs.refused }}
+          TRIGGER: ${{ steps.setup.outputs.trigger }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          EVIDENCE_RESOURCE_GROUP: ${{ vars.EVIDENCE_RESOURCE_GROUP || 'rg-identity-lab' }}
+        run: |
+          $work = Join-Path $env:RUNNER_TEMP 'evidence-pack'
+          ./lab/scripts/powershell/Write-EvidencePackSummary.ps1 -ManifestPath (Join-Path $work 'pack' 'manifest.json') `
+            -PublishResultPath (Join-Path $work 'published.json') -SignInOutcome "$env:SIGN_IN" -MissingSetup "$env:MISSING" `
+            -Refused "$env:REFUSED" -TriggerText "$env:TRIGGER" -TenantId "$env:AZURE_TENANT_ID" `
+            -SubscriptionId "$env:AZURE_SUBSCRIPTION_ID" -ResourceGroupName "$env:EVIDENCE_RESOURCE_GROUP" | Out-Null
+
+      # The runner empties RUNNER_TEMP after the job anyway; on a self-hosted
+      # runner the pack (it names people) is removed as soon as it is filed.
+      - name: Remove the local copy of the pack
+        if: always()
+        shell: bash
+        run: rm -rf "${RUNNER_TEMP}/evidence-pack"

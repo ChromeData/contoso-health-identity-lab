@@ -44,6 +44,11 @@
                                        app-only token (never printed), APPLY's roles
                                        cover it, guards still fail closed, the
                                        plain-English Apply summary lines
+      EvidencePackPipeline,            evidence-pack.yml: new blobs only under the
+      PipelineWorkflows                run's prefix, fingerprints checked before and
+                                       after upload, firewall / permission / tamper
+                                       refusals; the plain-English summary (counts
+                                       only); both workflows' safety properties
       Remove-DemoHire (lab/scripts/dc) one Workforce/Disabled account by employeeID,
                                        never protected or out-of-scope accounts
       ScriptAnalyzerScope              analyzer suppressions are per function,
