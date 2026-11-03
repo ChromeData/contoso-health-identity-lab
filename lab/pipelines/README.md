@@ -44,6 +44,7 @@ Conditional Access, access packages, PIM, the lot.
    • environment: prod   ⟵ REQUIRED REVIEWER GATE (run pauses here)
    • OIDC login (APPLY app, WRITE)
    • init / plan -out / apply
+   • automatic access rules (Set-AutoAssignmentPolicies.ps1, app-only)
    • step summary
                 │
                 ▼
@@ -478,7 +479,7 @@ with no PR and no review, lock the WORM store irreversibly.
 | Path | Purpose |
 |---|---|
 | `../../.github/workflows/terraform-plan.yml` | every PR: TruffleHog; if `lab/terraform/**` changed, also fmt/init/validate/plan + Checkov |
-| `../../.github/workflows/terraform-apply.yml` | main: reviewer-gated OIDC apply (a push that touches only `lab/terraform/aws/**` or `lab/terraform/k8s/**` doesn't start it) |
+| `../../.github/workflows/terraform-apply.yml` | main: reviewer-gated OIDC apply (a push that touches only `lab/terraform/aws/**` or `lab/terraform/k8s/**` doesn't start it); after a successful apply, the same job (fresh APPLY sign-in, app-only Graph token) writes the birthright automatic assignment policies with `Set-AutoAssignmentPolicies.ps1`, and the Apply summary says in plain English who each changed package now goes to. Not `continue-on-error`: a refused or failed rule turns the run red, the summary says the Terraform part is live |
 | `../../.github/workflows/ai-review.yml` | same-repo PR touching `lab/terraform/**`: Azure OpenAI (Entra-auth) security review |
 | `./ai-review/review.py` | stdlib script that calls Azure OpenAI with the Entra bearer token |
 | `../../.github/workflows/k8s-identity.yml` | PR touching `lab/k8s/**` or `lab/terraform/k8s/**` (or manual): runs `../k8s/ci/pipeline.sh` on an ephemeral kind cluster, no cloud credentials (§7) |

@@ -70,6 +70,19 @@
     Group.Read.All                        privileged-resource guard (isAssignableToRole)
     User.Read.All                         hire-date preflight (department, employeeHireDate)
 
+    APP-ONLY (-UseAzureCliToken, the pipeline path): the same three as
+    application permissions, or a ReadWrite superset. terraform-apply.yml
+    runs this script after a successful apply as the APPLY identity, whose
+    baseline Graph roles (modules/pipeline-identity apply_graph_roles) hold
+    EntitlementManagement.ReadWrite.All, Group.ReadWrite.All and
+    User.ReadWrite.All: nothing extra is granted for it (pinned by
+    tests/AutoAssignmentPipeline.Tests.ps1). The "Identity Governance
+    Administrator" prerequisite above is for a DELEGATED caller; an app with
+    EntitlementManagement.ReadWrite.All needs no directory role.
+    verify: on the first pipeline run, that the application permission
+    creates an AUTOMATIC assignment policy (Learn documents the permission
+    for the create call, not the automatic case specifically).
+
 .PARAMETER RulesPath
     Birthright rules. Default lab/iga/birthright-rules.json.
 
@@ -87,16 +100,43 @@
     Validate the rules and print the policies that would be sent. No Graph
     module, connection or tenant needed. Returns the desired policies.
 
+.PARAMETER UseAzureCliToken
+    App-only sign-in for pipelines: take a Microsoft Graph token from the
+    Azure CLI session (`az account get-access-token --resource-type ms-graph`;
+    in GitHub Actions, azure/login over OIDC) and connect with it - always
+    that identity, never a leftover context. The token is masked in Actions
+    and stays in this process: never in argv, a file or the output. Used for
+    -WhatIf too (the comparison needs the tenant's current policies).
+
+.PARAMETER SummaryPath
+    Write plain-English Markdown bullets for a run summary (terraform-apply.yml
+    puts them in the Apply summary), e.g.
+      - Automatic access rule set: **IT - Cloud Engineering Apps** goes to
+        everyone in Information Technology with the job title Cloud Engineer.
+      - No automatic access rules needed changing.
+    Written on every outcome once the rule file is read, refusals included.
+    Package names and rule wording only: never a person.
+
+.PARAMETER SummaryDetailsPath
+    The same run's technical lines (action and policy id per package) for the
+    summary's details section.
+
 .EXAMPLE
     ./Set-AutoAssignmentPolicies.ps1 -RenderOnly
 .EXAMPLE
     Connect-MgGraph -Scopes 'EntitlementManagement.ReadWrite.All','Group.Read.All'
     ./Set-AutoAssignmentPolicies.ps1 -WhatIf
     ./Set-AutoAssignmentPolicies.ps1            # prompts per change (ConfirmImpact High)
+.EXAMPLE
+    # Pipeline (terraform-apply.yml, after a successful apply, as APPLY):
+    ./Set-AutoAssignmentPolicies.ps1 -UseAzureCliToken -Confirm:$false `
+        -SummaryPath $env:RUNNER_TEMP/plain-autoassign.md -SummaryDetailsPath $env:RUNNER_TEMP/tech-autoassign.md
 
 .OUTPUTS
     -RenderOnly: the desired policies. Otherwise one result row per package
-    (Package, Action, Detail). Exit 1 when any package FAILED.
+    (Package, Action, Detail). Exit 1 when any package FAILED or a request-only
+    package carries an automatic policy (drift-found). A refusal before any
+    write (unsafe rule file, no hire dates in scope, no Graph sign-in) throws.
 
 .NOTES
     TENANT-TIME: nothing here has run against Entra. Confirmed on Microsoft
@@ -147,7 +187,19 @@ param(
     [string[]]$AccessPackage = @(),
 
     [Parameter()]
-    [switch]$RenderOnly
+    [switch]$RenderOnly,
+
+    # App-only sign-in from the Azure CLI session (azure/login over OIDC).
+    [Parameter()]
+    [switch]$UseAzureCliToken,
+
+    # Plain-English bullets for a run summary (terraform-apply.yml).
+    [Parameter()]
+    [string]$SummaryPath = '',
+
+    # Technical lines for the same summary's details section.
+    [Parameter()]
+    [string]$SummaryDetailsPath = ''
 )
 
 # Operator console output. Write-Host on purpose (colour, -NoNewline); every
@@ -387,6 +439,91 @@ function Merge-AutoPolicyBody {
     return $body
 }
 
+function Get-MissingGraphPermission {
+    # Required permissions the context does not cover. A ReadWrite (or
+    # Directory) permission covers its Read counterpart: the app-only APPLY
+    # identity holds Group.ReadWrite.All / User.ReadWrite.All, not the Read
+    # roles a delegated operator consents to. Empty -Have = unknown (no warning).
+    param([AllowEmptyCollection()][string[]]$Have = @(), [Parameter(Mandatory)][string[]]$Required)
+    if (-not @($Have | Where-Object { $_ })) { return @() }
+    $coveredBy = @{
+        'Group.Read.All' = @('Group.Read.All', 'Group.ReadWrite.All', 'Directory.Read.All', 'Directory.ReadWrite.All')
+        'User.Read.All'  = @('User.Read.All', 'User.ReadWrite.All', 'Directory.Read.All', 'Directory.ReadWrite.All')
+    }
+    return @($Required | Where-Object {
+            $ok = if ($coveredBy.ContainsKey($_)) { $coveredBy[$_] } else { @($_) }
+            -not @($Have | Where-Object { $_ -in $ok })
+        })
+}
+
+function ConvertTo-AudienceText {
+    # Who a birthright package goes to, in plain words, from its job
+    # profiles: "everyone in Nursing with the job title Nurse Manager or
+    # Registered Nurse". Departments and values sorted, as in the rule.
+    param([Parameter(Mandatory)]$Rules, [Parameter(Mandatory)][string]$Package, [Parameter(Mandatory)][ValidateSet('jobTitle', 'jobCode')][string]$MatchOn)
+    $what = if ($MatchOn -eq 'jobCode') { 'job code' } else { 'job title' }
+    $profiles = @(@($Rules['jobProfiles']) | Where-Object { $_ -and $Package -in @($_['birthright']) })
+    if (-not $profiles) { return 'nobody yet (no job profile in lab/iga/birthright-rules.json names it)' }
+    $parts = foreach ($g in (@($profiles) | Group-Object { [string]$_['department'] } | Sort-Object Name)) {
+        $v = @($g.Group | ForEach-Object { [string]$_[$MatchOn] } | Sort-Object -Unique)
+        $list = if ($v.Count -le 1) { $v -join '' } else { (@($v[0..($v.Count - 2)]) -join ', ') + ' or ' + $v[-1] }
+        "everyone in $($g.Name) with the $what $list"
+    }
+    return (@($parts) -join '; and ')
+}
+
+function Get-AutoAssignmentFailureText {
+    # A failed package's technical detail -> one plain sentence.
+    param([AllowEmptyString()][string]$Detail = '')
+    if ($Detail -like '*never birthright*') { return 'It would hand out admin-level access, and admin access is never given automatically.' }
+    if ($Detail -like '*failing closed*') { return 'Its groups in Entra do not match the access catalog, so the safety check stopped it.' }
+    if ($Detail -like '*not found in the tenant*') { return 'The access package does not exist in Entra yet.' }
+    if ($Detail -like '*automatic policies*') { return 'It already has more than one automatic rule in Entra; an administrator merges them into one in the portal.' }
+    if ($Detail -like '*share this display name*') { return 'Two access packages in Entra have this name.' }
+    if ($Detail -match '\b403\b|Forbidden|Authorization_RequestDenied') { return 'Microsoft refused it: the pipeline identity is missing a permission.' }
+    return 'Microsoft did not accept the change.'
+}
+
+function ConvertTo-AutoAssignmentSummary {
+    # Result rows (Package, Action, Detail) or a refusal -> the run summary:
+    # Plain = bullets for someone who is not an identity engineer, Details =
+    # the technical lines. Package names, rule wording and policy ids only.
+    param([AllowEmptyCollection()][object[]]$Results = @(), [Parameter(Mandatory)]$Rules, [Parameter(Mandatory)][ValidateSet('jobTitle', 'jobCode')][string]$MatchOn, [hashtable]$Refusal = $null)
+    $plain = [System.Collections.Generic.List[string]]::new()
+    $details = [System.Collections.Generic.List[string]]::new()
+    $source = "``Set-AutoAssignmentPolicies.ps1`` from ``lab/iga/birthright-rules.json`` (match on $MatchOn, access removed $([string]$Rules['settings']['gracePeriodBeforeAccessRemoval']) after someone stops matching)"
+    if ($Refusal) {
+        $kind = [string]$Refusal['kind']
+        $plain.Add($(switch ($kind) {
+                    'unsafe-rules' { "- **Automatic access rules not changed:** the rule file failed its safety checks ($($Refusal['count']) problem(s), listed in the step log), so nothing was sent to Microsoft." }
+                    'no-hire-date' { "- **Automatic access rules not changed:** none of the $($Refusal['inScope']) people in the departments these rules cover has a start date in Entra yet, so every rule would give access to nobody. Nothing was sent; the start date has to arrive from HR first." }
+                    'sign-in' { '- **Automatic access rules not checked:** the pipeline could not get a Microsoft Graph sign-in. Nothing was changed; re-running the workflow is safe.' }
+                    'unknown-package' { '- **Automatic access rules not changed:** a package that was asked for has no birthright rule.' }
+                    default { '- **Automatic access rules not checked:** Microsoft Graph did not answer a read (see the step log). Nothing was changed.' }
+                }))
+        $details.Add("- **Automatic access rules:** $source; stopped before any change ($kind)")
+        return [pscustomobject]@{ Plain = $plain.ToArray(); Details = $details.ToArray() }
+    }
+    foreach ($r in @($Results | Where-Object { $_ })) {
+        $pkg = [string]$r.Package
+        switch ([string]$r.Action) {
+            'created' { $plain.Add("- Automatic access rule set: **$pkg** goes to $(ConvertTo-AudienceText -Rules $Rules -Package $pkg -MatchOn $MatchOn).") }
+            'updated' { $plain.Add("- Automatic access rule updated: **$pkg** now goes to $(ConvertTo-AudienceText -Rules $Rules -Package $pkg -MatchOn $MatchOn).") }
+            'would-create' { $plain.Add("- Dry run: would set the automatic access rule for **$pkg** (to $(ConvertTo-AudienceText -Rules $Rules -Package $pkg -MatchOn $MatchOn)).") }
+            'would-update' { $plain.Add("- Dry run: would update the automatic access rule for **$pkg** (to $(ConvertTo-AudienceText -Rules $Rules -Package $pkg -MatchOn $MatchOn)).") }
+            'failed' { $plain.Add("- **Automatic access rule not set: $pkg.** $(Get-AutoAssignmentFailureText ([string]$r.Detail)) Nothing was changed for this package.") }
+            'drift-found' { $plain.Add("- **Needs a person: $pkg** is handed out automatically in Entra, but it should only be given on request. Nothing was removed; an administrator checks who holds it, then deletes that rule in the portal.") }
+        }
+    }
+    if (-not @($Results | Where-Object { $_ -and [string]$_.Action -notin 'in-sync', 'skipped-planned' })) { $plain.Add('- No automatic access rules needed changing.') }
+    $rows = @($Results | Where-Object { $_ -and [string]$_.Action -ne 'skipped-planned' } | ForEach-Object { "$($_.Package): $($_.Action) ($($_.Detail))" })
+    $planned = @($Results | Where-Object { $_ -and [string]$_.Action -eq 'skipped-planned' } | ForEach-Object { [string]$_.Package })
+    $details.Add("- **Automatic access rules:** $source")
+    foreach ($row in $rows) { $details.Add("  - $row") }
+    if ($planned) { $details.Add("  - planned, not built yet (skipped): $($planned -join ', ')") }
+    return [pscustomobject]@{ Plain = $plain.ToArray(); Details = $details.ToArray() }
+}
+
 # =============================================================================
 # SCRIPT BODY
 # =============================================================================
@@ -394,15 +531,33 @@ $rules = Read-IgaJson -Path $RulesPath
 $catalog = Read-IgaJson -Path $CatalogPath
 $mode = if ($MatchOn) { $MatchOn } else { [string]$rules['settings']['matchOn'] }
 
+# -SummaryPath / -SummaryDetailsPath, written on every outcome from here on.
+$summaryTargets = @{ Plain = $SummaryPath; Details = $SummaryDetailsPath }
+function Save-AutoAssignmentSummary {
+    # Refusals included, so a run summary never has to guess what happened.
+    # -WhatIf:$false: the summary is this run's own report, not a change.
+    param([AllowEmptyCollection()][object[]]$Results = @(), [hashtable]$Refusal = $null)
+    if (-not $summaryTargets.Plain -and -not $summaryTargets.Details) { return }
+    $sm = if ($mode -in 'jobTitle', 'jobCode') { $mode } else { 'jobTitle' }
+    $s = ConvertTo-AutoAssignmentSummary -Results $Results -Rules $rules -MatchOn $sm -Refusal $Refusal
+    foreach ($target in @(@{ Path = $summaryTargets.Plain; Lines = $s.Plain }, @{ Path = $summaryTargets.Details; Lines = $s.Details })) {
+        if (-not $target.Path) { continue }
+        $dir = Split-Path -Parent $target.Path
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force -WhatIf:$false | Out-Null }
+        Set-Content -LiteralPath $target.Path -Value $target.Lines -Encoding utf8NoBOM -WhatIf:$false
+    }
+}
+
 $problems = @(Test-BirthrightRuleSet -Rules $rules -Catalog $catalog -MatchOn $mode)
 if ($problems.Count) {
     foreach ($p in $problems) { Write-Warning "  RULE ERROR: $p" }
+    Save-AutoAssignmentSummary -Refusal @{ kind = 'unsafe-rules'; count = $problems.Count }
     throw "birthright-rules.json is not safe to apply ($($problems.Count) error(s)). Nothing was sent to Graph."
 }
 $desired = @(Get-DesiredAutoPolicy -Rules $rules -MatchOn $mode)
 if ($AccessPackage.Count) {
     $unknown = @($AccessPackage | Where-Object { $_ -notin $desired.Package })
-    if ($unknown) { throw "-AccessPackage names no birthright package: $($unknown -join ', ')" }
+    if ($unknown) { Save-AutoAssignmentSummary -Refusal @{ kind = 'unknown-package' }; throw "-AccessPackage names no birthright package: $($unknown -join ', ')" }
     $desired = @($desired | Where-Object { $_.Package -in $AccessPackage })
 }
 
@@ -415,11 +570,44 @@ foreach ($d in $desired) {
 if ($RenderOnly) { return $desired }
 
 # ---- Graph ------------------------------------------------------------------
-if (-not (Get-Command Invoke-MgGraphRequest -ErrorAction SilentlyContinue)) { throw 'Microsoft.Graph.Authentication is required (Install-Module Microsoft.Graph.Authentication -Scope CurrentUser), or use -RenderOnly.' }
+if (-not (Get-Command Invoke-MgGraphRequest -ErrorAction SilentlyContinue)) {
+    Save-AutoAssignmentSummary -Refusal @{ kind = 'no-graph-module' }
+    throw 'Microsoft.Graph.Authentication is required (Install-Module Microsoft.Graph.Authentication -Scope CurrentUser), or use -RenderOnly.'
+}
+
+function Connect-GraphFromAzureCli {
+    # App-only: the Azure CLI is already signed in as an app (azure/login over
+    # GitHub OIDC). The token never leaves this process: masked in Actions,
+    # handed to Connect-MgGraph as a SecureString, then dropped. Same as
+    # mock-hr/Invoke-InboundProvisioning.ps1 (parity-tested with
+    # Export-EvidencePack.ps1), through Write-Console for the analyzer.
+    $global:LASTEXITCODE = 0
+    $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {
+        throw 'No Microsoft Graph token from the Azure CLI. Sign it in first (azure/login with OIDC in GitHub Actions, or az login locally).'
+    }
+    $token = ([string]$token).Trim()
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Console "::add-mask::$token" }
+    # NetworkCredential.SecurePassword: the same SecureString as
+    # ConvertTo-SecureString -AsPlainText, without the analyzer error rule.
+    Connect-MgGraph -AccessToken ([System.Net.NetworkCredential]::new('', $token).SecurePassword) -NoWelcome | Out-Null
+    Remove-Variable -Name token
+}
+
 $requiredScopes = @('EntitlementManagement.ReadWrite.All', 'Group.Read.All', 'User.Read.All')
+if ($UseAzureCliToken) {
+    # App-only (pipeline): always this identity, never a leftover context.
+    Write-Console 'Signing in to Microsoft Graph app-only (token from the Azure CLI session)...' -ForegroundColor Yellow
+    try { Connect-GraphFromAzureCli }
+    catch { Save-AutoAssignmentSummary -Refusal @{ kind = 'sign-in' }; throw }
+}
 $ctx = $null; try { $ctx = Get-MgContext } catch { Write-Verbose "Get-MgContext failed: $($_.Exception.Message)"; $ctx = $null }
-if (-not $ctx) { Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes -NoWelcome; $ctx = Get-MgContext }
-$missingScopes = @($requiredScopes | Where-Object { $ctx.Scopes -and $_ -notin $ctx.Scopes })
+if (-not $ctx) {
+    if ($UseAzureCliToken) { Save-AutoAssignmentSummary -Refusal @{ kind = 'sign-in' }; throw 'No Microsoft Graph context after the app-only sign-in.' }
+    Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes -NoWelcome; $ctx = Get-MgContext
+}
+# App-only contexts list the token's roles here; a ReadWrite role covers its Read.
+$missingScopes = @(Get-MissingGraphPermission -Have @($ctx.Scopes) -Required $requiredScopes)
 if ($missingScopes) { Write-Warning "Current Graph context does not list: $($missingScopes -join ', '). Calls needing them will return 403." }
 
 $em = 'https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement'
@@ -486,8 +674,11 @@ function Add-Result {
 Write-Console "`nPreflight: employeeHireDate in the birthright departments" -ForegroundColor Cyan
 $birthrightDepts = @(@($rules['jobProfiles']) | Where-Object { $_ -and @(@($_['birthright']) | Where-Object { $_ -in $desired.Package }).Count } | ForEach-Object { [string]$_['department'] } | Sort-Object -Unique)
 $uf = [uri]::EscapeDataString("accountEnabled eq true and userType eq 'Member'")
-$pre = Get-HireDatePreflight -Users @(Get-GraphCollection -Uri "$graph/users?`$filter=$uf&`$select=id,department,employeeHireDate&`$top=999") -Departments $birthrightDepts
+try { $preUsers = @(Get-GraphCollection -Uri "$graph/users?`$filter=$uf&`$select=id,department,employeeHireDate&`$top=999") }
+catch { Save-AutoAssignmentSummary -Refusal @{ kind = 'graph-read' }; throw }
+$pre = Get-HireDatePreflight -Users $preUsers -Departments $birthrightDepts
 if ($pre.WithHireDate -eq 0) {
+    Save-AutoAssignmentSummary -Refusal @{ kind = 'no-hire-date'; inScope = $pre.InScope }
     throw ("Hire-date preflight: $($pre.InScope) enabled Member user(s) in the birthright departments ($($birthrightDepts -join ', ')) and NONE has employeeHireDate. " +
         'Every birthright rule requires "user.employeeHireDate -le system.now", so the automatic policies would assign the packages to nobody (a clinical lockout). ' +
         'Map HR startDate -> employeeHireDate first (mock-hr/Invoke-InboundProvisioning.ps1 sends it as the SCIM hireDate; the provisioning and Cloud Sync mappings are tenant-time steps), re-provision, then re-run. Nothing was sent.')
@@ -560,6 +751,7 @@ foreach ($e in @($catalog['accessPackages'] | Where-Object { $_ -and [string]$_[
 }
 
 $bad = @($results | Where-Object Action -in 'failed', 'drift-found')
+Save-AutoAssignmentSummary -Results $results.ToArray()
 Write-Console ("`n{0} package(s): {1}" -f $results.Count, (($results | Group-Object Action | ForEach-Object { "$($_.Count) $($_.Name)" }) -join ', ')) -ForegroundColor $(if ($bad) { 'Red' } else { 'Green' })
 Write-Console 'Verify: Entra -> ID Governance -> Access packages -> <package> -> Policies (auto-assignment) and Assignments.' -ForegroundColor Cyan
 $results.ToArray()

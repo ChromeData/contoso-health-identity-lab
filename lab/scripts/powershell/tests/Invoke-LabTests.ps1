@@ -40,6 +40,10 @@
                                        (never printed), result file; the diff in HR
                                        words; the plain-English summary (names, title,
                                        department only) and its bounded log wait
+      AutoAssignmentPipeline           Set-AutoAssignmentPolicies in terraform-apply.yml:
+                                       app-only token (never printed), APPLY's roles
+                                       cover it, guards still fail closed, the
+                                       plain-English Apply summary lines
       Remove-DemoHire (lab/scripts/dc) one Workforce/Disabled account by employeeID,
                                        never protected or out-of-scope accounts
       ScriptAnalyzerScope              analyzer suppressions are per function,

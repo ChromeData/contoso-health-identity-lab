@@ -55,7 +55,15 @@ for you (its steps 5 and 6, in that order, when `enable_governance` is on).
    policies for T2 packages; birthright packages get no Terraform policy).
 2. `Set-AutoAssignmentPolicies.ps1 -WhatIf`, then for real. Needs the
    **Identity Governance Administrator** role: catalog owners and access
-   package managers cannot create automatic policies.
+   package managers cannot create automatic policies. **In the pipeline this
+   step is automatic:** `terraform-apply.yml` runs it after every successful
+   apply, app-only as the APPLY identity (`-UseAzureCliToken`, whose
+   `EntitlementManagement.ReadWrite.All` needs no directory role), and puts
+   one plain line per change in the Apply summary ("Automatic access rule
+   set: **IT - Cloud Engineering Apps** goes to everyone in Information
+   Technology with the job title Cloud Engineer.", or "No automatic access
+   rules needed changing."). A refusal or failure turns the run red; the
+   Terraform part stays applied and a re-run is safe.
 3. `Set-IncompatibleAccessPackages.ps1 -WhatIf -Prune`, then `-Prune`. This
    removes the old Nurse -> Pharmacy link, which would otherwise gate the
    birthright package.

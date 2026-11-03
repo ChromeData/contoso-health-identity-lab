@@ -18,6 +18,12 @@
 # repo:OWNER@OWNER_ID/REPO@REPO_ID:environment:prod), and the PLAN app ONLY by
 # pull_request. A fork PR gets no OIDC token at all, so it reaches neither identity.
 #
+# After a successful apply, the same job writes the automatic access rules
+# (who gets each birthright access package) from lab/iga/birthright-rules.json
+# with post-apply/Set-AutoAssignmentPolicies.ps1, as the same APPLY identity
+# (app-only Microsoft Graph token from the azure/login session). Terraform
+# creates the packages; it does not create automatic assignment policies.
+#
 # All third-party actions pinned to full commit SHA (see terraform-plan.yml for
 # the Trivy-2026 supply-chain rationale).
 # =============================================================================
@@ -242,15 +248,92 @@ jobs:
         run: terraform apply -input=false -no-color -auto-approve tfplan
         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      # Plain-English result first ("Applied: ..." from the summary step), then
-      # the technical lines. Only says "Applied" when the apply step succeeded.
+      # ---- Automatic access rules (birthright, ADR 0012 T3) -------------------
+      # Terraform creates the automatic access packages but not WHO gets them:
+      # that is one automatic assignment policy per package, built from
+      # lab/iga/birthright-rules.json (department + job title) by
+      # Set-AutoAssignmentPolicies.ps1. It runs here, in the same job, only
+      # after a SUCCESSFUL apply (the packages must exist), as the same APPLY
+      # identity. Its baseline Graph roles already cover it
+      # (EntitlementManagement.ReadWrite.All; Group/User.ReadWrite.All cover
+      # the reads), pinned by tests/AutoAssignmentPipeline.Tests.ps1.
+      #
+      # NOT continue-on-error, on purpose. By now the Terraform change is
+      # live, and a failure here means a birthright package hands its access
+      # to the wrong people or to nobody: the script's own safety checks
+      # stopped (a package reaching a privileged group, tenant groups that do
+      # not match the catalog, two automatic rules, nobody in scope with a
+      # hire date, an automatic rule on a request-only package), or Microsoft
+      # refused (403). Marking that green would hide exactly the failure the
+      # summary exists to show. Instead the run goes red, the Apply summary
+      # below says the Terraform part IS live and what stopped, and
+      # re-running the workflow is safe (apply and script are idempotent).
+      #
+      # A fresh azure/login first: GitHub's OIDC token is short-lived, and
+      # after a long apply the Azure CLI could no longer swap it for a Graph
+      # token (AADSTS700024). Same APPLY app, same environment:prod subject.
+      - name: Sign in again for Microsoft Graph (APPLY app, fresh OIDC token)
+        if: steps.apply.outcome == 'success'
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install the pinned Microsoft Graph module
+        if: steps.apply.outcome == 'success'
+        shell: pwsh
+        run: |
+          # PSGallery is sometimes slow to answer on a fresh runner: retry (as lab-tests.yml does).
+          for ($i = 1; $i -le 4; $i++) {
+            try {
+              if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default -ErrorAction Stop }
+              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
+              Install-Module Microsoft.Graph.Authentication -RequiredVersion 2.41.2 -Scope CurrentUser -Force -ErrorAction Stop
+              break
+            } catch {
+              if ($i -eq 4) { throw }
+              Write-Warning "Install-Module failed (attempt $i): $($_.Exception.Message); retrying"
+              Start-Sleep -Seconds (10 * $i)
+            }
+          }
+
+      - name: Set who gets each automatic access package (birthright rules)
+        id: autoassign
+        if: steps.apply.outcome == 'success'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $plain = Join-Path $env:RUNNER_TEMP 'plain-autoassign.md'
+          $tech = Join-Path $env:RUNNER_TEMP 'tech-autoassign.md'
+          # enable_governance off in lab.tfvars = no access packages: nothing to set.
+          $raw = terraform -chdir="$env:TF_WORKING_DIR" output -json birthright_package_names 2>$null
+          if ($LASTEXITCODE -eq 0 -and -not @(($raw | Out-String) | ConvertFrom-Json | Where-Object { $_ })) {
+            '- Automatic access rules: not used here (access packages are switched off in lab.tfvars).' | Set-Content -LiteralPath $plain -Encoding utf8NoBOM
+            exit 0
+          }
+          # -Confirm:$false: the human gate was the approval job; the script's
+          # own refusals still apply. Package names and rule text only in the
+          # log; the Graph token is masked and never printed.
+          $global:LASTEXITCODE = 0
+          ./lab/scripts/powershell/post-apply/Set-AutoAssignmentPolicies.ps1 -UseAzureCliToken -Confirm:$false `
+            -SummaryPath $plain -SummaryDetailsPath $tech | Format-Table -AutoSize Package, Action, Detail | Out-String -Width 4096
+          exit $LASTEXITCODE
+
+      # Plain-English result first ("Applied: ..." from the summary step, then
+      # the automatic access rules), then the technical lines. Only says
+      # "Applied" when the apply step succeeded.
       - name: Apply summary
         if: always()
         env:
           APPLY_OUTCOME: ${{ steps.apply.outcome }}
+          AUTOASSIGN_OUTCOME: ${{ steps.autoassign.outcome }}
+          JOB_STATUS: ${{ job.status }}
         run: |
           applied="${RUNNER_TEMP}/plain-applied.md"
           planned="${RUNNER_TEMP}/plain-plan.md"
+          autoassign_plain="${RUNNER_TEMP}/plain-autoassign.md"
+          autoassign_tech="${RUNNER_TEMP}/tech-autoassign.md"
           {
             echo "## Terraform apply — \`${{ env.TF_WORKING_DIR }}\`"
             echo ""
@@ -260,6 +343,19 @@ jobs:
                   cat "$applied"
                 else
                   echo "**Applied.** (No plain-English summary this time; the \"terraform plan\" step log lists the changes.)"
+                fi
+                # Who gets each automatic access package (the step after the apply).
+                echo ""
+                if [ -s "$autoassign_plain" ]; then
+                  cat "$autoassign_plain"
+                else
+                  echo "- **Automatic access rules not checked:** the run stopped before that step reached Microsoft (see the steps after \"terraform apply\"). Nothing was changed by it."
+                fi
+                # job.status here = every step so far: red after a good apply
+                # means the sign-in, module install or access-rule step failed.
+                if [ "${JOB_STATUS}" != "success" ]; then
+                  echo ""
+                  echo "**The run is marked failed, but the Terraform changes above are live.** A step after the apply stopped: the line above says what. Re-running this workflow is safe."
                 fi ;;
               failure|cancelled)
                 echo "**The apply did not finish (${APPLY_OUTCOME}).** Some of these planned changes may not be live; the \"terraform apply\" step log shows where it stopped."
@@ -273,5 +369,6 @@ jobs:
             echo "- commit: \`${{ github.sha }}\`"
             echo "- actor:  \`${{ github.actor }}\`"
             echo "- result: \`${{ job.status }}\`"
-            echo "- identity: APPLY app via OIDC (no stored credential)"
+            echo "- identity: APPLY app via OIDC (no stored credential); the automatic access rules use an app-only Microsoft Graph token from the same sign-in (masked, never printed)"
+            if [ -s "$autoassign_tech" ]; then cat "$autoassign_tech"; fi
           } >> "$GITHUB_STEP_SUMMARY"
