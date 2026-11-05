@@ -68,6 +68,8 @@ variable "operator_graph_roles" {
       User.ReadWrite.All                  test users' job attributes
       GroupMember.ReadWrite.All           test users into app groups for the
                                           staff sign-in tests
+      Team.Create, TeamMember.ReadWrite.All  the SOC team the alert and
+                                          containment playbooks post to
   EOT
   type        = list(string)
   default = [
@@ -93,6 +95,8 @@ variable "operator_graph_roles" {
     "UserAuthenticationMethod.ReadWrite.All",
     "User.ReadWrite.All",
     "GroupMember.ReadWrite.All",
+    "Team.Create",
+    "TeamMember.ReadWrite.All",
   ]
 }
 

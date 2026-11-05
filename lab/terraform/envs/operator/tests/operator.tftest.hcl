@@ -33,6 +33,8 @@ mock_provider "azuread" {
         "UserAuthenticationMethod.ReadWrite.All"          = "50483e42-d915-4231-9639-7fdb7fd190e5"
         "User.ReadWrite.All"                              = "741f803b-c850-494e-b5df-cde7c675a1ca"
         "GroupMember.ReadWrite.All"                       = "dbaae8cf-10b5-4b86-a4a1-f871c94c6695"
+        "Team.Create"                                     = "23fc2474-f741-46ce-8465-674744c5c361"
+        "TeamMember.ReadWrite.All"                        = "0121dc95-1b9f-4aed-8bac-58c5ac466691"
       }
     }
   }
