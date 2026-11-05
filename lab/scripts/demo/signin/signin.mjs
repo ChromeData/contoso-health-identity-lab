@@ -2,7 +2,7 @@
 // =============================================================================
 // lab/scripts/demo/signin/signin.mjs - sign a lab user in through Entra
 // -----------------------------------------------------------------------------
-//   node signin.mjs <upn> <start-url> [--headed] [--fresh] [--identifier <name>] [--no-kmsi]
+//   node signin.mjs <upn> <start-url> [--headed] [--fresh] [--identifier <name>] [--until <regex>] [--no-kmsi]
 //
 //   import { signIn } from '<repo>/lab/scripts/demo/signin/signin.mjs';
 //   const { page, context, browser, close } = await signIn(upn, url, { headless: true });
@@ -178,23 +178,43 @@ async function step(page, upn, s) {
   return null;
 }
 
-// Drive Entra until the browser is back on the app. `until(page)` (optional)
-// decides "signed in"; otherwise: off the login hosts and the URL steady.
+// When is the browser "signed in"? A pure decision, so it is unit-tested
+// (tests/lib.test.mjs). An app's own sign-in or access-denied page is also
+// "off the login hosts with a steady URL", so that alone proves nothing:
+//   * with an `until` test, only `until` decides;
+//   * without one, Entra must have been visited in THIS run (the app sent
+//     the browser to Entra and Entra sent it back), no password box may be
+//     on screen (a signed-out app page), and the URL must be steady 2.5 s.
+//   * no Entra visit and no `until` = cannot tell: an error, never "ok".
+export function verdict({ onApp, untilGiven, untilOk, visitedLogin, passwordOnScreen, steadyMs }) {
+  if (!onApp) return 'wait';
+  if (untilGiven) return untilOk ? 'done' : 'wait';
+  if (passwordOnScreen) return 'signed-out';
+  if (steadyMs < 2500) return 'wait';
+  return visitedLogin ? 'done' : 'unproven';
+}
+
+// Drive Entra until the browser is back on the app (see verdict()).
 export async function drive(page, upn, opts = {}) {
   const s = { kmsi: true, pwTries: 0, otcTries: 0, userTries: 0, ...opts };
   const deadline = Date.now() + (opts.timeoutMs || 180000);
-  let steadyUrl = '', steadySince = 0;
+  let steadyUrl = '', steadySince = 0, visitedLogin = false;
   while (Date.now() < deadline) {
     await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+    if (LOGIN_HOST.test(host(page.url()))) visitedLogin = true;
     const did = await step(page, upn, s);
-    if (did) { log(`${localPart(upn)}: ${did}`); steadyUrl = ''; await sleep(1500); continue; }
+    if (did) { visitedLogin = true; log(`${localPart(upn)}: ${did}`); steadyUrl = ''; await sleep(1500); continue; }
     const h = host(page.url());
     const onApp = !LOGIN_HOST.test(h) && !(OKTA_HOST.test(h) && await onScreen(page, 'input[name="identifier"], input[name="username"], input[name="credentials.passcode"]'));
-    if (onApp) {
-      if (opts.until) { if (await opts.until(page).catch(() => false)) return; }
-      else if (page.url() === steadyUrl) { if (Date.now() - steadySince > 2500) return; }
-      else { steadyUrl = page.url(); steadySince = Date.now(); }
-    }
+    if (onApp && page.url() !== steadyUrl) { steadyUrl = page.url(); steadySince = Date.now(); }
+    const v = verdict({
+      onApp, untilGiven: !!opts.until, untilOk: onApp && opts.until ? await opts.until(page).catch(() => false) : false,
+      visitedLogin, passwordOnScreen: onApp && !opts.until ? !!(await onScreen(page, 'input[type=password]')) : false,
+      steadyMs: onApp ? Date.now() - steadySince : 0,
+    });
+    if (v === 'done') return;
+    if (v === 'signed-out') throw new Error(`back on ${h} but it shows a password box: the app did not accept the sign-in`);
+    if (v === 'unproven') throw new Error(`no Entra sign-in happened and no "until" test was given: cannot tell whether ${h} is signed in (pass until / --until)`);
     await sleep(700);
   }
   throw new Error(`sign-in did not finish in ${(opts.timeoutMs || 180000) / 1000}s (at ${host(page.url())})`);
@@ -237,11 +257,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(proces
   const flag = (n) => { const i = a.indexOf(n); if (i < 0) return false; a.splice(i, 1); return true; };
   const val = (n) => { const i = a.indexOf(n); if (i < 0) return undefined; const v = a[i + 1]; a.splice(i, 2); return v; };
   const headed = flag('--headed'), fresh = flag('--fresh'), noKmsi = flag('--no-kmsi');
-  const identifier = val('--identifier'), shotName = val('--shot');
+  const identifier = val('--identifier'), shotName = val('--shot'), untilRe = val('--until');
   const [upn, url] = a;
-  if (!upn || !url) { console.error('usage: node signin.mjs <upn> <start-url> [--headed] [--fresh] [--identifier <name>] [--no-kmsi] [--shot <name>]'); process.exit(2); }
+  if (!upn || !url) { console.error('usage: node signin.mjs <upn> <start-url> [--headed] [--fresh] [--identifier <name>] [--until <regex>] [--no-kmsi] [--shot <name>]'); process.exit(2); }
   try {
-    const r = await signIn(upn, url, { headless: !headed, fresh, identifier, kmsi: !noKmsi });
+    // --until <regex>: signed in only when the URL or the page text matches.
+    const until = untilRe ? async (p) => new RegExp(untilRe, 'i').test(p.url()) || new RegExp(untilRe, 'i').test(await pageText(p)) : undefined;
+    const r = await signIn(upn, url, { headless: !headed, fresh, identifier, kmsi: !noKmsi, until });
     await sleep(2000);
     const f = await shot(r.page, shotName || `signin-ok-${localPart(upn)}`);
     console.log(JSON.stringify({ ok: true, upn, landed: r.page.url(), title: await r.page.title(), screenshot: f, storageState: r.statePath }));

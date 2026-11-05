@@ -140,3 +140,50 @@ test('keychainWrite: a failing security -i reports the exit code, never its outp
     assert.throws(() => l.keychainWrite('contoso-lab-x', 'a@b', 'label', 'SECRETVALUE'), (e) => /security exit 1/.test(e.message) && !/SECRETVALUE/.test(e.message));
   });
 });
+
+// ---- overlapping sign-ins never share a code (per-user lock) ------------------
+test('freshTotp: two overlapping calls for one user get codes from different windows', async () => {
+  const upn = 'test-user-b@contosohealthlab.com';
+  let t = 1_700_000_010_000; // 10 s into a 30-s window
+  const clock = { now: () => t, sleep: async (ms) => { t += ms; await new Promise((r) => setImmediate(r)); } };
+  fs.rmSync(path.join(home, 'session', 'browser', 'test-user-b.totp-step'), { force: true });
+  const [a, b] = await Promise.all([lib.freshTotp(upn, RFC_SEED, clock), lib.freshTotp(upn, RFC_SEED, clock)]);
+  assert.notEqual(a, b, 'the second caller must wait for the next window');
+  const first = Math.floor(1_700_000_010_000 / 30000);
+  assert.ok([a, b].includes(lib.hotp(lib.base32Decode(RFC_SEED), first)), 'one caller uses the current window');
+  assert.ok([a, b].includes(lib.hotp(lib.base32Decode(RFC_SEED), first + 1)), 'the other uses the next one');
+  assert.equal(fs.existsSync(path.join(home, 'session', 'browser', 'test-user-b.totp-lock')), false, 'the lock is released');
+});
+
+test('freshTotp: a lock left by a crashed run (older than 90 s) is taken over', async () => {
+  const upn = 'test-user-c@contosohealthlab.com';
+  const lock = path.join(home, 'session', 'browser', 'test-user-c.totp-lock');
+  fs.writeFileSync(lock, '');
+  const old = (Date.now() - 120000) / 1000; fs.utimesSync(lock, old, old);
+  fs.rmSync(path.join(home, 'session', 'browser', 'test-user-c.totp-step'), { force: true });
+  let t = 1_700_000_010_000;
+  const code = await lib.freshTotp(upn, RFC_SEED, { now: () => t, sleep: async (ms) => { t += ms; } });
+  assert.equal(code, lib.hotp(lib.base32Decode(RFC_SEED), Math.floor(1_700_000_010_000 / 30000)));
+});
+
+// ---- when is a browser "signed in"? (signin.mjs verdict) ----------------------
+const { verdict } = await import('../signin.mjs');
+const base = { onApp: true, untilGiven: false, untilOk: false, visitedLogin: true, passwordOnScreen: false, steadyMs: 3000 };
+
+test('verdict: back from Entra on a steady app page with no password box = signed in', () => {
+  assert.equal(verdict(base), 'done');
+});
+test('verdict: an app page that never went through Entra, with no until test, is NOT reported signed in', () => {
+  assert.equal(verdict({ ...base, visitedLogin: false }), 'unproven');
+});
+test('verdict: an app page showing a password box (its own sign-in page) is signed out', () => {
+  assert.equal(verdict({ ...base, passwordOnScreen: true }), 'signed-out');
+});
+test('verdict: with an until test, only until decides', () => {
+  assert.equal(verdict({ ...base, untilGiven: true, untilOk: false }), 'wait');
+  assert.equal(verdict({ ...base, untilGiven: true, untilOk: true, visitedLogin: false }), 'done');
+});
+test('verdict: still on Entra, or the URL not yet steady = wait', () => {
+  assert.equal(verdict({ ...base, onApp: false }), 'wait');
+  assert.equal(verdict({ ...base, steadyMs: 1000 }), 'wait');
+});

@@ -11,8 +11,8 @@ with Conditional Access evaluated for real, instead of an admin session.
 
 | Script | What it does |
 |---|---|
-| `enroll.mjs <upn> [--force] [--headed] [--no-verify]` | Keeps the user's Keychain password (or sets a random one through Graph), issues a **one-time Temporary Access Pass** (60 min, the TAP policy minimum), signs in with it at `mysignins.microsoft.com/security-info`, adds an **authenticator app** ("Set up a different authentication app" → "Can't scan image?"), reads the secret key, stores it in the Keychain, enters the computed code, deletes any pass left, checks Graph lists the method, then proves a password + code sign-in reaches My Apps. |
-| `signin.mjs <upn> <start-url> [--fresh] [--headed] [--identifier <name>] [--no-kmsi] [--shot <name>]` | Opens the start URL and answers Entra's pages as the user (username, password, authenticator code, *Stay signed in?*, postponable nudges; Okta's identifier box when the start URL is Okta). Prints `{ok, landed, title, screenshot, storageState}`. |
+| `enroll.mjs <upn> [--force] [--headed] [--no-verify]` | Checks first, changes after: Playwright/Chromium must load and the password must be known (or settable) before anything on the account changes. Keeps the user's Keychain password (or sets a random one through Graph), issues a **one-time Temporary Access Pass** (60 min, the TAP policy minimum), signs in with it at `mysignins.microsoft.com/security-info`, adds an **authenticator app** ("Set up a different authentication app" → "Can't scan image?"), reads the secret key, stores it in the Keychain, enters the computed code, deletes any pass left, checks Graph lists the method, then proves a password + code sign-in reaches My Apps. `--force` replaces an authenticator the Keychain has no seed for: the new one is registered **first** and the old one deleted only once Graph lists the new one. The pass is deleted in a `finally`. |
+| `signin.mjs <upn> <start-url> [--fresh] [--headed] [--identifier <name>] [--until <regex>] [--no-kmsi] [--shot <name>]` | Opens the start URL and answers Entra's pages as the user (username, password, authenticator code, *Stay signed in?*, postponable nudges; Okta's identifier box when the start URL is Okta). Prints `{ok, landed, title, screenshot, storageState}`. |
 | `lib.mjs` | Keychain read/write, TOTP (RFC 6238, node:crypto), Graph as the operator, Playwright loader, secret-blurring screenshots. |
 
 As a module (other scripts):
@@ -26,7 +26,10 @@ await close();
 ```
 
 Options: `fresh` (ignore the saved cookies), `until` (the app's own "signed
-in" test; default = off the login hosts and the URL steady for 2.5 s),
+in" test - recommended; without it, success needs a round trip through Entra
+in this run, no password box on the app page and a URL steady for 2.5 s, and
+an app reached without any Entra visit is an error, never "ok"; see
+`verdict()`),
 `identifier` (what to type in Okta's box; default the UPN), `kmsi` (answer to
 *Stay signed in?*, default yes), `browser` (reuse a launched browser; the
 caller closes it), `timeoutMs`.
@@ -39,7 +42,7 @@ caller closes it), `timeoutMs`.
 | Authenticator seed | Keychain `contoso-lab-totp-<local>` (account = UPN), written over stdin to `security -i` **before** the code is submitted | A crash after Entra accepts the code cannot lose the seed |
 | Temporary Access Pass | This process's memory only; deleted through Graph afterwards | One-time, never printed or stored |
 | Cookies | `~/.contoso-operator/session/browser/<local>.json`, mode 600 | The operator's private session folder; reused by the next `signIn` |
-| Last code used | `~/.contoso-operator/session/browser/<local>.totp-step` (a counter, not a secret) | Entra refuses a code twice: a second sign-in inside 30 s waits for the next code |
+| Last code used | `~/.contoso-operator/session/browser/<local>.totp-step` (a counter, not a secret) and a `.totp-lock` while a code is chosen | Entra refuses a code twice: a second sign-in inside 30 s waits for the next code, also when two run at once (lock; a lock older than 90 s is taken over) |
 | Failure screenshots | `$SIGNIN_SHOTS_DIR` (default `$TMPDIR/signin-shots`) | Seeds, QR codes and inputs are blurred before every screenshot |
 
 ## Why it is built this way
@@ -53,6 +56,7 @@ caller closes it), `timeoutMs`.
 - **TOTP in node:crypto.** No extra package to vet; the seed never leaves
   memory and the Keychain. `tests/lib.test.mjs` checks it against the RFC
   6238 and RFC 4226 test vectors.
+- **A pass active on the account** (issued by someone else) is left alone: a password sign-in takes *Use your password instead*, as a user would.
 - **Fail closed.** A Keychain that cannot be read (locked) stops the run; only
   "item not found" (exit 44) counts as "no password yet", so a working
   password is never overwritten by mistake. Graph errors stop the run.

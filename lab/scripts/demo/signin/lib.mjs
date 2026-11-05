@@ -145,19 +145,43 @@ export function totp(secretB32, { now = Date.now(), step = 30, digits = 6 } = {}
 }
 // Entra refuses a code that was already used. The last time step used per
 // user (a counter, not a secret) is kept next to the storage state, so two
-// sign-ins inside one 30-second window wait for the next code.
+// sign-ins inside one 30-second window wait for the next code. Read, wait
+// and reservation happen under a per-user lock file (exclusive create), so
+// overlapping sign-ins - in one process or several - never get the same
+// code. A lock older than 90 s is a crashed holder's and is taken over.
 const stepFile = (upn) => path.join(STATE_DIR, `${localPart(upn)}.totp-step`);
+const lockFile = (upn) => path.join(STATE_DIR, `${localPart(upn)}.totp-lock`);
+const realClock = { now: () => Date.now(), sleep };
 export function markTotpStep(upn, counter) {
   fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
   fs.writeFileSync(stepFile(upn), String(counter), { mode: 0o600 });
 }
-export async function freshTotp(upn, seed) {
-  let last = -1; try { last = Number(fs.readFileSync(stepFile(upn), 'utf8')); } catch {}
-  let t = totp(seed);
-  // Too close to the end of the window: the code could expire in flight.
-  while (t.counter <= last || t.secondsLeft < 4) { await sleep(Math.max(1, t.secondsLeft) * 1000 + 300); t = totp(seed); }
-  markTotpStep(upn, t.counter);
-  return t.code;
+async function withTotpLock(upn, clock, fn) {
+  fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
+  const f = lockFile(upn);
+  const giveUp = clock.now() + 120000;
+  for (;;) {
+    try { fs.closeSync(fs.openSync(f, 'wx', 0o600)); break; } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      let age = 0; try { age = Date.now() - fs.statSync(f).mtimeMs; } catch { continue; }
+      if (age > 90000) { fs.rmSync(f, { force: true }); continue; }
+      if (clock.now() > giveUp) throw new Error(`another sign-in for ${upn} holds ${f}`);
+      await clock.sleep(200);
+    }
+  }
+  try { return await fn(); } finally { fs.rmSync(f, { force: true }); }
+}
+// `clock` is a test seam (a fake now/sleep); callers leave it out.
+export async function freshTotp(upn, seed, clock = realClock) {
+  return withTotpLock(upn, clock, async () => {
+    let last = -1;
+    try { last = Number(fs.readFileSync(stepFile(upn), 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    let t = totp(seed, { now: clock.now() });
+    // Too close to the end of the window: the code could expire in flight.
+    while (t.counter <= last || t.secondsLeft < 4) { await clock.sleep(Math.max(1, t.secondsLeft) * 1000 + 300); t = totp(seed, { now: clock.now() }); }
+    markTotpStep(upn, t.counter);
+    return t.code;
+  });
 }
 
 // A strong random password from an alphabet the Keychain writer accepts
