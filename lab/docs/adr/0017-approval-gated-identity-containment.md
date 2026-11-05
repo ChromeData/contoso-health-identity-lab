@@ -1,6 +1,6 @@
 # ADR 0017: Approval-gated identity containment
 
-- **Status:** Accepted (lab). BUILT: the playbook template, its deploy script, the AD containment script and the Sentinel automation rule are in code, behind `enable_itdr_containment` (default off), with offline Pester tests of the playbook's logic. DESIGNED only: the cloud block group for confirmed compromises. Not run: no Sentinel workspace exists and no approval card has been answered.
+- **Status:** Accepted (lab). RAN · tenant 2026-11-05 (capture-log E40, E41; record `lab/evidence/itdr/20261105T102000Z/`): `pb-identity-contain` is deployed in `rg-identity-lab`, its Teams connection is authorized as the SOC automation account, and from a drill incident about a throwaway cloud-only user the card ignored a non-approver's Contain, did nothing on a listed approver's Reject, and on that approver's Contain revoked sessions, confirmed the user compromised and disabled the account. The Sentinel automation rule is code behind `enable_itdr_containment` (on in `lab.tfvars` from the same date; it exists after the apply). BUILT, not run: `Invoke-AdContainment.ps1`, the break-glass and self-approval refusals. DESIGNED only: the cloud block group for confirmed compromises.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
@@ -68,9 +68,8 @@ into an older Medium incident.
    - An answer with no responder identity fails closed.
    - No answer within 4 hours means no action.
 4. **Contain** means: revoke sign-in sessions; `confirmCompromised` (user
-   risk becomes High); then disable the account if it is cloud-only and the
-   opt-in role exists, or flag it for an AD disable if it is synced or
-   AD-only. **Revoke only** signs the account out everywhere and leaves it
+   risk becomes High); then disable the account if it is cloud-only, or
+   flag it for an AD disable if it is synced or AD-only. **Revoke only** signs the account out everywhere and leaves it
    enabled.
 5. **Records** the decision, the approver and every Graph result on the
    incident and the ServiceNow ticket.
@@ -106,19 +105,21 @@ roles (`User.Read.All`, `AdministrativeUnit.Read.All` for the RMAU check,
 `User.RevokeSessions.All`, `User.EnableDisableAccount.All`,
 `IdentityRiskyUser.ReadWrite.All`), plus Microsoft Sentinel Responder
 (verify: that `AdministrativeUnit.Read.All` is the least-privileged role
-for the RMAU read). For an app-only caller, disabling a user also
-needs a directory role, because `accountEnabled` is a sensitive property.
-**That role, Authentication Administrator, stays off, which is the
-default.**
+for the RMAU read). The design assumed that an app-only caller also
+needs a directory role to disable a user, because `accountEnabled` is a
+sensitive property, and added an opt-in Authentication Administrator
+assignment for it. **The first run showed it is not needed:** on
+2026-11-05 the disable of a non-admin cloud-only user answered 204 with
+the five app roles alone (E41). **So that role stays off for good.**
 
-- **What it would buy is small.** With the workforce mastered in AD, it
-  reaches only cloud-only, non-admin accounts, such as guests.
+- **It would buy nothing** for the accounts the playbook may disable
+  (cloud-only, non-admin).
 - **What it would expose is large.** Authentication Administrator can also
   reset methods and issue a TAP for any non-admin user, so whoever controls
   the playbook could take over any clinician.
-- If it is ever turned on, it is scoped to an administrative unit of
-  cloud-only, non-admin accounts (`-DirectoryRoleScope`), never the tenant.
-  That AU isn't built, and the script's default is the tenant (`/`).
+- The switch (`-GrantDisableRole`, `-DirectoryRoleScope`) stays in the
+  script only so the decision is visible and reversible; using it needs a
+  new risk acceptance.
 
 **Admins are never contained by automation.** That would need Privileged
 Authentication Administrator, which would make the Logic App Tier 0.
@@ -152,14 +153,15 @@ role assignments on that resource group.
   a Vault check-in stops new logons with the stolen password or hash. A
   suspected forged ticket means resetting krbtgt twice, a separate
   procedure.
-- **If the disable role is ever turned on, it is standing privilege
-  outside PIM** and breaks the zero-standing rule (ADR 0020). That is a
-  risk acceptance. Risk owner: SOC lead (in the lab, the repository
-  maintainer). Next review: 2027-01-20, or when the cloud block is built.
-  `role-assigned-outside-pim` alerts once; record that alert. The identity
-  is a sensitive NHI in the inventory (ADR 0018). Without the role, the
-  disable step returns 403, the playbook records that, and sessions are
-  still revoked.
+- **The managed identity can disable any non-admin cloud-only account
+  with its app roles alone** (seen 2026-11-05). The Teams approval is what
+  stands between a detection and that disable; whoever can edit the Logic
+  App can skip it (R16, the trust boundary above). If the directory role
+  were ever turned on, it would also be standing privilege outside PIM and
+  break the zero-standing rule (ADR 0020): a new risk acceptance. Risk
+  owner: SOC lead (in the lab, the repository maintainer). Next review:
+  2027-01-20, or when the cloud block is built. The identity is a
+  sensitive NHI in the inventory (ADR 0018).
 - **The protected list can drift.** Break-glass and approver object IDs are
   fixed at deploy time. Re-run `-VerifyProtectedList` whenever either group
   changes.
@@ -172,8 +174,12 @@ role assignments on that resource group.
 ## How it is measured
 
 Source: Logic App run history, the incident comments and the
-`Invoke-AdContainment.ps1` evidence records. Fill this in after the first
-run.
+`Invoke-AdContainment.ps1` evidence records. First run, 2026-11-05 (E41,
+a drill started from the incident, so it measures the machinery, not an
+on-call rota): the approver's Contain answer reached the playbook at 10:31:13Z (Teams `responseTime`), and
+`revokeSignInSessions`, `confirmCompromised` and the disable were all done
+by 10:31:15Z (Entra audit log); the outcome was on the incident and the
+ServiceNow ticket at 10:31:19Z.
 
 | Measure | Target |
 |---|---|
