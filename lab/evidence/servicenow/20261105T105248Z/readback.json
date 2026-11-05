@@ -231,6 +231,118 @@
      "details": {}
     }
    ]
+  },
+  "temp_mover_created": {
+   "at": "2026-11-05T11:19:00Z",
+   "action": "Create",
+   "steps": [
+    {
+     "name": "EntryImport",
+     "status": "Success",
+     "description": "Retrieved User 'snow-mover-test@contosohealthlab.com' from Microsoft Entra ID",
+     "details": {
+      "objectId": "f4d6c2b3-b121-4fdd-891e-5295cd5414f6",
+      "accountEnabled": "True",
+      "displayName": "ServiceNow Mover Test (slice 2, temporary)",
+      "givenName": "Mover",
+      "surname": "Test",
+      "userPrincipalName": "snow-mover-test@contosohealthlab.com",
+      "IsSoftDeleted": "False",
+      "appRoleAssignments": "User"
+     }
+    },
+    {
+     "name": "EntrySynchronizationScoping",
+     "status": "Success",
+     "description": "Determine if User in scope by evaluating against each scoping filter",
+     "details": {
+      "Active in the source system": "True",
+      "Assigned to the application": "True",
+      "User has the required role": "True",
+      "Scoping filter evaluation passed": "True",
+      "ScopeEvaluationResult": "{}"
+     }
+    },
+    {
+     "name": "EntrySynchronizationAdd",
+     "status": "Success",
+     "description": "User 'snow-mover-test@contosohealthlab.com' will be created in ServiceNow (User is active and assigned in Microsoft Entra ID, but no matching User was found in ServiceNow)",
+     "details": {}
+    },
+    {
+     "name": "EntryExportAdd",
+     "status": "Success",
+     "description": "User 'snow-mover-test@contosohealthlab.com' was created in ServiceNow",
+     "details": {
+      "active": "1",
+      "first_name": "Mover",
+      "last_name": "Test",
+      "user_name": "snow-mover-test@contosohealthlab.com"
+     }
+    }
+   ]
+  },
+  "temp_mover_removed_from_group_then_switched_off": {
+   "at": "2026-11-05T11:19:20Z",
+   "action": "Disable",
+   "steps": [
+    {
+     "name": "EntryImport",
+     "status": "Success",
+     "description": "Retrieved User 'snow-mover-test@contosohealthlab.com' from Microsoft Entra ID",
+     "details": {
+      "objectId": "f4d6c2b3-b121-4fdd-891e-5295cd5414f6",
+      "accountEnabled": "True",
+      "displayName": "ServiceNow Mover Test (slice 2, temporary)",
+      "givenName": "Mover",
+      "surname": "Test",
+      "userPrincipalName": "snow-mover-test@contosohealthlab.com",
+      "IsSoftDeleted": "False"
+     }
+    },
+    {
+     "name": "EntryImport",
+     "status": "Success",
+     "description": "Retrieved  'snow-mover-test@contosohealthlab.com' from ServiceNow",
+     "details": {
+      "active": "1",
+      "first_name": "Mover",
+      "last_name": "Test",
+      "locked_out": "0",
+      "sys_id": "08e3683a9390d75025167bfdfaba1012",
+      "user_name": "snow-mover-test@contosohealthlab.com"
+     }
+    },
+    {
+     "name": "EntrySynchronizationScoping",
+     "status": "Success",
+     "description": "Determine if User in scope by evaluating against each scoping filter",
+     "details": {
+      "Active in the source system": "True",
+      "Assigned to the application": "False",
+      "User has the required role": "False",
+      "Scoping filter evaluation passed": "True",
+      "ScopeEvaluationResult": "{}"
+     }
+    },
+    {
+     "name": "EntrySynchronizationDeactivate",
+     "status": "Success",
+     "description": "The User 'snow-mover-test@contosohealthlab.com' is disabled in Microsoft Entra ID, but active in ServiceNow. They will be disabled in ServiceNow.",
+     "details": {
+      "IsActive": "True",
+      "Assigned to the application": "False",
+      "IsInProvisioningScope": "True",
+      "ScopeEvaluationResult": "{}"
+     }
+    },
+    {
+     "name": "EntryExportUpdateSoftDelete",
+     "status": "Success",
+     "description": "User 'snow-mover-test@contosohealthlab.com' was updated in ServiceNow",
+     "details": {}
+    }
+   ]
   }
  },
  "servicenow_readback": {
@@ -255,6 +367,17 @@
     "locked_out": "true",
     "active": "false",
     "sys_updated_on": "2026-11-05 11:00:49",
+    "sys_created_by": "svc-entra-provisioning"
+   }
+  ],
+  "temp_mover": [
+   {
+    "sys_updated_by": "svc-entra-provisioning",
+    "user_name": "snow-mover-test@contosohealthlab.com",
+    "sys_created_on": "2026-11-05 11:19:11",
+    "locked_out": "true",
+    "active": "false",
+    "sys_updated_on": "2026-11-05 11:19:30",
     "sys_created_by": "svc-entra-provisioning"
    }
   ],
@@ -291,5 +414,5 @@
    "errorCode": 0
   }
  ],
- "cleanup": "temporary snow-leaver-test@contosohealthlab.com deleted and purged from Entra 11:08Z; its ServiceNow account kept, inactive + locked, as the leaver evidence"
+ "cleanup": "temporary snow-leaver-test (deleted + purged 11:08Z) and snow-mover-test (removed from App-ServiceNow-Users 11:19:20Z, deleted + purged 11:20Z) - their ServiceNow accounts kept, inactive + locked, as the evidence"
 }
