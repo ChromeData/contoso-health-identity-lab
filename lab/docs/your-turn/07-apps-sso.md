@@ -22,6 +22,9 @@ decides who gets in; AWS decides what they get.
 
 **Starts from:** `turn where` says `dc`, and run sheet 06 is done: Dana holds
 **Nurse - Clinical Apps**, which puts her in `App-AWS-IdentityCenter-Users`.
+(That is how the first run went. Nurses no longer get AWS: on a rebuild, use
+a cloud engineer holding **IT - Cloud Engineering Apps** wherever this sheet
+says Dana.)
 
 **Heads-up:** step 2 gives the pipeline's APPLY identity a second Tier-0
 permission (`AppRoleAssignment.ReadWrite.All`, ADR 0005). AWS shows the SCIM
