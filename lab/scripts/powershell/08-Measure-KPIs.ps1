@@ -86,6 +86,17 @@
                                       (discovery x Vault), not recomputed here.
       pam_sessions_recorded_pct       brokered sessions (Guacamole history) with
                                       a recording
+      secure_score_pct                Microsoft Secure Score (Graph
+                                      /security/secureScores, one record a day,
+                                      about 90 days kept): today's currentScore
+                                      / maxScore, and in detail the same on the
+                                      baseline day (-SecureScoreBaselineDate,
+                                      default the oldest record kept) plus every
+                                      control whose score moved between the two.
+                                      Opt-in (-IncludeSecureScore): it needs
+                                      SecurityEvents.Read.All, which the other
+                                      KPIs do not. Without the switch it is
+                                      not-measured, never 0.
 
     WHAT THE FILE CONTAINS: aggregates only (counts, percentages, minutes).
     No names, UPNs, object ids or tenant id - the kpis folder is public.
@@ -111,6 +122,9 @@
                                          PIM for Groups membership
     Policy.Read.All                      Conditional Access policies
     AccessReview.Read.All                access-review decisions
+    SecurityEvents.Read.All              Secure Score history (-IncludeSecureScore
+                                         only; least privileged per Microsoft
+                                         Learn, List secureScores)
     Application.Read.All                 Graph application-permission grants
                                          (servicePrincipals/{id}/appRoleAssignedTo)
                                          and NHI credentials (no -NhiInventoryPath)
@@ -290,7 +304,17 @@ param(
     # App-only sign-in from the Azure CLI session (the lab operator via
     # lab/scripts/operator/op, or azure/login over OIDC).
     [Parameter()]
-    [switch]$UseAzureCliToken
+    [switch]$UseAzureCliToken,
+
+    # Microsoft Secure Score history (needs SecurityEvents.Read.All).
+    [Parameter()]
+    [switch]$IncludeSecureScore,
+
+    # The "before" day for Secure Score: the first daily record on or after
+    # this date (yyyy-MM-dd). Empty = the oldest record Microsoft still keeps.
+    [Parameter()]
+    [ValidatePattern('^$|^\d{4}-\d{2}-\d{2}$')]
+    [string]$SecureScoreBaselineDate = ''
 )
 
 # Operator console output. Write-Host on purpose (colour, -NoNewline); every
@@ -860,6 +884,70 @@ function Measure-HrToDisable {
     }
 }
 
+function Measure-SecureScore {
+    # Microsoft Secure Score history -> the baseline day vs the latest day.
+    # One record per day (createdDateTime); if a day appears twice the later
+    # record wins. The baseline is the first day on or after -BaselineDate (or
+    # the oldest day kept). A control counts as "moved" when its score differs
+    # between the two days; a control present on only one day is reported
+    # with $null on the other side, never as 0.
+    param(
+        [AllowEmptyCollection()][object[]]$History,
+        [string]$BaselineDate = ''
+    )
+    $days = @{}
+    foreach ($r in @($History)) {
+        if ($null -eq $r) { continue }
+        $created = Get-Field $r @('createdDateTime')
+        if (-not $created) { continue }
+        $ts = ([datetime]$created).ToUniversalTime()
+        $key = $ts.ToString('yyyy-MM-dd')
+        if (-not $days.ContainsKey($key) -or $ts -gt $days[$key].Ts) { $days[$key] = @{ Ts = $ts; Record = $r } }
+    }
+    if ($days.Count -eq 0) { throw 'Secure Score history is empty: no daily record to measure.' }
+    $ordered = @($days.Keys | Sort-Object)
+    # @() around the whole if: a one-element result would otherwise unroll to a
+    # bare string, and [0] would then be its first character.
+    $baseKeys = @(if ($BaselineDate) { $ordered | Where-Object { $_ -ge $BaselineDate } | Select-Object -First 1 } else { $ordered[0] })
+    if ($baseKeys.Count -eq 0 -or -not $baseKeys[0]) { throw "No Secure Score record on or after $BaselineDate (oldest kept: $($ordered[0]); newest: $($ordered[-1]))." }
+    $baseKey = [string]$baseKeys[0]
+    $lastKey = [string]$ordered[-1]
+    $point = {
+        param([string]$Key)
+        $rec = $days[$Key].Record
+        $cur = [double](Get-Field $rec @('currentScore')); $max = [double](Get-Field $rec @('maxScore'))
+        if ($max -le 0) { throw "Secure Score record for $Key has no maxScore." }
+        [ordered]@{ date = $Key; score = [math]::Round($cur, 2); maxScore = [math]::Round($max, 2); pct = [math]::Round(100 * $cur / $max, 1) }
+    }
+    $base = & $point $baseKey
+    $last = & $point $lastKey
+    $controls = {
+        param([string]$Key)
+        $m = @{}
+        foreach ($c in @(Get-Field $days[$Key].Record @('controlScores'))) {
+            if ($null -eq $c) { continue }
+            $n = [string](Get-Field $c @('controlName')); if (-not $n) { continue }
+            $m[$n] = @{ Category = [string](Get-Field $c @('controlCategory')); Score = [double](Get-Field $c @('score')) }
+        }
+        $m
+    }
+    $cb = & $controls $baseKey; $cl = & $controls $lastKey
+    $moved = foreach ($n in @(@($cb.Keys) + @($cl.Keys) | Sort-Object -Unique)) {
+        $b = if ($cb.ContainsKey($n)) { $cb[$n].Score } else { $null }
+        $a = if ($cl.ContainsKey($n)) { $cl[$n].Score } else { $null }
+        if ($null -ne $b -and $null -ne $a -and [math]::Abs($a - $b) -lt 0.005) { continue }
+        $cat = if ($cl.ContainsKey($n)) { $cl[$n].Category } else { $cb[$n].Category }
+        [ordered]@{ control = $n; category = $cat; before = $b; after = $a; delta = $(if ($null -ne $b -and $null -ne $a) { [math]::Round($a - $b, 2) } else { $null }) }
+    }
+    $moved = @($moved | Sort-Object -Property @{ Expression = { if ($null -ne $_['delta']) { [math]::Abs($_['delta']) } else { 0 } }; Descending = $true }, @{ Expression = { $_['control'] } })
+    return [pscustomobject]@{
+        Baseline = $base; Latest = $last; Days = $ordered.Count
+        DeltaScore = [math]::Round($last.score - $base.score, 2); DeltaPct = [math]::Round($last.pct - $base.pct, 1)
+        MaxScoreChanged = ($last.maxScore -ne $base.maxScore)
+        ControlsMoved = $moved
+    }
+}
+
 function Measure-NhiCredential {
     # FALLBACK when no 06 output is given: application objects only (owners
     # expanded). Same KPI definitions as 06 (an NHI with >= 1 expired
@@ -996,6 +1084,7 @@ function Get-PrincipalType { param($Principal) return ([string](Get-Field $Princ
 $requiredScopes = @('User.Read.All', 'Group.Read.All', 'Directory.Read.All', 'AuditLog.Read.All', 'RoleManagement.Read.Directory',
     'PrivilegedEligibilitySchedule.Read.AzureADGroup', 'PrivilegedAssignmentSchedule.Read.AzureADGroup', 'Policy.Read.All', 'AccessReview.Read.All',
     'Application.Read.All')   # Graph application-permission grants (always) + NHI fallback read
+if ($IncludeSecureScore) { $requiredScopes += 'SecurityEvents.Read.All' }
 if ($UseAzureCliToken) {
     # App-only: always this identity, never a leftover context.
     Write-Console 'Signing in to Microsoft Graph app-only (token from the Azure CLI session)...' -ForegroundColor Yellow
@@ -1266,6 +1355,27 @@ try {
 }
 catch { foreach ($k in $nhiKeys) { $kpis[$k] = Get-KpiEntry -Status failed -Note $_.Exception.Message } }
 $nhiKeys | ForEach-Object { Write-KpiLine $_ }
+
+# --- 7b. Microsoft Secure Score (opt-in) -------------------------------------------------------
+# Microsoft's own rating of the tenant's security settings, kept by Microsoft
+# as one record a day for about 90 days, so the "before" is read from the
+# history itself rather than from an older snapshot that never had it.
+Write-Console "`n[7b/8] Microsoft Secure Score (history)" -ForegroundColor Cyan
+if (-not $IncludeSecureScore) {
+    $kpis['secure_score_pct'] = Get-KpiEntry -Status not-measured -Note 'pass -IncludeSecureScore (Graph /security/secureScores, SecurityEvents.Read.All)'
+}
+else {
+    try {
+        # $top=90: Microsoft keeps about 90 daily records (Learn: List secureScores).
+        $ss = Measure-SecureScore -History @(Get-GraphCollection -Uri "$graph/security/secureScores?`$top=90") -BaselineDate $SecureScoreBaselineDate
+        $kpis['secure_score_pct'] = Get-KpiEntry -Status measured -Value $ss.Latest.pct -Unit '%' -Numerator $ss.Latest.score -Denominator $ss.Latest.maxScore `
+            -Note ("{0}: {1} % ({2} of {3}) -> {4}: {5} % ({6} of {7}); {8} control(s) moved{9}" -f $ss.Baseline.date, $ss.Baseline.pct, $ss.Baseline.score, $ss.Baseline.maxScore,
+                $ss.Latest.date, $ss.Latest.pct, $ss.Latest.score, $ss.Latest.maxScore, @($ss.ControlsMoved).Count, $(if ($ss.MaxScoreChanged) { '; the maximum changed too (Microsoft added or removed controls)' } else { '' })) `
+            -Detail ([ordered]@{ baseline = $ss.Baseline; latest = $ss.Latest; days = $ss.Days; deltaScore = $ss.DeltaScore; deltaPct = $ss.DeltaPct; controlsMoved = @($ss.ControlsMoved) })
+    }
+    catch { $kpis['secure_score_pct'] = Get-KpiEntry -Status failed -Note $_.Exception.Message }
+}
+Write-KpiLine 'secure_score_pct'
 
 # --- 8. PAM stand-ins (lab/pam reconcile report + Guacamole session history) ---------------------
 Write-Console "`n[8/8] PAM (Vault + Guacamole stand-ins)" -ForegroundColor Cyan

@@ -88,6 +88,15 @@ Describe 'ConvertTo-KpiOnePager' {
         $script:Md | Should -Match '\*\*Standing privileged humans\*\* \| 2 users \| -5 \(better\)'
         $script:Md | Should -Match '\*\*Workforce on phishing-resistant sign-in\*\* \| 40 % \(80 of 200\) \| \+27\.5 \(better\)'
     }
+    It 'names Microsoft Secure Score and carries its baseline-day note (the after for the security scan)' {
+        $snap = New-Snapshot -Label 'after' -Kpis @{
+            secure_score_pct = [ordered]@{ status = 'measured'; value = 50; unit = '%'; numerator = 90; denominator = 180; note = '2026-10-20: 25 % (45 of 180) -> 2026-11-05: 50 % (90 of 180); 1 control(s) moved' }
+        }
+        $md = ConvertTo-KpiOnePager -Snapshot $snap
+        $md | Should -Match '\| Microsoft Secure Score \| 50 % \(90 of 180\) \|'
+        $md | Should -Match '2026-10-20: 25 % \(45 of 180\) -> 2026-11-05: 50 % \(90 of 180\)'
+        $md | Should -Not -Match '\| secure_score_pct \|'
+    }
     It 'lists every KPI, including ones the catalog does not know' {
         $script:Md | Should -Match '\| custom_kpi_from_future \| 3 things \|'
     }
