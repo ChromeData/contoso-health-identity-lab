@@ -1,0 +1,323 @@
+{
+  "record": "ITDR playbook drill, Sentinel incident #35 (lab tenant, RAN - tenant)",
+  "incident": {
+    "number": 35,
+    "name": "db1d9fb6-268c-48d3-9021-427e81c0ce08",
+    "rule": "Contoso TEST - containment drill (temporary; deleted after the drill)"
+  },
+  "team": {
+    "name": "Contoso SOC",
+    "groupId": "6bf33a4b-865b-43fb-9dba-c1a031e36bd0",
+    "channel": "Identity-SecOps",
+    "channelId": "19:4082dd6ec333491786083ed4b1299843@thread.tacv2",
+    "owner": "svc-soc-automation@ContosoHealthLab.onmicrosoft.com"
+  },
+  "subject": {
+    "upn": "itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com",
+    "objectId": "6387fa55-2654-4e6e-b401-98a162dc1a14",
+    "kind": "throwaway cloud-only test user, no licence, nobody held its password; deleted after the drill"
+  },
+  "approvers": {
+    "group": "ITDR-Containment-Approvers",
+    "testApprover": "test-user-a@contosohealthlab.com (f0fae691-4751-416b-9535-4756ee7c3fa6)",
+    "nonApproverChannelMember": "test-user-b@contosohealthlab.com (0c8c0647-d18a-476f-9cc4-c5b9d2cd8ad4)"
+  },
+  "runs": [
+    {
+      "step": "notify",
+      "playbook": "pb-identity-notify",
+      "run": "08584077328415607642972030817CU02",
+      "status": "Succeeded",
+      "startTime": "2026-11-05T10:20:43.919259Z",
+      "endTime": "2026-11-05T10:20:56.4518871Z",
+      "actions": {
+        "Post_card_to_SOC_channel": {
+          "status": "Succeeded",
+          "httpStatus": 201,
+          "posted": true
+        },
+        "Create_ServiceNow_incident": {
+          "status": "Succeeded",
+          "httpStatus": 201,
+          "ticket": "INC0010001",
+          "correlation_id": "db1d9fb6-268c-48d3-9021-427e81c0ce08"
+        },
+        "Comment_ticket_number_on_Sentinel_incident": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        }
+      }
+    },
+    {
+      "step": "contain: non-approver answers Contain (must be ignored)",
+      "playbook": "pb-identity-contain",
+      "run": "08584077326127766303116141609CU35",
+      "status": "Succeeded",
+      "startTime": "2026-11-05T10:24:32.7061079Z",
+      "endTime": "2026-11-05T10:27:11.244479Z",
+      "actions": {
+        "Post_approval_card_and_wait": {
+          "status": "Succeeded",
+          "httpStatus": null,
+          "responder": {
+            "userPrincipalName": "test-user-b@contosohealthlab.com",
+            "objectId": "0c8c0647-d18a-476f-9cc4-c5b9d2cd8ad4"
+          },
+          "decision": "contain",
+          "responseTime": "2026-11-05T10:27:07.1906494Z"
+        },
+        "Get_user": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        },
+        "Revoke_sessions": {
+          "status": "Skipped"
+        },
+        "Confirm_compromised": {
+          "status": "Skipped"
+        },
+        "Disable_user": {
+          "status": "Skipped"
+        },
+        "Revoke_sessions_only": {
+          "status": "Skipped"
+        },
+        "Compose_summary": {
+          "status": "Succeeded",
+          "httpStatus": null,
+          "summary": "IGNORED for itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com: answer from test-user-b@contosohealthlab.com not accepted - the responder is not on the containment approver list. No action taken - a listed approver who is not the subject must decide (re-run the playbook from the incident)."
+        },
+        "Comment_on_Sentinel_incident": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        },
+        "Add_work_note": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        }
+      }
+    },
+    {
+      "step": "contain: approver answers Reject (deny)",
+      "playbook": "pb-identity-contain",
+      "run": "08584077323787092868643908073CU14",
+      "status": "Succeeded",
+      "startTime": "2026-11-05T10:28:26.7735686Z",
+      "endTime": "2026-11-05T10:29:21.9252282Z",
+      "actions": {
+        "Post_approval_card_and_wait": {
+          "status": "Succeeded",
+          "httpStatus": null,
+          "responder": {
+            "userPrincipalName": "test-user-a@contosohealthlab.com",
+            "objectId": "f0fae691-4751-416b-9535-4756ee7c3fa6"
+          },
+          "decision": "reject",
+          "responseTime": "2026-11-05T10:29:17.7961753Z"
+        },
+        "Get_user": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        },
+        "Revoke_sessions": {
+          "status": "Skipped"
+        },
+        "Confirm_compromised": {
+          "status": "Skipped"
+        },
+        "Disable_user": {
+          "status": "Skipped"
+        },
+        "Revoke_sessions_only": {
+          "status": "Skipped"
+        },
+        "Compose_summary": {
+          "status": "Succeeded",
+          "httpStatus": null,
+          "summary": "REJECTED by test-user-a@contosohealthlab.com for itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com: no action taken."
+        },
+        "Comment_on_Sentinel_incident": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        },
+        "Add_work_note": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        }
+      }
+    },
+    {
+      "step": "contain: approver answers Contain (approve)",
+      "playbook": "pb-identity-contain",
+      "run": "08584077322644441638316440066CU01",
+      "status": "Succeeded",
+      "startTime": "2026-11-05T10:30:21.0721639Z",
+      "endTime": "2026-11-05T10:31:19.8768974Z",
+      "actions": {
+        "Post_approval_card_and_wait": {
+          "status": "Succeeded",
+          "httpStatus": null,
+          "responder": {
+            "userPrincipalName": "test-user-a@contosohealthlab.com",
+            "objectId": "f0fae691-4751-416b-9535-4756ee7c3fa6"
+          },
+          "decision": "contain",
+          "responseTime": "2026-11-05T10:31:13.625271Z"
+        },
+        "Get_user": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        },
+        "Revoke_sessions": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        },
+        "Confirm_compromised": {
+          "status": "Succeeded",
+          "httpStatus": 204
+        },
+        "Disable_user": {
+          "status": "Succeeded",
+          "httpStatus": 204
+        },
+        "Revoke_sessions_only": {
+          "status": "Skipped"
+        },
+        "Compose_summary": {
+          "status": "Succeeded",
+          "httpStatus": null,
+          "summary": "CONTAIN approved by test-user-a@contosohealthlab.com (object id f0fae691-4751-416b-9535-4756ee7c3fa6) for itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com: revokeSignInSessions HTTP 200, confirmCompromised HTTP 204, disable (accountEnabled=false) HTTP 204. Expect 204 for all three; 403 = the managed identity lacks the Graph app role or the directory role (see Deploy-ContainmentPlaybook.ps1)."
+        },
+        "Comment_on_Sentinel_incident": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        },
+        "Add_work_note": {
+          "status": "Succeeded",
+          "httpStatus": 200
+        }
+      }
+    }
+  ],
+  "incidentComments": [
+    {
+      "utc": "2026-11-05T10:20:54.7594754Z",
+      "text": "ServiceNow incident INC0010001 opened automatically by playbook pb-identity-notify."
+    },
+    {
+      "utc": "2026-11-05T10:21:54.939994Z",
+      "text": "ITDR containment - playbook pb-identity-contain run 08584077327760454574138334593CU36 NO DECISION for itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com within 4 h (or the Teams connection failed): no action taken."
+    },
+    {
+      "utc": "2026-11-05T10:27:10.637171Z",
+      "text": "ITDR containment - playbook pb-identity-contain run 08584077326127766303116141609CU35 IGNORED for itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com: answer from test-user-b@contosohealthlab.com not accepted - the responder is not on the containment approver list. No action taken - a listed approver who is not the subject must decide (re-run the playbook from the incident)."
+    },
+    {
+      "utc": "2026-11-05T10:29:21.5157927Z",
+      "text": "ITDR containment - playbook pb-identity-contain run 08584077323787092868643908073CU14 REJECTED by test-user-a@contosohealthlab.com for itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com: no action taken."
+    },
+    {
+      "utc": "2026-11-05T10:31:19.4980404Z",
+      "text": "ITDR containment - playbook pb-identity-contain run 08584077322644441638316440066CU01 CONTAIN approved by test-user-a@contosohealthlab.com (object id f0fae691-4751-416b-9535-4756ee7c3fa6) for itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com: revokeSignInSessions HTTP 200, confirmCompromised HTTP 204, disable (accountEnabled=false) HTTP 204. Expect 204 for all three; 403 = the managed identity lacks the Graph app role or the directory role (see Deploy-ContainmentPlaybook.ps1)."
+    }
+  ],
+  "entraAudit": [
+    {
+      "utc": "2026-11-05T10:31:14.6842728Z",
+      "category": "UserManagement",
+      "activity": "Update user",
+      "result": "success",
+      "initiatedBy": "pb-identity-contain"
+    },
+    {
+      "utc": "2026-11-05T10:31:14.6842728Z",
+      "category": "UserManagement",
+      "activity": "Update StsRefreshTokenValidFrom Timestamp",
+      "result": "success",
+      "initiatedBy": "pb-identity-contain"
+    },
+    {
+      "utc": "2026-11-05T10:31:15.1056337Z",
+      "category": "IdentityProtection",
+      "activity": "ConfirmAccountCompromised",
+      "result": "success",
+      "initiatedBy": null
+    },
+    {
+      "utc": "2026-11-05T10:31:15.4971744Z",
+      "category": "UserManagement",
+      "activity": "Disable account",
+      "result": "success",
+      "initiatedBy": "pb-identity-contain"
+    },
+    {
+      "utc": "2026-11-05T10:31:15.4981794Z",
+      "category": "UserManagement",
+      "activity": "Update user",
+      "result": "success",
+      "initiatedBy": "pb-identity-contain"
+    },
+    {
+      "utc": "2026-11-05T10:31:25.6354408Z",
+      "category": "UserManagement",
+      "activity": "Update user",
+      "result": "success",
+      "initiatedBy": "Microsoft Substrate Management"
+    }
+  ],
+  "subjectAfter": {
+    "accountEnabled": false,
+    "signInSessionsValidFromDateTime": "2026-11-05T10:31:14Z",
+    "beforeAnyAnswer": {
+      "accountEnabled": true,
+      "signInSessionsValidFromDateTime": "2026-11-05T10:19:09Z"
+    },
+    "afterReject": "unchanged (read 10:30Z: accountEnabled true, signInSessionsValidFrom 10:19:09Z)"
+  },
+  "containIdentity": {
+    "principalId": "8b19d899-4d23-4b92-8478-12d9da78cb6b",
+    "directoryRoleAssignments": 0,
+    "graphAppRoleCount": 5
+  },
+  "teamsConnections": {
+    "teams-pb-identity-notify": {
+      "status": "Connected",
+      "authenticatedUser": "svc-soc-automation@ContosoHealthLab.onmicrosoft.com"
+    },
+    "teams-pb-identity-contain": {
+      "status": "Connected",
+      "authenticatedUser": "svc-soc-automation@ContosoHealthLab.onmicrosoft.com"
+    }
+  },
+  "serviceNow": {
+    "instance": "dev459905",
+    "ticket": "INC0010001",
+    "short_description": "[Sentinel #35] Contoso TEST - containment drill (temporary, slice 5, delete after use)",
+    "correlation_id": "db1d9fb6-268c-48d3-9021-427e81c0ce08",
+    "workNotesBy": "svc.sentinel",
+    "workNotes": [
+      {
+        "utc": "2026-11-05T10:21:56Z",
+        "starts": "NO DECISION (first run: the Teams action was rejected before posting, see notes)"
+      },
+      {
+        "utc": "2026-11-05T10:27:10Z",
+        "starts": "IGNORED ... answer from test-user-b ... not on the containment approver list"
+      },
+      {
+        "utc": "2026-11-05T10:29:21Z",
+        "starts": "REJECTED by test-user-a ... no action taken"
+      },
+      {
+        "utc": "2026-11-05T10:31:19Z",
+        "starts": "CONTAIN approved by test-user-a (object id f0fae691-...)"
+      }
+    ]
+  },
+  "notes": [
+    "First containment run (08584077327760454574138334593CU36, 10:21Z) failed at the Teams step: Logic Apps refuses a method on ApiConnectionWebhook inputs. The playbook logged NO DECISION and took no action (fail closed); the template was fixed (method removed) and redeployed before the three runs above.",
+    "revokeSignInSessions answered HTTP 200 (Graph v1.0 returns 200 with value true), not 204.",
+    "The disable answered 204 with NO directory role on the managed identity: for this non-admin cloud-only user the Graph app roles User.EnableDisableAccount.All + User.Read.All were enough. Admin targets were not tried (never on admins).",
+    "All runs were started from the incident (Sentinel incidents/runPlaybook, as the lab operator), not by an automation rule: the automation rules need the Terraform apply of TF_SENTINEL_PLAYBOOK_ID / TF_CONTAINMENT_PLAYBOOK_ID + enable_itdr_containment."
+  ]
+}

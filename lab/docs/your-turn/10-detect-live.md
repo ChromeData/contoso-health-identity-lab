@@ -17,7 +17,11 @@ twelve rules **Enabled** (run sheet 04), and:
   registration, three accounts for the failed sign-ins, and one disposable test
   user that nobody has a password for;
 - a Team with an **Identity-SecOps** channel, and two people in it: one who
-  will be in `ITDR-Containment-Approvers`, and one who won't be.
+  will be in `ITDR-Containment-Approvers`, and one who won't be. Since
+  2026-11-05 this is **Contoso SOC**, owned by `svc-soc-automation`, with
+  test-user-a (an approver) and test-user-b (not one); to answer cards
+  yourself on camera, add your own account to the team first
+  (`lab/scripts/monitoring/README.md`, "The SOC team").
 
 **Heads-up:** steps 4 to 8 ran on 2026-10-28 (stage `itdr`: DC01 already had SecurityEvent rows, four rules released, 16 enabled). The rest is still a draft, so
 correct any step the first time you do it. **Test accounts only.** Every PR here
@@ -45,7 +49,7 @@ answers **Reject**. Your own answer about yourself is ignored by design.
 | | **Part B: containment that asks first (E40, E41)** | | |
 | 11 | Entra, **Groups**: create `ITDR-Containment-Approvers` with the approver in it (not a test account). Check the Key Vault holds `servicenow-integration-password` | the group | one or more approvers |
 | 12 | `pwsh`: `Connect-MgGraph -TenantId <tenant id> -Scopes Application.Read.All,AppRoleAssignment.ReadWrite.All,GroupMember.Read.All`, with `az login` done. Then `./lab/scripts/monitoring/Deploy-ContainmentPlaybook.ps1 -KeyVaultName <kv> -TeamsGroupId <team id> -TeamsChannelId '<channel id>' -ServiceNowInstance <instance> -ServiceNowUser <user> -WhatIf`, then again without `-WhatIf` | the terminal | break-glass members protected by object id, the approvers counted, and the playbook id printed. Add `-GrantDisableRole` only if the playbook should disable cloud-only users (it raises one expected role-assignment incident) |
-| 13 | Azure portal: the Logic App `pb-identity-contain`, its Teams connection, **Authorize** | the connection | Connected |
+| 13 | `node lab/scripts/monitoring/authorize-teams-connection.mjs teams-pb-identity-contain` (it signs in as `svc-soc-automation`, never as you; done 2026-11-05 for both playbooks) | the JSON it prints, then the connection in the portal | Connected, authenticated as svc-soc-automation |
 | 14 | `gh variable set TF_CONTAINMENT_PLAYBOOK_ID -R ChromeData/contoso-health-identity-lab --body "<printed id>"`. Then a PR with `enable_itdr_containment = true`. Merge, approve, watch | the plan comment | the automation rule **Contoso ITDR - containment approval (High identity incidents)** |
 | 15 | Confirm test user C compromised, the same way as run sheet 08 step 5 but with C's object id | Sentinel **Incidents**, then the Teams channel | a High **Risky user or risky sign-in** incident naming C, then the approval card |
 | 16 | The channel member who is **not** an approver clicks **Contain** | the incident's comments | "IGNORED ... not on the containment approver list" |
@@ -97,7 +101,7 @@ answers **Reject**. Your own answer about yourself is ignored by design.
 | `lab-tests` is red on "no v2 ITDR rule" or on the vault feed signals | `plan_lab_tfvars` still pins the earlier stage. Update that assert. |
 | No Teams card | Authorize the Teams connection (step 13). If the incident was merged into an older one, the Created trigger never fires: run the playbook from the incident, or turn on `containment_on_alert_added` in its own PR. |
 | Every answer on the card is ignored | The approver list is empty, or Teams returned no responder identity, and both fail closed. `Deploy-ContainmentPlaybook.ps1 -VerifyProtectedList` reports the drift. |
-| The disable step answers 403 | Expected without `-GrantDisableRole`. Sessions are still revoked, and the incident says so. |
+| The disable step answers 403 | The account is an admin (out of the playbook's reach by design) or the managed identity lost `User.EnableDisableAccount.All`: re-run `Deploy-ContainmentPlaybook.ps1`. A non-admin cloud-only user is disabled without any directory role (E41). |
 | A card asks to contain your own admin account | The other approver clicks **Reject**. Say it on camera: the playbook asks, and a person says no. |
 | No incident after 15 minutes | Run the rule's query by hand in **Logs**. If Microsoft's operation names differ from the query, copy the real strings into it. |
 | Every Tier-0 logon alerts | The vault feed is down: the incident shows `VaultFeedHealthy = false`. Restart `ingest-vault-audit.sh`. |

@@ -2,7 +2,7 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "metadata": {
-    "description": "Contoso Health identity lab - ITDR containment playbook. High identity incident -> per account: protected-account check -> restricted-management-AU check (RMAU members are escalated to an RMAU-scoped human: app permissions cannot act on them) -> Teams adaptive card APPROVAL (Contain / Revoke only / Reject, 4 h timeout; only a listed approver who is not the subject can decide - a missing responder identity fails closed) -> Graph revokeSignInSessions + confirmCompromised (Identity Protection: user risk High, so CA006 applies) + accountEnabled=false (cloud-only) or an AD-disable flag (synced / AD-only accounts: AD is the authority) -> Sentinel incident comment + ServiceNow work note on the notify ticket (or a new ticket). Uses its system-assigned managed identity: Graph app roles User.RevokeSessions.All, User.EnableDisableAccount.All, User.Read.All, AdministrativeUnit.Read.All, IdentityRiskyUser.ReadWrite.All (+ a directory role for the disable, opt-in) and Microsoft Sentinel Responder on the workspace. ServiceNow secret comes from Key Vault at deploy time. Deployed by lab/scripts/monitoring/Deploy-ContainmentPlaybook.ps1; triggered by the automation rule in lab/terraform/modules/monitoring (enable_itdr_containment)."
+    "description": "Contoso Health identity lab - ITDR containment playbook. High identity incident -> per account: protected-account check -> restricted-management-AU check (RMAU members are escalated to an RMAU-scoped human: app permissions cannot act on them) -> Teams adaptive card APPROVAL (Contain / Revoke only / Reject, 4 h timeout; only a listed approver who is not the subject can decide - a missing responder identity fails closed) -> Graph revokeSignInSessions + confirmCompromised (Identity Protection: user risk High, so CA006 applies) + accountEnabled=false (cloud-only) or an AD-disable flag (synced / AD-only accounts: AD is the authority) -> Sentinel incident comment + ServiceNow work note on the notify ticket (or a new ticket). Uses its system-assigned managed identity: Graph app roles User.RevokeSessions.All, User.EnableDisableAccount.All, User.Read.All, AdministrativeUnit.Read.All, IdentityRiskyUser.ReadWrite.All (no directory role: the disable of a non-admin cloud-only user answered 204 without one, RAN - tenant 2026-11-05) and Microsoft Sentinel Responder on the workspace. ServiceNow secret comes from Key Vault at deploy time. Deployed by lab/scripts/monitoring/Deploy-ContainmentPlaybook.ps1; triggered by the automation rule in lab/terraform/modules/monitoring (enable_itdr_containment)."
   },
   "parameters": {
     "playbookName": {
@@ -97,7 +97,7 @@
       "location": "[parameters('location')]",
       "tags": "[parameters('tags')]",
       "properties": {
-        "displayName": "[concat('Teams approvals (authorize once after deploy) - ', parameters('playbookName'))]",
+        "displayName": "[concat('Teams approvals (authorize once after deploy, as svc-soc-automation) - ', parameters('playbookName'))]",
         "customParameterValues": {},
         "api": {
           "id": "[subscriptionResourceId('Microsoft.Web/locations/managedApis', parameters('location'), 'teams')]"
@@ -452,7 +452,7 @@
                                 },
                                 "Post_approval_card_and_wait": {
                                   "type": "ApiConnectionWebhook",
-                                  "description": "Teams 'Post adaptive card and wait for a response' (channel). Waits up to 4 h; no answer = no action. The teams connection is OAuth: authorize it once after deploy.",
+                                  "description": "Teams connector 'Post adaptive card and wait for a response' (PostCardAndWaitForResponse, as the Flow bot, to the SOC team's Identity-SecOps channel). It replaced the deprecated flowcontinuation action on 2026-11-05. Waits up to 4 h; no answer = no action. The response carries responder.objectId / responder.userPrincipalName (checked below) and data.decision from the Action.Submit button. The teams connection is OAuth: authorize it once after deploy as svc-soc-automation (lab/scripts/monitoring/authorize-teams-connection.mjs), never as a person.",
                                   "runAfter": {
                                     "Compose_approval_card": [
                                       "Succeeded"
@@ -467,18 +467,15 @@
                                         "name": "@parameters('$connections')['teams']['connectionId']"
                                       }
                                     },
-                                    "path": "/flowbot/actions/flowcontinuation/recipienttypes/channel/$subscriptions",
-                                    "queries": {
-                                      "groupId": "@parameters('teamsGroupId')"
-                                    },
+                                    "path": "/v1.0/teams/conversation/gatherinput/poster/Flow bot/location/@{encodeURIComponent('Channel')}/$subscriptions",
                                     "body": {
                                       "notificationUrl": "@{listCallbackUrl()}",
                                       "body": {
                                         "messageBody": "@{outputs('Compose_approval_card')}",
                                         "recipient": {
+                                          "groupId": "@parameters('teamsGroupId')",
                                           "channelId": "@parameters('teamsChannelId')"
                                         },
-                                        "shouldUpdateCard": true,
                                         "updateMessage": "Decision recorded - see the Sentinel incident comments."
                                       }
                                     }
@@ -628,7 +625,7 @@
                                                     "actions": {
                                                       "Disable_user": {
                                                         "type": "Http",
-                                                        "description": "PATCH accountEnabled=false - Graph app roles User.EnableDisableAccount.All + User.Read.All AND (app-only sensitive action) a directory role able to act on the target, e.g. Authentication Administrator for non-admin users. Without the role Graph answers 403 and the log says so.",
+                                                        "description": "PATCH accountEnabled=false - Graph app roles User.EnableDisableAccount.All + User.Read.All. RAN - tenant 2026-11-05: 204 for a non-admin cloud-only user with NO directory role on the managed identity, so the opt-in Authentication Administrator role is not needed for these targets. An admin target is out of reach by design (Privileged Authentication Administrator would make this Logic App Tier 0); Graph refusing it is expected and logged.",
                                                         "inputs": {
                                                           "method": "PATCH",
                                                           "uri": "https://graph.microsoft.com/v1.0/users/@{encodeUriComponent(body('Get_user')?['id'])}",
@@ -648,7 +645,7 @@
                                                         "type": "AppendToArrayVariable",
                                                         "inputs": {
                                                           "name": "ContainmentLog",
-                                                          "value": "CONTAIN approved by @{body('Post_approval_card_and_wait')?['responder']?['userPrincipalName']} (object id @{body('Post_approval_card_and_wait')?['responder']?['objectId']}) for @{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])}: revokeSignInSessions HTTP @{coalesce(string(outputs('Revoke_sessions')?['statusCode']), 'n/a')}, confirmCompromised HTTP @{coalesce(string(outputs('Confirm_compromised')?['statusCode']), 'n/a')}, disable (accountEnabled=false) HTTP @{coalesce(string(outputs('Disable_user')?['statusCode']), 'n/a')}. Expect 204 for all three; 403 = the managed identity lacks the Graph app role or the directory role (see Deploy-ContainmentPlaybook.ps1)."
+                                                          "value": "CONTAIN approved by @{body('Post_approval_card_and_wait')?['responder']?['userPrincipalName']} (object id @{body('Post_approval_card_and_wait')?['responder']?['objectId']}) for @{coalesce(body('Get_user')?['userPrincipalName'], items('For_each_account')?['AadUserId'])}: revokeSignInSessions HTTP @{coalesce(string(outputs('Revoke_sessions')?['statusCode']), 'n/a')}, confirmCompromised HTTP @{coalesce(string(outputs('Confirm_compromised')?['statusCode']), 'n/a')}, disable (accountEnabled=false) HTTP @{coalesce(string(outputs('Disable_user')?['statusCode']), 'n/a')}. Expect 200 (revoke) and 204, 204; 403 = the managed identity lacks a Graph app role, or the account is an admin automation must not touch (see Deploy-ContainmentPlaybook.ps1)."
                                                         },
                                                         "runAfter": {
                                                           "Disable_user": [

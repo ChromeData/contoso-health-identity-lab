@@ -154,7 +154,16 @@ Describe 'Containment playbook (lab/monitoring/playbook-contain.json)' {
         $wait = @($actions | Where-Object { $_.Name -eq 'Post_approval_card_and_wait' })[0]
         $wait.Action.type | Should -Be 'ApiConnectionWebhook'
         $wait.Action.limit.timeout | Should -Be 'PT4H'
-        $wait.Action.inputs.path | Should -Match 'flowcontinuation'
+        # The supported Teams action (PostCardAndWaitForResponse, Flow bot, channel), not the
+        # deprecated flowcontinuation one the connector swagger marks "deprecated": true (live read 2026-11-05).
+        $wait.Action.inputs.path | Should -Match '^/v1\.0/teams/conversation/gatherinput/poster/Flow bot/location/'
+        $wait.Action.inputs.path | Should -Not -Match 'flowcontinuation'
+        $wait.Action.inputs.body.notificationUrl | Should -Be '@{listCallbackUrl()}'
+        # Logic Apps refuses a 'method' on ApiConnectionWebhook inputs ("The 'method' must not be
+        # provided in the 'ApiConnectionWebhook' action inputs", run 2026-11-05): the subscribe is always a POST.
+        @($wait.Action.inputs.Keys) | Should -Not -Contain 'method'
+        $wait.Action.inputs.body.body.recipient.groupId | Should -Be "@parameters('teamsGroupId')"
+        $wait.Action.inputs.body.body.recipient.channelId | Should -Be "@parameters('teamsChannelId')"
         # Every write lives under the decided scope -> Switch_on_decision.
         $writes = @($graphCalls | Where-Object { $_.Action.inputs.method -ne 'GET' })
         foreach ($w in $writes) { $w.Scope | Should -Match '^Switch_on_decision/|^Condition_synced_from_AD/else$' -Because $w.Name }
@@ -228,12 +237,75 @@ Describe 'Containment playbook (lab/monitoring/playbook-contain.json)' {
         }
     }
 
+    It 'posts the incident card to the SOC channel through the Teams connector, with no webhook secret' {
+        $nwf = @($notify.resources | Where-Object { $_.type -eq 'Microsoft.Logic/workflows' })[0]
+        # The Workflows webhook URL was a bearer credential (anyone holding it could post): gone.
+        @($notify.parameters.Keys) | Should -Not -Contain 'teamsWebhookUrl'
+        ($notify | ConvertTo-Json -Depth 50) | Should -Not -Match 'teamsWebhookUrl'
+        @($notify.resources | Where-Object { $_.type -eq 'Microsoft.Web/connections' -and $_.name -like '*teams-*' }).Count | Should -Be 1
+        $nwf.properties.parameters.'$connections'.value.teams.connectionId | Should -Match "teams-"
+        $nwf.dependsOn -join ' ' | Should -Match "teams-"
+        $if = $nwf.properties.definition.actions.If_Teams_configured
+        ($if.expression | ConvertTo-Json -Depth 10 -Compress) | Should -Match 'teamsGroupId'
+        ($if.expression | ConvertTo-Json -Depth 10 -Compress) | Should -Match 'teamsChannelId'
+        $post = $if.actions.Post_card_to_SOC_channel
+        $post.type | Should -Be 'ApiConnection'
+        $post.inputs.host.connection.name | Should -Be "@parameters('`$connections')['teams']['connectionId']"
+        $post.inputs.path | Should -Match '^/v1\.0/teams/conversation/adaptivecard/poster/Flow bot/location/'
+        $post.inputs.body.recipient.groupId | Should -Be "@parameters('teamsGroupId')"
+        $post.inputs.body.recipient.channelId | Should -Be "@parameters('teamsChannelId')"
+        $notify.outputs.teamsConnectionName | Should -Not -BeNullOrEmpty
+        # The deploy script no longer reads a webhook secret.
+        (Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' 'Deploy-Playbook.ps1') -Raw) | Should -Not -Match "'teams-webhook-url'"
+    }
+
     It 'updates the notify ticket by the correlation id the notify playbook sets' {
         $find = @($actions | Where-Object Name -EQ 'Find_ticket_by_correlation_id')[0]
         $find.Action.inputs.queries.sysparm_query | Should -Match "correlation_id=@\{triggerBody\(\)\?\['object'\]\?\['name'\]\}"
         $nwf = @($notify.resources | Where-Object { $_.type -eq 'Microsoft.Logic/workflows' })[0]
         $body = $nwf.properties.definition.actions.If_ServiceNow_configured.actions.Create_ServiceNow_incident.inputs.body
         $body.correlation_id | Should -Be "@{triggerBody()?['object']?['name']}"
+    }
+}
+
+Describe 'Teams drill helpers (authorize-teams-connection.mjs, answer-teams-card.mjs)' {
+    BeforeAll {
+        $authorize = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..' 'authorize-teams-connection.mjs')
+        $answer = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..' 'answer-teams-card.mjs')
+    }
+
+    It 'authorizes Teams connections only, and only counts Connected AS the requested account' {
+        $authorize | Should -Match "conn\.api !== 'teams'"
+        $authorize | Should -Match "conn\.status === 'Connected' && conn\.user\.toLowerCase\(\) === upn"
+        # The consent code reaches az on stdin, never in argv.
+        $authorize | Should -Match "'--body', '@/dev/stdin'"
+        $authorize | Should -Match 'confirmConsentCode'
+        $authorize | Should -Not -Match "'--body', [^']*code"
+        # The owner and break-glass refusal comes from the toolkit's checkUpn.
+        $authorize | Should -Match 'checkUpn\('
+    }
+
+    It 'acts (Contain / Revoke) only on cards about lab test or drill accounts; Reject is always allowed' {
+        $answer | Should -Match "choice !== 'reject' && !DRILL_SUBJECT\.test\(subject\)"
+        $node = Get-Command node -ErrorAction SilentlyContinue
+        if (-not $node) { Set-ItResult -Skipped -Because 'node is not installed'; return }
+        $fn = [regex]::Match($answer, '(?ms)^function subjectOf.*?^}').Value
+        $re = [regex]::Match($answer, 'const DRILL_SUBJECT = (/.*/i);').Groups[1].Value
+        $fn | Should -Not -BeNullOrEmpty
+        $js = @"
+$fn
+const DR = $re;
+const cases = [
+  ['Account\tITDR Drill (throwaway) (itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com)\nEntra object id\tx', true],
+  ['Account\tMichael Williams (MichaelWilliams@ContosoHealthLab.onmicrosoft.com)\nEntra object id\tx', false],
+  ['Account\tEvil (test-user-a@contosohealthlab.com) (adm-x@contosohealthlab.com)\nEntra object id\tx', false],
+  ['Account\tno address here\nEntra object id\tx', false],
+];
+const bad = cases.filter(([t, ok]) => DR.test(subjectOf(t)) !== ok);
+console.log(bad.length);
+"@
+        $out = $js | & $node.Source -
+        $out | Should -Be '0'
     }
 }
 

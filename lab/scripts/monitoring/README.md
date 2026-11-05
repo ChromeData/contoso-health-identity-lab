@@ -5,14 +5,24 @@ eleven detections (KQL for Sentinel / Log Analytics, SPL twins for Splunk), a
 human-approved containment playbook, and the telemetry the hybrid Tier-0
 detections need.
 
-> **Status: built and tested offline only. Nothing here has run against
-> Entra, Azure or a live Sentinel workspace yet.** Every staging flag defaults
-> to `false`; lines marked `verify:` depend on behaviour only the tenant can
-> confirm. The tenant-time steps are listed at the end.
+> **Status.** The detections run in Sentinel (see `lab.tfvars` for the ones
+> held back). **RAN · tenant (2026-11-05, capture-log E40, E40a, E41):** both
+> playbooks are deployed in `rg-identity-lab` and were run from a drill
+> incident: the notify card reached the SOC team's Identity-SecOps channel and
+> opened a ServiceNow ticket; the containment card ignored a non-approver,
+> did nothing on an approver's Reject, and on the approver's Contain revoked
+> sessions, confirmed the user compromised and disabled the account (record:
+> `lab/evidence/itdr/20261105T102000Z/`). The automation rules that start
+> them on their own are code in `modules/monitoring` and exist once the apply
+> has run with `TF_SENTINEL_PLAYBOOK_ID` / `TF_CONTAINMENT_PLAYBOOK_ID` and
+> `enable_itdr_containment` (`lab.tfvars`). Lines marked `verify:` still
+> depend on behaviour only the tenant can confirm.
 
 | File | What it does |
 |---|---|
-| `Deploy-Playbook.ps1` | Deploys `lab/monitoring/playbook-notify.json` (Teams card + ServiceNow ticket on every incident). |
+| `Deploy-Playbook.ps1` | Deploys `lab/monitoring/playbook-notify.json` (Teams card to the SOC channel + ServiceNow ticket on every incident). |
+| `authorize-teams-connection.mjs` | Authorizes a playbook's Teams API connection once, headless, as `svc-soc-automation` (ARM `listConsentLinks` / `confirmConsentCode`, staff sign-in toolkit), and fails unless the connection reads back Connected as that account. |
+| `answer-teams-card.mjs` | Drill aid: answers a containment card in Teams on the web as a lab TEST user (the playbook still decides whether that answer counts). |
 | `Deploy-ContainmentPlaybook.ps1` | Deploys `lab/monitoring/playbook-contain.json` and grants its managed identity exactly the rights it uses. |
 | `Invoke-AdContainment.ps1` | The AD half of containment: disables / re-enables an AD account on DC01 through `az vm run-command`, writes an evidence record. |
 | `ingest-vault-audit.sh` | Ships Vault check-out / check-in evidence (lab/pam audit log) to the `VaultCheckout_CL` table through the Logs Ingestion API. |
@@ -128,8 +138,10 @@ tier0-logon-without-checkout.kql: logon NOT inside
    person holding a role scoped to that AU, such as the VIP-support PIM
    group) revokes and disables by hand. If that read fails, the playbook
    records it and continues to the approval.
-4. **Teams adaptive card** to the Identity-SecOps channel: *Contain*, *Revoke
-   sessions only*, *Reject*. No answer in 4 h means no action. The answer
+4. **Teams adaptive card** to the Identity-SecOps channel of the SOC team
+   (Teams connector, *Post adaptive card and wait for a response* as the Flow
+   bot): *Contain*, *Revoke sessions only*, *Reject*. No answer in 4 h means
+   no action. The answer
    counts only if Teams returns the responder's object id and UPN, the id is
    a member of the containment approver group (`approverObjectIds`, from
    `-ApproverGroupName ITDR-Containment-Approvers`), and the responder is not
@@ -158,7 +170,7 @@ stay runbook steps.
 | | Graph `User.RevokeSessions.All` | revoke refresh tokens / session cookies |
 | | Graph `User.EnableDisableAccount.All` | `accountEnabled=false` |
 | | Graph `IdentityRiskyUser.ReadWrite.All` | `confirmCompromised` on Contain (Entra ID P2; 403 without it, logged) |
-| | *Opt-in* `-GrantDisableRole`: Authentication Administrator (tenant or AU-scoped) | Graph treats `accountEnabled` as a **sensitive action**: an app-only caller also needs a directory role that may act on the target. Off by default, so the disable answers 403 until it's granted. Admins stay out of scope: containing an admin needs Privileged Authentication Administrator, which would make this Logic App Tier 0. Granting the role trips `role-assigned-outside-pim` once (expected). |
+| | *Opt-in* `-GrantDisableRole`: Authentication Administrator (tenant or AU-scoped) - **not needed, keep it off** | The design assumed Graph's sensitive-action rule makes an app-only disable need a directory role. RAN · tenant 2026-11-05 (E41): without any directory role, `accountEnabled=false` on a non-admin cloud-only user answered 204. The role would add only reach (method resets and Temporary Access Passes for every non-admin user, R16). Admins stay out of scope: containing an admin needs Privileged Authentication Administrator, which would make this Logic App Tier 0 (not tried live, by design). Granting the role would trip `role-assigned-outside-pim` once (expected). |
 | | Microsoft Sentinel Responder (workspace) | incident comments, entity extraction |
 | Azure Security Insights app | Microsoft Sentinel Automation Contributor (RG) | lets automation rules run playbooks |
 | Operator running `ingest-vault-audit.sh` | Monitoring Metrics Publisher on `dcr-idlab-vault-checkout` | Logs Ingestion API. The CI apply identity can't grant it (it isn't on its ABAC-delegable list), so this is a human step |
@@ -166,8 +178,44 @@ stay runbook steps.
 
 Secrets: the ServiceNow password comes from Key Vault at deploy time as an ARM
 `securestring` (0600 temp parameter file, deleted), and ServiceNow calls have
-`secureData` on in run history. The Teams connector is OAuth, authorized once
-in the portal, and holds no secret in the template.
+`secureData` on in run history. The Teams connector is OAuth and holds no
+secret in the template. Both playbooks' Teams connections are authorized once,
+as the cloud-only SOC automation account `svc-soc-automation` (it owns the
+SOC team; E5 with only the Teams service plan on; password and authenticator
+seed in the operator's Keychain), never as a person, with
+`node lab/scripts/monitoring/authorize-teams-connection.mjs teams-pb-identity-contain`
+(and `teams-pb-identity-notify`). A re-deploy keeps the authorization (checked
+2026-11-05: Connected as the same account after a redeploy). The notify card
+used to go through a Teams Workflows webhook URL: that URL was a bearer
+credential (anyone holding it could post into the SOC channel) and needed a
+flow owned by a person, so the notify playbook now uses the same connector.
+What the connection adds to R16: whoever can edit either Logic App can act in
+Teams as `svc-soc-automation` (post, read the SOC channel, manage the team it
+owns). That is no new reach - the same editors can already change the
+workflow itself (R16, `rg-identity-lab` is Tier 0) - and adding someone to the
+team never makes them an approver: approvers are object ids baked in at deploy
+from `ITDR-Containment-Approvers`.
+
+### The SOC team (one-time, as the lab operator, 2026-11-05)
+
+Graph, app-only (operator rights `Team.Create`, `TeamMember.ReadWrite.All`,
+`User.ReadWrite.All`, `GroupMember.ReadWrite.All`):
+
+1. `POST /users` `svc-soc-automation@ContosoHealthLab.onmicrosoft.com`,
+   cloud-only, password generated into the Keychain (`contoso-lab-svc-soc-automation`),
+   then `assignLicense` E5 with every service plan disabled except `TEAMS1`
+   (a Teams connector call acts as a Teams user). Its authenticator app:
+   `node lab/scripts/demo/signin/enroll.mjs svc-soc-automation@ContosoHealthLab.onmicrosoft.com`.
+2. `POST /teams` (template `standard`, owner = that account: an app-only
+   team needs a user owner) named **Contoso SOC**, with the channel
+   **Identity-SecOps** in the same body.
+3. Members: the containment approvers that are lab test users
+   (`test-user-a`, also added to `ITDR-Containment-Approvers`) and one channel
+   member who is not an approver (`test-user-b`), for the "ignored" drill.
+   The owner's own account is in `ITDR-Containment-Approvers` but is NOT
+   added to the team by automation: whoever presents adds themselves.
+4. Deploy both playbooks with `-TeamsGroupId <team id> -TeamsChannelId '<channel id>'`,
+   then authorize both Teams connections (above).
 
 ## Staging order (flags live in `lab/terraform/envs/dev`)
 
@@ -194,9 +242,11 @@ in the portal, and holds no secret in the template.
    rules plus every ITDR rule whose table has data deploy. Enable the
    connector, wait for DC01 rows in SecurityEvent, then remove those
    exclusions in a second PR.
-5. `./Deploy-ContainmentPlaybook.ps1 …`, then authorize the Teams connection.
-6. `containment_playbook_id = "<printed id>"` and
-   `enable_itdr_containment = true`.
+5. `./Deploy-ContainmentPlaybook.ps1 …`, then authorize the Teams connection
+   (`authorize-teams-connection.mjs`). Done 2026-11-05.
+6. `containment_playbook_id = "<printed id>"` (repo variable
+   `TF_CONTAINMENT_PLAYBOOK_ID`) and `enable_itdr_containment = true`
+   (`lab.tfvars`, on since 2026-11-05).
 
 Inputs and lookups the second-wave rules (`enable_itdr_detections_v2`) need:
 
@@ -264,9 +314,9 @@ get checked in the tenant (the steps below).
 | 2 | Generate one event per rule: add an app secret, consent to a test app, set a CA policy to report-only, assign a role outside PIM, issue a TAP to a test user, confirm a test user compromised in ID Protection, log on to DC01 as tier0-admin-01 **without** a check-out | one Sentinel incident per rule, with severity |
 | 3 | Log on with a proper `psm-session.sh checkout` and confirm **no** tier0 alert | the absence, plus the `VaultCheckout_CL` rows |
 | 4 | Stop the ingest script for 30 min and log on: the alert says `VaultFeedHealthy = false` | incident custom details |
-| 5 | Containment drill on a cloud-only test user: Contain → card → 204/204 → comment + ServiceNow work note | card screenshot, incident comment, SNOW ticket |
+| 5 | Containment drill on a cloud-only test user: Contain → card → 204/204 → comment + ServiceNow work note. **RAN · tenant 2026-11-05 (E41)** on a throwaway user: revoke 200, confirmCompromised 204, disable 204; a Reject before it changed nothing | `lab/evidence/itdr/20261105T102000Z/` (run records, incident comments, Entra audit rows, ServiceNow work notes, card screenshots) |
 | 6 | Same on a synced user: revoke 204 + "AD disable required", then `Invoke-AdContainment.ps1` | evidence JSON in `lab/evidence/out/itdr/` |
-| 7 | Break-glass refusal, self-approval refusal, and an answer from a channel member who is NOT an approver (ignored) | incident comments |
+| 7 | Break-glass refusal, self-approval refusal, and an answer from a channel member who is NOT an approver (ignored). **The non-approver case RAN · tenant 2026-11-05 (E41)**; the break-glass and self-approval cases have not run | incident comments |
 | 8 | Contain on a test user: `confirmCompromised` 204, user risk High in ID Protection, CA006 prompt at next sign-in | risky-user blade, sign-in log |
 
 ## verify: (only the tenant can confirm)
@@ -281,16 +331,17 @@ get checked in the tenant (the steps below).
   DC01 events and the four SecurityEvent rules must read the `Event` table.
 - The AMA extension's current `type_handler_version` (1.0 pinned, minor
   auto-upgrade).
-- Whether app-only `accountEnabled=false` needs the directory role for
-  non-admin users, and whether `revokeSignInSessions` app-only needs one for
-  any target.
+- ~~Whether app-only `accountEnabled=false` needs the directory role for
+  non-admin users~~ - answered 2026-11-05 (E41): it does not (204 with the
+  app roles only); `revokeSignInSessions` needed none either (200). Still
+  open: Graph's answer for an ADMIN target (never tried, by design).
 - Which containment calls a restricted-management AU blocks for an app-only
   caller, and the AD-disable path (`Invoke-AdContainment.ps1`, then Cloud
   Sync) for a synced VIP.
-- The Teams *Post adaptive card and wait for a response* action shape, and
-  the `responder.objectId` / `responder.userPrincipalName` fields (taken from
-  Microsoft's Sentinel playbook templates). Without them every answer is
-  ignored (fail closed) - check the first drill.
+- ~~The Teams *Post adaptive card and wait for a response* action shape~~ -
+  answered 2026-11-05 (E41): the response carries `responder.objectId`,
+  `responder.userPrincipalName` and `data.decision`; Logic Apps refuses a
+  `method` on that webhook action's inputs.
 - The `PropertyArrayChanged` (Alerts / Added) automation-rule condition used
   by `containment_on_alert_added`.
 - DC01 audit policy logs Logon and Special Logon success (`auditpol /get

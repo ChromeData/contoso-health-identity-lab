@@ -103,6 +103,14 @@ run "plan_lab_tfvars" {
     condition     = length(output.itdr_sentinel_only_rule_keys) > 0
     error_message = "ITDR v2 (enable_itdr_detections_v2): the Sentinel-only second-wave rules and the operator_ips watchlist render with lab.tfvars"
   }
+  # Day 13 (E40/E41): containment on. Its automation rule appears once
+  # TF_CONTAINMENT_PLAYBOOK_ID is set (plan_lab_itdr_hold_back plans it with
+  # this hold-back list); the "alert added" trigger stays off until E18/E41
+  # show Defender correlating ITDR alerts into older incidents.
+  assert {
+    condition     = var.enable_itdr_containment && !var.containment_on_alert_added
+    error_message = "Day 13: lab.tfvars turns ITDR containment on (approval-gated, E40/E41); containment_on_alert_added stays off"
+  }
   assert {
     condition     = output.evidence_storage_account_name != null && output.agent_runtime_uami_principal_id == null
     error_message = "P2: the evidence store exists (enable_evidence_store); the agent runtime identity must not while enable_agent_identity = false"
