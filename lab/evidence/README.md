@@ -169,7 +169,10 @@ GitHub signs in as **EVIDENCE** over OIDC (no secret), pulls the auditor
 evidence pack out of Entra read-only (`Export-EvidencePack.ps1
 -UseAzureCliToken`: PIM activations and live assignments, the PIM audit
 trail, access-review decisions, Conditional Access, MFA registration,
-privileged role holders, each SHA-256 hashed in `manifest.json`), and files
+privileged role holders, each SHA-256 hashed in `manifest.json`, plus a
+`SUMMARY.md` whose every finding is computed from those records: standing
+privileged holders outside break-glass, CA states, MFA registration, robot
+accounts without an owner; counts only, never a fixed claim), and files
 it in the WORM container as **new files only**
 (`Publish-EvidencePack.ps1`). The job summary, for someone who is not an
 identity engineer:
