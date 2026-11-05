@@ -211,12 +211,14 @@ export const APPS = [
     denied: /User:?\s*\S+\s+not (found|active|authenticated)|Ensure that the user you are logging in with is active|SAML2? (error|Error)|not authorized|Logged out/i },
 ];
 // 'ok' | 'denied: <app>' | 'wait' | 'unknown'. `custom` = { url, text, denied }
-// (RegExps) for an app not in APPS, or to tighten one that is.
+// (RegExps) for an app not in APPS, or to tighten one that is: custom url/text
+// replace the app's signal, custom denied ADDS to its refusal pages.
 export function landing(url, text, custom = {}) {
   let h = ''; try { h = new URL(url).hostname; } catch {}
   const app = APPS.find((a) => a.host.test(h));
-  const denied = custom.denied || (app && app.denied);
-  if (denied && denied.test(text)) return `denied: ${app ? app.name : h}`;
+  // A caller's refusal pattern is added to the app's built-in ones, never instead of them.
+  const denied = [custom.denied, app && app.denied].filter(Boolean);
+  if (denied.some((re) => re.test(text))) return `denied: ${app ? app.name : h}`;
   const okUrl = custom.url || (app && app.url), okText = custom.text || (app && app.ok);
   if (!okUrl && !okText) return 'unknown';
   return (!okUrl || okUrl.test(url)) && (!okText || okText.test(text)) ? 'ok' : 'wait';

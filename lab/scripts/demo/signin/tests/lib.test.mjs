@@ -223,6 +223,12 @@ test('landing: an app with no known signal is "unknown"; a custom signal or refu
   assert.match(landing('https://example.org/home', 'Access denied', { text: /Welcome/, denied: /Access denied/ }), /^denied/);
 });
 
+test('landing: a caller\'s refusal pattern adds to the app\'s built-in ones (never replaces them)', () => {
+  const custom = { denied: /session expired/i };
+  assert.match(landing('https://dev459905.service-now.com/', 'ServiceNow User: x@contosohealthlab.com not found', custom), /^denied: ServiceNow/);
+  assert.match(landing('https://dev459905.service-now.com/', 'ServiceNow - your session expired', custom), /^denied: ServiceNow/);
+});
+
 test('verdict: the app\'s positive signal = signed in (also when saved cookies skipped Entra)', () => {
   assert.equal(verdict(base), 'done');
 });
