@@ -340,14 +340,25 @@ Describe '06-NHI-Inventory.ps1 -OwnersRegisterPath (Tier-0 identities owned by a
         { Read-OwnersRegister -Register @{ identities = @(@{ displayName = 'a'; ownerModel = 'entra' }) } } | Should -Throw "*'roles'*"
     }
 
-    It 'never covers a display name that matches two app registrations (a look-alike must not inherit the role)' {
+    It 'never covers a display name that matches two app registrations, and still flags an Entra owner on either (OWNER-TIER0)' {
         Set-NhiTenantMocks
+        # Two look-alikes of a role-owned name: one ownerless, one with a single human owner.
         $twin = $global:NhiTest.Apps[0].Clone(); $twin['id'] = 'app-3'; $twin['appId'] = 'aid-3'
+        $twin['owners'] = @(@{ '@odata.type' = '#microsoft.graph.user'; id = 'u-1'; userPrincipalName = 'owner1@contoso.test' })
         $global:NhiTest.Apps = @($global:NhiTest.Apps) + @($twin)
         $reg = New-OwnersRegisterFile 'twin' @(@{ displayName = 'orphan-app'; ownerModel = 'role'; accountableOwnerRole = 'Identity Platform Owner'; tier = 'Tier 0' })
         $global:LASTEXITCODE = 0
         $r = & $script:Nhi -OutputDirectory (Join-Path $TestDrive 'nhi-twin') -SkipSignInActivity -OwnersRegisterPath $reg -WarningAction SilentlyContinue
-        @($r.Findings | Where-Object { $_.DisplayName -eq 'orphan-app' -and $_.FindingId -eq 'OWNER-NONE' }).Count | Should -Be 2
+        @($r.Findings | Where-Object { $_.ObjectId -eq 'sp-1' -and $_.FindingId -eq 'OWNER-NONE' }).Count | Should -Be 1
+        $owned = @($r.Findings | Where-Object { $_.ObjectId -eq 'app-3' } | ForEach-Object FindingId)
+        $owned | Should -Contain 'OWNER-TIER0'
+        $owned | Should -Not -Contain 'OWNER-SINGLE'
+        @($r.Inventory | Where-Object { $_.DisplayName -eq 'orphan-app' -and $_.OwnerModel -like 'Register role*' }).Count | Should -Be 0
         ($r.DataSources | Where-Object Name -eq 'ownersRegister').Detail | Should -Match "'orphan-app' matches 2 app registrations"
+    }
+
+    It 'refuses a role-owned row without a Tier-0 tier (a typo must not switch off OWNER-TIER0)' {
+        { Read-OwnersRegister -Register @{ roles = @{ R = @{} }; identities = @(@{ displayName = 'a'; ownerModel = 'role'; accountableOwnerRole = 'R' }) } } | Should -Throw "*tier must start with 'Tier 0'*"
+        { Read-OwnersRegister -Register @{ roles = @{ R = @{} }; identities = @(@{ displayName = 'a'; ownerModel = 'role'; accountableOwnerRole = 'R'; tier = 'Tier O' }) } } | Should -Throw "*tier must start with 'Tier 0'*"
     }
 }

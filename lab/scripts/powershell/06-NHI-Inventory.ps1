@@ -527,7 +527,11 @@ function Read-OwnersRegister {
         if ($model -eq 'role') {
             $role = [string](Get-Value $e @('accountableOwnerRole'))
             if (-not $role -or -not $roles.Contains($role)) { throw "owners register: '$name' names role '$role', which is not in 'roles'" }
-            $map[$name] = @{ Role = $role; Tier = [string](Get-Value $e @('tier')) }
+            # Role ownership exists only for Tier 0 (no Entra owner at all); a
+            # missing or other tier would quietly switch off OWNER-TIER0.
+            $tier = [string](Get-Value $e @('tier'))
+            if ($tier -notlike 'Tier 0*') { throw "owners register: '$name' is role-owned, so its tier must start with 'Tier 0' (got '$tier')" }
+            $map[$name] = @{ Role = $role; Tier = $tier }
         }
     }
     return $map
@@ -1011,10 +1015,15 @@ foreach ($sp in $tenant.ServicePrincipals) {
 # Entra owner). Read before the rules, so a role-owned identity is judged as
 # owned; a duplicate display name in the tenant is never covered.
 $roleOwned = @{}
+# Every role-owned name in the register is Tier 0, duplicate or not: a
+# look-alike app must not get the ROLE's cover, but must not lose the
+# OWNER-TIER0 check either.
+$registerTierZero = @{}
 if ($OwnersRegisterPath) {
     try {
         if (-not (Test-Path -LiteralPath $OwnersRegisterPath -PathType Leaf)) { throw "not found: $OwnersRegisterPath" }
         $regMap = Read-OwnersRegister -Register (Get-Content -LiteralPath $OwnersRegisterPath -Raw | ConvertFrom-Json -AsHashtable)
+        foreach ($n in $regMap.Keys) { $registerTierZero[$n] = $true }
         $nameCount = @{}
         foreach ($r in @($records | Where-Object { $_.Kind -in 'AppRegistration', 'AgentBlueprint' })) { $nameCount[$r.DisplayName] = 1 + $(if ($nameCount.ContainsKey($r.DisplayName)) { $nameCount[$r.DisplayName] } else { 0 }) }
         $notes = @()
@@ -1026,7 +1035,7 @@ if ($OwnersRegisterPath) {
         }
         Add-DataSource 'ownersRegister' 'ok' ("$($roleOwned.Count) identit$(if ($roleOwned.Count -eq 1) { 'y' } else { 'ies' }) owned by a role" + $(if ($notes) { '; ' + ($notes -join '; ') } else { '' }))
     }
-    catch { $roleOwned = @{}; Add-DataSource 'ownersRegister' 'FAILED' $_.Exception.Message }
+    catch { $roleOwned = @{}; $registerTierZero = @{}; Add-DataSource 'ownersRegister' 'FAILED' $_.Exception.Message }
 }
 
 # ---------------------------------------------------------------------------
@@ -1066,8 +1075,9 @@ foreach ($rec in $records) {
         $disabledHumans = @($humans | Where-Object { $_.Enabled -eq $false })
         $nonHuman = @($owners | Where-Object Type -ne 'user')
         $reg = if ($roleOwned.ContainsKey($rec.DisplayName)) { $roleOwned[$rec.DisplayName] } else { $null }
-        # Tier 0 by what it can do (permission, role) or by the register's word.
-        $tierZeroOwnerRule = $rec.IsTierZero -or ($reg -and $reg.Tier -like 'Tier 0*')
+        # Tier 0 by what it can do (permission, role) or by the register's word
+        # (every role-owned name, even one the tenant duplicates).
+        $tierZeroOwnerRule = $rec.IsTierZero -or $registerTierZero.ContainsKey($rec.DisplayName)
         if ($tierZeroOwnerRule -and $owners.Count -gt 0) {
             Add-Finding $rec 'OWNER-TIER0' 'High' "Tier-0 identity with Entra owner(s): $(@($owners.Label) -join ', '). Each can add a credential and act as it."
         }
