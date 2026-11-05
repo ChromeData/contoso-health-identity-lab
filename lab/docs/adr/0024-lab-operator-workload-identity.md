@@ -51,9 +51,15 @@ private key's lasting copy is a login Keychain item; a session copy (mode
 IAM OIDC provider and creates `contoso-lab-operator`, which accepts only
 tokens whose audience is the operator's client id and whose subject is its
 service principal object id. The role has AdministratorAccess in the lab
-account, with explicit Denies on access keys, IAM users, console passwords,
-editing its own trust or permissions, editing the Entra provider and closing
-the account.
+account minus an account-wide Deny on **every IAM write** (and PassRole, IAM
+Roles Anywhere and account closure). A Deny scoped to the operator's own
+role is not enough: AdministratorAccess could create a second admin role,
+assume it and shed the Denies, keeping access after the kill switch. IAM
+changes in the lab account stay human-applied.
+
+Two changes stay with the human admin by design: the AWS IAM objects above,
+and the tenant diagnostic setting in `envs/bootstrap` (the operator holds
+Security Reader, so it can plan that setting but not write it).
 
 ## Compensating controls
 
@@ -101,5 +107,6 @@ switch.
 - First run (2026-11-04): `lab-signin.sh` printed the operator in the lab
   tenant and the AWS role contoso-lab-operator in account 182002546409; the
   guardrail check returned "explicit deny" for CreateAccessKey and
-  UpdateAssumeRolePolicy. Still to capture: the Entra service-principal
+  UpdateAssumeRolePolicy. (The first guardrail set protected only the role
+  itself; review moved it to the account-wide IAM-write Deny above.) Still to capture: the Entra service-principal
   sign-in record and the CloudTrail `AssumeRoleWithWebIdentity` record.

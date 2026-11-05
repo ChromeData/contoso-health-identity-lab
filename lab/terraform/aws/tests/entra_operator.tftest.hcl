@@ -4,7 +4,7 @@
 # What these pin: nothing is created unless enable_entra_operator; the trust
 # names the Entra v2 issuer of THIS tenant and only the operator's exact client
 # id (aud) and service-principal object id (sub), with StringEquals; the
-# guardrail Denies stay attached; bad ids are refused before anything is made.
+# guardrail Denies block every IAM write account-wide; bad ids are refused before anything is made.
 
 mock_provider "aws" {
   mock_data "aws_caller_identity" {
@@ -88,7 +88,7 @@ run "trust_is_the_operator_only" {
   }
 }
 
-run "guardrails_deny_keys_and_self_changes" {
+run "guardrails_deny_every_iam_write" {
   command = apply
 
   variables {
@@ -97,14 +97,18 @@ run "guardrails_deny_keys_and_self_changes" {
 
   assert {
     condition = length(setsubtract(
-      ["iam:CreateAccessKey", "iam:CreateUser", "iam:CreateLoginProfile", "iam:UpdateAssumeRolePolicy", "iam:AttachRolePolicy", "iam:DeleteOpenIDConnectProvider", "account:CloseAccount"],
+      ["iam:Create*", "iam:Put*", "iam:Attach*", "iam:Update*", "iam:Delete*", "iam:PassRole", "rolesanywhere:Create*", "account:CloseAccount"],
       flatten([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Action if s.Effect == "Deny"])
     )) == 0
-    error_message = "the guardrails must deny access keys, IAM users, console passwords, self-edits of the trust/role, provider removal and account closure"
+    error_message = "the guardrails must deny every IAM write (no second role, user, key or trust edit), PassRole, Roles Anywhere and account closure"
   }
   assert {
-    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny"])
-    error_message = "the guardrail policy may only Deny"
+    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny" && s.Resource == "*"])
+    error_message = "the guardrail policy may only Deny, account-wide (a Deny scoped to the operator's own role is bypassed by creating another role)"
+  }
+  assert {
+    condition     = jsondecode(aws_iam_role.entra_operator[0].assume_role_policy).Statement[0].Principal.Federated == aws_iam_openid_connect_provider.entra[0].arn
+    error_message = "the trust must reference the provider resource (ordering on a fresh apply)"
   }
 }
 

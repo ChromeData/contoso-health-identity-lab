@@ -77,7 +77,11 @@ variable "operator_directory_roles" {
   description = <<-EOT
     Entra directory roles for the operator. Security Reader: a bootstrap plan
     refreshes the tenant diagnostic setting (microsoft.aadiam), which ARM
-    authorizes with Entra roles, not Azure RBAC.
+    authorizes with Entra roles, not Azure RBAC. READ only, on purpose: a
+    bootstrap change to that setting (categories, destination, a restore) is
+    a human apply. The operator's plan shows it; its apply fails on the write.
+    Granting Security Administrator would also let it rewrite Conditional
+    Access, the control the audit trail is there to watch.
   EOT
   type        = list(string)
   default     = ["Security Reader"]

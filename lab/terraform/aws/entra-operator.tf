@@ -14,12 +14,16 @@
 # same web-identity federation as the GitHub role in github-oidc.tf.
 #
 # WHAT THE ROLE MAY DO: AdministratorAccess in this one account - the lab
-# account the provider's allowed_account_ids pins - minus guardrails that an
-# explicit Deny keeps true even for an admin:
-#   * no long-lived credentials: no IAM users, access keys or console
-#     passwords (the lab rule: no static AWS keys anywhere)
-#   * cannot edit its own trust, permissions or the Entra provider, so it
-#     cannot widen who may assume it or outlive the kill switch
+# account the provider's allowed_account_ids pins - EXCEPT any change to IAM.
+# An explicit Deny keeps that true even for an admin:
+#   * no IAM writes at all (Create*/Put*/Attach*/Update*/... and PassRole):
+#     no users or access keys, no second role it could assume or hand to a
+#     service, no edit to its own trust or to the Entra provider. Without
+#     this, AdministratorAccess could create a new admin role, assume it and
+#     shed these Denies - access that would outlive the Entra kill switch.
+#     IAM changes stay human-applied, like the GitHub role in github-oidc.tf.
+#   * no IAM Roles Anywhere trust anchors or profiles (another way in
+#     without Entra)
 #   * cannot close the account or leave / delete the organization
 #
 # STAGED + HUMAN-APPLIED: enable_entra_operator defaults to false; turned on
@@ -30,8 +34,9 @@ locals {
   # v2 issuer (envs/operator sets requested_access_token_version = 2).
   entra_issuer_host = "login.microsoftonline.com/${var.entra_tenant_id}/v2.0"
 
-  entra_operator_provider_arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.entra_issuer_host}"
-  entra_operator_role_arn     = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${var.entra_operator_role_name}"
+  # From the resource, not a string: the role's trust then depends on the
+  # provider, so a fresh apply creates the provider first.
+  entra_operator_provider_arn = one(aws_iam_openid_connect_provider.entra[*].arn)
 
   entra_operator_trust_policy = jsonencode({
     Version = "2012-10-17"
@@ -59,36 +64,22 @@ locals {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "NoLongLivedCredentials"
+        # Every IAM write. iam:Get*/List*/Generate*/Simulate* stay allowed.
+        Sid    = "NoIamChanges"
         Effect = "Deny"
         Action = [
-          "iam:CreateUser", "iam:CreateAccessKey", "iam:UpdateAccessKey",
-          "iam:CreateLoginProfile", "iam:UpdateLoginProfile",
-          "iam:CreateServiceSpecificCredential", "iam:UploadSSHPublicKey",
+          "iam:Create*", "iam:Delete*", "iam:Put*", "iam:Attach*", "iam:Detach*",
+          "iam:Update*", "iam:Add*", "iam:Remove*", "iam:Upload*", "iam:Tag*",
+          "iam:Untag*", "iam:Set*", "iam:Enable*", "iam:Deactivate*", "iam:Resync*",
+          "iam:Change*", "iam:Reset*", "iam:PassRole",
         ]
         Resource = "*"
       },
       {
-        Sid    = "CannotChangeItsOwnTrustOrRights"
-        Effect = "Deny"
-        Action = [
-          "iam:UpdateAssumeRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy",
-          "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:PutRolePermissionsBoundary",
-          "iam:DeleteRolePermissionsBoundary", "iam:UpdateRole", "iam:DeleteRole",
-          "iam:TagRole", "iam:UntagRole",
-        ]
-        Resource = local.entra_operator_role_arn
-      },
-      {
-        Sid    = "CannotChangeTheEntraTrust"
-        Effect = "Deny"
-        Action = [
-          "iam:CreateOpenIDConnectProvider", "iam:DeleteOpenIDConnectProvider",
-          "iam:AddClientIDToOpenIDConnectProvider", "iam:RemoveClientIDFromOpenIDConnectProvider",
-          "iam:UpdateOpenIDConnectProviderThumbprint", "iam:TagOpenIDConnectProvider",
-          "iam:UntagOpenIDConnectProvider",
-        ]
-        Resource = local.entra_operator_provider_arn
+        Sid      = "NoOtherWayIn"
+        Effect   = "Deny"
+        Action   = ["rolesanywhere:Create*", "rolesanywhere:Update*", "rolesanywhere:Enable*", "rolesanywhere:Put*"]
+        Resource = "*"
       },
       {
         Sid      = "CannotCloseOrDetachTheAccount"
