@@ -146,7 +146,7 @@ def wait_ready(cmd, deadline: float, state: dict) -> bool:
             p = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True,
                                timeout=max(1.0, min(15.0, deadline - time.time())))
             if p.returncode == 0:
-                print(f"guac_tunnel: target ready after {time.time() - t0:.1f}s ({checks} check(s))")
+                print(f"guac_tunnel: target ready after {time.time() - t0:.1f}s ({checks} check(s))", flush=True)
                 return True
             tail = (p.stderr or p.stdout).strip().splitlines()
             last = f"exit {p.returncode}" + (f": {tail[-1]}" if tail else "")
@@ -155,7 +155,8 @@ def wait_ready(cmd, deadline: float, state: dict) -> bool:
         except OSError as e:
             last = f"could not run the check: {e}"
         if time.time() - last_note >= READY_PROGRESS_SECONDS:
-            print(f"guac_tunnel: target not ready yet after {time.time() - t0:.0f}s ({checks} checks; last: {last})")
+            print(f"guac_tunnel: target not ready yet after {time.time() - t0:.0f}s ({checks} checks; last: {last})",
+                  flush=True)
             last_note = time.time()
         time.sleep(READY_POLL_SECONDS)
     if not state["error"] and not state["closed"]:
@@ -298,12 +299,13 @@ def main() -> int:
         ks = ord(ch)                             # Latin-1 printable: keysym == code point
         write(encode("key", str(ks), "1") + encode("key", str(ks), "0"))
         time.sleep(0.02)
+    # typed_at: the moment the Return is SENT. Timings in the report are
+    # measured from here; an error can arrive before the Return's own HTTP
+    # response does (a quick `exit`), and that is still "after the keys were
+    # typed". Every error is a failure either way - this only words the report.
+    typed_at = time.time()
     if args.text:
         write(encode("key", str(KEYSYM_RETURN), "1") + encode("key", str(KEYSYM_RETURN), "0"))
-    # typed_at: the web app has accepted the Return (the write returned), so
-    # the command line is complete; only an end reported after this counts as
-    # the session ending because of what was typed.
-    typed_at = time.time()
 
     client_disconnect = False
     while not state["closed"] and time.time() < deadline:
@@ -319,7 +321,7 @@ def main() -> int:
     how = "client sent disconnect" if client_disconnect else "the server ended it"
     if state["error"]:
         after = state["error_at"] - typed_at
-        when = "while the keys were being typed" if after < 0 else f"{after:.1f}s after the keys were typed"
+        when = "while the keys were being typed" if after < 0 else f"{after:.1f}s after the keys were typed (Return sent)"
         print(f"guac_tunnel: Guacamole error {when}: {state['error']}", file=sys.stderr)
         return 2
     if not state["closed"]:
