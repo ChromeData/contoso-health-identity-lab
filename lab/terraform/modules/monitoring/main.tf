@@ -237,11 +237,26 @@ resource "azurerm_sentinel_log_analytics_workspace_onboarding" "this" {
   }
 }
 
+# Near-real-time (NRT) rules: the break-glass sign-in only. An NRT rule runs
+# every minute over the rows INGESTED in the previous minute (Learn, "Quick
+# threat detection with near-real-time (NRT) analytics rules": it queries on
+# ingestion time, with a built-in two-minute delay, so data-source delay can
+# be ignored). A scheduled rule judges TimeGenerated over a fixed window, so
+# a late row, or a late or skipped run, can fall between windows; for the
+# lab's most powerful accounts that gap is not acceptable (2026-11-05). NRT
+# fits this rule: several tables (the union), entity mapping, incident
+# grouping and automation are all supported (Learn, "Work with NRT rules";
+# limit 50 NRT rules per tenant). The Log Analytics alert path below keeps
+# the scheduled form (it has no NRT).
+locals {
+  nrt_rule_keys = ["break_glass_signin"]
+}
+
 resource "azurerm_sentinel_alert_rule_scheduled" "this" {
   # A filtering for-expression, not `cond ? local.rules : {}`: the ITDR rules
   # carry custom_details / group_by shapes the core rules don't, so the rule
   # set is an object that cannot convert to a single map type.
-  for_each = { for k, r in local.rules : k => r if var.enable_sentinel }
+  for_each = { for k, r in local.rules : k => r if var.enable_sentinel && !contains(local.nrt_rule_keys, k) }
 
   name                       = "contoso-${replace(each.key, "_", "-")}"
   log_analytics_workspace_id = azurerm_sentinel_log_analytics_workspace_onboarding.this[0].workspace_id
@@ -324,6 +339,69 @@ resource "azurerm_sentinel_alert_rule_scheduled" "this" {
   depends_on = [azurerm_sentinel_watchlist_item.operator_ips]
 }
 
+# The NRT twin of the block above, for local.nrt_rule_keys. No schedule or
+# threshold (fixed by NRT: every minute, an alert per result set). A NEW
+# rule name (-nrt): Sentinel refuses to re-create a rule id for a while after
+# it was deleted (seen live 2026-11-05), so the scheduled rule of the same key
+# is deleted and this one created beside it, not over it.
+resource "azurerm_sentinel_alert_rule_nrt" "this" {
+  for_each = { for k, r in local.rules : k => r if var.enable_sentinel && contains(local.nrt_rule_keys, k) }
+
+  name                       = "contoso-${replace(each.key, "_", "-")}-nrt"
+  log_analytics_workspace_id = azurerm_sentinel_log_analytics_workspace_onboarding.this[0].workspace_id
+  display_name               = each.value.display_name
+  description                = "${each.value.description} Source: lab/kql/${each.value.file}. Near-real-time rule (every minute, by ingestion time)."
+  severity                   = each.value.severity
+  query                      = local.rule_queries[each.key]
+  suppression_enabled        = false
+  tactics                    = each.value.tactics
+  techniques                 = length(each.value.techniques) > 0 ? each.value.techniques : null
+  custom_details             = length(each.value.custom_details) > 0 ? each.value.custom_details : null
+  enabled                    = true
+
+  # One alert per run (the rows ingested in that minute); the provider
+  # requires the block for NRT rules. "AlertPerResult" would cap at 30 single
+  # alerts per run (Learn, NRT considerations) and buys nothing here.
+  event_grouping {
+    aggregation_method = "SingleAlert"
+  }
+
+  dynamic "entity_mapping" {
+    for_each = each.value.entities
+    content {
+      entity_type = entity_mapping.value.type
+      dynamic "field_mapping" {
+        for_each = entity_mapping.value.fields
+        content {
+          identifier  = field_mapping.value.identifier
+          column_name = field_mapping.value.column
+        }
+      }
+    }
+  }
+
+  # Same grouping as the core scheduled rules: a sign-in's alerts inside an
+  # hour join one incident (same account and IP); the automation rule
+  # notify_on_alert_added below still posts a card for each alert that joins.
+  incident {
+    create_incident_enabled = true
+    grouping {
+      enabled                 = true
+      lookback_duration       = "PT1H"
+      reopen_closed_incidents = false
+      entity_matching_method  = "AllEntities"
+    }
+  }
+}
+
+locals {
+  # Every Sentinel analytics rule this module owns (scheduled + NRT), by key.
+  sentinel_rule_ids = merge(
+    { for k, r in azurerm_sentinel_alert_rule_scheduled.this : k => r.id },
+    { for k, r in azurerm_sentinel_alert_rule_nrt.this : k => r.id },
+  )
+}
+
 # Run the notify playbook on every new incident from the rules above (once the
 # playbook exists).
 resource "azurerm_sentinel_automation_rule" "notify" {
@@ -344,7 +422,7 @@ resource "azurerm_sentinel_automation_rule" "notify" {
     conditionProperties = {
       propertyName   = "IncidentRelatedAnalyticRuleIds"
       operator       = "Contains"
-      propertyValues = [for r in azurerm_sentinel_alert_rule_scheduled.this : r.id]
+      propertyValues = values(local.sentinel_rule_ids)
     }
   }])
 
@@ -401,7 +479,7 @@ resource "azurerm_sentinel_automation_rule" "notify_on_alert_added" {
 
 locals {
   notify_on_alert_added_rule_ids = [
-    for k, r in azurerm_sentinel_alert_rule_scheduled.this : r.id if contains(var.notify_on_alert_added_rule_keys, k)
+    for k, id in local.sentinel_rule_ids : id if contains(var.notify_on_alert_added_rule_keys, k)
   ]
 }
 

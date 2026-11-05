@@ -306,6 +306,31 @@ lab/scripts/demo/containment-drill.sh disarm   # after the take
 Offline test: `tests/containment-drill.test.sh` (stubbed `az` and `curl`).
 Live record: `lab/evidence/itdr/20261105T125302Z/` (capture-log E41b).
 
+## Before recording: close the build noise, `close-build-noise.sh`
+
+Building and testing the lab raised Sentinel incidents (and ServiceNow
+tickets) that are not part of the story. Right before recording, the lead
+closes them, as the lab operator:
+
+```bash
+lab/scripts/demo/close-build-noise.sh --numbers 32-51 --since 2026-11-05T09:00Z --until 2026-11-05T13:30Z           # dry run
+lab/scripts/demo/close-build-noise.sh --numbers 32-51 --since 2026-11-05T09:00Z --until 2026-11-05T13:30Z --apply   # acts
+```
+
+- An open incident is **closed** when every Account entity on it is a lab
+  test or admin account (`test-user-*`, `itdr-drill-*`, `adm-*`,
+  `bg-admin-NN`, `svc-*`), or when it was created inside `--since`/`--until`.
+- An incident about the **owner's account**, a real (non-lab) account, or an
+  account whose name cannot be read is **NEEDS-LEAD**: listed, never closed,
+  until its number is passed in `--lead-ok 28,27`.
+- Each closed incident gets a one-line reason (comment, BenignPositive). Its
+  open ServiceNow tickets (matched by `correlation_id`) are resolved as
+  `svc.sentinel` (itil), and so are open tickets whose Sentinel incident was
+  already closed.
+- Default is a dry run. `--numbers` narrows the set first.
+
+Offline test: `tests/close-build-noise.test.sh`.
+
 ## Rewind and replay the whole lab: `rewind-lab.sh`
 
 `Reset-DemoState.ps1` re-takes one people segment. `rewind-lab.sh` moves the

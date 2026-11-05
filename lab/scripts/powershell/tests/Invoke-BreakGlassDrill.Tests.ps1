@@ -50,7 +50,9 @@ BeforeAll {
             $a = $Arguments -join ' '
             if ($a -like 'account show*') { return 'sub-0000' }
             if ($a -like 'monitor log-analytics workspace show*') { return [pscustomobject]@{ customerId = 'ws-cust'; id = '/subscriptions/sub-0000/resourceGroups/rg-identity-lab/providers/Microsoft.OperationalInsights/workspaces/loga-idlab' } }
-            if ($a -like '*SecurityInsights/alertRules/contoso-break-glass-signin*') { return [pscustomobject]@{ properties = [pscustomobject]@{ enabled = $true; displayName = 'Contoso - Break-glass account sign-in (any)' } } }
+            # Only the NRT rule (modules/monitoring since 2026-11-05) exists; the old scheduled name is a 404.
+            if ($a -like '*SecurityInsights/alertRules/contoso-break-glass-signin-nrt?*') { return [pscustomobject]@{ properties = [pscustomobject]@{ enabled = $true; displayName = 'Contoso - Break-glass account sign-in (any)' } } }
+            if ($a -like '*SecurityInsights/alertRules/contoso-break-glass-signin?*') { return $null }
             if ($a -like '*scheduledQueryRules*') { return $null }   # not deployed: Sentinel path only
             throw "unexpected az call in test: $a"
         }
