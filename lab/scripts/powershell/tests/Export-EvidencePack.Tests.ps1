@@ -240,3 +240,154 @@ Describe 'Export-EvidencePack.ps1 -UseAzureCliToken (app-only as EVIDENCE, evide
         Test-Path (Join-Path $out 'manifest.json') | Should -BeFalse
     }
 }
+
+Describe 'Export-EvidencePack.ps1 - SUMMARY.md states computed facts, never fixed claims' {
+    # The old template said "Standing privileged humans = break-glass only" and
+    # "Every app ... has an owner" whatever the records held. Live (2026-11-05)
+    # the build account held a standing Global Administrator and 8 of 19 robot
+    # identities had no owner (capture-log E70, E72).
+    BeforeAll {
+        . (Get-ScriptFunctionBlock -Path $script:Pack -Name 'Get-SummaryValue', 'Get-EvidenceRecordText', 'ConvertTo-EvidenceSummaryMarkdown', 'Get-CompanionFact')
+        function New-RoleRow([string]$Id, [string]$Type, [bool]$Bg, [string]$Assign = 'Assigned', [string]$Member = 'Direct', $End = $null) {
+            [pscustomobject]@{ source = 'Directory role'; role = 'Global Administrator'; isPrivileged = $true; principalId = $Id; principal = "Person $Id"
+                principalType = $Type; isBreakGlass = $Bg; assignmentType = $Assign; memberType = $Member; endDateTime = $End }
+        }
+    }
+
+    It 'the script carries none of the old fixed claims' {
+        $text = Get-Content -LiteralPath $script:Pack -Raw
+        $text | Should -Not -Match 'Standing privileged humans = break-glass only'
+        $text | Should -Not -Match 'has an owner, a known credential type'
+        $text | Should -Not -Match 'approved -- no standing admin'
+    }
+
+    It 'a non-break-glass user with a standing privileged role is reported as such, by count, never by name' {
+        $rec = @{ 'pim_active_assignments.json' = @{ status = 'ok'; error = $null; data = @(
+                    (New-RoleRow -Id 'u-build' -Type '#microsoft.graph.user' -Bg $false),
+                    (New-RoleRow -Id 'g-bg' -Type '#microsoft.graph.group' -Bg $true),
+                    (New-RoleRow -Id 'g-tier0' -Type '#microsoft.graph.group' -Bg $false),
+                    (New-RoleRow -Id 'u-jit' -Type '#microsoft.graph.user' -Bg $false -Assign 'Activated')) } }
+        $t = Get-EvidenceRecordText -Name 'pim_active_assignments.json' -Records $rec
+        $t | Should -Match '1 user account\(s\) outside break-glass assigned directly \(1 with no end date\), 1 break-glass principal\(s\), 1 group\(s\), 0 service principal\(s\)'
+        $t | Should -Match 'activated just in time right now: 1'
+        $t | Should -Match 'Not zero standing admin'
+        $md = ConvertTo-EvidenceSummaryMarkdown -Records $rec
+        $md | Should -Not -Match 'Person u-build|u-build'
+        $md | Should -Not -Match 'break-glass only'
+    }
+
+    It 'says so only when no user outside break-glass holds a standing privileged role' {
+        $rec = @{ 'pim_active_assignments.json' = @{ status = 'ok'; error = $null; data = @((New-RoleRow -Id 'bg1' -Type '#microsoft.graph.user' -Bg $true), (New-RoleRow -Id 'g1' -Type '#microsoft.graph.group' -Bg $false)) } }
+        $t = Get-EvidenceRecordText -Name 'pim_active_assignments.json' -Records $rec
+        $t | Should -Match '0 user account\(s\) outside break-glass'
+        $t | Should -Match 'No user account outside break-glass holds a standing privileged role by direct assignment; access through groups is counted separately'
+    }
+
+    It 'Assigned is "standing", not "permanent": an end date is counted; users holding a role through a group are counted apart' {
+        $rec = @{ 'pim_active_assignments.json' = @{ status = 'ok'; data = @(
+                    (New-RoleRow -Id 'u-temp' -Type '#microsoft.graph.user' -Bg $false -End '2026-12-01T00:00:00Z'),
+                    (New-RoleRow -Id 'u-viagroup' -Type '#microsoft.graph.user' -Bg $false -Member 'Group')) } }
+        $t = Get-EvidenceRecordText -Name 'pim_active_assignments.json' -Records $rec
+        $t | Should -Match '1 user account\(s\) outside break-glass assigned directly \(0 with no end date\)'
+        $t | Should -Match 'through a group: 1'
+        $t | Should -Not -Match 'permanent'
+    }
+
+    It 'activation requests are split by outcome; only granted ones count as elevations' {
+        $rows = @(
+            [pscustomobject]@{ elevationType = 'PIM for Groups'; status = 'Provisioned'; justification = 'INC-1'; mfa = $null },
+            [pscustomobject]@{ elevationType = 'PIM for Groups'; status = 'Denied'; justification = 'INC-2'; mfa = $null },
+            [pscustomobject]@{ elevationType = 'PIM for Groups'; status = 'PendingApproval'; justification = 'INC-3'; mfa = $null },
+            [pscustomobject]@{ elevationType = 'PIM for roles'; status = 'success (Add member to role completed (PIM activation))'; justification = 'CHG-1'; mfa = 'True' })
+        $t = Get-EvidenceRecordText -Name 'pim_activation_history.json' -Records @{ 'pim_activation_history.json' = @{ status = 'ok'; data = $rows } }
+        $t | Should -Match '4 activation request\(s\): 2 granted, 1 pending, 1 denied'
+        $t | Should -Match 'Of the granted: 1 through PIM for Groups, 1 through PIM for directory roles; 2 with a justification; 1 with MFA'
+    }
+
+    It 'MFA registration points to the Conditional Access file for who must use MFA' {
+        $t = Get-EvidenceRecordText -Name 'mfa_registration_coverage.json' -Records @{ 'mfa_registration_coverage.json' = @{ status = 'ok'; data = @([pscustomobject]@{ _summary = $true; totalUsers = 20; mfaRegistered = 2; coveragePercent = 10 }) } }
+        $t | Should -Match '2 of 20 users registered for MFA \(10%\)'
+        $t | Should -Match 'conditional_access_policies\.json'
+    }
+
+    It 'an incomplete NHI run is shown as a minimum, never as clean' {
+        $md = ConvertTo-EvidenceSummaryMarkdown -Companion @([pscustomobject]@{ file = 'nhi/x/nhi-summary.json'; status = 'ok'; source = 'companion' }) -Nhi @{ file = 'nhi/x/nhi-summary.json'; generatedAtUtc = 'x'; nhiCount = 19; orphanedNhi = 0; tierZeroNhi = 2; expired = 0; complete = $false }
+        $md | Should -Match 'Incomplete run: a data source failed, so these counts are a minimum'
+    }
+
+    It 'a failed or missing record is stated as failed or missing, never as clean' {
+        $rec = @{ 'pim_activation_history.json' = @{ status = 'failed'; error = 'PermissionScopeNotGranted'; data = @() } }
+        Get-EvidenceRecordText -Name 'pim_activation_history.json' -Records $rec | Should -Match 'Could not be collected'
+        Get-EvidenceRecordText -Name 'conditional_access_policies.json' -Records $rec | Should -Be 'Not collected in this run.'
+    }
+
+    It 'counts Conditional Access states and flags a policy that does not exclude break-glass' {
+        $rows = @([pscustomobject]@{ state = 'enabled'; excludesBreakGlass = $true }, [pscustomobject]@{ state = 'enabledForReportingButNotEnforced'; excludesBreakGlass = $false })
+        $t = Get-EvidenceRecordText -Name 'conditional_access_policies.json' -Records @{ 'conditional_access_policies.json' = @{ status = 'ok'; data = $rows } }
+        $t | Should -Match '2 Conditional Access policies: 1 enforced, 1 report-only, 0 off\. 1 of 2 exclude the break-glass group; \*\*1 do not\*\*'
+    }
+
+    It 'NHI ownership comes from the newest tenant inventory; with none, the row says absent' {
+        $comp = @([pscustomobject]@{ file = 'nhi/20261105T101425Z/nhi-summary.json'; status = 'ok'; source = 'companion' })
+        $md = ConvertTo-EvidenceSummaryMarkdown -Companion $comp -Nhi @{ file = 'nhi/20261105T101425Z/nhi-summary.json'; generatedAtUtc = '2026-11-05T10:14:25Z'; nhiCount = 19; orphanedNhi = 8; tierZeroNhi = 2; expired = 0 }
+        $md | Should -Match '19 non-human identities; \*\*8 without an accountable owner\*\*'
+        $md | Should -Not -Match 'has an owner'
+        $none = ConvertTo-EvidenceSummaryMarkdown -Companion @([pscustomobject]@{ file = 'out/nhi_inventory.json'; status = 'absent'; source = 'companion' })
+        ($none -split "`n" | Where-Object { $_ -like '*06-NHI-Inventory.ps1*' }) | Should -Match 'Absent: not captured in this pack'
+    }
+
+    It 'Get-CompanionFact takes the newest TENANT record of each kind (a fixture is ignored) and keeps ISO dates' {
+        $ev = Join-Path $TestDrive 'facts'
+        foreach ($d in 'nhi/20261101T000000Z', 'nhi/20261105T101425Z', 'nhi/20261106T000000Z', 'kpis') { New-Item -ItemType Directory -Path (Join-Path $ev $d) -Force | Out-Null }
+        '{"source":"tenant","generatedAtUtc":"2026-11-01T00:00:00Z","summary":{"nhiCount":10,"kpi":{"orphanedNhi":2,"tierZeroNhi":1,"nhiWithExpiredCredential":0}}}' | Set-Content (Join-Path $ev 'nhi/20261101T000000Z/nhi-summary.json')
+        '{"source":"tenant","complete":true,"generatedAtUtc":"2026-11-05T10:14:25Z","summary":{"nhiCount":19,"kpi":{"orphanedNhi":8,"tierZeroNhi":2,"nhiWithExpiredCredential":0}}}' | Set-Content (Join-Path $ev 'nhi/20261105T101425Z/nhi-summary.json')
+        '{"source":"offline-mock","generatedAtUtc":"2026-11-06T00:00:00Z","summary":{"nhiCount":1,"kpi":{"orphanedNhi":0,"tierZeroNhi":0,"nhiWithExpiredCredential":0}}}' | Set-Content (Join-Path $ev 'nhi/20261106T000000Z/nhi-summary.json')
+        '{"schema":"contoso-identity-kpis/v1","label":"baseline","generatedAtUtc":"2026-10-27T03:34:28Z","kpis":{"admin_standing_users":{"status":"measured","value":1}}}' | Set-Content (Join-Path $ev 'kpis/a.json')
+        '{"schema":"contoso-identity-kpis/v1","label":"after","generatedAtUtc":"2026-11-05T10:19:12Z","kpis":{"admin_standing_users":{"status":"measured","value":1}}}' | Set-Content (Join-Path $ev 'kpis/b.json')
+        $comp = @('nhi/20261101T000000Z/nhi-summary.json', 'nhi/20261105T101425Z/nhi-summary.json', 'nhi/20261106T000000Z/nhi-summary.json', 'kpis/a.json', 'kpis/b.json') |
+            ForEach-Object { [pscustomobject]@{ file = $_; status = 'ok'; source = 'companion' } }
+        $f = Get-CompanionFact -Companion $comp -EvidenceRoot $ev
+        $f['Nhi']['orphanedNhi'] | Should -Be 8
+        $f['Nhi']['complete'] | Should -BeTrue
+        # A record that does not say whether it was complete is never taken as complete.
+        '{"source":"tenant","generatedAtUtc":"2026-11-07T00:00:00Z","summary":{"nhiCount":3,"kpi":{"orphanedNhi":0,"tierZeroNhi":0,"nhiWithExpiredCredential":0}}}' | Set-Content (Join-Path $ev 'nhi/20261106T000000Z/nhi-summary.json')
+        $f2 = Get-CompanionFact -Companion $comp -EvidenceRoot $ev
+        $f2['Nhi']['generatedAtUtc'] | Should -Be '2026-11-07T00:00:00Z'
+        $f2['Nhi']['complete'] | Should -BeFalse
+        $f['Nhi']['generatedAtUtc'] | Should -Be '2026-11-05T10:14:25Z'
+        $f['Kpi']['label'] | Should -Be 'after'
+        $f['Kpi']['standing'] | Should -Be '1'
+    }
+}
+
+Describe 'Export-EvidencePack.ps1 - SUMMARY.md end to end (mocked Graph), against the live 2026-11-05 shape' {
+    It 'reports the standing build account and 8 of 19 ownerless robot identities; no fixed claim, no name' {
+        $ev = Join-Path $TestDrive 'e2e'; $out = Join-Path $ev 'out'
+        New-Item -ItemType Directory -Path @($out, [System.IO.Path]::Combine($ev, 'nhi', '20261105T101425Z')) -Force | Out-Null
+        '{"source":"tenant","complete":true,"generatedAtUtc":"2026-11-05T10:14:25Z","summary":{"nhiCount":19,"kpi":{"orphanedNhi":8,"tierZeroNhi":2,"nhiWithExpiredCredential":0}}}' |
+            Set-Content -LiteralPath ([System.IO.Path]::Combine($ev, 'nhi', '20261105T101425Z', 'nhi-summary.json'))
+        Set-PackMocks
+        Mock Write-Warning {}
+        Mock Get-MgRoleManagementDirectoryRoleAssignmentScheduleInstance {
+            [pscustomobject]@{ RoleDefinitionId = '62e90394-69f5-4237-9190-012177145e10'; RoleDefinition = [pscustomobject]@{ DisplayName = 'Global Administrator' }
+                PrincipalId = 'u-build'; Principal = [pscustomobject]@{ AdditionalProperties = @{ displayName = 'Build Person'; '@odata.type' = '#microsoft.graph.user'; userPrincipalName = 'build.person@contoso.test' } }
+                AssignmentType = 'Assigned'; MemberType = 'Direct'; StartDateTime = $null; EndDateTime = $null }
+            [pscustomobject]@{ RoleDefinitionId = '62e90394-69f5-4237-9190-012177145e10'; RoleDefinition = [pscustomobject]@{ DisplayName = 'Global Administrator' }
+                PrincipalId = 'u-bg1'; Principal = [pscustomobject]@{ AdditionalProperties = @{ displayName = 'BG ADMIN 01'; '@odata.type' = '#microsoft.graph.user'; userPrincipalName = 'bg-admin-01@contoso.test' } }
+                AssignmentType = 'Assigned'; MemberType = 'Direct'; StartDateTime = $null; EndDateTime = $null }
+        }
+        $null = & $script:Pack -OutputDirectory $out -EvidenceRoot $ev -SkipPimTierGroups
+        $md = Get-Content -LiteralPath (Join-Path $out 'SUMMARY.md') -Raw
+        $md | Should -Match '1 user account\(s\) outside break-glass assigned directly \(1 with no end date\), 1 break-glass principal\(s\)'
+        $md | Should -Match 'Not zero standing admin'
+        $md | Should -Match '19 non-human identities; \*\*8 without an accountable owner\*\*'
+        $md | Should -Not -Match 'break-glass only'
+        $md | Should -Not -Match 'Incomplete run'
+        $md | Should -Not -Match 'has an owner'
+        $md | Should -Not -Match 'Build Person|build\.person|bg-admin-01'
+        # The rows themselves still carry the type and flag the summary counts.
+        $rows = @(Get-Content (Join-Path $out 'pim_active_assignments.json') -Raw | ConvertFrom-Json)
+        ($rows | Where-Object principalId -eq 'u-bg1').isBreakGlass | Should -BeTrue
+        ($rows | Where-Object principalId -eq 'u-build').principalType | Should -Be '#microsoft.graph.user'
+    }
+}
