@@ -46,6 +46,8 @@
     FINDINGS  (OWASP NHI Top 10 2025 -> lab NHI standard rule)
       OWNER-NONE, OWNER-NO-HUMAN, OWNER-ALL-DISABLED  NHI1 Improper Offboarding  N1, N9
       OWNER-SINGLE (no second owner)                  NHI1                       N1
+      OWNER-TIER0 (a Tier-0 identity HAS an Entra
+      owner: a standing way to act as it)             NHI5 Overprivileged        N1, N6
       SP-WITHOUT-APP                                  NHI1                       N1
       AGENT-NO-SPONSOR                                NHI1                       N10
       STALE, STALE-NEVER                              NHI1                       N8
@@ -148,6 +150,20 @@
     SECRET-NO-EXPIRY, with the reason. An unreadable or invalid register
     (a malformed date, expiresOn before createdOn) is a FAILED data source
     (exit 1), never "no secrets". Default '' = not merged.
+
+.PARAMETER OwnersRegisterPath
+    The NHI owners register (lab/iga/nhi-owners.json, ADR 0018). Entries with
+    ownerModel 'role' are identities whose accountable owner is a ROLE, not an
+    Entra owner: the Tier-0 identities (an Entra owner can add a credential
+    and act as the app, so they must have none). Such an identity, matched by
+    display name, counts as owned (OwnerModel 'Register role (<role>)', no
+    OWNER-NONE) - but only while it has NO Entra owner and its name is unique
+    among the tenant's app registrations; a duplicate name stays unowned (a
+    look-alike app must not inherit the register's cover). Any Tier-0
+    identity (by permission, directory role or register tier) that HAS an
+    Entra owner is flagged OWNER-TIER0. An unreadable or invalid register is
+    a FAILED data source (exit 1) and nothing is counted as owned by it.
+    Default '' = not read.
 
 .PARAMETER FailOnSeverity
     Exit 2 when any finding is at or above this severity (for a scheduled job
@@ -280,6 +296,10 @@ param(
     [Parameter()]
     [string]$SecretsRegisterPath = '',
 
+    # NHI owners register (role-owned Tier-0 identities). '' = not read.
+    [Parameter()]
+    [string]$OwnersRegisterPath = '',
+
     # App-only sign-in from the Azure CLI session (the lab operator via
     # lab/scripts/operator/op, or azure/login over OIDC).
     [Parameter()]
@@ -406,10 +426,11 @@ $OwaspTitles = [ordered]@{
 # One place for the mapping and the fix, so every row with the same FindingId
 # says the same thing (and the OWASP coverage block is computed, not typed).
 $Catalog = @{
-    'OWNER-NONE'           = @{ Owasp = 'NHI1'; Rule = 'N1'; Fix = 'Name two human owners (or one owner plus a team group). With no owner after 30 days, disable the identity.' }
+    'OWNER-NONE'           = @{ Owasp = 'NHI1'; Rule = 'N1'; Fix = 'Name two human owners (or one owner plus a team group); for a Tier-0 identity, record its accountable role in lab/iga/nhi-owners.json instead (no Entra owner). With no owner after 30 days, disable the identity.' }
     'OWNER-NO-HUMAN'       = @{ Owasp = 'NHI1'; Rule = 'N1'; Fix = 'Owned only by other service principals: add accountable human owners.' }
     'OWNER-ALL-DISABLED'   = @{ Owasp = 'NHI1'; Rule = 'N1, N9'; Fix = 'Every human owner is disabled (a leaver): reassign to the owner''s manager, rotate credentials the leaver could see.' }
     'OWNER-SINGLE'         = @{ Owasp = 'NHI1'; Rule = 'N1'; Fix = 'Add a second owner or a team group so one leaver doesn''t orphan the identity.' }
+    'OWNER-TIER0'          = @{ Owasp = 'NHI5'; Rule = 'N1, N6'; Fix = 'Remove the Entra owner(s): an owner can add a credential and act as this Tier-0 identity, outside PIM. Record its accountable owner as a role in lab/iga/nhi-owners.json and change it only through reviewed code.' }
     'SP-WITHOUT-APP'       = @{ Owasp = 'NHI1'; Rule = 'N1'; Fix = 'The app registration was deleted but its service principal (and grants) remain: confirm nothing uses it, then delete it.' }
     'AGENT-NO-SPONSOR'     = @{ Owasp = 'NHI1'; Rule = 'N10'; Fix = 'Every agent identity needs an accountable human sponsor: add one or disable the agent.' }
     'STALE'                = @{ Owasp = 'NHI1'; Rule = 'N8'; Fix = 'No sign-in within the stale window: confirm with the owner, then disable; delete after a further 30 days.' }
@@ -483,6 +504,37 @@ function Test-SecretsRegister {
                 ExpiresOn = $(if ($exp) { $exp.ToString('yyyy-MM-dd') } else { $undated }); Rotation = $rot; Status = [string]$e['status']; OwaspNhi = (@($e['owaspNhi']) -join ', ') })
     }
     return [pscustomobject]@{ Rows = $rows.ToArray(); Findings = $fx.ToArray() }
+}
+
+function Read-OwnersRegister {
+    # Pure: the owners register -> displayName -> @{ Role; Tier } for the
+    # identities owned by a ROLE (ownerModel 'role'). Throws on anything it
+    # cannot trust, so the caller records a FAILED source and counts nothing
+    # as owned (fail closed).
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Register)
+    $roles = Get-Value $Register @('roles')
+    if ($roles -isnot [System.Collections.IDictionary] -or $roles.Count -eq 0) { throw "owners register: 'roles' must name at least one role" }
+    $ids = @(Get-Value $Register @('identities'))
+    if ($ids.Count -eq 0 -or $null -eq $ids[0]) { throw "owners register: 'identities' is empty" }
+    $map = @{}; $seen = @{}
+    foreach ($e in $ids) {
+        $name = [string](Get-Value $e @('displayName'))
+        if (-not $name) { throw 'owners register: an identity has no displayName' }
+        if ($seen.ContainsKey($name)) { throw "owners register: '$name' is listed twice" }
+        $seen[$name] = $true
+        $model = [string](Get-Value $e @('ownerModel'))
+        if ($model -notin 'entra', 'role') { throw "owners register: '$name' ownerModel must be 'entra' or 'role' (got '$model')" }
+        if ($model -eq 'role') {
+            $role = [string](Get-Value $e @('accountableOwnerRole'))
+            if (-not $role -or -not $roles.Contains($role)) { throw "owners register: '$name' names role '$role', which is not in 'roles'" }
+            # Role ownership exists only for Tier 0 (no Entra owner at all); a
+            # missing or other tier would quietly switch off OWNER-TIER0.
+            $tier = [string](Get-Value $e @('tier'))
+            if ($tier -notlike 'Tier 0*') { throw "owners register: '$name' is role-owned, so its tier must start with 'Tier 0' (got '$tier')" }
+            $map[$name] = @{ Role = $role; Tier = $tier }
+        }
+    }
+    return $map
 }
 
 function Get-RaisedSeverity([string]$Severity) {
@@ -891,7 +943,7 @@ function Get-NhiRecord([string]$Kind, $App, $Sp) {
         Kind = $Kind; DisplayName = ''; AppId = ''; AppObjectId = ''; SpObjectId = ''
         Created = $null; Owners = @(); OwnersKnown = $true; Passwords = @(); KeyCreds = @(); Fics = @(); FicsKnown = $true
         TierZero = @(); Sensitive = @(); Roles = @(); TenantWideScopes = @(); IsTierZero = $false
-        ImplicitGrant = $false; PublisherVerified = $false; Sponsors = $null; OwnerModel = 'Entra owners'; ManagedIdentityType = ''
+        ImplicitGrant = $false; PublisherVerified = $false; Sponsors = $null; OwnerModel = 'Entra owners'; ManagedIdentityType = ''; AccountableOwner = ''
         LastSignIn = $null; SignInKnown = $false
     }
     if ($App) {
@@ -959,6 +1011,33 @@ foreach ($sp in $tenant.ServicePrincipals) {
     $records.Add($rec)
 }
 
+# Owners register: identities whose accountable owner is a ROLE (Tier 0, no
+# Entra owner). Read before the rules, so a role-owned identity is judged as
+# owned; a duplicate display name in the tenant is never covered.
+$roleOwned = @{}
+# Every role-owned name in the register is Tier 0, duplicate or not: a
+# look-alike app must not get the ROLE's cover, but must not lose the
+# OWNER-TIER0 check either.
+$registerTierZero = @{}
+if ($OwnersRegisterPath) {
+    try {
+        if (-not (Test-Path -LiteralPath $OwnersRegisterPath -PathType Leaf)) { throw "not found: $OwnersRegisterPath" }
+        $regMap = Read-OwnersRegister -Register (Get-Content -LiteralPath $OwnersRegisterPath -Raw | ConvertFrom-Json -AsHashtable)
+        foreach ($n in $regMap.Keys) { $registerTierZero[$n] = $true }
+        $nameCount = @{}
+        foreach ($r in @($records | Where-Object { $_.Kind -in 'AppRegistration', 'AgentBlueprint' })) { $nameCount[$r.DisplayName] = 1 + $(if ($nameCount.ContainsKey($r.DisplayName)) { $nameCount[$r.DisplayName] } else { 0 }) }
+        $notes = @()
+        foreach ($n in @($regMap.Keys | Sort-Object)) {
+            $c = if ($nameCount.ContainsKey($n)) { $nameCount[$n] } else { 0 }
+            if ($c -eq 1) { $roleOwned[$n] = $regMap[$n] }
+            elseif ($c -gt 1) { $notes += "'$n' matches $c app registrations - none counted as owned"; Write-Warning "Owners register: '$n' matches $c app registrations; none is counted as role-owned." }
+            else { $notes += "'$n' not in the tenant" }
+        }
+        Add-DataSource 'ownersRegister' 'ok' ("$($roleOwned.Count) identit$(if ($roleOwned.Count -eq 1) { 'y' } else { 'ies' }) owned by a role" + $(if ($notes) { '; ' + ($notes -join '; ') } else { '' }))
+    }
+    catch { $roleOwned = @{}; $registerTierZero = @{}; Add-DataSource 'ownersRegister' 'FAILED' $_.Exception.Message }
+}
+
 # ---------------------------------------------------------------------------
 # Rules
 # ---------------------------------------------------------------------------
@@ -995,7 +1074,24 @@ foreach ($rec in $records) {
         $enabledHumans = @($humans | Where-Object { $_.Enabled -eq $true })
         $disabledHumans = @($humans | Where-Object { $_.Enabled -eq $false })
         $nonHuman = @($owners | Where-Object Type -ne 'user')
-        if ($owners.Count -eq 0) {
+        $reg = if ($roleOwned.ContainsKey($rec.DisplayName)) { $roleOwned[$rec.DisplayName] } else { $null }
+        # Tier 0 by what it can do (permission, role) or by the register's word
+        # (every role-owned name, even one the tenant duplicates).
+        $tierZeroOwnerRule = $rec.IsTierZero -or $registerTierZero.ContainsKey($rec.DisplayName)
+        if ($tierZeroOwnerRule -and $owners.Count -gt 0) {
+            Add-Finding $rec 'OWNER-TIER0' 'High' "Tier-0 identity with Entra owner(s): $(@($owners.Label) -join ', '). Each can add a credential and act as it."
+        }
+        if ($reg -and $owners.Count -eq 0) {
+            # Owned by a role, as designed: no Entra owner to take it over.
+            $rec.OwnerModel = "Register role ($($reg.Role))"
+            $rec.AccountableOwner = $reg.Role
+        }
+        elseif ($reg) {
+            # Role-owned on paper, but someone holds Entra ownership: OWNER-TIER0
+            # above says so; the register still names who answers for it.
+            $rec.AccountableOwner = $reg.Role
+        }
+        elseif ($owners.Count -eq 0) {
             Add-Finding $rec 'OWNER-NONE' 'Medium' 'No owners on the app registration or its service principal.'
         }
         elseif ($humans.Count -eq 0) {
@@ -1004,7 +1100,8 @@ foreach ($rec in $records) {
         elseif ($disabledHumans.Count -eq $humans.Count) {
             Add-Finding $rec 'OWNER-ALL-DISABLED' 'High' "Every human owner is disabled: $(@($disabledHumans.Label) -join ', ')"
         }
-        elseif ($enabledHumans.Count -eq 1 -and $humans.Count -eq 1 -and $nonHuman.Count -eq 0) {
+        elseif ($enabledHumans.Count -eq 1 -and $humans.Count -eq 1 -and $nonHuman.Count -eq 0 -and -not $tierZeroOwnerRule) {
+            # Not for Tier 0: its fix is no Entra owner at all (OWNER-TIER0), never a second one.
             Add-Finding $rec 'OWNER-SINGLE' 'Low' "Single owner: $($enabledHumans[0].Label)"
         }
     }
@@ -1108,12 +1205,14 @@ function Get-MaxSeverity([object[]]$Rows) {
 
 # OwnerCount = ACCOUNTABLE humans: enabled human owners (apps, blueprints,
 # orphaned SPs) or sponsors (agent identities). Blank when ownership isn't an
-# Entra concept (managed identity = Azure RBAC; vendor and Microsoft apps) or
-# when owner state couldn't be read, so 0 always means "orphaned", never
+# Entra concept (managed identity = Azure RBAC; vendor and Microsoft apps; a
+# Tier-0 identity owned by a register role, see AccountableOwner) or when
+# owner state couldn't be read, so 0 always means "orphaned", never
 # "unknown".
 function Get-OwnerCount($Rec) {
     if ($Rec.Kind -eq 'AgentIdentity') { if ($null -eq $Rec.Sponsors) { return '' } else { return [int]$Rec.Sponsors } }
     if ($Rec.Kind -notin 'AppRegistration', 'AgentBlueprint', 'OrphanedServicePrincipal' -or -not $Rec.OwnersKnown) { return '' }
+    if ($Rec.AccountableOwner -and @($Rec.OwnerSummary).Count -eq 0) { return '' }   # owned by a register role, by design no Entra owner
     $enabled = @($Rec.OwnerSummary | Where-Object { $_.Type -eq 'user' -and $_.Enabled -eq $true }).Count
     $unknown = @($Rec.OwnerSummary | Where-Object { $_.Type -eq 'user' -and $null -eq $_.Enabled }).Count
     if ($enabled -eq 0 -and $unknown -gt 0) { return '' }
@@ -1173,6 +1272,7 @@ $inventory = foreach ($rec in $records) {
         SpObjectId               = $rec.SpObjectId
         ManagedIdentityType      = $rec.ManagedIdentityType
         OwnerModel               = $rec.OwnerModel
+        AccountableOwner         = $rec.AccountableOwner
         Owners                   = (@($rec.OwnerSummary | ForEach-Object { "$($_.Label)$(if ($_.Enabled -eq $false) { ' (DISABLED)' } elseif ($null -eq $_.Enabled -and $_.Type -eq 'user') { ' (state unknown)' })" }) -join '; ')
         EnabledHumanOwners       = @($rec.OwnerSummary | Where-Object { $_.Type -eq 'user' -and $_.Enabled -eq $true }).Count
         OwnerCount               = Get-OwnerCount $rec
@@ -1232,6 +1332,8 @@ $summary = [ordered]@{
         expiredOrOrphanedNhi     = @($findingRows | Where-Object { $_.FindingId -in $orphanIds -or $_.FindingId -eq 'CRED-EXPIRED' } | Select-Object -ExpandProperty ObjectId -Unique).Count
         nhiWithSecrets           = @($inventory | Where-Object { $_.SecretCount -gt 0 }).Count
         tierZeroNhi              = @($records | Where-Object IsTierZero).Count
+        roleOwnedNhi             = @($records | Where-Object { $_.AccountableOwner -and $_.OwnerModel -like 'Register role*' }).Count
+        tierZeroWithEntraOwner   = @($findingRows | Where-Object FindingId -eq 'OWNER-TIER0' | Select-Object -ExpandProperty ObjectId -Unique).Count
         staleNhi                 = @($findingRows | Where-Object FindingId -in 'STALE', 'STALE-NEVER' | Select-Object -ExpandProperty ObjectId -Unique).Count
         registeredSecrets        = $secretRows.Count
         secretsWithoutOwnerOrExpiry = @($findingRows | Where-Object FindingId -in 'SECRET-NO-OWNER', 'SECRET-NO-EXPIRY', 'SECRET-EXPIRED' | Select-Object -ExpandProperty ObjectId -Unique).Count

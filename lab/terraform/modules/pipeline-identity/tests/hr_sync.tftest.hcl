@@ -171,29 +171,27 @@ run "hr_sync_log_roles_are_read_only" {
   expect_failures = [var.hr_sync_log_read_graph_roles]
 }
 
-# ADR 0018: accountable human owners per identity, on the app AND its service
-# principal; an identity nobody is named for plans no owners change (null),
-# and the HR provisioning app's human owners are added one resource each, so
-# HR-SYNC's own ownership of it is untouched.
-run "owners_named_per_identity" {
+# ADR 0018 (amendment "Tier-0 identities"): the CI identities have NO Entra
+# owner - an owner can add a credential and act as the app - so owners is an
+# explicit empty list on every app and service principal (an owner added in
+# the portal is removed by the next apply). The HR provisioning app's human
+# owners are added one resource each, so HR-SYNC's own ownership is untouched.
+run "ci_identities_have_no_entra_owners" {
   command = plan
 
   variables {
-    hr_sync_enabled               = true
-    hr_provisioning_app_client_id = "a0a0a0a0-0000-4000-8000-00000000000f"
-    owner_object_ids = {
-      hr_sync         = ["b0b0b0b0-0000-4000-8000-0000000000b1"]
-      hr_provisioning = ["b0b0b0b0-0000-4000-8000-0000000000b1", "b0b0b0b0-0000-4000-8000-0000000000b2"]
-    }
+    hr_sync_enabled                  = true
+    hr_provisioning_app_client_id    = "a0a0a0a0-0000-4000-8000-00000000000f"
+    hr_provisioning_owner_object_ids = ["b0b0b0b0-0000-4000-8000-0000000000b1", "b0b0b0b0-0000-4000-8000-0000000000b2"]
   }
 
   assert {
-    condition     = toset(azuread_application.hr_sync[0].owners) == toset(["b0b0b0b0-0000-4000-8000-0000000000b1"]) && toset(azuread_service_principal.hr_sync[0].owners) == toset(["b0b0b0b0-0000-4000-8000-0000000000b1"])
-    error_message = "HR-SYNC's named owner must be on its app registration AND its service principal"
-  }
-  assert {
-    condition     = azuread_application.plan.owners == null && azuread_service_principal.plan.owners == null && azuread_application.apply.owners == null && azuread_service_principal.apply.owners == null
-    error_message = "PLAN and APPLY (Tier 0) get no owners change until someone is named for them"
+    condition = alltrue([
+      length(azuread_application.plan.owners) == 0, length(azuread_service_principal.plan.owners) == 0,
+      length(azuread_application.apply.owners) == 0, length(azuread_service_principal.apply.owners) == 0,
+      length(azuread_application.hr_sync[0].owners) == 0, length(azuread_service_principal.hr_sync[0].owners) == 0,
+    ])
+    error_message = "PLAN, APPLY and HR-SYNC must have no Entra owner (their accountable owner is a role in lab/iga/nhi-owners.json)"
   }
   assert {
     condition     = length(azuread_application_owner.hr_provisioning_humans) == 2 && alltrue([for o in azuread_application_owner.hr_provisioning_humans : o.application_id == "/applications/a0a0a0a0-0000-4000-8000-00000000000e"]) && length(azuread_application_owner.hr_sync_owns_provisioning_app) == 1
@@ -201,12 +199,12 @@ run "owners_named_per_identity" {
   }
 }
 
-run "owner_ids_must_be_guids" {
+run "hr_provisioning_owner_ids_must_be_guids" {
   command = plan
 
   variables {
-    owner_object_ids = { evidence = ["adm-mei.tanaka"] }
+    hr_provisioning_owner_object_ids = ["adm-ava.lin"]
   }
 
-  expect_failures = [var.owner_object_ids]
+  expect_failures = [var.hr_provisioning_owner_object_ids]
 }

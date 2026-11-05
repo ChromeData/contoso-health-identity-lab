@@ -73,16 +73,16 @@ locals {
   plan_roles  = distinct(concat(var.plan_graph_roles, var.extra_plan_graph_roles))
   apply_roles = distinct(concat(var.apply_graph_roles, var.extra_apply_graph_roles))
 
-  # Accountable human owners per identity (ADR 0018, nhi-standard N1), on the
-  # app registration AND its service principal. null - not [] - when none is
-  # named: the provider then plans no owners change for an identity nobody
-  # has been named for yet (today APPLY and PLAN, both Tier 0: their owners
-  # are the lead's decision, lab/iga/nhi-owners.json). Once a list is set,
-  # this code is the only place it lives - an owner added in the portal is
-  # removed by the next bootstrap apply, which is the point.
-  owners = {
-    for k, ids in var.owner_object_ids : k => length(ids) > 0 ? distinct(ids) : null
-  }
+  # NO Entra owners on any CI identity (ADR 0018, amendment "Tier-0
+  # identities"): an owner can add a credential and act AS the app, so an
+  # owner of APPLY, PLAN (reads the state with the break-glass passwords),
+  # HR-SYNC (creates and disables workforce accounts) or EVIDENCE (writes the
+  # audit evidence) would hold that power standing, outside PIM. Their
+  # accountable owner is a ROLE in lab/iga/nhi-owners.json (Identity Platform
+  # Owner), which 06-NHI-Inventory.ps1 reads. [] (not null) so an owner added
+  # in the portal is removed by the next bootstrap apply, and the inventory
+  # flags one in between (OWNER-TIER0).
+  no_entra_owners = []
 }
 
 # =============================================================================
@@ -91,7 +91,7 @@ locals {
 resource "azuread_application" "plan" {
   display_name     = var.plan_app_display_name
   sign_in_audience = "AzureADMyOrg"
-  owners           = local.owners.plan
+  owners           = local.no_entra_owners
 
   # Declare the delegated/app permissions the app needs (documentation + the
   # consent experience). The actual grant is the app_role_assignment below.
@@ -110,7 +110,7 @@ resource "azuread_application" "plan" {
 
 resource "azuread_service_principal" "plan" {
   client_id = azuread_application.plan.client_id
-  owners    = local.owners.plan
+  owners    = local.no_entra_owners
 }
 
 # Federated credential: trust GitHub tokens from PULL REQUESTS of this repo.
@@ -156,7 +156,7 @@ resource "azuread_app_role_assignment" "plan" {
 resource "azuread_application" "apply" {
   display_name     = var.apply_app_display_name
   sign_in_audience = "AzureADMyOrg"
-  owners           = local.owners.apply
+  owners           = local.no_entra_owners
 
   required_resource_access {
     resource_app_id = local.microsoft_graph_app_id
@@ -173,7 +173,7 @@ resource "azuread_application" "apply" {
 
 resource "azuread_service_principal" "apply" {
   client_id = azuread_application.apply.client_id
-  owners    = local.owners.apply
+  owners    = local.no_entra_owners
 }
 
 # Federated credential: trust GitHub tokens ONLY from the protected prod
@@ -274,7 +274,7 @@ resource "azuread_application" "hr_sync" {
   count            = var.hr_sync_enabled ? 1 : 0
   display_name     = var.hr_sync_app_display_name
   sign_in_audience = "AzureADMyOrg"
-  owners           = local.owners.hr_sync
+  owners           = local.no_entra_owners
 
   required_resource_access {
     resource_app_id = local.microsoft_graph_app_id
@@ -299,7 +299,7 @@ resource "azuread_application" "hr_sync" {
 resource "azuread_service_principal" "hr_sync" {
   count     = var.hr_sync_enabled ? 1 : 0
   client_id = azuread_application.hr_sync[0].client_id
-  owners    = local.owners.hr_sync
+  owners    = local.no_entra_owners
 }
 
 # Federated credential: trust GitHub tokens ONLY from runs on the hr-feed
@@ -336,9 +336,12 @@ resource "azuread_application_owner" "hr_sync_owns_provisioning_app" {
 # owned only by a service principal as OWNER-NO-HUMAN. One owner resource per
 # person, like the HR-SYNC one above, so the app's other owners (set when the
 # app was made) are left alone - unlike `owners` on an azuread_application,
-# which would make this list the complete set.
+# which would make this list the complete set. On the app REGISTRATION only:
+# the provisioning job lives on the service principal, whose owners are not
+# changed here, so a help-desk owner gets no say over what the job writes
+# (the restricted VIP unit stays out of the help desk's reach).
 resource "azuread_application_owner" "hr_provisioning_humans" {
-  for_each        = local.hr_sync_owns_app ? toset(var.owner_object_ids.hr_provisioning) : toset([])
+  for_each        = local.hr_sync_owns_app ? toset(var.hr_provisioning_owner_object_ids) : toset([])
   application_id  = "/applications/${data.azuread_application.hr_provisioning[0].object_id}"
   owner_object_id = each.value
 }
@@ -412,7 +415,7 @@ resource "azuread_application" "evidence" {
   count            = var.evidence_enabled ? 1 : 0
   display_name     = var.evidence_app_display_name
   sign_in_audience = "AzureADMyOrg"
-  owners           = local.owners.evidence
+  owners           = local.no_entra_owners
 
   required_resource_access {
     resource_app_id = local.microsoft_graph_app_id
@@ -430,7 +433,7 @@ resource "azuread_application" "evidence" {
 resource "azuread_service_principal" "evidence" {
   count     = var.evidence_enabled ? 1 : 0
   client_id = azuread_application.evidence[0].client_id
-  owners    = local.owners.evidence
+  owners    = local.no_entra_owners
 }
 
 # Federated credential: trust GitHub tokens ONLY from runs on main

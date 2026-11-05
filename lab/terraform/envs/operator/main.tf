@@ -45,9 +45,12 @@ locals {
   microsoft_graph_app_id = "00000003-0000-0000-c000-000000000000"
   certificate_path       = pathexpand(var.operator_certificate_path)
 
-  # Named human owners (ADR 0018), on the app and its service principal. null
-  # while none is named, so the provider plans no owners change.
-  operator_owners = length(var.operator_owner_object_ids) > 0 ? distinct(var.operator_owner_object_ids) : null
+  # NO Entra owner, ever (ADR 0018, amendment "Tier-0 identities"): the
+  # operator is Tier 0 and an owner could add a credential and act as it. Its
+  # accountable owner is the Identity Platform Owner role in
+  # lab/iga/nhi-owners.json. [] (not null): an owner added in the portal is
+  # removed by the next apply, and 06-NHI-Inventory.ps1 flags it until then.
+  operator_owners = []
 }
 
 data "azuread_service_principal" "msgraph" {
