@@ -662,6 +662,10 @@ session's own banner, the run record).
   start; a disconnected session is killed at once.
 - **The session** is one light xterm filling the 1024x768 screen (no window
   manager). Typing `exit` ends the session and xrdp drops the connection.
+  Once the xterm's window is up the session writes `~/.rdp-session-ready`
+  (the shell asks the terminal for its device attributes; xterm answers only
+  after mapping its window), so a scripted session types then instead of
+  after a fixed wait.
 - **Brokered exactly like DC01:** `./psm-session.sh checkout --operator NAME
   --ticket CHG####### --target rdp-target` runs the same gates (Safe, ticket,
   dual control), the same Vault check-out and the same injection; only the
@@ -672,7 +676,18 @@ session's own banner, the run record).
 in to Guacamole as the operator (her own token, READ on the one connection)
 and drives a real RDP session over Guacamole's HTTP tunnel with
 `test/guac_tunnel.py` (`--mouse` puts the pointer over the xterm, keys are
-sent as keysyms, `id > rdp-proof; hostname >> rdp-proof; exit` is typed).
+sent as keysyms, `id > rdp-proof; hostname >> rdp-proof; cat rdp-proof;
+sleep 3; exit` is typed as soon as `--ready-cmd` sees the ready marker; a
+slow start is logged, never guessed at; the `sleep 3` only holds the output
+on screen so the recording shows it). xrdp closes the connection while guacd may still be writing,
+so guacd 1.6.0 reports the same end either with no error ("Manually logged
+off.") or, when the reset wins, as `UPSTREAM_NOT_FOUND` /
+`UPSTREAM_UNAVAILABLE`; both count as "the server ended it" only after the
+Return and only with `xrdp-sesman`'s own "finished normally" (source lines
+in `test/guac_tunnel.py`). This race is the most likely cause of the
+nightly's intermittent 282/284 from 2026-10-29 (its exact status was not yet
+caught on a runner); if the RDP session check ever fails again, its FAIL line
+names the guacd status and guacd's own close line.
 guacd writes the recording to `${HISTORY_PATH}/${HISTORY_UUID}/recording`,
 where the History page looks. "Plays back" is shown three ways, none of them
 a video:
@@ -730,6 +745,7 @@ named in `--only`.
 | `ingest` | `../scripts/monitoring/tests/ingest-vault-audit.test.sh` | The Vault audit → `VaultCheckout_CL` feed script, against fixtures and stubs | `jq` | 30 passed |
 | `itsm-dual-control` (new) | `test/itsm-dual-control.test.sh` | Ticket validation and **dual control**, offline: the real `lib.sh` `itsm_validate` against the real ServiceNow mock (started on 127.0.0.1) with the committed policy and operators. Tier 0: two distinct authorised approvers accepted; self-approval, one approver, the same approver twice, an approver without the Safe right, the change's requester, a pending approval, any rejection refused; a missing / 0 / string / fractional `approvals_required` and an approvals table answering 500 refused (fail closed). Tier 1: one approver accepted, none / self / unauthorised refused. The older gates, the mock's ServiceNow shape | `python3`, `jq`, `curl` | 45 passed |
 | `recording-format` (new) | `test/guac_recording.test.py` | The guacamole-recording format check (`test/guac_recording.py`) passes 6 well-formed recordings and fails 23 broken ones (truncation, bad framing, bad base64, PNG CRC / pixel-size errors, streams never opened, wrong screen size, no images, off-screen-only drawing, time going backwards, too short, JPEG without SOF / EOI, unknown image type, not UTF-8, empty), so e2e's "plays back" is a real check | `python3` | 29 passed |
+| `tunnel-client` (new, 2026-11-05) | `test/guac_tunnel.test.py` | The scripted-session client (`test/guac_tunnel.py`) that e2e's SSH and RDP session checks rest on, against a fake Guacamole HTTP tunnel: "the server ended it" only when the session ends after the typed Return (no error, or an error whose status the caller accepts with `--server-close-status`); an error before or while typing, any other status, a session that never ends, or a target that never becomes ready (`--ready-cmd`; nothing typed) is a failure | `python3` | 11 passed (not in the 2026-10-20 total) |
 | `e2e` | `test/e2e.sh` | The AD-dependent PAM flow against a Samba AD DC: onboarding, check-out gates + **dual control**, PSM, **a recorded RDP session to the Linux xrdp stand-in that plays back** (g4), discovery, onboarding at scale, dependency gate, reconciliation, SSH CA (one approver), HA/DR (section below) | shared stack (+ `rdp-target`, built by the run) | 284 passed (was 241 before dual control and g4) |
 | `midpoint` | `test/e2e-midpoint.sh` | Two certification campaigns, the evidence, and the live state after remediation ([`midpoint/README.md`](midpoint/README.md)) | shared stack (midPoint) | 91 passed |
 | `dynamic-db` | `test/e2e-dynamic-db.sh` | Vault dynamic database credentials, rebuilt from scratch ([`dynamic-db/README.md`](dynamic-db/README.md)) | Docker (own project `contoso-dyndb`) | 60 passed |
@@ -741,7 +757,7 @@ named in `--only`.
 cd lab/pam
 test/run-all.sh                          # everything except scale (~6-7 min; e2e alone is ~4-4.5 min)
 test/run-all.sh --scale                  # also the 500-account run (adds about 3.5 min)
-test/run-all.sh --only dependency-scan,ingest,itsm-dual-control,recording-format   # offline suites only, no containers
+test/run-all.sh --only dependency-scan,ingest,itsm-dual-control,recording-format,tunnel-client   # offline suites only, no containers
 test/run-all.sh --skip-ha                # e2e without the 3-node Raft / DR drill
 test/run-all.sh --publish                # also write hashed run records to ../evidence/ (below)
 test/run-all.sh --cleanup                # afterwards: e2e.sh --cleanup + e2e-dynamic-db.sh --cleanup

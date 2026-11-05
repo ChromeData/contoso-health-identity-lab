@@ -14,8 +14,9 @@
 # the midPoint campaign, dynamic database credentials and the Vault audit
 # feed, all in Docker on the runner; plus the offline suites (dependency-scan
 # Pester tests, the ingest script, dual control against the ServiceNow mock,
-# the recording-format check). The optional 500-account `scale` suite is not
-# run here (add a dispatch input if it is ever wanted).
+# the recording-format check, the scripted-session client's verdicts in
+# tunnel-client). The optional 500-account `scale` suite is not run here
+# (add a dispatch input if it is ever wanted).
 #
 # NO CLOUD CREDENTIALS: no id-token: write, no secrets, no repo variables. The
 # harness generates every lab credential (`pam-up.sh` writes `.env` and

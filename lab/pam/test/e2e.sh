@@ -491,6 +491,9 @@ guacd_rdp_close_reason() { # how guacd says the last RDP connection ended (its o
   docker compose logs --no-log-prefix --since 5m guacd 2>/dev/null \
     | grep -E 'RDP server closed/refused connection|Connection closed\.|Disconnect reason code' | tail -n 2 | tr '\n' ' ' | sed 's/ *$//'
 }
+rdp_server_ended_on_exit() { # the client saw the server end the session AND rdp-target says the xterm exited
+  said "the server ended it" && sesman_logged "finished normally"
+}
 rdp_proof_has() { rdpc exec -T rdp-target cat "/home/$1/rdp-proof" </dev/null 2>/dev/null | grep -qF -- "$2"; }   # SAM TEXT
 sesman_logged() { rdpc exec -T rdp-target cat /var/log/xrdp-sesman.log </dev/null 2>/dev/null | grep -qF -- "$1"; }
 history_last() { # history_last CONNECTION-NAME -> its newest history entry (JSON)
@@ -954,10 +957,28 @@ check "PAM audit line: checkout target=rdp-target account=$RACCT approvers=ops-c
 RPW_FILE="$TEST_SECRETS/rdp-injected-password"
 guac_conn_param_by_name "$RCONN" password > "$RPW_FILE" || true
 check "the injected Vault password gets a Kerberos TGT for $RACCT from the DC (kinit on rdp-target)" kdc_accepts "$RACCT" < "$RPW_FILE"
-rdpc exec -T rdp-target rm -f "/home/$RACCT/rdp-proof" </dev/null >/dev/null 2>&1 || true
+rdpc exec -T rdp-target rm -f "/home/$RACCT/rdp-proof" "/home/$RACCT/.rdp-session-ready" </dev/null >/dev/null 2>&1 || true
 sess=$(op_tok ops-alice)
+# WHEN TO TYPE: once the session can take keys, not after a fixed wait. The
+# session's shell writes ~/.rdp-session-ready when its xterm answers a
+# terminal query, i.e. after the window is mapped (rdp-target/startwm.sh);
+# guac_tunnel.py polls for it (bounded by --timeout, progress logged).
+# HOW IT ENDS: xrdp closes while guacd may still be writing, so guacd 1.6.0
+# reports the same server-side end either with no error ("Manually logged
+# off.") or, when the reset wins the race, as UPSTREAM_NOT_FOUND /
+# UPSTREAM_UNAVAILABLE (source lines in test/guac_tunnel.py). Those two count
+# as "the server ended it" only after the Return, and the check below also
+# needs xrdp-sesman's own "finished normally" (the typed exit closed the
+# xterm), so a target crash after typing is not read as a clean end.
+# WHAT IS TYPED: the proof, then `cat` it and hold it on screen 3 s before
+# `exit`, so the recording shows the commands' output to whoever plays it
+# back (and spans the format check's 3 s minimum with that, not with an idle
+# prompt). The 3 s is display time inside the session, not a wait for
+# anything: typing starts on the ready marker above.
 if LAST_OUT=$(printf '%s' "$sess" | python3 test/guac_tunnel.py --base "$GUAC_URL" --connection-id "$(conn_id_by_name "$RCONN")" \
-     --mouse 512,384 --settle 12 --type "id > rdp-proof; hostname >> rdp-proof; exit" --timeout 120 2>&1); then
+     --mouse 512,384 --ready-cmd "docker compose --profile rdp exec -T rdp-target test -e /home/$RACCT/.rdp-session-ready" \
+     --server-close-status UPSTREAM_NOT_FOUND --server-close-status UPSTREAM_UNAVAILABLE \
+     --type "id > rdp-proof; hostname >> rdp-proof; cat rdp-proof; sleep 3; exit" --timeout 120 2>&1); then
   printf '%s\n' "$LAST_OUT" | indent
   pass "a real RDP session through Guacamole as ops-alice (HTTP tunnel, xrdp autologon with the injected credential, keys typed)"
 else
@@ -968,7 +989,7 @@ else
   fail "a real RDP session through Guacamole as ops-alice ($(grep -m1 '^guac_tunnel:' <<<"$LAST_OUT" || tail -n 1 <<<"$LAST_OUT"); guacd: $(guacd_rdp_close_reason))"
 fi
 sess=""
-check "... and the server ended it when the typed 'exit' closed the session" said "the server ended it"
+check "... and the server ended it when the typed 'exit' closed the session" rdp_server_ended_on_exit
 RH=$(history_last "$RCONN" || echo '{}')
 RUSER=$(jq -r '.username // ""' <<<"$RH"); RUUID=$(jq -r '.uuid // ""' <<<"$RH"); RHID=$(jq -r '.identifier // ""' <<<"$RH")
 RLOG=$(jq -r '(.logs // {}) | keys[0] // ""' <<<"$RH")
