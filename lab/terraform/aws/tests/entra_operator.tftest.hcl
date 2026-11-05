@@ -5,6 +5,10 @@
 # names the Entra v2 issuer of THIS tenant and only the operator's exact client
 # id (aud) and service-principal object id (sub), with StringEquals; the
 # guardrail Denies block every IAM write account-wide; bad ids are refused before anything is made.
+# Guardrails v2 (ADR 0025): also every IAM Identity Center / identity store /
+# Identity Center directory write (the admin path around the IAM Deny), the
+# Organizations writes that add accounts or delegate administration,
+# sts:AssumeRoot and the account's recovery contacts - while reads stay open.
 
 mock_provider "aws" {
   mock_data "aws_caller_identity" {
@@ -121,4 +125,52 @@ run "bad_ids_are_refused" {
   }
 
   expect_failures = [aws_iam_role.entra_operator]
+}
+
+run "guardrails_v2_close_the_identity_center_path" {
+  command = apply
+
+  variables {
+    enable_entra_operator = true
+  }
+
+  # Every IAM write VERB the AWS policy generator lists (2026-11-05); a verb
+  # missing here is an IAM write the operator could still make.
+  assert {
+    condition = length(setsubtract(
+      [for v in ["Accept", "Add", "Associate", "Attach", "Change", "Create", "Deactivate", "Delete", "Detach", "Disable", "Enable", "Put", "Reject", "Remove", "Reset", "Resync", "Send", "Set", "Tag", "Untag", "Update", "Upload"] : "iam:${v}*"],
+      one([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Action if s.Sid == "NoIamChanges"])
+    )) == 0
+    error_message = "NoIamChanges must deny every IAM write verb (v2 adds Accept, Associate, Disable, Reject, Send)"
+  }
+  assert {
+    condition = length(setsubtract(
+      [
+        "sso:Create*", "sso:Put*", "sso:Attach*", "sso:Detach*", "sso:Delete*", "sso:Update*", "sso:Provision*",
+        "sso:Associate*", "sso:Disassociate*", "sso:Import*", "sso:Start*",
+        "identitystore:Create*", "identitystore:Update*", "identitystore:Delete*",
+        "sso-directory:Create*", "sso-directory:Update*", "sso-directory:Delete*", "sso-directory:Add*", "sso-directory:Enable*",
+      ],
+      one([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Action if s.Sid == "NoIdentityCenterChanges"])
+    )) == 0
+    error_message = "no permission set, assignment, provisioning, local user or group, SCIM bearer token (sso-directory:CreateBearerToken) or identity-source change by the operator"
+  }
+  assert {
+    condition = alltrue([
+      for a in one([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Action if s.Sid == "NoIdentityCenterChanges"]) :
+      !can(regex(":(Describe|Get|List|Search|IsMemberIn)", a)) && !strcontains(a, ":*")
+    ])
+    error_message = "Identity Center READS must stay allowed (the operator reports on them) and no blanket <service>:* deny"
+  }
+  assert {
+    condition = length(setsubtract(
+      ["organizations:Create*", "organizations:Invite*", "organizations:Register*", "organizations:Enable*", "organizations:Attach*", "organizations:Detach*", "organizations:Put*", "sts:AssumeRoot", "account:StartPrimaryEmailUpdate", "account:PutAlternateContact"],
+      one([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Action if s.Sid == "NoNewAccountsOrDelegation"])
+    )) == 0
+    error_message = "no new member account (OrganizationAccountAccessRole), invitation, delegated administrator, SCP change, root session or recovery-contact change"
+  }
+  assert {
+    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny" && s.Resource == "*" && !contains(s.Action, "*")])
+    error_message = "every guardrail statement is an account-wide Deny, and none denies everything"
+  }
 }
