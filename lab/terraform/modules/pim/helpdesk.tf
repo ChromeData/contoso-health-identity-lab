@@ -17,6 +17,12 @@
 # accounts or break-glass - whatever the caller says (help-desk-identity-
 # verification.md, Rules 1-3).
 #
+# VIPs: the restricted management AU RMAU-VIP (post-apply/New-Restricted
+# AdminUnit.ps1) holds them, and var.workforce_au_excluded_employee_ids keeps
+# them out of THIS AU's rule too. The RMAU's responder roles sit on
+# PIM-Tier0-Privileged-Auth-Admins at RMAU scope, granted by that script
+# through PIM: outside this module, which never sees the RMAU.
+#
 # PROVIDER LIMITS (azuread 3.10.0, schema + administrative_unit_resource.go):
 #   * No isMemberManagementRestricted attribute (and it is immutable after
 #     creation in Graph) - the VIP RMAU is a Graph POST, never this resource:
@@ -44,6 +50,21 @@
 locals {
   au_scoped_group_keys = [for k, s in local.tier_group_settings : k if s.au_scoped]
   workforce_au_enabled = var.enable_helpdesk_au_scoping && length(local.au_scoped_group_keys) > 0
+
+  # VIPs (RMAU-VIP members) never sit in the help desk's AU: the base rule
+  # plus an employeeId exclusion. Dynamic-rule syntax: -notIn with a
+  # bracketed list of double-quoted strings (Learn, "Dynamic membership
+  # rules for groups" - the same rule language administrative units use).
+  # Verified live 2026-11-05: Graph accepted this exact rule on
+  # AU-Workforce-Standard and the two excluded VIPs left it (capture E16c).
+  # The base rule is wrapped in parentheses first: -and binds tighter than
+  # -or, so a base rule with an -or would otherwise keep the excluded VIPs
+  # in every branch but the last.
+  workforce_au_membership_rule = length(var.workforce_au_excluded_employee_ids) == 0 ? var.workforce_au_membership_rule : format(
+    "(%s) -and (user.employeeId -notIn [%s])",
+    var.workforce_au_membership_rule,
+    join(",", [for id in var.workforce_au_excluded_employee_ids : format("\"%s\"", id)])
+  )
 }
 
 resource "azuread_administrative_unit" "workforce_standard" {

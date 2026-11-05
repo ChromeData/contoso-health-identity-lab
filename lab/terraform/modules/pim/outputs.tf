@@ -95,7 +95,7 @@ output "workforce_au_membership_body" {
   description = "TENANT-TIME Graph body that turns AU-Workforce-Standard into a dynamic AU: PATCH https://graph.microsoft.com/v1.0/directory/administrativeUnits/<workforce_au_object_id> (AdministrativeUnit.ReadWrite.All). null when the AU is off."
   value = local.workforce_au_enabled ? jsonencode({
     membershipType                = "Dynamic"
-    membershipRule                = var.workforce_au_membership_rule
+    membershipRule                = local.workforce_au_membership_rule
     membershipRuleProcessingState = "On"
   }) : null
 }
@@ -165,7 +165,34 @@ output "pim_eligible_review_bodies" {
   precondition {
     # Nobody certifies their own group (the reviewer group must not be one of
     # the groups under review).
-    condition     = !local.review_enabled || (!contains(values(local.privileged_review_targets), local.review_reviewer_group_object_id) && !contains(values(local.privileged_review_targets), var.privileged_review_fallback_group_object_id))
+    condition     = !local.review_enabled || (!contains(values(local.review_targets), local.review_reviewer_group_object_id) && !contains(values(local.review_targets), var.privileged_review_fallback_group_object_id))
     error_message = "The privileged review reviewer or fallback group is itself a PIM-governed group: reviewers would certify their own ability to activate."
   }
+}
+
+# ---- AWS administration through PIM for Groups (aws.tf) -----------------------
+
+output "aws_admin_group_object_id" {
+  description = "Object id of PIM-AWS-Lab-Admins (null unless enable_pim_aws_admin). envs/dev assigns it to the AWS IAM Identity Center app; lab/terraform/aws can pin the SCIM copy to it (lab_admin_entra_group_object_id)."
+  value       = one(azuread_group.aws_admin[*].object_id)
+}
+
+output "aws_admin_group_mail_nickname" {
+  description = "mail_nickname of PIM-AWS-Lab-Admins for Set-PimGroupEligibility.ps1 -GroupMailNickname (null unless enable_pim_aws_admin)."
+  value       = local.aws_admin_enabled ? var.aws_admin_group_mail_nickname : null
+}
+
+output "aws_admin_activation_policy" {
+  description = "Evidence summary of the PIM-AWS-Lab-Admins activation policy (null unless enable_pim_aws_admin)."
+  value = local.aws_admin_enabled ? {
+    group               = var.aws_admin_group_name
+    maximum_duration    = var.aws_admin_activation_max_duration
+    mfa                 = true
+    justification       = true
+    approval            = var.aws_admin_require_approval
+    eligible_expire     = var.aws_admin_eligible_assignment_duration
+    activation_mail     = local.pim_notifications_enabled
+    in_ca_admin_scope   = false
+    in_quarterly_review = local.review_enabled
+  } : null
 }

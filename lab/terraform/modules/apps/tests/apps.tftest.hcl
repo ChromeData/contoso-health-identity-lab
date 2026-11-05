@@ -4,8 +4,10 @@
 # computed defaults at APPLY, so ids stay unknown at plan like a real first plan.
 #
 # What these pin:
-#   * the AWS SAML app is assigned to exactly one principal - the App group -
-#     with assignment required and SAML as the SSO mode;
+#   * the AWS SAML app is assigned to the App group, with assignment required
+#     and SAML as the SSO mode, and to NO second principal unless
+#     enable_aws_admins_assignment adds the PIM admin group (ADR 0025), which
+#     can never be the staff group;
 #   * the wrong gallery template id is refused at plan;
 #   * the OIDC app defines exactly Clinician / Pharmacist / Auditor, user-only,
 #     app-assigned groups claim, no implicit flow;
@@ -139,6 +141,29 @@ run "saml_basic_configuration_and_claims" {
   assert {
     condition     = strcontains(azuread_claims_mapping_policy.aws[0].definition[0], "https://aws.amazon.com/SAML/Attributes/AccessControl:Department")
     error_message = "the Department ABAC session tag must be emitted"
+  }
+}
+
+# The access portal's AuthnRequest names a different ACS host than the one
+# the console panel shows (read live 2026-11-05, AADSTS50011 until both were
+# listed): both hosts of the same instance must become reply URLs, unchanged.
+run "every_acs_host_of_the_instance_is_a_reply_url" {
+  command = plan
+
+  variables {
+    aws_saml_entity_id = "https://us-east-1.signin.aws.amazon.com/platform/saml/d-1234567890"
+    aws_saml_acs_urls = [
+      "https://us-east-1.sso.signin.aws/platform/saml/acs/abcd-1234",
+      "https://us-east-1.signin.aws/platform/saml/acs/abcd-1234",
+    ]
+  }
+
+  assert {
+    condition = azuread_application_redirect_uris.aws[0].redirect_uris == toset([
+      "https://us-east-1.sso.signin.aws/platform/saml/acs/abcd-1234",
+      "https://us-east-1.signin.aws/platform/saml/acs/abcd-1234",
+    ])
+    error_message = "both ACS hosts of the instance must be reply URLs (the portal's AuthnRequest uses the second)"
   }
 }
 
@@ -454,4 +479,64 @@ run "apps_are_owned_by_the_apply_identity_not_the_caller" {
     condition     = contains(tolist(azuread_service_principal.aws.owners), "66666666-6666-6666-6666-666666666666")
     error_message = "the named human owner must stay"
   }
+}
+
+# =============================================================================
+# The second principal: the PIM admin group (ADR 0025)
+# =============================================================================
+
+run "aws_admins_group_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(azuread_app_role_assignment.aws_admins) == 0 && output.aws_admins_assigned_group_object_id == null
+    error_message = "No second principal on the AWS app unless enable_aws_admins_assignment = true."
+  }
+}
+
+run "aws_admins_group_is_the_second_principal" {
+  command = apply
+
+  variables {
+    enable_aws_admins_assignment = true
+    aws_admins_group_object_id   = "77777777-7777-7777-7777-777777777777"
+  }
+
+  assert {
+    condition = (
+      azuread_app_role_assignment.aws_admins[0].principal_object_id == "77777777-7777-7777-7777-777777777777" &&
+      azuread_app_role_assignment.aws_admins[0].resource_object_id == azuread_service_principal.aws.object_id &&
+      azuread_app_role_assignment.aws_admins[0].app_role_id == azuread_app_role_assignment.aws_users.app_role_id
+    )
+    error_message = "The PIM admin group is assigned to the AWS app with the same User role as the staff group."
+  }
+  assert {
+    condition     = azuread_app_role_assignment.aws_users.principal_object_id == "55555555-5555-5555-5555-555555555555"
+    error_message = "The staff assignment is unchanged by the second principal."
+  }
+  assert {
+    condition     = output.aws_admins_assigned_group_object_id == "77777777-7777-7777-7777-777777777777"
+    error_message = "Output: the admin principal, for the evidence pack."
+  }
+}
+
+run "aws_admins_group_cannot_be_the_staff_group" {
+  command = plan
+
+  variables {
+    enable_aws_admins_assignment = true
+    aws_admins_group_object_id   = "55555555-5555-5555-5555-555555555555"
+  }
+
+  expect_failures = [azuread_app_role_assignment.aws_admins]
+}
+
+run "aws_admins_group_needs_an_id" {
+  command = plan
+
+  variables {
+    enable_aws_admins_assignment = true
+  }
+
+  expect_failures = [azuread_app_role_assignment.aws_admins]
 }

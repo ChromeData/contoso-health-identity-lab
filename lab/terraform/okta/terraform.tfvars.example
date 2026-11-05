@@ -18,8 +18,12 @@ okta_org_name = "integrator-1234567"
 okta_base_url = "okta.com"
 
 # ---- The clinic's estate (always planned) -------------------------------------
-# The clinic users' login domain: routed to Entra, and the Clinic-Staff rule.
-clinic_login_domain = "clinic.contoso.example"
+# The login domain Okta sends to Entra, and the Clinic-Staff rule's domain.
+# The lab's decision (2026-11-05): after the acquisition, clinic staff use
+# hospital accounts, so Okta sends staff with a hospital address to the
+# hospital login. It must be the domain of the users' Entra email too: Okta
+# names a JIT user after that email, and the next sign-in is routed by it.
+clinic_login_domain = "contosohealthlab.com"
 
 clinic_staff_group_name = "Clinic-Staff"
 legacy_app_label        = "Clinic Scheduling (legacy)"

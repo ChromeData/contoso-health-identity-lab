@@ -458,7 +458,7 @@ variable "aws_saml_entity_id" {
 
 variable "aws_saml_acs_urls" {
   type        = list(string)
-  description = "IAM Identity Center ACS URL(s), one per enabled region. Empty = not managed yet (no wildcard reply URL is ever kept). Tenant-specific."
+  description = "IAM Identity Center ACS URL(s): every host AWS uses for this instance (the console panel's and the one in the access portal's AuthnRequest - they differ; modules/apps variables.tf). Empty = not managed yet (no wildcard reply URL is ever kept). Tenant-specific: TF_AWS_SAML_ACS_URLS."
   default     = []
 }
 
@@ -492,7 +492,7 @@ variable "aws_scim_credentials" {
 
 variable "require_scim_credentials" {
   type        = bool
-  description = "Fail closed (instead of warning) when this run would CREATE the SCIM credential without aws_scim_credentials. true in terraform-apply.yml and the local seeding apply; false for PR plans, which can never hold the token."
+  description = "Fail closed (instead of warning) when this run would CREATE a provisioning credential without its value: the AWS SCIM credential without aws_scim_credentials, or the ServiceNow connector credential without servicenow_provisioning_credentials. true in terraform-apply.yml and the local seeding apply; false for PR plans, which can never read the vault."
   default     = false
 }
 
@@ -548,8 +548,8 @@ variable "enable_servicenow_sso" {
     non-gallery SAML app with the Learn tutorial's ServiceNow settings,
     assignment required, ONE assignment (App-ServiceNow-Users), Entra-minted
     signing certificate, NameID = UPN. Needs enable_sso_apps and
-    servicenow_instance_url (the plan fails without it). Provisioning to
-    ServiceNow is designed, not built. Off by default.
+    servicenow_instance_url (the plan fails without it). Accounts come from
+    enable_servicenow_provisioning. Off by default.
   EOT
   default     = false
 }
@@ -564,6 +564,44 @@ variable "servicenow_sso_sys_id" {
   type        = string
   description = "sys_id of the SAML identity provider record created in ServiceNow (Multi-Provider SSO) - makes the My Apps sign-on URL login_with_sso.do?glide_sso_id=<sys_id>. Empty = <instance>/navpage.do; set in a second apply once the record exists."
   default     = ""
+}
+
+variable "enable_servicenow_provisioning" {
+  type        = bool
+  description = <<-EOT
+    Create the ServiceNow provisioning app (modules/apps
+    servicenow_provisioning.tf): gallery "ServiceNow" app, hidden from My
+    Apps, assigned only to App-ServiceNow-Users (the SSO app's group), its
+    ServiceNowOutDelta job created STOPPED, and its credential (InstanceName
+    from servicenow_instance_url + the integration user). The run that creates
+    the credential must be the LOCAL seeding apply with
+    TF_VAR_servicenow_provisioning_credentials from Key Vault (CI cannot reach
+    the vault and fails closed). Needs enable_sso_apps. Off by default.
+  EOT
+  default     = false
+}
+
+variable "servicenow_provisioning_job_enabled" {
+  type        = bool
+  description = "Start the ServiceNow provisioning job (~40-minute cycle). Flip in its own PR only after Test Connection + one provision-on-demand succeeded."
+  default     = false
+}
+
+variable "servicenow_provisioning_credentials" {
+  type = object({
+    user_name = string
+    password  = string
+  })
+  description = <<-EOT
+    The ServiceNow integration user for the provisioning connector, ONLY for
+    the run that creates (or deliberately replaces) the credential: export
+    from Key Vault secrets servicenow-provisioning-username /
+    servicenow-provisioning-password as TF_VAR_servicenow_provisioning_credentials.
+    null (default) = not supplied; afterwards Terraform ignores it. Never
+    committed, never in lab.tfvars, never passed by CI.
+  EOT
+  default     = null
+  sensitive   = true
 }
 
 variable "enable_okta_federation" {
@@ -602,6 +640,12 @@ variable "enable_pim_azure_resources" {
   default     = false
 }
 
+variable "enable_pim_aws_admin" {
+  type        = bool
+  description = "AWS admin without root (ADR 0025): create PIM-AWS-Lab-Admins (modules/pim aws.tf; eligible-only, 2-hour MFA + justification activation, every activation mailed) and assign it to the AWS IAM Identity Center app as its second principal (modules/apps), so SCIM copies only ACTIVE members to AWS. lab/terraform/aws grants the SCIM copy the LabAdministrator permission set. Needs enable_premium and enable_sso_apps; eligibility is a post-apply step."
+  default     = false
+}
+
 variable "enable_b2b_governance" {
   type        = bool
   description = "Create the Affiliated Partners catalog + Affiliated Physicians guest package (connected-org requestors, sponsor approval, 90-day expiry, monthly sponsor review). Needs enable_premium + enable_governance; post-apply/New-B2BConnectedOrganization.ps1 creates the connected organization."
@@ -631,6 +675,12 @@ variable "enable_helpdesk_au_scoping" {
   type        = bool
   description = "Create AU-Workforce-Standard and scope PIM-Tier1-Helpdesk's Helpdesk + Authentication Administrator roles to it instead of the tenant (modules/pim helpdesk.tf). Needs enable_premium and enable_pim_tiers. The AU's dynamic membership rule is a TENANT-TIME Graph PATCH (output pim_workforce_au_membership_body); the group stays in CA002/CA020 by group (admin_scope_group_object_ids), because AU-scoped roles are invisible to CA's role condition."
   default     = false
+}
+
+variable "helpdesk_au_excluded_employee_ids" {
+  type        = list(string)
+  description = "HR employee ids kept out of AU-Workforce-Standard (modules/pim workforce_au_excluded_employee_ids): the VIPs in the restricted management AU RMAU-VIP (post-apply/New-RestrictedAdminUnit.ps1). Changes the rendered rule in output pim_workforce_au_membership_body only; the PATCH that applies it stays a tenant-time step."
+  default     = []
 }
 
 variable "enable_global_admin_pim_policy" {

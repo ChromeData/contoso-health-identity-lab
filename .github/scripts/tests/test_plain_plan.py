@@ -49,7 +49,7 @@ class FixtureOutput(unittest.TestCase):
 
     def test_update_access_package_resources(self):
         self.assertEqual(pp.summarize(load("plan_update_access_package.json")), (
-            "**What this change does:** adds 1 access package and changes 1.\n"
+            "**What this change does:** adds 1 access package and changes 1 existing one.\n"
             "\n"
             "- Adds access package **IT - Cloud Engineering Apps** with app group App-AWS-IdentityCenter-Users\n"
             "- Changes access package **Nurse - Clinical Apps**: removes app group App-AWS-IdentityCenter-Users\n"
@@ -57,7 +57,7 @@ class FixtureOutput(unittest.TestCase):
 
     def test_update_access_package_resources_applied(self):
         self.assertEqual(pp.summarize(load("plan_update_access_package.json"), past=True), (
-            "**Applied:** added 1 access package and changed 1.\n"
+            "**Applied:** added 1 access package and changed 1 existing one.\n"
             "\n"
             "- Added access package **IT - Cloud Engineering Apps** with app group App-AWS-IdentityCenter-Users\n"
             "- Changed access package **Nurse - Clinical Apps**: removed app group App-AWS-IdentityCenter-Users\n"
@@ -202,7 +202,7 @@ class EdgeCases(unittest.TestCase):
         out = pp.summarize(plan)
         self.assertIn("- Removes access package **Nurse - Clinical Apps**\n", out)
         self.assertNotIn("removes app group", out)
-        self.assertTrue(out.startswith("**What this change does:** adds 1 access package and removes 1."))
+        self.assertTrue(out.startswith("**What this change does:** adds 1 access package and removes 1 existing one."))
 
     def test_import_forget_replace_reason_and_cap(self):
         changes = [

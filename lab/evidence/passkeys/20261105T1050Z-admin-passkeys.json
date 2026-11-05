@@ -1,0 +1,142 @@
+{
+  "schema": "contoso-lab-passkeys/v1",
+  "capturedUtc": "2026-11-05T10:50:00Z",
+  "generator": "lab/scripts/demo/signin/passkey.mjs (register, prove, status)",
+  "labDeviation": "one software passkey per account (Chromium virtual WebAuthn authenticator) kept in the operator Mac login Keychain; production standard is two attested FIDO2 hardware keys per account in separate safes",
+  "whyAccepted": "the all_users passkey target carries the unattested Default passkey profile; Entra allows a passkey that satisfies any one scoped profile (Learn, how-to-authentication-passkeys-fido2)",
+  "accounts": [
+    {
+      "account": "adm-ava.lin",
+      "registeredVia": "one-time Temporary Access Pass + Security info (as the user)",
+      "registeredUtc": "2026-11-05T10:47:09Z",
+      "displayName": "Lab passkey (Keychain)",
+      "attestationLevel": "notAttested",
+      "aaGuid": "01020304-0506-0708-0102-030405060708",
+      "passkeyMethodsOnAccount": 1,
+      "keychainItem": "contoso-lab-passkey-adm-ava.lin",
+      "proof": {
+        "startedUtc": "2026-11-05T10:47:23.196Z",
+        "freshBrowserContext": true,
+        "passwordTyped": false,
+        "landedHost": "myaccount.microsoft.com",
+        "trail": [
+          "username",
+          "stay signed in: no"
+        ],
+        "screenshotFile": "2026-11-05T10-47-37-036Z-prove-adm-ava.lin.png",
+        "result": "signed in"
+      },
+      "scopedPasskeyProfiles": [
+        "Default passkey profile",
+        "Contoso - Admins (device-bound, attested)"
+      ]
+    },
+    {
+      "account": "adm-raj.patel",
+      "registeredVia": "one-time Temporary Access Pass + Security info (as the user)",
+      "registeredUtc": "2026-11-05T10:34:58Z",
+      "displayName": "Lab passkey (Keychain)",
+      "attestationLevel": "notAttested",
+      "aaGuid": "01020304-0506-0708-0102-030405060708",
+      "passkeyMethodsOnAccount": 1,
+      "keychainItem": "contoso-lab-passkey-adm-raj.patel",
+      "proof": {
+        "startedUtc": "2026-11-05T10:36:03.831Z",
+        "freshBrowserContext": true,
+        "passwordTyped": false,
+        "landedHost": "myaccount.microsoft.com",
+        "trail": [
+          "username",
+          "stay signed in: no"
+        ],
+        "screenshotFile": "2026-11-05T10-36-17-038Z-prove-adm-raj.patel.png",
+        "result": "signed in"
+      },
+      "scopedPasskeyProfiles": [
+        "Default passkey profile",
+        "Contoso - Admins (device-bound, attested)"
+      ]
+    },
+    {
+      "account": "adm-mei.tanaka",
+      "registeredVia": "one-time Temporary Access Pass + Security info (as the user)",
+      "registeredUtc": "2026-11-05T10:35:48Z",
+      "displayName": "Lab passkey (Keychain)",
+      "attestationLevel": "notAttested",
+      "aaGuid": "01020304-0506-0708-0102-030405060708",
+      "passkeyMethodsOnAccount": 1,
+      "keychainItem": "contoso-lab-passkey-adm-mei.tanaka",
+      "proof": {
+        "startedUtc": "2026-11-05T10:36:56.634Z",
+        "freshBrowserContext": true,
+        "passwordTyped": false,
+        "landedHost": "myaccount.microsoft.com",
+        "trail": [
+          "username",
+          "stay signed in: no"
+        ],
+        "screenshotFile": "2026-11-05T10-37-09-677Z-prove-adm-mei.tanaka.png",
+        "result": "signed in"
+      },
+      "scopedPasskeyProfiles": [
+        "Default passkey profile",
+        "Contoso - Admins (device-bound, attested)"
+      ]
+    },
+    {
+      "account": "bg-admin-01",
+      "registeredVia": "Graph admin provisioning (no TAP: the TAP policy excludes Break-Glass-Admins)",
+      "registeredUtc": "2026-11-05T10:38:39Z",
+      "displayName": "Lab passkey (Keychain)",
+      "attestationLevel": "notAttested",
+      "aaGuid": "01020304-0506-0708-0102-030405060708",
+      "passkeyMethodsOnAccount": 1,
+      "keychainItem": "contoso-lab-passkey-bg-admin-01",
+      "proof": {
+        "startedUtc": "2026-11-05T10:41:38.586Z",
+        "freshBrowserContext": true,
+        "passwordTyped": false,
+        "landedHost": "myaccount.microsoft.com",
+        "trail": [
+          "username",
+          "use a passkey instead",
+          "stay signed in: no"
+        ],
+        "screenshotFile": "2026-11-05T10-41-52-142Z-prove-bg-admin-01.png",
+        "result": "signed in"
+      },
+      "scopedPasskeyProfiles": [
+        "Default passkey profile",
+        "Contoso - Admins (device-bound, attested)"
+      ]
+    },
+    {
+      "account": "bg-admin-02",
+      "registeredVia": "Graph admin provisioning (no TAP: the TAP policy excludes Break-Glass-Admins)",
+      "registeredUtc": "2026-11-05T10:38:56Z",
+      "displayName": "Lab passkey (Keychain)",
+      "attestationLevel": "notAttested",
+      "aaGuid": "01020304-0506-0708-0102-030405060708",
+      "passkeyMethodsOnAccount": 1,
+      "keychainItem": "contoso-lab-passkey-bg-admin-02",
+      "proof": {
+        "startedUtc": "2026-11-05T10:41:52.461Z",
+        "freshBrowserContext": true,
+        "passwordTyped": false,
+        "landedHost": "myaccount.microsoft.com",
+        "trail": [
+          "username",
+          "use a passkey instead",
+          "stay signed in: no"
+        ],
+        "screenshotFile": "2026-11-05T10-42-05-714Z-prove-bg-admin-02.png",
+        "result": "signed in"
+      },
+      "scopedPasskeyProfiles": [
+        "Default passkey profile",
+        "Contoso - Admins (device-bound, attested)"
+      ]
+    }
+  ],
+  "notInThisFile": "UPN domains, object ids, method ids, IP addresses, the Temporary Access Passes and every private key"
+}

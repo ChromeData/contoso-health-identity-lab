@@ -5,11 +5,15 @@ org: the real Okta product on its free plan, standing in for the acquired
 clinic's enterprise Okta tenant (the Okta row in
 [`lab/docs/STAND-INS.md`](../../docs/STAND-INS.md)).
 
-> **Status: BUILT.** `validate` passes and 16 mocked `terraform test` runs
-> pass (below). **Nothing has been applied: no Okta org and no Entra tenant
-> exist.** RAN · tenant: nothing. Every runtime statement here comes from the
-> Okta provider's schema (4.20.0) or Okta's documentation; what neither
-> proves is marked *verify:*.
+> **Status: RAN · tenant, verified end to end** (capture-log E102). Applied to
+> the lab's Okta Integrator Free org (E58); the authorize-request fix (#140), the
+> routing domain `contosohealthlab.com` (#159) and Entra's v1.0 endpoints with
+> trust claims (#162) went live on 2026-11-05. That day a clinic user typed her
+> hospital address at Okta, was sent to Entra, signed in with her password and
+> an authenticator code (CA001 applied), and landed on the Okta dashboard with
+> the clinic's legacy app - with no Okta factor enrolled: Okta's *Any two
+> factors* was met by the MFA Entra asserted (`amr`). Runtime statements still
+> marked *verify:* are not proven by that run.
 
 It is Phase 1 of [`lab/docs/okta-migration-runbook.md`](../../docs/okta-migration-runbook.md)
 as code, decided in [ADR 0022](../../docs/adr/0022-okta-coexistence-as-code.md).
@@ -23,7 +27,7 @@ root decides **which sign-ins Okta sends to Entra** and **what they reach**:
 | Group rule | `okta_group_rule.clinic_staff` | `String.substringAfter(user.login, "@") == "<clinic_login_domain>"` → Clinic-Staff |
 | Legacy app | `okta_app_bookmark.clinic_scheduling` | *Clinic Scheduling (legacy)*, a bookmark to `legacy_app_url` (the app Phase 2 moves) |
 | Its one assignment | `okta_app_group_assignment.clinic_scheduling_staff` | Clinic-Staff, nobody else |
-| Identity provider (flag) | `okta_idp_oidc.entra` | generic OIDC, the tenant's v2.0 endpoints, scopes `openid profile email`, link by email, JIT on (lab) |
+| Identity provider (flag) | `okta_idp_oidc.entra` | generic OIDC, the tenant's **v1.0** endpoints (only their ID token carries `amr`; no userinfo), scopes `openid profile email`, link by email, JIT on (lab) |
 | Routing rule (flag) | `okta_policy_rule_idp_discovery.clinic_to_entra` | priority 1, username **suffix** = `clinic_login_domain` → that IdP; attached to Okta's built-in IdP discovery policy, read by `data.okta_default_policy` and never managed, so Okta's **Default Rule stays the fallback** |
 
 Provider: **okta/okta `~> 4.0`**, validated and mock-tested against **4.20.0**
@@ -130,6 +134,38 @@ clinic domain out.
 
 ---
 
+## Trust the Entra MFA (post-apply step)
+
+Okta's own dashboard policy (catch-all *Any two factors*) stays as it is: MFA
+is required. What changes is that Okta **accepts the MFA Entra already
+enforced** (CA001) instead of asking a clinic user to enroll an Okta factor on
+top. Two pieces:
+
+1. **The IdP is on Entra's v1.0 endpoints** (`main.tf` locals). Only the v1.0
+   ID token carries `amr` (read live: `["pwd","mfa"]`; the v2.0 one has none,
+   and its Graph access token cannot be verified by a third party). Users Okta
+   already linked stay linked: `sub` is the same on both. The Entra app adds
+   the `email` optional claim (modules/apps `okta.tf`), because the v1.0 ID
+   token has no email for members and Okta's JIT and account link need it.
+2. **`trustClaims` on the IdP**, set by `trust-claims.mjs` (okta/okta 4.20 has
+   no argument for it):
+
+   ```bash
+   node lab/terraform/okta/trust-claims.mjs --dry-run   # what would change
+   node lab/terraform/okta/trust-claims.mjs             # set + read back
+   ```
+
+   Idempotent (a second run changes nothing), refuses while the IdP is still
+   on v2.0 (Okta warns that trusting claims an IdP does not send breaks
+   sign-in), sends the IdP back with only `policy.trustClaims` changed and
+   checks that nothing else moved. Token: `OKTA_API_TOKEN` or the Keychain item
+   `contoso-lab-okta-token`. **Run it after every apply that updates
+   `okta_idp_oidc.entra`** (*verify:* whether such an apply resets the flag;
+   the script's read-back shows it).
+
+Rollback: `node lab/terraform/okta/trust-claims.mjs --off` (Okta then asks for
+its own second factor again).
+
 ## What the runbook's Phase 1 maps to
 
 | Runbook Phase 1 | Was | Now |
@@ -159,7 +195,10 @@ app in `modules/apps`, then `hide_web = true` here for one sign-in cycle, then
 - [ ] The Entra sign-in log row for `okta-clinic-idp` shows the CA policies applied; a non-member of `App-Okta-Federation-Users` is refused at Entra (record the AADSTS code).
 - [ ] `String.substringAfter(user.login, "@")` evaluates as expected: the clinic user is in Clinic-Staff and sees the bookmark; a non-clinic user is not and does not.
 - [ ] Rollback: `routing_rule_active = false` applied and timed; the next sign-in uses an Okta password; then `true` again.
-- [ ] The first sign-in exchange succeeds with the provider's default request-signature settings; if the authorize call fails at Entra, set `request_signature_scope = "NONE"` and record it.
+- [x] The first sign-in exchange succeeds with the provider's default request-signature settings; if the authorize call fails at Entra, set `request_signature_scope = "NONE"` and record it. **Resolved 2026-11-05:** the default (`REQUEST`, HS256) failed at Entra with AADSTS70013 (*the 'request' request parameter is not supported*) on the first clinic sign-in; `main.tf` now sets `NONE`, and the live IdP was set to match through the Okta API (the step this item documents).
+- [x] The routed domain is the one users type at Okta **and** the domain of their Entra email (Okta names a JIT user after `idpuser.email`, and the next sign-in is routed by it). **Decided 2026-11-05:** after the acquisition, clinic staff use hospital accounts, so `clinic_login_domain = contosohealthlab.com`: Okta sends staff with a hospital address to the hospital login. Okta's own admin (an `onmicrosoft.com` login) matches neither the routing rule nor the group rule, so it keeps the Default Rule.
+- [x] Okta's own sign-on policy for the Okta dashboard (catch-all *Any two factors*) counts the Entra MFA. **Decided and verified 2026-11-05:** MFA stays required in Okta; Okta accepts Entra's: the IdP is on Entra's v1.0 endpoints (its ID token carries `amr`) and `trust-claims.mjs` sets `trustClaims`. Before that, a JIT-created clinic user was asked to enroll Okta Verify or a passkey; after it, she reached the dashboard with no Okta factor (E102).
+- [ ] Users need a first and last name in Entra: Okta's JIT refuses a user without them (`firstName`/`lastName` *cannot be left blank*, seen live). HR-fed users always have both.
 - [ ] Integrator Free exposed everything used here (OIDC IdP, routing rules, group rules, bookmark apps, API tokens).
 - [ ] The state file holds the client secret: it stayed on the applier's laptop, and `terraform.tfstate*` is gitignored (`git status` shows nothing from this directory except the lock file and code).
 
@@ -185,8 +224,8 @@ What the tests pin (read each in `tests/okta_federation.tftest.hcl`):
   login-domain rule, the legacy bookmark app and its one assignment; no IdP,
   no routing rule; the org host and callback outputs derived from the org
   name and cell;
-- with the flag on: one OIDC IdP on the tenant's v2.0 endpoints (issuer,
-  authorize, token, JWKS, userinfo built from `entra_tenant_id`), scopes
+- with the flag on: one OIDC IdP on the tenant's v1.0 endpoints (issuer,
+  authorize, token, JWKS built from `entra_tenant_id`; no userinfo), scopes
   `openid profile email`, link by email, JIT on, groups never copied from the
   IdP; one routing rule, priority 1, ACTIVE, matching the clinic domain as a
   SUFFIX only and routing to exactly one IdP of type OIDC, attached to
@@ -234,5 +273,12 @@ in a scratch copy and never commit a tofu-written one.
   policy* (IDENTIFIER / SUFFIX routing, the Default Rule), *Okta Expression
   Language* (`String.substringAfter`), *Integrator Free Plan* (limits;
   *verify:* current terms).
-- Microsoft Learn: the v2.0 endpoint URLs (`/v2.0`, `/oauth2/v2.0/authorize`,
-  `/oauth2/v2.0/token`, `/discovery/v2.0/keys`, `graph.microsoft.com/oidc/userinfo`).
+- Microsoft Learn: the v1.0 endpoint URLs (`https://sts.windows.net/<tenant>/`,
+  `/oauth2/authorize`, `/oauth2/token`, `/discovery/keys`) and the *ID token
+  claims reference* (no `amr` listed for ID tokens; `email` for members only as
+  an optional claim). Read live 2026-11-05: the v2.0 ID token carries no `amr`,
+  the v1.0 one carries `["pwd","mfa"]`.
+- Okta developer docs, *Configure claims sharing* > *third-party OIDC IdP*: the
+  IdP "must send an `amr` array with AMR claims in the OpenID Connect ID token";
+  enabled with `trustClaims: true` in the IdP PUT; "The `mfa` AMR claim ... is
+  defined to satisfy the app sign-in policy **Any two factors** configuration".

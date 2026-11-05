@@ -46,7 +46,10 @@
 # Supply chain: every action pinned to a full commit SHA with the version in
 # a trailing comment (same pins and rationale as terraform-plan.yml);
 # Microsoft.Graph.Authentication pinned to the version lab-tests.yml uses.
-# BUILT: no workflow has run yet (no tenant).
+# RAN - tenant: nightly on main since 2026-10-29. It caught Microsoft's
+# telecomProviderSettings schema addition on 2026-11-05 (#112, baseline
+# refresh #113); before that it could not sign in for six nights (see the
+# "check could not run" step).
 # =============================================================================
 
 name: config-drift
@@ -205,6 +208,58 @@ jobs:
               }
             } else if (mine) {
               await github.rest.issues.createComment({ owner, repo, issue_number: mine.number, body: `Clean on ${new Date().toISOString().slice(0, 10)}: no open High or Medium drift. ${runUrl}` });
+              await github.rest.issues.update({ owner, repo, issue_number: mine.number, state: 'closed', state_reason: 'completed' });
+              core.info(`closed issue #${mine.number}`);
+            }
+
+      # A check that cannot run is not a clean night. From 2026-10-30 to
+      # 2026-11-04 this job could not sign in (AADSTS700213: PLAN's
+      # github-main-drift credential was merged in #101, but the bootstrap
+      # apply that creates it had not run). Each night went red and opened
+      # nothing, because the drift issue above needs a comparison, and nobody
+      # looked for six nights (lab/docs/field-notes.md, entry 5). This step
+      # opens ONE issue whenever the run produced no comparison (sign-in,
+      # token or export failure: compare_exit 3 or missing), adds a comment
+      # each night it stays that way, and closes it on the next run that
+      # compared. Same label as the drift issue, so one filter shows both.
+      - name: Open or close the "check could not run" issue
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        env:
+          COMPARE_EXIT: ${{ steps.compare.outputs.compare_exit }}
+        with:
+          script: |
+            const label = 'identity-drift';
+            const title = 'Nightly identity drift check could not run';
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const code = process.env.COMPARE_EXIT || 'missing';
+            const compared = ['0', '1', '2'].includes(code);
+            const open = await github.paginate(github.rest.issues.listForRepo, { owner, repo, state: 'open', labels: label, per_page: 100 });
+            const mine = open.find(i => !i.pull_request && i.title === title);
+            const day = new Date().toISOString().slice(0, 10);
+            if (!compared) {
+              const body = [
+                `The nightly reconcile produced **no comparison** on ${day} (compare_exit=${code}): it could not sign in, mint a Graph token or export, so nothing was checked.`,
+                '',
+                'AADSTS700213 in the "Azure login" step means envs/bootstrap has not been applied since PLAN\'s github-main-drift federated credential was added: run the bootstrap apply, then re-run this workflow.',
+                '',
+                `Run: ${runUrl}`,
+              ].join('\n');
+              if (mine) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: mine.number, body });
+                core.info(`commented on issue #${mine.number}`);
+              } else {
+                try { await github.rest.issues.getLabel({ owner, repo, name: label }); }
+                catch (e) {
+                  if (e.status !== 404) throw e;
+                  await github.rest.issues.createLabel({ owner, repo, name: label, color: 'b60205', description: 'Tenant configuration differs from the code (nightly reconcile)' });
+                }
+                const created = await github.rest.issues.create({ owner, repo, title, body, labels: [label] });
+                core.info(`opened issue #${created.data.number}`);
+              }
+            } else if (mine) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: mine.number, body: `The check ran again on ${day} (compare_exit=${code}). ${runUrl}` });
               await github.rest.issues.update({ owner, repo, issue_number: mine.number, state: 'closed', state_reason: 'completed' });
               core.info(`closed issue #${mine.number}`);
             }

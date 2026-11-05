@@ -3,13 +3,15 @@
 #     the AUs Graph returns, the privilege finding that keeps admins out.
 #   * Whole-script runs against a mocked tenant (Invoke-MgGraphRequest mock
 #     with the real cmdlet's signature): create-or-skip, immutable-flag
-#     conflict, fail-closed reads, member guards, -WhatIf.
+#     conflict, fail-closed reads, member guards, -WhatIf, the RMAU-scoped
+#     responder grant (-ResponderGroupName, through PIM) and the app-only
+#     sign-in (-UseAzureCliToken; az and Connect-MgGraph are mocks).
 # No tenant is contacted.
 
 BeforeAll {
     . (Join-Path $PSScriptRoot 'TestHelpers.ps1')
     $script:Rau = Get-LabScriptPath 'post-apply/New-RestrictedAdminUnit.ps1'
-    . (Get-ScriptFunctionBlock -Path $script:Rau -Name 'Test-BreakGlassUpn', 'Test-AdminAccountUpn', 'Get-RestrictedAuBody', 'Resolve-ExistingAu', 'Get-PrivilegeFinding')
+    . (Get-ScriptFunctionBlock -Path $script:Rau -Name 'Test-BreakGlassUpn', 'Test-AdminAccountUpn', 'Get-RestrictedAuBody', 'Resolve-ExistingAu', 'Get-PrivilegeFinding', 'Get-MissingGraphPermission', 'Get-ResponderRequestBody')
 
     function Set-RauMock {
         param(
@@ -19,11 +21,19 @@ BeforeAll {
             [hashtable]$Privilege = @{},   # userId -> @{ RoleAssignments=..; Groups=..; GroupEligibilities=.. }
             [switch]$FailAuRead, [switch]$FailPrivilegeRead, [switch]$CreatedUnrestricted,
             # AU id -> number of role assignments scoped to it (the RMAU-scoped responder).
-            [hashtable]$Responders = @{ 'au-1' = 1 }
+            [hashtable]$Responders = @{ 'au-1' = 1 },
+            # Group display name -> group object (the -ResponderGroupName lookup).
+            [hashtable]$Groups = @{ 'PIM-Tier0-Privileged-Auth-Admins' = @{ id = 'g-vip'; displayName = 'PIM-Tier0-Privileged-Auth-Admins'; isAssignableToRole = $true } },
+            # 'groupId|roleTemplateId|auId' the group already holds.
+            [string[]]$GroupRoles = @(),
+            # How many PIM requests answer 404 first (a just-created AU PIM cannot see yet).
+            [int]$PimNotFound = 0
         )
         $global:RauTest = @{ Units = $Units; Members = $Members; Users = $Users; Privilege = $Privilege; FailAuRead = [bool]$FailAuRead; FailPriv = [bool]$FailPrivilegeRead; Unrestricted = [bool]$CreatedUnrestricted; Responders = $Responders
+            Groups = $Groups; GroupRoles = [System.Collections.Generic.List[string]]::new([string[]]$GroupRoles); PimNotFound = $PimNotFound
             Posts = [System.Collections.Generic.List[object]]::new() }
         Mock Write-Host {}
+        Mock Start-Sleep {}
         Mock Get-MgContext { New-MgContextStub -Scopes @('AdministrativeUnit.ReadWrite.All', 'User.Read.All', 'GroupMember.Read.All', 'RoleManagement.Read.Directory', 'PrivilegedEligibilitySchedule.Read.AzureADGroup') }
         Mock Connect-MgGraph { throw 'tests must never connect' }
         Mock Invoke-MgGraphRequest {
@@ -32,7 +42,23 @@ BeforeAll {
                 $b = $Body | ConvertFrom-Json -AsHashtable
                 $t.Posts.Add(@{ Uri = $u; Body = $b })
                 if ($u -like '*/directory/administrativeUnits') { return @{ id = 'au-new'; displayName = $b['displayName'] } }
+                if ($u -like '*/roleManagement/directory/roleAssignmentScheduleRequests') {
+                    if ($t.PimNotFound -gt 0) { $t.PimNotFound--; $t.Posts.RemoveAt($t.Posts.Count - 1); throw 'Response status code does not indicate success: NotFound (Not Found).' }
+                    # PIM provisions the assignment: it now counts as a responder.
+                    $au = ([string]$b['directoryScopeId']).Split('/')[-1]
+                    $t.GroupRoles.Add("$($b['principalId'])|$($b['roleDefinitionId'])|$au")
+                    $t.Responders[$au] = 1 + $(if ($t.Responders.ContainsKey($au)) { [int]$t.Responders[$au] } else { 0 })
+                    return @{ id = "req-$($t.Posts.Count)"; status = 'Provisioned' }
+                }
                 return $null
+            }
+            if ($u -match "/groups\?\`$filter=displayName eq '(?<n>[^']+)'") {
+                $n = $Matches.n
+                return @{ value = @(if ($t.Groups.ContainsKey($n)) { $t.Groups[$n] }) }
+            }
+            if ($u -match "roleAssignments\?\`$filter=principalId eq '(?<p>[^']+)' and roleDefinitionId eq '(?<r>[^']+)' and directoryScopeId eq '/administrativeUnits/(?<au>[^']+)'") {
+                $k = "$($Matches.p)|$($Matches.r)|$($Matches.au)"
+                return @{ value = @(if ($t.GroupRoles.Contains($k)) { @{ id = "ra-$k" } }) }
             }
             if ($u -match '/directory/administrativeUnits/au-new\?') { return @{ id = 'au-new'; isMemberManagementRestricted = (-not $t.Unrestricted) } }
             if ($u -match "/directory/administrativeUnits\?\`$filter=displayName eq '") {
@@ -76,6 +102,23 @@ Describe 'New-RestrictedAdminUnit.ps1 - helpers' {
         $c.Reason | Should -Match 'immutable'
         (Resolve-ExistingAu -Units @(@{ id = 'a'; isMemberManagementRestricted = $null }) -DisplayName 'RMAU-VIP').Action | Should -Be 'conflict' -Because 'null means an ordinary AU'
         (Resolve-ExistingAu -Units @(@{ id = 'a'; isMemberManagementRestricted = $true }, @{ id = 'b'; isMemberManagementRestricted = $true }) -DisplayName 'RMAU-VIP').Action | Should -Be 'conflict'
+    }
+
+    It 'treats app-only roles that are a superset as covering the delegated reads' {
+        $operator = @('AdministrativeUnit.ReadWrite.All', 'Directory.Read.All', 'RoleManagement.ReadWrite.Directory', 'PrivilegedEligibilitySchedule.Read.AzureADGroup')
+        Get-MissingGraphPermission -Have $operator -Required @('AdministrativeUnit.ReadWrite.All', 'User.Read.All', 'GroupMember.Read.All', 'RoleManagement.Read.Directory', 'PrivilegedEligibilitySchedule.Read.AzureADGroup', 'RoleManagement.ReadWrite.Directory') | Should -BeNullOrEmpty
+        Get-MissingGraphPermission -Have @('Directory.Read.All') -Required @('User.Read.All', 'RoleManagement.ReadWrite.Directory') | Should -Be @('RoleManagement.ReadWrite.Directory') -Because 'a Read role never covers a write'
+        Get-MissingGraphPermission -Have @() -Required @('User.Read.All') | Should -BeNullOrEmpty -Because 'no scope list = unknown, no warning'
+    }
+
+    It 'asks PIM for an ACTIVE, non-expiring assignment of one role at the RMAU scope, held by the group' {
+        $b = Get-ResponderRequestBody -GroupId 'g-vip' -RoleTemplateId '729827e3-9c14-49f7-bb1b-9608f156bbb8' -AuId 'au-1' -StartUtc ([datetime]::new(2026, 11, 5, 10, 0, 0, [DateTimeKind]::Utc))
+        $b.action | Should -Be 'adminAssign'
+        $b.principalId | Should -Be 'g-vip'
+        $b.directoryScopeId | Should -Be '/administrativeUnits/au-1'
+        $b.scheduleInfo.expiration.type | Should -Be 'noExpiration'
+        $b.scheduleInfo.startDateTime | Should -Be '2026-11-05T10:00:00Z'
+        $b.justification | Should -Not -BeNullOrEmpty
     }
 
     It 'finds privilege that must keep a user out of an RMAU' {
@@ -190,8 +233,84 @@ Describe 'New-RestrictedAdminUnit.ps1 - against a mocked tenant' {
         Should -Invoke Connect-MgGraph -Times 0 -Exactly
     }
 
+    It '-ResponderGroupName gives the group Helpdesk + Authentication Administrator at the RMAU scope through PIM, then adds the VIP' {
+        Set-RauMock -Units @(@{ id = 'au-1'; displayName = 'RMAU-VIP'; isMemberManagementRestricted = $true }) -Responders @{}
+        & $Rau -ResponderGroupName 'PIM-Tier0-Privileged-Auth-Admins' -MemberUserPrincipalNames 'helen.carter@contosohealth.io' -Confirm:$false
+        $LASTEXITCODE | Should -Be 0
+        $pim = @($global:RauTest.Posts | Where-Object { $_.Uri -like '*/roleAssignmentScheduleRequests' })
+        $pim.Count | Should -Be 2
+        @($pim | ForEach-Object { $_.Body.roleDefinitionId }) | Should -Be @('729827e3-9c14-49f7-bb1b-9608f156bbb8', 'c4e39bd9-1100-46d3-8c65-fb160da0071f')
+        @($pim | Where-Object { $_.Body.principalId -eq 'g-vip' -and $_.Body.directoryScopeId -eq '/administrativeUnits/au-1' -and $_.Body.action -eq 'adminAssign' }).Count | Should -Be 2
+        @($global:RauTest.Posts | Where-Object { $_.Uri -like '*/members/$ref' }).Count | Should -Be 1
+        Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -ParameterFilter { $Method -eq 'POST' -and "$Uri" -like '*/roleManagement/directory/roleAssignments' } -Because 'never a direct write that bypasses PIM'
+    }
+
+    It '-ResponderGroupName retries a NotFound only while PIM catches up with an RMAU created in this run' {
+        Set-RauMock -Responders @{} -PimNotFound 2
+        & $Rau -ResponderGroupName 'PIM-Tier0-Privileged-Auth-Admins' -MemberUserPrincipalNames 'helen.carter@contosohealth.io' -Confirm:$false
+        $LASTEXITCODE | Should -Be 0
+        @($global:RauTest.Posts | Where-Object { $_.Uri -like '*/roleAssignmentScheduleRequests' }).Count | Should -Be 2
+        @($global:RauTest.Posts | Where-Object { $_.Uri -like '*/members/$ref' }).Count | Should -Be 1
+        Should -Invoke Start-Sleep -Times 2 -Exactly -ParameterFilter { $Seconds -eq 10 }
+    }
+
+    It '-ResponderGroupName does NOT retry a NotFound on an RMAU that already existed (fail closed)' {
+        Set-RauMock -Units @(@{ id = 'au-1'; displayName = 'RMAU-VIP'; isMemberManagementRestricted = $true }) -Responders @{} -PimNotFound 1
+        Mock Write-Warning {}
+        & $Rau -ResponderGroupName 'PIM-Tier0-Privileged-Auth-Admins' -MemberUserPrincipalNames 'helen.carter@contosohealth.io' -Confirm:$false
+        $LASTEXITCODE | Should -Be 1
+        $global:RauTest.Posts.Count | Should -Be 0
+        Should -Invoke Start-Sleep -Times 0 -Exactly
+    }
+
+    It '-ResponderGroupName skips roles the group already holds there' {
+        Set-RauMock -Units @(@{ id = 'au-1'; displayName = 'RMAU-VIP'; isMemberManagementRestricted = $true }) `
+            -GroupRoles @('g-vip|729827e3-9c14-49f7-bb1b-9608f156bbb8|au-1', 'g-vip|c4e39bd9-1100-46d3-8c65-fb160da0071f|au-1')
+        & $Rau -ResponderGroupName 'PIM-Tier0-Privileged-Auth-Admins' -Confirm:$false
+        $LASTEXITCODE | Should -Be 0
+        $global:RauTest.Posts.Count | Should -Be 0
+    }
+
+    It '-ResponderGroupName refuses a group that is not role-assignable, and adds nobody' {
+        Set-RauMock -Units @(@{ id = 'au-1'; displayName = 'RMAU-VIP'; isMemberManagementRestricted = $true }) -Responders @{} `
+            -Groups @{ 'VIP-Support' = @{ id = 'g-x'; displayName = 'VIP-Support'; isAssignableToRole = $false } }
+        Mock Write-Warning {}
+        & $Rau -ResponderGroupName 'VIP-Support' -MemberUserPrincipalNames 'helen.carter@contosohealth.io' -Confirm:$false
+        $LASTEXITCODE | Should -Be 1
+        $global:RauTest.Posts.Count | Should -Be 0
+        Should -Invoke Write-Warning -ParameterFilter { $Message -match 'not role-assignable' }
+    }
+
+    It '-ResponderGroupName stops when the group is missing (not found is not "no responder needed")' {
+        Set-RauMock -Units @(@{ id = 'au-1'; displayName = 'RMAU-VIP'; isMemberManagementRestricted = $true }) -Groups @{}
+        Mock Write-Warning {}
+        & $Rau -ResponderGroupName 'PIM-Tier0-Privileged-Auth-Admins' -MemberUserPrincipalNames 'helen.carter@contosohealth.io' -Confirm:$false
+        $LASTEXITCODE | Should -Be 1
+        $global:RauTest.Posts.Count | Should -Be 0
+    }
+
+    It '-UseAzureCliToken signs in app-only with the Azure CLI token, never with delegated scopes' {
+        Set-RauMock -Units @(@{ id = 'au-1'; displayName = 'RMAU-VIP'; isMemberManagementRestricted = $true }) -Members @('u-helen')
+        $global:RauFakeToken = 'header.payload.signature'
+        Mock az { $global:LASTEXITCODE = 0; $global:RauFakeToken }
+        Mock Connect-MgGraph {}
+        & $Rau -UseAzureCliToken -MemberUserPrincipalNames 'helen.carter@contosohealth.io' -Confirm:$false
+        $LASTEXITCODE | Should -Be 0
+        Should -Invoke Connect-MgGraph -Times 1 -Exactly -ParameterFilter { $AccessToken -is [securestring] -and [System.Net.NetworkCredential]::new('', $AccessToken).Password -eq $global:RauFakeToken }
+        Should -Invoke Connect-MgGraph -Times 0 -ParameterFilter { $Scopes }
+        Remove-Variable -Name RauFakeToken -Scope Global
+    }
+
+    It '-UseAzureCliToken with no Azure CLI token stops before any Graph call' {
+        Set-RauMock
+        Mock az { $global:LASTEXITCODE = 1 }
+        Mock Connect-MgGraph {}
+        { & $Rau -UseAzureCliToken -Confirm:$false } | Should -Throw '*No Microsoft Graph token*'
+        Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly
+    }
+
     It 'documents the consequences an operator must accept in its help' {
         $help = Get-Help $Rau -Full | Out-String
-        foreach ($s in 'immutable', 'Lifecycle Workflows', 'access reviews', 'APPLICATION permissions', 'password', '100', 'containment playbook', 'RMAU-scoped responder') { $help | Should -Match ([regex]::Escape($s)) }
+        foreach ($s in 'immutable', 'Lifecycle Workflows', 'access reviews', 'APPLICATION permissions', 'password', '100', 'containment playbook', 'RMAU-scoped responder', 'role-assigned-outside-pim') { $help | Should -Match ([regex]::Escape($s)) }
     }
 }

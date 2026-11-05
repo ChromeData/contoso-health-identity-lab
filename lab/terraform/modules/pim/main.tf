@@ -39,6 +39,8 @@
 #   reviews.tf          access review bodies for PIM-eligible membership
 #                       (output pim_eligible_review_bodies)
 #   azure.tf            PIM for Azure RESOURCES (var.enable_pim_azure_resources)
+#   aws.tf              PIM-AWS-Lab-Admins: AWS admin as a PIM-for-Groups
+#                       activation (var.enable_pim_aws_admin, ADR 0025)
 # =============================================================================
 
 # -----------------------------------------------------------------------------

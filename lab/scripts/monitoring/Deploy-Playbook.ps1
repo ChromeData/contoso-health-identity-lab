@@ -1,23 +1,35 @@
 <#
 .SYNOPSIS
     Deploys the Sentinel response playbook (lab/monitoring/playbook-notify.json):
-    incident -> Teams adaptive card + ServiceNow incident + ticket number
-    commented back on the Sentinel incident. Pulls its secrets from Key Vault
-    at deploy time and grants the two roles the playbook needs.
+    incident -> adaptive card in the SOC team's Identity-SecOps channel +
+    ServiceNow incident + ticket number commented back on the Sentinel
+    incident. Pulls the ServiceNow secret from Key Vault at deploy time and
+    grants the two roles the playbook needs.
 
 .DESCRIPTION
-    Why a script and not the pipeline: the playbook carries two secrets - the
-    Teams Workflows webhook URL (anyone holding it can post to the channel)
-    and the ServiceNow integration user's password. The CI identities must
-    never hold those, so this runs LOCALLY as the operator (whose IP the Key
-    Vault firewall admits), reads the secrets from Key Vault, passes them as
-    ARM securestring parameters through a short-lived 0600 parameters file,
-    and deletes the file.
+    Why a script and not the pipeline: the playbook carries the ServiceNow
+    integration user's password. The CI identities must never hold it, so
+    this runs LOCALLY as the operator (whose IP the Key Vault firewall
+    admits), reads the secret from Key Vault, passes it as an ARM
+    securestring parameter through a short-lived 0600 parameters file, and
+    deletes the file.
 
-    Before running, store the secrets yourself (you type them; nothing here
-    prompts or echoes them):
-        az keyvault secret set --vault-name <kv> --name teams-webhook-url              --value '<url>'
-        az keyvault secret set --vault-name <kv> --name servicenow-integration-password --value '<pw>'
+    Teams: the card is posted by the Teams connector (an OAuth API
+    connection, teams-<playbook>), not by a Workflows webhook. A webhook URL
+    is a bearer credential - anyone holding it can post into the SOC channel
+    - and it needs a Power Automate flow owned by a person. The connection
+    holds no secret in the template; it is authorized ONCE after the first
+    deploy as the SOC automation account (svc-soc-automation, the team
+    owner), never as a person:
+        node lab/scripts/monitoring/authorize-teams-connection.mjs teams-pb-identity-notify
+    Re-deploying keeps that authorization (the template sets no parameter
+    values on the connection).
+
+    Before running, store the ServiceNow secret yourself (nothing here prompts
+    or echoes it; it goes in over stdin, never in argv):
+        security find-generic-password -s contoso-lab-servicenow-sentinel -w | tr -d '\n' |
+          az keyvault secret set --vault-name <kv> --name servicenow-integration-password --file /dev/stdin
+    (needs Key Vault Secrets Officer on the vault; the lab operator only reads.)
 
     ROLES GRANTED (Owner / User Access Administrator required - the operator):
       * playbook managed identity  -> Microsoft Sentinel Responder (workspace)
@@ -36,7 +48,15 @@
     Log Analytics workspace with Sentinel (default loga-idlab).
 
 .PARAMETER KeyVaultName
-    Lab Key Vault holding teams-webhook-url / servicenow-integration-password.
+    Lab Key Vault holding servicenow-integration-password.
+
+.PARAMETER TeamsGroupId
+    Object id of the SOC team (M365 group) that owns the Identity-SecOps
+    channel. Empty = skip Teams (the playbook's If_Teams_configured is false).
+
+.PARAMETER TeamsChannelId
+    Channel id (19:...@thread.tacv2) the incident cards go to. Required with
+    -TeamsGroupId.
 
 .PARAMETER ServiceNowInstance
     PDI instance name, e.g. dev123456 (empty = skip ServiceNow).
@@ -45,7 +65,7 @@
     ServiceNow integration user (with the itil role). Required with -ServiceNowInstance.
 
 .EXAMPLE
-    ./Deploy-Playbook.ps1 -KeyVaultName kv-idlab-7f3a -ServiceNowInstance dev123456 -ServiceNowUser svc.sentinel
+    ./Deploy-Playbook.ps1 -KeyVaultName kv-idlab-7f3a -TeamsGroupId <team id> -TeamsChannelId '19:abc@thread.tacv2' -ServiceNowInstance dev123456 -ServiceNowUser svc.sentinel
 #>
 
 #Requires -Version 7.0
@@ -57,6 +77,8 @@ param(
     [string]$ResourceGroup = 'rg-identity-lab',
     [string]$WorkspaceName = 'loga-idlab',
     [Parameter(Mandatory)][string]$KeyVaultName,
+    [ValidatePattern('^$|^[0-9a-fA-F-]{36}$')][string]$TeamsGroupId = '',
+    [ValidatePattern('^$|^19:.+@thread\.(tacv2|skype)$')][string]$TeamsChannelId = '',
     [string]$ServiceNowInstance = '',
     [string]$ServiceNowUser = '',
     [string]$PlaybookName = 'pb-identity-notify',
@@ -96,11 +118,12 @@ function Grant-RoleIfMissing {
 
 if (-not (Test-Path -LiteralPath $TemplatePath)) { throw "Template not found: $TemplatePath" }
 if ($ServiceNowInstance -and -not $ServiceNowUser) { throw '-ServiceNowInstance requires -ServiceNowUser (the integration user with the itil role).' }
+if ([bool]$TeamsGroupId -ne [bool]$TeamsChannelId) { throw '-TeamsGroupId and -TeamsChannelId go together (the SOC team and its Identity-SecOps channel).' }
+if (-not $TeamsGroupId) { Write-Warning 'No -TeamsGroupId / -TeamsChannelId: the playbook will skip Teams (ServiceNow and the incident comment only).' }
 $workspaceId = az monitor log-analytics workspace show -g $ResourceGroup -n $WorkspaceName --query id -o tsv
 $rgId = az group show -n $ResourceGroup --query id -o tsv
 
-Write-Host "[1/3] Reading playbook secrets from Key Vault '$KeyVaultName'" -ForegroundColor Cyan
-$teamsUrl = Get-VaultSecretOrEmpty 'teams-webhook-url'
+Write-Host "[1/3] Reading the ServiceNow secret from Key Vault '$KeyVaultName'" -ForegroundColor Cyan
 $snowPassword = if ($ServiceNowInstance) { Get-VaultSecretOrEmpty 'servicenow-integration-password' } else { '' }
 if ($ServiceNowInstance -and -not $snowPassword) {
     # The playbook gates ServiceNow on snowInstance only, so blank it (and the user) to make
@@ -117,7 +140,8 @@ try {
         contentVersion = '1.0.0.0'
         parameters     = @{
             playbookName    = @{ value = $PlaybookName }
-            teamsWebhookUrl = @{ value = $teamsUrl }
+            teamsGroupId    = @{ value = $TeamsGroupId }
+            teamsChannelId  = @{ value = $TeamsChannelId }
             snowInstance    = @{ value = $ServiceNowInstance }
             snowUser        = @{ value = $ServiceNowUser }
             snowPassword    = @{ value = $snowPassword }
@@ -131,7 +155,7 @@ try {
 }
 finally {
     Remove-Item -LiteralPath $paramFile.FullName -Force -ErrorAction SilentlyContinue
-    $teamsUrl = $null; $snowPassword = $null
+    $snowPassword = $null
 }
 
 $playbookId = $out.playbookId.value
@@ -143,4 +167,10 @@ $siObjectId = az ad sp show --id $SecurityInsightsAppId --query id -o tsv
 Grant-RoleIfMissing -PrincipalId $siObjectId -PrincipalType ServicePrincipal -Role 'Microsoft Sentinel Automation Contributor' -Scope $rgId
 
 Write-Host "`nPlaybook deployed: $playbookId" -ForegroundColor Green
-Write-Host "Next: set GitHub variable TF_SENTINEL_PLAYBOOK_ID (or sentinel_playbook_id in terraform.tfvars) to that id, so modules/monitoring creates the automation rule." -ForegroundColor Cyan
+Write-Host @"
+Next:
+  1. Authorize the Teams connection once, as svc-soc-automation (never as a person):
+     node lab/scripts/monitoring/authorize-teams-connection.mjs $($out.teamsConnectionName.value)
+  2. Set GitHub variable TF_SENTINEL_PLAYBOOK_ID (or sentinel_playbook_id in terraform.tfvars) to that id,
+     so modules/monitoring creates the automation rule.
+"@ -ForegroundColor Cyan

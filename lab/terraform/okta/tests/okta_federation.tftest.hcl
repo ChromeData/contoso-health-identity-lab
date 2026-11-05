@@ -5,7 +5,7 @@
 #   * by default (enable_entra_federation = false) only the clinic's estate
 #     is planned: Clinic-Staff, its group rule keyed on the login domain, the
 #     legacy bookmark app and its ONE assignment; no IdP, no routing rule;
-#   * with the flag on: the Entra OIDC IdP against the tenant's v2.0
+#   * with the flag on: the Entra OIDC IdP against the tenant's v1.0
 #     endpoints with scopes openid profile email, account link by email, and
 #     ONE routing rule, priority 1, ACTIVE, matching the clinic login domain
 #     as a SUFFIX (never everyone) and targeting only that IdP - so Okta's
@@ -103,18 +103,25 @@ run "federation_on_plans_the_idp_and_one_routing_rule" {
   }
   assert {
     condition = (
-      okta_idp_oidc.entra[0].issuer_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0"
-      && okta_idp_oidc.entra[0].authorization_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/v2.0/authorize"
-      && okta_idp_oidc.entra[0].token_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/v2.0/token"
-      && okta_idp_oidc.entra[0].jwks_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/discovery/v2.0/keys"
-      && okta_idp_oidc.entra[0].user_info_url == "https://graph.microsoft.com/oidc/userinfo"
+      okta_idp_oidc.entra[0].issuer_url == "https://sts.windows.net/11111111-1111-1111-1111-111111111111/"
+      && okta_idp_oidc.entra[0].authorization_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/authorize"
+      && okta_idp_oidc.entra[0].token_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/token"
+      && okta_idp_oidc.entra[0].jwks_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/discovery/keys"
       && okta_idp_oidc.entra[0].token_binding == "HTTP-POST"
     )
-    error_message = "every IdP endpoint must be the tenant's v2.0 endpoint built from entra_tenant_id, and the token request a POST"
+    error_message = "every IdP endpoint must be the tenant's v1.0 endpoint built from entra_tenant_id (only its ID token carries amr), and the token request a POST"
+  }
+  assert {
+    condition     = okta_idp_oidc.entra[0].user_info_url == null
+    error_message = "no userinfo endpoint: Graph's userinfo refuses a v1.0 access token (401), and the v1.0 ID token carries the profile"
   }
   assert {
     condition     = okta_idp_oidc.entra[0].subject_match_type == "EMAIL" && okta_idp_oidc.entra[0].account_link_action == "AUTO" && okta_idp_oidc.entra[0].provisioning_action == "AUTO" && okta_idp_oidc.entra[0].groups_action == "NONE" && okta_idp_oidc.entra[0].issuer_mode == "ORG_URL"
     error_message = "account link by email, JIT on (lab), groups never copied from the IdP, org URL as issuer"
+  }
+  assert {
+    condition     = okta_idp_oidc.entra[0].request_signature_scope == "NONE"
+    error_message = "the authorize request must be unsigned: Entra refuses a signed request object (AADSTS70013, first clinic sign-in 2026-11-05)"
   }
   assert {
     condition     = okta_policy_rule_idp_discovery.clinic_to_entra[0].priority == 1 && okta_policy_rule_idp_discovery.clinic_to_entra[0].status == "ACTIVE" && okta_policy_rule_idp_discovery.clinic_to_entra[0].network_connection == "ANYWHERE"
@@ -330,4 +337,29 @@ run "client_id_that_is_not_a_guid_is_rejected" {
   }
 
   expect_failures = [var.entra_client_id]
+}
+
+# The lab's routing decision (2026-11-05): clinic staff use hospital accounts
+# after the acquisition, so the routed domain is the hospital's. Both the
+# routing rule and the Clinic-Staff group rule must follow it, and nothing
+# wider than that one suffix may be routed.
+run "hospital_domain_routes_hospital_addresses_only" {
+  command = plan
+
+  variables {
+    clinic_login_domain     = "contosohealthlab.com"
+    enable_entra_federation = true
+    entra_tenant_id         = "11111111-1111-1111-1111-111111111111"
+    entra_client_id         = "14141414-1414-1414-1414-141414141414"
+    entra_client_secret     = "not-a-real-secret-0123456789"
+  }
+
+  assert {
+    condition     = [for p in okta_policy_rule_idp_discovery.clinic_to_entra[0].user_identifier_patterns : "${p.match_type}:${p.value}"] == ["SUFFIX:contosohealthlab.com"]
+    error_message = "the routing rule must match exactly the hospital domain suffix"
+  }
+  assert {
+    condition     = okta_group_rule.clinic_staff.expression_value == "String.substringAfter(user.login, \"@\") == \"contosohealthlab.com\""
+    error_message = "Clinic-Staff membership must follow the same domain as the routing rule"
+  }
 }

@@ -100,6 +100,86 @@ Describe 'Export-EvidencePack.ps1 - tier groups + companion evidence' {
     }
 }
 
+Describe 'Export-EvidencePack.ps1 - PIM activation history (read-only: PIM-for-Groups requests + the directory audit log)' {
+    # Learn names RoleAssignmentSchedule.ReadWrite.Directory as the least
+    # privileged permission for LIST roleAssignmentScheduleRequests, and the
+    # live EVIDENCE runs were refused it (PermissionScopeNotGranted). The
+    # directory-role history is read from directoryAudits (AuditLog.Read.All).
+    BeforeEach {
+        $script:out = Join-Path $TestDrive ("pim-" + [guid]::NewGuid().ToString('N').Substring(0, 6))
+        New-Item -ItemType Directory -Path $out -Force | Out-Null
+        Set-PackMocks
+        function New-AuditRow([string]$Category, [string]$Role, [string]$Group, [string]$User, [string]$Why, [string]$RequestId) {
+            $targets = @([pscustomobject]@{ Type = 'Role'; DisplayName = $Role })
+            if ($Group) { $targets += [pscustomobject]@{ Type = 'Other'; DisplayName = $Group; Id = "gid-$Group" } }
+            $targets += [pscustomobject]@{ Type = 'User'; DisplayName = $User }
+            [pscustomobject]@{
+                Id = [guid]::NewGuid().ToString(); Category = $Category; Result = 'success'
+                ActivityDisplayName = 'Add member to role completed (PIM activation)'; ActivityDateTime = [datetime]'2026-11-01T10:00:00Z'
+                InitiatedBy = [pscustomobject]@{ User = [pscustomobject]@{ Id = "uid-$User"; DisplayName = $User; UserPrincipalName = "$User@contoso.test" } }
+                TargetResources = $targets
+                AdditionalDetails = @(
+                    [pscustomobject]@{ Key = 'RoleAssignmentRequestId'; Value = $RequestId }, [pscustomobject]@{ Key = 'Justification'; Value = $Why },
+                    [pscustomobject]@{ Key = 'StartTime'; Value = '2026-11-01T10:00:00Z' }, [pscustomobject]@{ Key = 'ExpirationTime'; Value = '2026-11-01T12:00:00Z' },
+                    [pscustomobject]@{ Key = 'IsAuthenticatedWithMfa'; Value = 'True' }) + @(if ($Group) { [pscustomobject]@{ Key = 'ResourceOriginId'; Value = "gid-$Group" } })
+            }
+        }
+        Mock Get-MgAuditLogDirectoryAudit -ParameterFilter { $Filter -like "*Add member to role completed (PIM activation)*" } {
+            New-AuditRow -Category 'RoleManagement' -Role 'Global Administrator' -User 'adm-test' -Why 'CHG-1: break a stuck sync' -RequestId 'req-role-1'
+            # Also returned by the PIM-for-Groups requests API below: must not be counted twice.
+            New-AuditRow -Category 'GroupManagement' -Role 'Member' -Group 'privileged-iam-admins' -User 'adm-other' -Why 'INC-2' -RequestId 'req-grp-1'
+            # No longer in the requests API: added from the audit log.
+            New-AuditRow -Category 'GroupManagement' -Role 'Member' -Group 'privileged-iam-admins' -User 'adm-third' -Why 'INC-3' -RequestId 'req-grp-old'
+            # A group this pack does not cover (-SkipPimTierGroups): never added.
+            New-AuditRow -Category 'GroupManagement' -Role 'Member' -Group 'pim-tier1-helpdesk' -User 'adm-fourth' -Why 'INC-4' -RequestId 'req-grp-tier'
+        }
+        Mock Invoke-MgGraphRequest -ParameterFilter { "$Uri" -like '*privilegedAccess/group/assignmentScheduleRequests*' } {
+            @{ value = @(@{ id = 'req-grp-1'; action = 'selfActivate'; accessId = 'member'; principalId = 'uid-adm-other'; principal = @{ displayName = 'adm-other' }
+                        status = 'Provisioned'; justification = 'INC-2'; createdDateTime = '2026-11-01T09:00:00Z'
+                        scheduleInfo = @{ startDateTime = '2026-11-01T09:00:00Z'; expiration = @{ endDateTime = '2026-11-01T13:00:00Z' } }; ticketInfo = @{ ticketNumber = 'INC-2' } }) }
+        }
+    }
+
+    It 'adds a tier group''s audit-log activation when the pack covers the tier groups' {
+        Set-PackMocks -TierGroups @('pim-tier1-helpdesk')
+        $null = & $Pack -OutputDirectory $out -EvidenceRoot $out
+        $rows = @(Get-Content (Join-Path $out 'pim_activation_history.json') -Raw | ConvertFrom-Json)
+        ($rows | Where-Object requestId -eq 'req-grp-tier').role | Should -Be 'pim-tier1-helpdesk (member)'
+    }
+
+    It 'never lists roleAssignmentScheduleRequests (its least-privileged permission is ReadWrite)' {
+        $null = & $Pack -OutputDirectory $out -EvidenceRoot $out -SkipPimTierGroups
+        Should -Invoke Get-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -Times 0
+        (Get-Content -LiteralPath $Pack -Raw) | Should -Not -Match 'Get-MgRoleManagementDirectoryRoleAssignmentScheduleRequest\s'
+        $m = Get-Content (Join-Path $out 'manifest.json') -Raw | ConvertFrom-Json
+        ($m.artifacts | Where-Object file -eq 'pim_activation_history.json').status | Should -Be 'ok'
+    }
+
+    It 'merges: directory-role activations and aged-out group activations from the audit log, each request once' {
+        $null = & $Pack -OutputDirectory $out -EvidenceRoot $out -SkipPimTierGroups
+        $rows = @(Get-Content (Join-Path $out 'pim_activation_history.json') -Raw | ConvertFrom-Json)
+        $rows.Count | Should -Be 3
+        @($rows | Where-Object requestId -eq 'req-grp-1').Count | Should -Be 1
+        ($rows | Where-Object requestId -eq 'req-grp-1').source | Should -Be 'PIM requests API'
+        ($rows | Where-Object requestId -eq 'req-grp-1').ticketNumber | Should -Be 'INC-2'
+        # The kept requests-API row takes the audit log's MFA answer (not lost in the de-duplication).
+        ($rows | Where-Object requestId -eq 'req-grp-1').mfa | Should -Be 'True'
+        @($rows | Where-Object requestId -eq 'req-grp-tier').Count | Should -Be 0
+        $old = $rows | Where-Object requestId -eq 'req-grp-old'
+        $old.elevationType | Should -Be 'PIM for Groups'
+        $old.role | Should -Be 'privileged-iam-admins (member)'
+        $old.source | Should -Be 'directory audit log'
+        $r = $rows | Where-Object requestId -eq 'req-role-1'
+        $r.elevationType | Should -Be 'PIM for roles'
+        $r.role | Should -Be 'Global Administrator'
+        $r.principal | Should -Be 'adm-test'
+        $r.justification | Should -Be 'CHG-1: break a stuck sync'
+        ([datetime]$r.expiration).ToUniversalTime() | Should -Be ([datetime]::new(2026, 11, 1, 12, 0, 0, [DateTimeKind]::Utc))
+        $r.mfa | Should -Be 'True'
+        Should -Invoke Get-MgAuditLogDirectoryAudit -Times 1 -Exactly -ParameterFilter { $Filter -like "loggedByService eq 'PIM' and activityDisplayName eq*" }
+    }
+}
+
 Describe 'Export-EvidencePack.ps1 -UseAzureCliToken (app-only as EVIDENCE, evidence-pack.yml)' {
     BeforeAll {
         # EVIDENCE's Graph roles, read from the Terraform default.

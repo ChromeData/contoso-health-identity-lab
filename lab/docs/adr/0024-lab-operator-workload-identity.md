@@ -52,7 +52,7 @@ private key's lasting copy is a login Keychain item; a session copy (mode
   User.ReadWrite.All and GroupMember.ReadWrite.All (no new reach: the
   operator was already Tier 0 through AppRoleAssignment.ReadWrite.All)
 - **Azure, lab subscription:** Owner, Storage Blob Data Contributor,
-  Key Vault Secrets User
+  Key Vault Secrets Officer (Secrets User until 2026-11-05)
 - **Entra role:** Security Reader (refreshing the tenant diagnostic setting)
 
 `lab/terraform/aws/entra-operator.tf` registers the tenant's v2 issuer as an
@@ -130,3 +130,12 @@ the review and merge are now the control, as for every other change. Every
 such apply is a service-principal sign-in plus "Add app role assignment"
 audit events by the operator, which `app-consent-granted.kql` logs.
 
+## Amendment 2026-11-05: PIM-group eligibility (ADR 0025)
+
+`PrivilegedEligibilitySchedule.Read.AzureADGroup` becomes
+`PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup`, so the operator can
+make the lab-operations admin account ELIGIBLE for `PIM-AWS-Lab-Admins`
+(ADR 0025), the step `Set-PimGroupEligibility.ps1` does for people. It is
+not given `PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup`: making a
+member ACTIVE stays an activation by the member, with MFA and a reason. No
+new reach: the operator was already Tier 0 (Consequences above).

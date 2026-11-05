@@ -43,6 +43,19 @@ enable_pim_azure_resources     = false
 enable_helpdesk_au_scoping     = true
 enable_global_admin_pim_policy = true
 
+# AWS admin without root (ADR 0025): PIM-AWS-Lab-Admins, eligible-only, 2-hour
+# activation (MFA + justification, mailed to the security mailbox), assigned to
+# the AWS IAM Identity Center app so SCIM copies only ACTIVE members to AWS,
+# where lab/terraform/aws gives them the LabAdministrator permission set.
+enable_pim_aws_admin = true
+
+# VIPs in the restricted management AU RMAU-VIP (post-apply/
+# New-RestrictedAdminUnit.ps1), kept out of the help desk's AU by HR
+# employee id: 300001 Helen Carter (Chief Nursing Officer), 400100 Joan
+# Ferris (IT Director). Only the rendered AU rule changes; the Graph PATCH
+# that applies it is the tenant-time step (done 2026-11-05).
+helpdesk_au_excluded_employee_ids = ["300001", "400100"]
+
 # Tier-0 PIM activation step-up on auth context c1 (CA021). The plan refuses
 # the context unless CA021 is DECLARED "enabled" (ca_policy_states) AND
 # ca021_enforced_in_tenant = true. Terraform cannot see whether
@@ -107,6 +120,11 @@ enable_shared_clinical_ca     = false
 # clinical_portal_preauthorize_azure_cli: E25 token demo only; off again after.
 # enable_servicenow_sso adds the ServiceNow PDI SAML app (its instance URL
 # goes in terraform.tfvars / TF_VAR_, never here).
+# enable_servicenow_provisioning adds the ServiceNow provisioning app (gallery,
+# hidden, same group); its credential was written by the LOCAL seeding apply
+# (modules/apps/README.md "ServiceNow provisioning"). The job was created
+# stopped and is started here after Test Connection, provision-on-demand and a
+# real sign-in passed (capture-log E82, E83), as aws_scim_job_enabled was.
 # enable_okta_federation adds okta-clinic-idp, Entra as the IdP for the acquired
 # clinic's Okta org (runbook Phase 1, ADR 0022; the org host goes in
 # terraform.tfvars / TF_VAR_, never here). The Okta side is the separate,
@@ -122,6 +140,8 @@ aws_scim_job_enabled                   = true
 enable_pam_oidc_app                    = false
 clinical_portal_preauthorize_azure_cli = false
 enable_servicenow_sso                  = true
+enable_servicenow_provisioning         = true
+servicenow_provisioning_job_enabled    = true
 enable_okta_federation                 = true
 
 # Non-human identity governance: App-Consent-Reviewers group (premium) for the
@@ -140,8 +160,12 @@ enable_agent_identity = false
 # Containment (approval-gated revoke + confirm compromised + disable) needs
 # Sentinel and the deployed playbook (TF_CONTAINMENT_PLAYBOOK_ID);
 # containment_on_alert_added adds the Defender-portal "alert added" trigger.
+# ON since 2026-11-05 (E40/E41): pb-identity-contain is deployed, its Teams
+# connection is authorized as svc-soc-automation, and the drill ran in the
+# tenant (lab/evidence/itdr/20261105T102000Z). The rule only ASKS: every High
+# ITDR incident posts an approval card; no answer in 4 h means no action.
 enable_itdr_detections     = true
-enable_itdr_containment    = false
+enable_itdr_containment    = true
 containment_on_alert_added = false
 
 # Second-wave ITDR rules (device code, risky security-info registration, DC01

@@ -77,15 +77,47 @@
     and "Add member to restricted management administrative unit" are
     written to the Entra audit log.
 
-    TENANT-TIME. Nothing here has run against a tenant.
+    RAN in the tenant 2026-11-05 (capture E16c), app-only as the lab operator:
+    RMAU-VIP created; PIM-Tier0-Privileged-Auth-Admins holds Helpdesk +
+    Authentication Administrator at its scope; Helen Carter and Joan Ferris
+    added. The first PIM request answered 404 NotFound about 20 s after the
+    create (hence the retry). Verified that day: Cloud Sync still updates
+    an RMAU member (on-demand provisioning, "updated in Microsoft Entra
+    ID"). Still to verify: which containment calls the RMAU blocks, and HR
+    inbound provisioning on a VIP.
 
 .NOTES
     GRAPH SCOPES (delegated; admin-consent)
     AdministrativeUnit.ReadWrite.All                 create the RMAU, add members
     User.Read.All, GroupMember.Read.All              resolve VIPs, role-assignable memberships
     RoleManagement.Read.Directory                    direct role assignments / eligibility
+                                                     (RoleManagement.ReadWrite.Directory
+                                                     with -ResponderGroupName)
     PrivilegedEligibilitySchedule.Read.AzureADGroup  PIM-for-Groups eligibility
     Role: Privileged Role Administrator (or Global Administrator).
+
+    APP-ONLY (-UseAzureCliToken): the same permissions as application roles,
+    or a superset (Directory.Read.All covers the user / group reads; a
+    ReadWrite role covers its Read). The lab operator (lab/scripts/operator/op,
+    envs/operator) holds AdministrativeUnit.ReadWrite.All and
+    RoleManagement.ReadWrite.Directory for exactly this step. Microsoft Learn
+    (restricted management AUs, "Programmability"): application permissions
+    do NOT reach the MEMBERS of an RMAU, but creating the RMAU, adding
+    members and assigning roles at its scope are management of the RMAU
+    itself, which a tenant-scoped role or permission keeps.
+
+    THE RESPONDER (-ResponderGroupName)
+    The RMAU-scoped responder is a ROLE-ASSIGNABLE group that actively holds
+    Helpdesk Administrator + Authentication Administrator at the RMAU's scope,
+    granted through PIM (roleAssignmentScheduleRequests, adminAssign,
+    noExpiration) so the audit trail shows a PIM change, not a direct write.
+    The group's own membership is PIM-eligible only (modules/pim), so no
+    person holds the power until they activate it - with that group's
+    approval, ticket and time limit. The lab uses PIM-Tier0-Privileged-Auth-
+    Admins: resetting an executive is a Tier-0 act. Expected alert: the
+    grant raises role-assigned-outside-pim.kql (High: an ACTIVE PIM
+    assignment that is not an activation) once per role - match it to the
+    change record.
 
 .PARAMETER DisplayName
     Default RMAU-VIP.
@@ -94,10 +126,30 @@
     VIP workforce accounts to add (e.g. the Chief Nursing Officer). Empty =
     create the RMAU only.
 
+.PARAMETER ResponderGroupName
+    Role-assignable group to hold Helpdesk Administrator + Authentication
+    Administrator at the RMAU's scope (see THE RESPONDER). Idempotent: roles
+    it already holds there are skipped. Empty = only check that some
+    responder exists before adding members.
+
+.PARAMETER UseAzureCliToken
+    App-only sign-in: take a Microsoft Graph token from the Azure CLI session
+    (`az account get-access-token --resource-type ms-graph`; the lab
+    operator's profile under lab/scripts/operator/op, or azure/login over
+    OIDC in a pipeline) and connect with it - always that identity, never a
+    leftover context. The token stays in this process: never in argv, a file
+    or the output. Used for -WhatIf too (the preview reads the tenant).
+
 .EXAMPLE
     Connect-MgGraph -Scopes 'AdministrativeUnit.ReadWrite.All','User.Read.All','GroupMember.Read.All','RoleManagement.Read.Directory','PrivilegedEligibilitySchedule.Read.AzureADGroup'
     ./New-RestrictedAdminUnit.ps1 -WhatIf
     ./New-RestrictedAdminUnit.ps1 -MemberUserPrincipalNames 'first.last@<domain>' -Confirm:$false
+
+.EXAMPLE
+    # As the lab operator (app-only), responder first, then the VIPs:
+    lab/scripts/operator/op pwsh -NoProfile -File lab/scripts/powershell/post-apply/New-RestrictedAdminUnit.ps1 `
+        -UseAzureCliToken -ResponderGroupName 'PIM-Tier0-Privileged-Auth-Admins' `
+        -MemberUserPrincipalNames 'first.last@<domain>' -Confirm:$false
 #>
 
 #Requires -Version 7.0
@@ -114,7 +166,17 @@ param(
     [string]$Description = 'VIP accounts - managed only by roles scoped to this restricted management administrative unit.',
 
     [Parameter()]
-    [string[]]$MemberUserPrincipalNames = @()
+    [string[]]$MemberUserPrincipalNames = @(),
+
+    # Role-assignable group that becomes the RMAU-scoped responder.
+    [Parameter()]
+    [ValidatePattern('^$|^[A-Za-z0-9][A-Za-z0-9 ._-]{0,255}$')]
+    [string]$ResponderGroupName = '',
+
+    # App-only sign-in from the Azure CLI session (the lab operator, or
+    # azure/login over OIDC).
+    [Parameter()]
+    [switch]$UseAzureCliToken
 )
 
 # Operator console output. Write-Host on purpose (colour, -NoNewline); every
@@ -180,6 +242,44 @@ function Get-PrivilegeFinding {
     return , @($f)
 }
 
+function Get-MissingGraphPermission {
+    # Required permissions the context does not cover. App-only contexts list
+    # the token's ROLES, which are often a superset (Directory.Read.All for
+    # the user / group reads, a ReadWrite role for its Read). Empty -Have =
+    # unknown (no warning).
+    param([AllowEmptyCollection()][string[]]$Have = @(), [Parameter(Mandatory)][string[]]$Required)
+    if (-not @($Have | Where-Object { $_ })) { return @() }
+    $coveredBy = @{
+        'User.Read.All'                                   = @('User.Read.All', 'User.ReadWrite.All', 'Directory.Read.All', 'Directory.ReadWrite.All')
+        'GroupMember.Read.All'                            = @('GroupMember.Read.All', 'GroupMember.ReadWrite.All', 'Group.Read.All', 'Group.ReadWrite.All', 'Directory.Read.All', 'Directory.ReadWrite.All')
+        'RoleManagement.Read.Directory'                   = @('RoleManagement.Read.Directory', 'RoleManagement.Read.All', 'RoleManagement.ReadWrite.Directory')
+        'PrivilegedEligibilitySchedule.Read.AzureADGroup' = @('PrivilegedEligibilitySchedule.Read.AzureADGroup', 'PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup', 'PrivilegedAccess.Read.AzureADGroup', 'PrivilegedAccess.ReadWrite.AzureADGroup')
+    }
+    return @($Required | Where-Object {
+            $ok = if ($coveredBy.ContainsKey($_)) { $coveredBy[$_] } else { @($_) }
+            -not @($Have | Where-Object { $_ -in $ok })
+        })
+}
+
+function Get-ResponderRequestBody {
+    # PIM request that makes the group ACTIVELY hold one role at the RMAU's
+    # scope, permanently (people reach it only by activating the group).
+    param(
+        [Parameter(Mandatory)][string]$GroupId,
+        [Parameter(Mandatory)][string]$RoleTemplateId,
+        [Parameter(Mandatory)][string]$AuId,
+        [Parameter(Mandatory)][datetime]$StartUtc
+    )
+    return [ordered]@{
+        action           = 'adminAssign'
+        principalId      = $GroupId
+        roleDefinitionId = $RoleTemplateId
+        directoryScopeId = "/administrativeUnits/$AuId"
+        justification    = 'RMAU-scoped responder for the VIP restricted management administrative unit (post-apply/New-RestrictedAdminUnit.ps1).'
+        scheduleInfo     = [ordered]@{ startDateTime = $StartUtc.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); expiration = [ordered]@{ type = 'noExpiration' } }
+    }
+}
+
 function Get-GraphCollection {
     param([Parameter(Mandatory)][string]$Uri)
     $items = [System.Collections.Generic.List[object]]::new(); $next = $Uri
@@ -194,17 +294,56 @@ function Get-GraphCollection {
 # =============================================================================
 # Main
 # =============================================================================
+# Responder roles: template ids (built-in roles accept the template id as
+# roleDefinitionId). Both can be scoped to an administrative unit (Learn,
+# "Roles that can be assigned with administrative unit scope"). Ids read back
+# from the lab tenant's roleDefinitions on 2026-11-05 and match Learn's
+# "Microsoft Entra built-in roles" table.
+$responderRoles = [ordered]@{
+    'Helpdesk Administrator'       = '729827e3-9c14-49f7-bb1b-9608f156bbb8'
+    'Authentication Administrator' = 'c4e39bd9-1100-46d3-8c65-fb160da0071f'
+}
+
+function Connect-GraphFromAzureCli {
+    # App-only: the Azure CLI is already signed in as an app (azure/login over
+    # GitHub OIDC, or the lab operator's certificate through
+    # lab/scripts/operator/op). The token never leaves this process: masked in
+    # Actions, handed to Connect-MgGraph as a SecureString, then dropped. Same
+    # as mock-hr/Invoke-InboundProvisioning.ps1, through Write-Console for the
+    # analyzer; every lab/scripts/powershell copy is identical (parity test in
+    # tests/EvidencePackPipeline.Tests.ps1).
+    $global:LASTEXITCODE = 0
+    $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {
+        throw 'No Microsoft Graph token from the Azure CLI. Sign it in first (azure/login with OIDC in GitHub Actions, or az login locally).'
+    }
+    $token = ([string]$token).Trim()
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Console "::add-mask::$token" }
+    # NetworkCredential.SecurePassword: the same SecureString as
+    # ConvertTo-SecureString -AsPlainText, without the analyzer error rule.
+    Connect-MgGraph -AccessToken ([System.Net.NetworkCredential]::new('', $token).SecurePassword) -NoWelcome | Out-Null
+    Remove-Variable -Name token
+}
+
 $requiredScopes = @('AdministrativeUnit.ReadWrite.All', 'User.Read.All', 'GroupMember.Read.All', 'RoleManagement.Read.Directory', 'PrivilegedEligibilitySchedule.Read.AzureADGroup')
+if ($ResponderGroupName) { $requiredScopes = @($requiredScopes | Where-Object { $_ -ne 'RoleManagement.Read.Directory' }) + 'RoleManagement.ReadWrite.Directory' }
+if ($UseAzureCliToken) {
+    # App-only: always this identity, never a leftover context.
+    Write-Console 'Signing in to Microsoft Graph app-only (token from the Azure CLI session)...' -ForegroundColor Yellow
+    Connect-GraphFromAzureCli
+}
 $ctx = $null; try { $ctx = Get-MgContext } catch { $ctx = $null }
+if (-not $ctx -and $UseAzureCliToken) { Write-Warning 'No Microsoft Graph context after the app-only sign-in. Nothing created.'; exit 1 }
 if (-not $ctx -and -not $WhatIfPreference) { Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes; $ctx = Get-MgContext }
 if (-not $ctx) {
     # -WhatIf with no Graph session: offline preview.
     Write-Console "[?] would ensure restricted management AU '$DisplayName':" -ForegroundColor Yellow
     Write-Console ((Get-RestrictedAuBody -DisplayName $DisplayName -Description $Description) | ConvertTo-Json) -ForegroundColor DarkGray
+    if ($ResponderGroupName) { Write-Console "[?] would give '$ResponderGroupName' $(@($responderRoles.Keys) -join ' + ') at its scope (PIM adminAssign)" -ForegroundColor Yellow }
     foreach ($upn in $MemberUserPrincipalNames) { Write-Console "[?] would check and add $upn" -ForegroundColor Yellow }
     exit 0
 }
-$missingScopes = @($requiredScopes | Where-Object { $ctx.Scopes -and $_ -notin $ctx.Scopes })
+$missingScopes = @(Get-MissingGraphPermission -Have @($ctx.Scopes) -Required $requiredScopes)
 if ($missingScopes) { Write-Warning "Current Graph context does not list: $($missingScopes -join ', '). Calls needing them will return 403 (Disconnect-MgGraph, then re-run to reconnect with all scopes)." }
 
 # 1. Find it. A failed read stops the run: a duplicate RMAU is worse.
@@ -220,6 +359,7 @@ $decision = Resolve-ExistingAu -Units $found -DisplayName $DisplayName
 if ($decision.Action -eq 'conflict') { Write-Warning $decision.Reason; exit 1 }
 
 $au = $decision.Unit
+$createdNow = $false
 if ($decision.Action -eq 'exists') { Write-Console "[=] '$DisplayName' exists ($($au['id'])) and is restricted management." -ForegroundColor DarkGray }
 else {
     # 2. Create.
@@ -231,8 +371,59 @@ else {
             $check = Invoke-MgGraphRequest -Method GET -Uri "$graph/directory/administrativeUnits/$($au['id'])?`$select=id,isMemberManagementRestricted" -OutputType HashTable
             if ($check['isMemberManagementRestricted'] -ne $true) { Write-Warning "Created '$DisplayName' ($($au['id'])) but Graph reports isMemberManagementRestricted is not true. Nobody was added; check it in the portal."; exit 1 }
             Write-Console "[+] '$DisplayName' created ($($au['id'])), restricted management." -ForegroundColor Green
+            $createdNow = $true
         }
         catch { Write-Warning "'$DisplayName' not created: $($_.Exception.Message)"; exit 1 }
+    }
+}
+
+# 2b. The responder (-ResponderGroupName): a role-assignable group that
+#     actively holds the support roles at the RMAU's scope, through PIM.
+if ($ResponderGroupName) {
+    if (-not $au) {
+        Write-Console "  [?] would give '$ResponderGroupName' $(@($responderRoles.Keys) -join ' + ') at '$DisplayName' scope once it exists." -ForegroundColor Yellow
+    }
+    else {
+        $gEsc = $ResponderGroupName.Replace("'", "''")
+        try { $groups = @(Get-GraphCollection -Uri "$graph/groups?`$filter=displayName eq '$gEsc'&`$select=id,displayName,isAssignableToRole") }
+        catch { Write-Warning "Could not read group '$ResponderGroupName': $($_.Exception.Message). No responder assigned, no member added."; exit 1 }
+        if ($groups.Count -ne 1) { Write-Warning "Expected exactly one group named '$ResponderGroupName', found $($groups.Count). No responder assigned, no member added."; exit 1 }
+        $grp = $groups[0]
+        if (-not ($grp.Contains('isAssignableToRole') -and $grp['isAssignableToRole'] -eq $true)) {
+            # A role on an ordinary group could be handed out by any group
+            # owner or Groups Administrator: refuse.
+            Write-Warning "'$ResponderGroupName' is not role-assignable: a role on it could be passed on by its owners or a Groups Administrator. No responder assigned, no member added."; exit 1
+        }
+        $gid = $grp['id']
+        foreach ($role in $responderRoles.GetEnumerator()) {
+            try {
+                $f = [uri]::EscapeDataString("principalId eq '$gid' and roleDefinitionId eq '$($role.Value)' and directoryScopeId eq '/administrativeUnits/$($au['id'])'")
+                $have = @(Get-GraphCollection -Uri "$graph/roleManagement/directory/roleAssignments?`$filter=$f")
+            }
+            catch { Write-Warning "Could not read $($role.Key) at '$DisplayName' scope: $($_.Exception.Message). No member added (fail closed)."; exit 1 }
+            if ($have.Count) { Write-Console "  [=] '$ResponderGroupName' already holds $($role.Key) at '$DisplayName' scope." -ForegroundColor DarkGray; continue }
+            if ($PSCmdlet.ShouldProcess("$ResponderGroupName -> $($role.Key) @ $DisplayName", 'PIM adminAssign (active, no expiration; the group itself is eligible-only)')) {
+                # An RMAU created moments ago is not yet visible to PIM: the
+                # first request answers 404 NotFound (seen in the lab tenant
+                # 2026-11-05, ~20 s after the create). Only for an AU created
+                # in THIS run, retry a NotFound up to 6 times, 10 s apart;
+                # every other error, or a NotFound on an existing AU, stops.
+                $req = $null
+                for ($try = 1; $try -le $(if ($createdNow) { 7 } else { 1 }); $try++) {
+                    try {
+                        $body = Get-ResponderRequestBody -GroupId $gid -RoleTemplateId $role.Value -AuId $au['id'] -StartUtc ([datetime]::UtcNow) | ConvertTo-Json -Depth 5 -Compress
+                        $req = Invoke-MgGraphRequest -Method POST -Uri "$graph/roleManagement/directory/roleAssignmentScheduleRequests" -Body $body -ContentType 'application/json' -OutputType HashTable
+                        break
+                    }
+                    catch {
+                        $notFound = "$($_.Exception.Message)" -match 'NotFound'
+                        if ($createdNow -and $notFound -and $try -lt 7) { Write-Console "  [~] PIM does not see '$DisplayName' yet (NotFound); retrying in 10 s." -ForegroundColor DarkGray; Start-Sleep -Seconds 10; continue }
+                        Write-Warning "  [!] $($role.Key) not assigned to '$ResponderGroupName': $($_.Exception.Message). No member added."; exit 1
+                    }
+                }
+                Write-Console "  [+] '$ResponderGroupName' holds $($role.Key) at '$DisplayName' scope (PIM request $($req['id']), status $($req['status']))." -ForegroundColor Green
+            }
+        }
     }
 }
 
@@ -244,11 +435,18 @@ if ($MemberUserPrincipalNames.Count) {
         Write-Warning "  '$DisplayName' does not exist yet (dry run): members are added only once a role is assigned at its scope (the RMAU-scoped responder). None added."
         exit $(if ($WhatIfPreference) { 0 } else { 1 })
     }
-    try {
-        $scope = [uri]::EscapeDataString("directoryScopeId eq '/administrativeUnits/$($au['id'])'")
-        $responders = @(Get-GraphCollection -Uri "$graph/roleManagement/directory/roleAssignments?`$filter=$scope") + @(Get-GraphCollection -Uri "$graph/roleManagement/directory/roleEligibilitySchedules?`$filter=$scope")
+    # A PIM request made just above can take a few seconds to show as an
+    # assignment: with -ResponderGroupName, re-read up to 6 times, 10 s apart.
+    $tries = if ($ResponderGroupName -and -not $WhatIfPreference) { 6 } else { 1 }
+    for ($i = 1; $i -le $tries; $i++) {
+        try {
+            $scope = [uri]::EscapeDataString("directoryScopeId eq '/administrativeUnits/$($au['id'])'")
+            $responders = @(Get-GraphCollection -Uri "$graph/roleManagement/directory/roleAssignments?`$filter=$scope") + @(Get-GraphCollection -Uri "$graph/roleManagement/directory/roleEligibilitySchedules?`$filter=$scope")
+        }
+        catch { Write-Warning "Could not read the role assignments scoped to '$DisplayName' ($($_.Exception.Message)). No member added (fail closed)."; exit 1 }
+        if ($responders.Count -or $i -eq $tries) { break }
+        Start-Sleep -Seconds 10
     }
-    catch { Write-Warning "Could not read the role assignments scoped to '$DisplayName' ($($_.Exception.Message)). No member added (fail closed)."; exit 1 }
     if ($responders.Count -eq 0) {
         Write-Warning ("No directory role is assigned or eligible at '$DisplayName' scope. Refusing every member: nobody but a Global / Privileged Role Administrator assigning themselves could revoke, reset or disable a VIP, and automated containment cannot act on RMAU members (Graph application permissions do not apply to them). " +
             "First assign Authentication + Helpdesk Administrator scoped to '$DisplayName' to a small role-assignable VIP-support PIM group (TENANT-TIME), then re-run.")
@@ -302,4 +500,4 @@ foreach ($upn in $MemberUserPrincipalNames) {
 }
 
 if ($failures) { Write-Warning "$failures member(s) not added."; exit 1 }
-Write-Console "`nNext (TENANT-TIME): assign Authentication + Helpdesk Administrator scoped to '$DisplayName' to a small role-assignable VIP-support PIM group, and move VIP offboarding to a manual RMAU-scoped step. Verify: Entra -> Roles & admins -> Admin units -> $DisplayName (Restricted management: Yes)." -ForegroundColor Cyan
+Write-Console "`nNext: keep the VIPs out of the help desk's AU (modules/pim workforce_au_excluded_employee_ids, then the AU-rule PATCH), make someone eligible for the responder group, and move VIP offboarding to a manual RMAU-scoped step. Verify: Entra -> Roles & admins -> Admin units -> $DisplayName (Restricted management: Yes)." -ForegroundColor Cyan

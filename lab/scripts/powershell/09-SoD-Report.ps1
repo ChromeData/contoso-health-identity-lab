@@ -110,6 +110,14 @@
     lab/splunk/app/contoso_identity/lookups/contoso_sod_holdings.csv
     (gitignored) for the Splunk twin.
 
+.PARAMETER UseAzureCliToken
+    App-only sign-in: take a Microsoft Graph token from the Azure CLI session
+    (`az account get-access-token --resource-type ms-graph`) and connect
+    with it, always that identity, never a leftover context. For the lab
+    operator: `lab/scripts/operator/op pwsh ./<this script> -UseAzureCliToken`
+    (its own az profile, certificate sign-in). The token stays in this
+    process: never in argv, a file or the output (masked in GitHub Actions).
+
 .EXAMPLE
     ./09-SoD-Report.ps1 -InputPath ../../iga/fixtures/sod-tenant.json -WhatIf
 .EXAMPLE
@@ -157,7 +165,12 @@ param(
     [Nullable[datetime]]$AsOf = $null,
 
     [Parameter()]
-    [string]$HoldingsSnapshotPath = ''
+    [string]$HoldingsSnapshotPath = '',
+
+    # App-only sign-in from the Azure CLI session (the lab operator via
+    # lab/scripts/operator/op, or azure/login over OIDC).
+    [Parameter()]
+    [switch]$UseAzureCliToken
 )
 
 # Operator console output. Write-Host on purpose (colour, -NoNewline); every
@@ -167,6 +180,49 @@ function Write-Console {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Interactive operator console (colour, -NoNewline): status lines for the person running the script, not pipeline data.')]
     param()
     Write-Host @args
+}
+
+function Connect-GraphFromAzureCli {
+    # App-only: the Azure CLI is already signed in as an app (azure/login over
+    # GitHub OIDC, or the lab operator's certificate through
+    # lab/scripts/operator/op). The token never leaves this process: masked in
+    # Actions, handed to Connect-MgGraph as a SecureString, then dropped. Same
+    # as mock-hr/Invoke-InboundProvisioning.ps1, through Write-Console for the
+    # analyzer; every lab/scripts/powershell copy is identical (parity test in
+    # tests/EvidencePackPipeline.Tests.ps1).
+    $global:LASTEXITCODE = 0
+    $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {
+        throw 'No Microsoft Graph token from the Azure CLI. Sign it in first (azure/login with OIDC in GitHub Actions, or az login locally).'
+    }
+    $token = ([string]$token).Trim()
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Console "::add-mask::$token" }
+    # NetworkCredential.SecurePassword: the same SecureString as
+    # ConvertTo-SecureString -AsPlainText, without the analyzer error rule.
+    Connect-MgGraph -AccessToken ([System.Net.NetworkCredential]::new('', $token).SecurePassword) -NoWelcome | Out-Null
+    Remove-Variable -Name token
+}
+
+function Get-MissingGraphScope {
+    # Required Graph permissions the current context does not cover, for the
+    # "does not list" warning. An app-only identity (-UseAzureCliToken, e.g.
+    # the lab operator) often holds the ReadWrite role, not the Read one a
+    # delegated admin consents to. Microsoft Learn's permission tables list
+    # X.ReadWrite.Y as a higher-privileged permission wherever X.Read.Y is the
+    # least privileged one, and Directory.Read.All for the user, group,
+    # membership and application reads (checked 2026-11-05 on "List
+    # applications" and "List group transitive members"). Empty -Have
+    # (unknown context) = no warning. Identical in 06-NHI-Inventory.ps1,
+    # 08-Measure-KPIs.ps1, 09-SoD-Report.ps1 and Invoke-BreakGlassDrill.ps1
+    # (parity test in tests/EvidencePackPipeline.Tests.ps1).
+    param([AllowEmptyCollection()][string[]]$Have = @(), [Parameter(Mandatory)][string[]]$Required)
+    if (-not @($Have | Where-Object { $_ })) { return @() }
+    $directoryCovers = @('User.Read.All', 'Group.Read.All', 'GroupMember.Read.All', 'Application.Read.All')
+    $hasDirectory = ('Directory.Read.All' -in $Have) -or ('Directory.ReadWrite.All' -in $Have)
+    return @($Required | Where-Object {
+            ($_ -notin $Have) -and (($_ -replace '\.Read\.', '.ReadWrite.') -notin $Have) -and
+            -not ($hasDirectory -and $_ -in $directoryCovers)
+        })
 }
 
 Set-StrictMode -Version Latest
@@ -450,6 +506,8 @@ if ($problems.Count) {
 }
 $evidenceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' 'evidence'))
 $isFixture = [bool]$InputPath
+# Fail closed: a fixture run must never look like it signed in to a tenant.
+if ($isFixture -and $UseAzureCliToken) { throw '-InputPath and -UseAzureCliToken exclude each other: a fixture run never contacts a tenant.' }
 if (-not $OutputDirectory) { $OutputDirectory = if ($isFixture) { Join-Path $evidenceRoot 'out' 'sod' } else { Join-Path $evidenceRoot 'sod' } }
 if ($isFixture -and (Test-IsPublicEvidencePath -Path $OutputDirectory -EvidenceRoot $evidenceRoot)) {
     throw "Refusing to write a fixture (synthetic) report into the public evidence tree ($OutputDirectory). lab/evidence holds only output of real runs; use the default lab/evidence/out/sod."
@@ -470,9 +528,17 @@ if ($isFixture) {
 else {
     if (-not (Get-Command Invoke-MgGraphRequest -ErrorAction SilentlyContinue)) { throw 'Microsoft.Graph.Authentication is required for a tenant run (or use -InputPath).' }
     $requiredScopes = @('EntitlementManagement.Read.All', 'GroupMember.Read.All', 'User.Read.All', 'RoleManagement.Read.Directory', 'PrivilegedEligibilitySchedule.Read.AzureADGroup')
+    if ($UseAzureCliToken) {
+        # App-only: always this identity, never a leftover context.
+        Write-Console 'Signing in to Microsoft Graph app-only (token from the Azure CLI session)...' -ForegroundColor Yellow
+        Connect-GraphFromAzureCli
+    }
     $ctx = $null; try { $ctx = Get-MgContext } catch { Write-Verbose "Get-MgContext failed: $($_.Exception.Message)"; $ctx = $null }
-    if (-not $ctx) { Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes -NoWelcome; $ctx = Get-MgContext }
-    $missingScopes = @($requiredScopes | Where-Object { $ctx.Scopes -and $_ -notin $ctx.Scopes })
+    if (-not $ctx) {
+        if ($UseAzureCliToken) { throw 'No Microsoft Graph context after the app-only sign-in.' }
+        Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes -NoWelcome; $ctx = Get-MgContext
+    }
+    $missingScopes = @(Get-MissingGraphScope -Have @($ctx.Scopes) -Required $requiredScopes)
     if ($missingScopes) { Write-Warning "Current Graph context does not list: $($missingScopes -join ', '). Sources needing them will FAIL (exit 255), never read as empty." }
     if (-not $AsOf) { $AsOf = (Get-Date).ToUniversalTime() }
     Write-Console 'SoD report - tenant' -ForegroundColor Cyan

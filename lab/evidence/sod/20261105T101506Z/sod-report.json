@@ -1,0 +1,154 @@
+{
+  "schema": "contoso-iga/sod-report/v1",
+  "generatedAtUtc": "2026-11-05T10:15:06.1604440Z",
+  "source": "tenant",
+  "inputFile": null,
+  "asOf": "2026-11-05",
+  "rulesFile": {
+    "name": "sod-rules.json",
+    "sha256": "8b9fc33a649400faf8ef6f729e7cc9cfc6ce8daa795b7704dc68cabccb33926d"
+  },
+  "catalogFile": {
+    "name": "access-catalog.json",
+    "sha256": "0bb24f62a4c354892908f0ad5f0dabfe4640841871fdb3468606be3d5c780b49"
+  },
+  "summary": {
+    "rules": 9,
+    "rulesEvaluated": 1,
+    "rulesPartial": 1,
+    "rulesNotEvaluable": 7,
+    "violationsOpen": 0,
+    "violationsExcepted": 0,
+    "activationRequired": 0,
+    "disabledAccounts": 0,
+    "exitCode": 0
+  },
+  "rules": [
+    {
+      "id": "SOD-01",
+      "name": "Medication administration vs controlled-substance dispensing",
+      "risk": "High",
+      "status": "evaluated",
+      "missing": [],
+      "open": 0,
+      "excepted": 0
+    },
+    {
+      "id": "SOD-02",
+      "name": "Prescribe vs dispense",
+      "risk": "High",
+      "status": "not-evaluable",
+      "missing": [
+        "accessPackages|Prescriber - CPOE Ordering Apps"
+      ],
+      "open": 0,
+      "excepted": 0
+    },
+    {
+      "id": "SOD-03",
+      "name": "Order vs approve (pharmacist verification) of medication orders",
+      "risk": "High",
+      "status": "not-evaluable",
+      "missing": [
+        "accessPackages|Prescriber - CPOE Ordering Apps",
+        "accessPackages|Pharmacy - Order Verification Apps"
+      ],
+      "open": 0,
+      "excepted": 0
+    },
+    {
+      "id": "SOD-04",
+      "name": "Pharmacy inventory and purchasing vs dispensing",
+      "risk": "High",
+      "status": "not-evaluable",
+      "missing": [
+        "accessPackages|Pharmacy - Inventory & Purchasing Apps"
+      ],
+      "open": 0,
+      "excepted": 0
+    },
+    {
+      "id": "SOD-05",
+      "name": "Accounts payable processing vs vendor master data",
+      "risk": "High",
+      "status": "not-evaluable",
+      "missing": [
+        "accessPackages|Finance - Accounts Payable Apps",
+        "accessPackages|Finance - Vendor Master Data Apps"
+      ],
+      "open": 0,
+      "excepted": 0
+    },
+    {
+      "id": "SOD-06",
+      "name": "Payroll entry vs payroll approval",
+      "risk": "High",
+      "status": "not-evaluable",
+      "missing": [
+        "accessPackages|HR - Payroll Entry Apps",
+        "accessPackages|HR - Payroll Approval Apps"
+      ],
+      "open": 0,
+      "excepted": 0
+    },
+    {
+      "id": "SOD-07",
+      "name": "EHR break-the-glass vs EHR audit-log administration",
+      "risk": "High",
+      "status": "not-evaluable",
+      "missing": [
+        "accessPackages|Prescriber - CPOE Ordering Apps",
+        "groups|PIM-EHR-AuditLog-Admins"
+      ],
+      "open": 0,
+      "excepted": 0
+    },
+    {
+      "id": "SOD-08",
+      "name": "Identity administration vs access certification",
+      "risk": "High",
+      "status": "partial",
+      "missing": [
+        "groups|IGA-Access-Reviewers"
+      ],
+      "open": 0,
+      "excepted": 0
+    },
+    {
+      "id": "SOD-09",
+      "name": "Charge entry and coding vs payment posting and adjustments",
+      "risk": "Medium",
+      "status": "not-evaluable",
+      "missing": [
+        "accessPackages|Billing - Charge Entry & Coding Apps",
+        "accessPackages|Billing - Payment Posting & Adjustments Apps"
+      ],
+      "open": 0,
+      "excepted": 0
+    }
+  ],
+  "violations": [],
+  "dataSources": [
+    {
+      "status": "ok",
+      "detail": "",
+      "name": "accessPackageAssignments"
+    },
+    {
+      "status": "ok",
+      "detail": "",
+      "name": "groupMemberships"
+    },
+    {
+      "status": "ok",
+      "detail": "",
+      "name": "directoryRoles"
+    },
+    {
+      "status": "ok",
+      "detail": "",
+      "name": "directReports"
+    }
+  ],
+  "note": "Subjects are pseudonyms (U- + SHA-256 prefix of the object id). Identity detail is in the gitignored lab/evidence/out/sod. not-evaluable rules make no claim either way."
+}

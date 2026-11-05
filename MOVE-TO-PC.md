@@ -28,6 +28,7 @@ On the Mac they are Keychain items. On Windows use Credential Manager (`cmdkey`)
 | `contoso-lab-dc01-admin`, `contoso-lab-cloudsync` | DC01 local admin, Cloud Sync agent account |
 | `contoso-lab-porkbun`, `contoso-lab-porkbun-api` | Registrar login and API |
 | `contoso-lab-test-user-a/b/c`, `contoso-lab-tap-adm-raj`, `contoso-lab-totp-adm-raj` | Test users and the adm-raj MFA seed |
+| `contoso-lab-totp-<user>`, `contoso-lab-pw-<user>` | Authenticator seeds and passwords written by `lab/scripts/demo/signin/enroll.mjs` (account = UPN); re-run `enroll.mjs --force` on a new machine instead of copying |
 | `greptile-api` | Greptile API key (MCP server in `.mcp.json`) |
 
 Not every helper reads a vault, though: `lab/scripts/dc/run-on-dc.py` and a few others call the macOS `security` command directly (`keychain:<service>`), so on Windows they need a `security`-shim or a rewrite to read the Windows vault. Creating the Credential Manager entries is necessary but not sufficient; treat those scripts as Mac-only until ported.

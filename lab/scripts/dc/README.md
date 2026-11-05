@@ -85,8 +85,17 @@ for an Enterprise Admin.
    creates its gMSA, which the KDS root key from step 3 makes possible. Its
    Entra sign-in is password-only (no device code), so use a dedicated
    cloud-only account holding only Hybrid Identity Administrator
-   (`svc-cloudsync`), never a Global Administrator, and disable it once the
-   agent shows Healthy (re-enable only to re-register).
+   (`svc-cloudsync`), never a Global Administrator. Once the agent shows
+   Healthy, disable the account **and remove its role**: the role is an
+   install / registration prerequisite (Microsoft Learn, "Prerequisites for
+   Microsoft Entra Cloud Sync"); the running agent signs in with its own
+   certificate and runs as the gMSA. Lab, 2026-11-05 (capture E90): the
+   standing assignment from 10-27 was removed and Cloud Sync kept
+   succeeding (provisioning cycles 10:02Z and 10:26Z, password hash sync
+   every 5 minutes). To re-register later: re-enable `svc-cloudsync`, give
+   it Hybrid Identity Administrator **time-bound** for the session (PIM,
+   a few hours), run the installer, then disable it and let the
+   assignment expire.
 5. Paste the printed `parentDistinguishedName` expression into the
    provisioning app's attribute mapping (*Apply this mapping: Always*). That's
    what places each worker in their department OU and moves leavers to

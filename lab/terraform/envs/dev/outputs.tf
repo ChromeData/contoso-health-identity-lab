@@ -111,6 +111,16 @@ output "pim_tier_activation_policies" {
   value       = one(module.pim[*].tier_activation_policies)
 }
 
+output "aws_admin_group_object_id" {
+  description = "PIM-AWS-Lab-Admins - eligible-only AWS admin group, assigned to the AWS IAM Identity Center app (ADR 0025); null while enable_pim_aws_admin is off. lab/terraform/aws var lab_admin_entra_group_object_id pins its SCIM copy to this id."
+  value       = one(module.pim[*].aws_admin_group_object_id)
+}
+
+output "aws_admin_activation_policy" {
+  description = "Evidence summary of the PIM-AWS-Lab-Admins activation policy (null while off)."
+  value       = one(module.pim[*].aws_admin_activation_policy)
+}
+
 output "azure_pim_group_object_id" {
   description = "PIM-Azure-RG-Contributors - eligible for Contributor on the lab RG (add members post-apply); null while off."
   value       = one(module.pim[*].azure_pim_group_object_id)
@@ -336,7 +346,7 @@ output "okta_idp_redirect_uri" {
 }
 
 output "okta_idp_endpoints" {
-  description = "The tenant's v2.0 OIDC endpoints for the Okta root's identity provider (null while off)."
+  description = "The tenant's v1.0 OIDC endpoints for the Okta root's identity provider (its ID token carries amr; null while off)."
   value       = one(module.apps[*].okta_idp_endpoints)
 }
 
@@ -446,6 +456,29 @@ output "servicenow_service_principal_object_id" {
 output "servicenow_federation_metadata_url" {
   description = "Entra federation metadata for the ServiceNow app: import it as the IdP in ServiceNow's Multi-Provider SSO (S2)."
   value       = one(module.apps[*].servicenow_federation_metadata_url)
+}
+
+# ---- ServiceNow provisioning (enable_servicenow_provisioning) ------------------
+# Provision-on-demand, Test Connection and the provisioning logs act on these.
+
+output "servicenow_provisioning_service_principal_object_id" {
+  description = "Object id of the ServiceNow provisioning enterprise app (null while enable_servicenow_provisioning is off)."
+  value       = one(module.apps[*].servicenow_provisioning_service_principal_object_id)
+}
+
+output "servicenow_provisioning_job_id" {
+  description = "ServiceNow provisioning job id: provisionOnDemand and validateCredentials (Test Connection) take it."
+  value       = one(module.apps[*].servicenow_provisioning_job_id)
+}
+
+output "servicenow_provisioning_reply_url_import_id" {
+  description = "Seeding step: terraform import id of the ServiceNow provisioning app's existing Web redirect set (modules/apps README \"ServiceNow provisioning\")."
+  value       = one(module.apps[*].servicenow_provisioning_reply_url_import_id)
+}
+
+output "servicenow_provisioning_job_enabled" {
+  description = "Whether the ServiceNow provisioning cycle is started (false = created stopped)."
+  value       = one(module.apps[*].servicenow_provisioning_job_enabled)
 }
 
 output "servicenow_saml_signing_cert_activation_command" {

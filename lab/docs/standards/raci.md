@@ -32,7 +32,7 @@ I = Informed.
 | CA policy graduation to enforced | | **C (sign-off)** | R | C | I | C | I | **A** | `lab.tfvars` PR |
 | PIM eligibility grant | | | R | I | I | | | **A** | `Set-PimGroupEligibility.ps1` |
 | PIM activation approval | | | R (approver group) | I (alert) | | | | **A** | `modules/pim`, `kql/pim-activation.kql` |
-| Break-glass custody and 90-day drill | | | R | R (confirms alert) | I | | | **A** | Human step 6; `kql/break-glass-signin.kql`; [break-glass-drill.md](../runbooks/break-glass-drill.md) and `Invoke-BreakGlassDrill.ps1` (not yet run) |
+| Break-glass custody and 90-day drill | | | R | R (confirms alert) | I | | | **A** | Human step 6; `kql/break-glass-signin.kql`; [break-glass-drill.md](../runbooks/break-glass-drill.md) and `Invoke-BreakGlassDrill.ps1` (first lab drill 2026-11-05) |
 | Vault onboarding and rotation policy | | | **A/R** | I | C | C (dependencies) | | | `lab/pam/vault-onboard-ad.sh` |
 | NHI ownership and attestation | | | **A** (process) | | I | R (owner attests) | | | [nhi-standard.md](nhi-standard.md) |
 | Detection rule lifecycle | | | C | **A/R** | I | | | | `lab/kql/`, `modules/monitoring` |
@@ -51,10 +51,10 @@ I = Informed.
 - **Containment.** The notify playbook sends a Teams card and opens a
   ServiceNow ticket for every incident. For High ITDR incidents a second
   playbook asks the containment approver group in Teams, then revokes
-  sessions, marks the user confirmed compromised and, with an opt-in role,
-  disables a cloud-only account. AD accounts are disabled with
-  `Invoke-AdContainment.ps1`. The SOC stays Responsible; nothing acts without
-  a human answer. Built and tested offline, never run in a tenant.
+  sessions, marks the user confirmed compromised and disables a cloud-only
+  account. AD accounts are disabled with `Invoke-AdContainment.ps1`. The SOC
+  stays Responsible; nothing acts without a human answer. Both playbooks
+  RAN · tenant on 2026-11-05 (capture-log E40a, E41); the AD path has not run.
 - **Escalation for clinical lock-out.** The service desk issues a TAP after
   verifying identity, and Clinical Operations is informed. The procedure is
   level V2-C in

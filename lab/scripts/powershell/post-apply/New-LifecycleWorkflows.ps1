@@ -109,6 +109,15 @@
       the demo uses Run on demand (which ignores the trigger and the scope -
       Microsoft Learn, workflow: activate). -EnableJoinerSchedule turns the
       tenant schedule on (default every 3 hours) once the date flows.
+      LAB, 2026-11-05 (capture E91): the date flows (Cloud Sync carries
+      EmployeeHireDate, e.g. Helen Carter's 2016-02-01), so the joiner was
+      re-run with -EnableJoinerSchedule -UpdateExisting: scheduling is ON.
+      Before switching it on, check the catch-up window: Microsoft Learn
+      ("Understanding lifecycle workflows", Scheduling) says a time-based
+      workflow still processes a user whose trigger date passed up to three
+      days earlier. That day no Nursing user had a hire date in the window,
+      so the first scheduled runs processed nobody. Keep -EnableJoinerSchedule
+      on every later run of this script, or -UpdateExisting turns it off.
 
     WHY NO GROUP TASK BY DEFAULT
       The app groups (App-ServiceNow-Users, App-AWS-IdentityCenter-Users) are
@@ -146,9 +155,10 @@
       sign-ins and no role assignments yet - otherwise that task fails (and,
       being continueOnError, the run continues). Microsoft Learn: the TAP
       starts at the user's employeeHireDate (or now, if that is in the past).
-      # verify: what the task does when employeeHireDate is EMPTY - the case
-      # for every synced user in this lab until the hire-date mapping below
-      # exists. Check Workflow history after the first on-demand joiner run.
+      With employeeHireDate EMPTY the task FAILS: "EmployeeHireDate
+      attribute is missing" (lab, 2026-11-05, first on-demand run for the
+      cloud-only test-user-c; E91). The run goes on (continueOnError). With
+      the date set, the re-run completed all three tasks.
     * Request-access-package task: approval on the policy is bypassed for this
       admin-style request unless the Entitlement Management setting "Enforce
       policy approval setting for admin direct assignments" is on.
