@@ -37,8 +37,10 @@
                               blocks is a FAIL (verify: Learn says key
                               restrictions also stop keys already registered).
       [6/8] Alert rule        the break-glass sign-in rule is deployed AND
-                              enabled (Sentinel "contoso-break-glass-signin" or
-                              Log Analytics "alert-contoso-break-glass-signin").
+                              enabled (Sentinel NRT "contoso-break-glass-signin-nrt",
+                              the scheduled "contoso-break-glass-signin" before
+                              2026-11-05, or Log Analytics
+                              "alert-contoso-break-glass-signin").
       [7/8] GA PIM policy     post-apply/Set-DirectoryRolePimPolicies.ps1 has
                               set the Global Administrator role policy:
                               activation needs approval, with at least one
@@ -541,7 +543,13 @@ try {
     if (-not (Get-Command az -ErrorAction SilentlyContinue)) { throw 'az CLI not found (az login first)' }
     $subId = [string](Invoke-AzJson -Arguments @('account', 'show', '--query', 'id'))
     $ws = Invoke-AzJson -Arguments @('monitor', 'log-analytics', 'workspace', 'show', '-g', $ResourceGroup, '-n', $WorkspaceName)
-    $sentinel = Invoke-AzJson -Arguments @('rest', '--method', 'get', '--url', "https://management.azure.com$($ws.id)/providers/Microsoft.SecurityInsights/alertRules/contoso-break-glass-signin?api-version=2023-02-01") -AllowNotFound
+    # Near-real-time rule since 2026-11-05 (modules/monitoring, name -nrt);
+    # the scheduled name is still tried for a workspace applied before that.
+    $sentinel = $null
+    foreach ($ruleName in @('contoso-break-glass-signin-nrt', 'contoso-break-glass-signin')) {
+        $sentinel = Invoke-AzJson -Arguments @('rest', '--method', 'get', '--url', "https://management.azure.com$($ws.id)/providers/Microsoft.SecurityInsights/alertRules/$($ruleName)?api-version=2023-02-01") -AllowNotFound
+        if ($sentinel) { break }
+    }
     $la = Invoke-AzJson -Arguments @('rest', '--method', 'get', '--url', "https://management.azure.com/subscriptions/$subId/resourceGroups/$ResourceGroup/providers/Microsoft.Insights/scheduledQueryRules/alert-contoso-break-glass-signin?api-version=2021-08-01") -AllowNotFound
     if ($sentinel -and $sentinel.properties.enabled) { Add-Check 'Alert rule' 'PASS' "Sentinel rule '$($sentinel.properties.displayName)' enabled" }
     elseif ($la -and $la.properties.enabled) { Add-Check 'Alert rule' 'PASS' "Log Analytics alert '$($la.properties.displayName)' enabled" }

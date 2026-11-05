@@ -24,8 +24,10 @@
                       (verify: Learn, key restrictions apply to keys already
                       registered);
                    4. the break-glass sign-in rule is deployed AND enabled
-                      (Sentinel "contoso-break-glass-signin", or the Log
-                      Analytics alert "alert-contoso-break-glass-signin");
+                      (Sentinel NRT "contoso-break-glass-signin-nrt" - the
+                      scheduled "contoso-break-glass-signin" before
+                      2026-11-05 - or the Log Analytics alert
+                      "alert-contoso-break-glass-signin");
                    5. sign-in data reached the workspace in the last 24 h
                       (WARN: no data, no alert).
       Verify     after the operator's sign-ins: polls Log Analytics for the
@@ -157,8 +159,9 @@ param(
 
     [Parameter()]
     [ValidateNotNullOrEmpty()]
-    # modules/monitoring: Sentinel rule name "contoso-break-glass-signin", LA
-    # alert "alert-contoso-break-glass-signin", both with this display name.
+    # modules/monitoring: Sentinel NRT rule "contoso-break-glass-signin-nrt"
+    # (scheduled "contoso-break-glass-signin" before 2026-11-05), LA alert
+    # "alert-contoso-break-glass-signin", all with this display name.
     [string]$RuleDisplayName = 'Contoso - Break-glass account sign-in (any)',
 
     [Parameter()]
@@ -498,7 +501,20 @@ if (-not (Get-Command az -ErrorAction SilentlyContinue)) { throw 'az CLI not fou
 $subId = [string](Invoke-AzJson -Arguments @('account', 'show', '--query', 'id'))
 $ws = Invoke-AzJson -Arguments @('monitor', 'log-analytics', 'workspace', 'show', '-g', $ResourceGroup, '-n', $WorkspaceName)
 $wsCustomerId = [string]$ws.customerId
-$sentinelRuleUri = "https://management.azure.com$($ws.id)/providers/Microsoft.SecurityInsights/alertRules/contoso-break-glass-signin?api-version=2023-02-01"
+# The Sentinel rule is near-real-time since 2026-11-05 (modules/monitoring,
+# name -nrt); the scheduled name is still tried so the drill also works
+# against a workspace applied before that change.
+$sentinelRuleUris = @('contoso-break-glass-signin-nrt', 'contoso-break-glass-signin') | ForEach-Object {
+    "https://management.azure.com$($ws.id)/providers/Microsoft.SecurityInsights/alertRules/$($_)?api-version=2023-02-01"
+}
+function Get-BreakGlassSentinelRule {
+    # First deployed name wins; $null when neither exists (a 404 each).
+    foreach ($u in $sentinelRuleUris) {
+        $r = Invoke-AzJson -Arguments @('rest', '--method', 'get', '--url', $u) -AllowNotFound
+        if ($r) { return $r }
+    }
+    return $null
+}
 $laRuleId = "/subscriptions/$subId/resourceGroups/$ResourceGroup/providers/Microsoft.Insights/scheduledQueryRules/alert-contoso-break-glass-signin"
 
 # =============================================================================
@@ -558,7 +574,7 @@ function Invoke-Preflight {
     }
 
     Write-Host "`n[4/5] Break-glass sign-in rule" -ForegroundColor Cyan
-    $sentinel = Invoke-AzJson -Arguments @('rest', '--method', 'get', '--url', $sentinelRuleUri) -AllowNotFound
+    $sentinel = Get-BreakGlassSentinelRule
     $la = Invoke-AzJson -Arguments @('rest', '--method', 'get', '--url', "https://management.azure.com$laRuleId`?api-version=2021-08-01") -AllowNotFound
     if ($sentinel -and $sentinel.properties.enabled) { $ctxOut.AlertPath = 'sentinel'; Add-Check 'Alert rule' 'PASS' "Sentinel rule '$($sentinel.properties.displayName)' enabled" }
     elseif ($la -and $la.properties.enabled) { $ctxOut.AlertPath = 'log-analytics'; Add-Check 'Alert rule' 'PASS' "Log Analytics alert '$($la.properties.displayName)' enabled" }
@@ -672,7 +688,7 @@ $declared = @($DeclaredSignIns | ForEach-Object { $a, $k = $_ -split ':', 2; [ps
 $alertPath = if ($pre) { $pre.AlertPath } else { $null }
 if (-not $alertPath) {
     # Verify-only run: detect the path the same way the preflight does.
-    $s = Invoke-AzJson -Arguments @('rest', '--method', 'get', '--url', $sentinelRuleUri) -AllowNotFound
+    $s = Get-BreakGlassSentinelRule
     $alertPath = if ($s -and $s.properties.enabled) { 'sentinel' } elseif (Invoke-AzJson -Arguments @('rest', '--method', 'get', '--url', "https://management.azure.com$laRuleId`?api-version=2021-08-01") -AllowNotFound) { 'log-analytics' } else { 'none' }
 }
 
