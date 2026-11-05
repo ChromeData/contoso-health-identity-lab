@@ -77,10 +77,13 @@ jobs:
           for p in lab/pam/.env lab/pam/.secrets lab/pam/out lab/pam/dynamic-db/.secrets; do
             if [ -e "$p" ]; then echo "::error::$p exists before the run"; exit 1; fi
           done
-          if docker volume ls --format '{{.Name}}' | grep -E '^contoso-'; then
+          # Only the harness's own compose projects (lab/pam/**/docker-compose*):
+          # a bare ^contoso- also matched unrelated local stacks (Splunk, kind).
+          h='^contoso-(pam|pam-ha|pamscale|dyndb|vaultanom)[_-]'
+          if docker volume ls --format '{{.Name}}' | grep -E "$h"; then
             echo "::error::contoso-* Docker volumes exist before the run"; exit 1
           fi
-          if docker ps -a --format '{{.Names}}' | grep -E '^contoso-'; then
+          if docker ps -a --format '{{.Names}}' | grep -E "$h"; then
             echo "::error::contoso-* containers exist before the run"; exit 1
           fi
           echo "fresh: no .env, no .secrets/, no out/, no contoso-* volumes or containers"
