@@ -20,7 +20,7 @@
    "The ticket desk."
   ],
   "OKTA": [
-   "A partner clinic the hospital bought, which already has its own login system. Okta is set to trust Entra, so the clinic's staff keep signing in through their own door but land under the hospital's rules. Okta's side is set up; no clinic user has signed in through it, because Entra's side needs an admin's one-time consent.",
+   "A partner clinic the hospital bought, which already has its own login system. Okta is set to trust Entra, so the clinic's staff keep signing in through their own door but land under the hospital's rules. Set up on both sides; no clinic user has signed in through it yet.",
    "The acquired building's reception, now checking our badges."
   ],
   "HR": [
