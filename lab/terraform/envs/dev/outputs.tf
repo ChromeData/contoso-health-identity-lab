@@ -346,7 +346,7 @@ output "okta_idp_redirect_uri" {
 }
 
 output "okta_idp_endpoints" {
-  description = "The tenant's v2.0 OIDC endpoints for the Okta root's identity provider (null while off)."
+  description = "The tenant's v1.0 OIDC endpoints for the Okta root's identity provider (its ID token carries amr; null while off)."
   value       = one(module.apps[*].okta_idp_endpoints)
 }
 

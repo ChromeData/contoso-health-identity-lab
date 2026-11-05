@@ -280,7 +280,7 @@ output "okta_idp_redirect_uri" {
 }
 
 output "okta_idp_endpoints" {
-  description = "The tenant's v2.0 OIDC endpoints for the Okta root's okta_idp_oidc (issuer, authorization, token, JWKS, userinfo). Copy, do not retype."
+  description = "The tenant's v1.0 OIDC endpoints for the Okta root's okta_idp_oidc (issuer, authorization, token, JWKS; no userinfo). v1.0 because only its ID token carries amr, which Okta's trust claims reads. Copy, do not retype."
   value       = local.okta_enabled ? local.okta_idp_endpoints : null
 }
 

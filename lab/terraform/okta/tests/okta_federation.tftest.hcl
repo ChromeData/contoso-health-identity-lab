@@ -5,7 +5,7 @@
 #   * by default (enable_entra_federation = false) only the clinic's estate
 #     is planned: Clinic-Staff, its group rule keyed on the login domain, the
 #     legacy bookmark app and its ONE assignment; no IdP, no routing rule;
-#   * with the flag on: the Entra OIDC IdP against the tenant's v2.0
+#   * with the flag on: the Entra OIDC IdP against the tenant's v1.0
 #     endpoints with scopes openid profile email, account link by email, and
 #     ONE routing rule, priority 1, ACTIVE, matching the clinic login domain
 #     as a SUFFIX (never everyone) and targeting only that IdP - so Okta's
@@ -103,14 +103,17 @@ run "federation_on_plans_the_idp_and_one_routing_rule" {
   }
   assert {
     condition = (
-      okta_idp_oidc.entra[0].issuer_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0"
-      && okta_idp_oidc.entra[0].authorization_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/v2.0/authorize"
-      && okta_idp_oidc.entra[0].token_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/v2.0/token"
-      && okta_idp_oidc.entra[0].jwks_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/discovery/v2.0/keys"
-      && okta_idp_oidc.entra[0].user_info_url == "https://graph.microsoft.com/oidc/userinfo"
+      okta_idp_oidc.entra[0].issuer_url == "https://sts.windows.net/11111111-1111-1111-1111-111111111111/"
+      && okta_idp_oidc.entra[0].authorization_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/authorize"
+      && okta_idp_oidc.entra[0].token_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/token"
+      && okta_idp_oidc.entra[0].jwks_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/discovery/keys"
       && okta_idp_oidc.entra[0].token_binding == "HTTP-POST"
     )
-    error_message = "every IdP endpoint must be the tenant's v2.0 endpoint built from entra_tenant_id, and the token request a POST"
+    error_message = "every IdP endpoint must be the tenant's v1.0 endpoint built from entra_tenant_id (only its ID token carries amr), and the token request a POST"
+  }
+  assert {
+    condition     = okta_idp_oidc.entra[0].user_info_url == null
+    error_message = "no userinfo endpoint: Graph's userinfo refuses a v1.0 access token (401), and the v1.0 ID token carries the profile"
   }
   assert {
     condition     = okta_idp_oidc.entra[0].subject_match_type == "EMAIL" && okta_idp_oidc.entra[0].account_link_action == "AUTO" && okta_idp_oidc.entra[0].provisioning_action == "AUTO" && okta_idp_oidc.entra[0].groups_action == "NONE" && okta_idp_oidc.entra[0].issuer_mode == "ORG_URL"

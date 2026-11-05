@@ -166,8 +166,12 @@ run "okta_on_plans_app_sp_one_assignment_and_one_redirect" {
     error_message = "with no ITSM reference given, serviceManagementReference stays unset"
   }
   assert {
-    condition     = output.okta_idp_endpoints.issuer_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0" && output.okta_idp_endpoints.jwks_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/discovery/v2.0/keys" && output.okta_idp_endpoints.user_info_url == "https://graph.microsoft.com/oidc/userinfo"
-    error_message = "the endpoints handed to the Okta root must be the tenant's v2.0 endpoints"
+    condition     = output.okta_idp_endpoints.issuer_url == "https://sts.windows.net/11111111-1111-1111-1111-111111111111/" && output.okta_idp_endpoints.authorization_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/authorize" && output.okta_idp_endpoints.jwks_url == "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/discovery/keys" && !contains(keys(output.okta_idp_endpoints), "user_info_url")
+    error_message = "the endpoints handed to the Okta root must be the tenant's v1.0 endpoints (only their ID token carries amr), with no userinfo URL"
+  }
+  assert {
+    condition     = length([for c in azuread_application.okta_idp[0].optional_claims[0].id_token : c if c.name == "email"]) == 1
+    error_message = "the ID token must carry the email optional claim: Okta's JIT and account link need it, and the v1.0 ID token has no email for members"
   }
   # Separate from every other app: turning Okta on adds nothing elsewhere.
   assert {
