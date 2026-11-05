@@ -1,0 +1,94 @@
+# Offline, mocked tests for the lab operator (envs/operator). No Azure call:
+#   tofu init -backend=false && tofu test
+#
+# What these pin: the credential is a CERTIFICATE (no secret, no federated
+# credential); tokens are v2 and the App ID URI is api://<client id> (what the
+# AWS trust expects); every Graph role and Azure role in the defaults is
+# granted, and nothing else; single-tenant only.
+
+mock_provider "azuread" {
+  mock_data "azuread_service_principal" {
+    defaults = {
+      object_id = "44444444-4444-4444-4444-444444444444"
+      app_role_ids = {
+        "Application.ReadWrite.All"           = "1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9"
+        "AppRoleAssignment.ReadWrite.All"     = "06b708a9-e830-4db3-a914-8e69da51d44f"
+        "Directory.Read.All"                  = "7ab1d382-f21e-4acd-a863-ba3e13f7da61"
+        "Synchronization.ReadWrite.All"       = "9b50c33d-700f-43b1-b2eb-87e89b703581"
+        "AuditLog.Read.All"                   = "b0afded3-3588-46d8-8b3d-9842eff778da"
+        "EntitlementManagement.ReadWrite.All" = "9acd699f-1e81-4958-b001-93b1d2506e19"
+        "Policy.Read.All"                     = "246dd0d5-5bd0-4def-940b-0421030a5b68"
+      }
+    }
+  }
+  mock_resource "azuread_application" {
+    defaults = {
+      id        = "/applications/55555555-5555-5555-5555-555555555555"
+      client_id = "22222222-2222-2222-2222-222222222222"
+    }
+  }
+  mock_resource "azuread_service_principal" {
+    defaults = { object_id = "33333333-3333-3333-3333-333333333333" }
+  }
+  mock_resource "azuread_directory_role" {
+    defaults = { template_id = "5d6b6bb7-de71-4623-b4af-96380a352509" }
+  }
+}
+
+mock_provider "azurerm" {
+  mock_data "azurerm_subscription" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000001" }
+  }
+}
+
+variables {
+  subscription_id           = "00000000-0000-0000-0000-000000000001"
+  tenant_id                 = "11111111-1111-1111-1111-111111111111"
+  operator_certificate_path = "tests/fixtures/operator-test.crt"
+}
+
+run "certificate_only_single_tenant_v2" {
+  command = apply
+
+  assert {
+    condition     = azuread_application_certificate.operator.type == "AsymmetricX509Cert"
+    error_message = "the operator's only credential is a certificate"
+  }
+  assert {
+    condition     = azuread_application.operator.sign_in_audience == "AzureADMyOrg"
+    error_message = "the operator app must be single-tenant"
+  }
+  assert {
+    condition     = one(azuread_application.operator.api).requested_access_token_version == 2
+    error_message = "v2 tokens: the AWS trust is registered for the v2 issuer"
+  }
+  assert {
+    condition     = azuread_application_identifier_uri.operator.identifier_uri == "api://22222222-2222-2222-2222-222222222222"
+    error_message = "the App ID URI must be api://<client id> (the token audience AWS checks)"
+  }
+  assert {
+    condition     = output.operator_token_scope == "api://22222222-2222-2222-2222-222222222222/.default"
+    error_message = "the sign-in scripts ask for a token to the operator itself"
+  }
+}
+
+run "grants_are_exactly_the_reviewed_lists" {
+  command = apply
+
+  assert {
+    condition     = toset(keys(azuread_app_role_assignment.operator)) == toset(var.operator_graph_roles)
+    error_message = "every reviewed Graph role, and only those, is granted"
+  }
+  assert {
+    condition     = toset(keys(azurerm_role_assignment.operator)) == toset(["Owner", "Storage Blob Data Contributor", "Key Vault Secrets User"])
+    error_message = "Azure roles must be the three reviewed ones"
+  }
+  assert {
+    condition     = alltrue([for r in azurerm_role_assignment.operator : r.scope == "/subscriptions/00000000-0000-0000-0000-000000000001"])
+    error_message = "Azure roles are granted on the lab subscription only"
+  }
+  assert {
+    condition     = toset(keys(azuread_directory_role_assignment.operator)) == toset(["Security Reader"])
+    error_message = "the only directory role is Security Reader"
+  }
+}

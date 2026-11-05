@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# =============================================================================
+# op - run one command AS THE LAB OPERATOR
+# -----------------------------------------------------------------------------
+#   lab/scripts/operator/op az ad sp list --display-name "gh-oidc" -o table
+#   lab/scripts/operator/op tofu -chdir=lab/terraform/envs/bootstrap plan
+#   lab/scripts/operator/op aws s3 ls
+# Sets AZURE_CONFIG_DIR (the operator's own az profile) and AWS_PROFILE
+# (idlab-operator), signing in first if the Azure session has lapsed.
+# Terraform/OpenTofu's azurerm and azuread providers pick up the operator
+# through the az CLI; the aws provider through AWS_PROFILE.
+# =============================================================================
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=common.sh
+. "$here/common.sh"
+op_load_config
+
+if ! az account get-access-token --tenant "$OP_TENANT_ID" --query expiresOn -o tsv >/dev/null 2>&1 \
+  || [ ! -f "$OP_PEM" ]; then
+  "$here/lab-signin.sh" >&2
+fi
+
+# Any credentials already in the environment would win over AWS_PROFILE (AWS)
+# or over the az CLI (Terraform's azurerm/azuread): drop them so the command
+# really runs as the operator.
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN \
+  AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_SESSION_NAME AWS_DEFAULT_PROFILE \
+  AWS_CONFIG_FILE AWS_SHARED_CREDENTIALS_FILE AWS_CREDENTIAL_EXPIRATION \
+  ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_CLIENT_CERTIFICATE ARM_CLIENT_CERTIFICATE_PATH \
+  ARM_CLIENT_CERTIFICATE_PASSWORD ARM_USE_OIDC ARM_OIDC_TOKEN ARM_USE_MSI ARM_TENANT_ID \
+  AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_CLIENT_CERTIFICATE_PATH AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
+export AWS_PROFILE="$OP_AWS_PROFILE"
+# azurerm v4 does not take the az CLI's default subscription: roots that
+# leave subscription_id empty (envs/bootstrap) read it from here. The tenant
+# is NOT exported: with both set, the azurerm backend's az CLI credential
+# fails ("specify only one of subscription and tenant").
+export ARM_SUBSCRIPTION_ID="$OP_SUBSCRIPTION_ID"
+exec "$@"

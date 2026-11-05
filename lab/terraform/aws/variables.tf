@@ -262,3 +262,40 @@ variable "github_readonly_role_name" {
     error_message = "github_readonly_role_name must be a valid IAM role name (1-64 chars of A-Za-z0-9+=,.@_-)."
   }
 }
+
+# ---- Lab operator (entra-operator.tf) ----------------------------------------
+
+variable "enable_entra_operator" {
+  type        = bool
+  description = "Create the Entra OIDC provider and the contoso-lab-operator role (entra-operator.tf)."
+  default     = false
+}
+
+variable "entra_tenant_id" {
+  type        = string
+  description = "The lab Entra tenant id (the token issuer)."
+  default     = ""
+}
+
+variable "entra_operator_client_id" {
+  type        = string
+  description = "lab/terraform/envs/operator output operator_client_id: the token audience."
+  default     = ""
+}
+
+variable "entra_operator_object_id" {
+  type        = string
+  description = "lab/terraform/envs/operator output operator_object_id: the token subject (service principal object id)."
+  default     = ""
+}
+
+variable "entra_operator_role_name" {
+  type        = string
+  description = "Name of the operator role."
+  default     = "contoso-lab-operator"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.entra_operator_role_name))
+    error_message = "entra_operator_role_name must be a valid IAM role name."
+  }
+}

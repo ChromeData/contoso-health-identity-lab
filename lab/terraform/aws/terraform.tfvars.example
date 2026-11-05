@@ -59,3 +59,10 @@ github_repo_id               = "7654321"
 github_oidc_subject_suffixes = ["pull_request"]
 # Reuse an account's existing GitHub OIDC provider instead of creating one:
 existing_github_oidc_provider_arn = ""
+
+# ---- Lab operator (optional, off by default - entra-operator.tf) ------------
+# AWS trusts the Entra lab operator (lab/terraform/envs/operator outputs).
+enable_entra_operator    = false
+entra_tenant_id          = "00000000-0000-0000-0000-000000000000"
+entra_operator_client_id = "00000000-0000-0000-0000-000000000000"
+entra_operator_object_id = "00000000-0000-0000-0000-000000000000"
