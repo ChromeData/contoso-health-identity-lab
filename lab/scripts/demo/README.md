@@ -265,6 +265,15 @@ and refuses every employeeId when it cannot read that roster (offline, or a
 checkout without `origin/main`) rather than treat it as empty.
 Needs `az login` as an admin and DC01 running for the AD step.
 
+## A real staff sign-in, no phone: `signin/`
+
+`signin/enroll.mjs <upn>` gives a lab user an authenticator-app sign-in
+(one-time Temporary Access Pass, then the code computed from a Keychain
+seed); `signin/signin.mjs <upn> <start-url>` signs that user in through Entra,
+headless, on any app that sends people to Entra (AWS access portal, Okta, My
+Apps), and is also a module (`signIn(upn, url, {headless})`) for scripts that
+need a staff session. Details, secrets and undo: [`signin/README.md`](signin/README.md).
+
 ## Rewind and replay the whole lab: `rewind-lab.sh`
 
 `Reset-DemoState.ps1` re-takes one people segment. `rewind-lab.sh` moves the
