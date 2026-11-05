@@ -27,6 +27,14 @@ mock_provider "azuread" {
         "DeviceManagementManagedDevices.Read.All"         = "2f51be20-0bb4-4fed-bf7b-db946066c75e"
         "DeviceManagementConfiguration.Read.All"          = "dc377aa6-52d8-4e23-b271-2a7ae04cedf3"
         "User.DeleteRestore.All"                          = "eccc023d-eccf-4e7b-9683-8813ab36cecc"
+        "AdministrativeUnit.ReadWrite.All"                = "5eb59dd3-1da2-4329-8733-9dabdc435916"
+        "RoleManagement.ReadWrite.Directory"              = "9e3f62cf-ca93-4989-b6ce-bf83c28f9fe8"
+        "LifecycleWorkflows.ReadWrite.All"                = "5c505cf0-8424-4b8e-aa14-ee06e3bb23e3"
+        "UserAuthenticationMethod.ReadWrite.All"          = "50483e42-d915-4231-9639-7fdb7fd190e5"
+        "User.ReadWrite.All"                              = "741f803b-c850-494e-b5df-cde7c675a1ca"
+        "GroupMember.ReadWrite.All"                       = "dbaae8cf-10b5-4b86-a4a1-f871c94c6695"
+        "Team.Create"                                     = "23fc2474-f741-46ce-8465-674744c5c361"
+        "TeamMember.ReadWrite.All"                        = "0121dc95-1b9f-4aed-8bac-58c5ac466691"
       }
     }
   }

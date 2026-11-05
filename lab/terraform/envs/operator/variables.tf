@@ -54,6 +54,22 @@ variable "operator_graph_roles" {
       DeviceManagementConfiguration.Read.All   its compliance policy
       User.DeleteRestore.All              empty a demo hire from Deleted users
                                           (reset-demo-hire.sh --purge-entra)
+    Added 2026-11-05 to FINISH the lab's last tenant steps (each is a
+    documented post-apply script that a human used to run as Global Admin;
+    the operator already holds Tier 0, so these add no new reach):
+      AdministrativeUnit.ReadWrite.All    the restricted VIP admin unit
+                                          (post-apply/New-RestrictedAdminUnit.ps1)
+      RoleManagement.ReadWrite.Directory  AU-scoped roles; retire svc-cloudsync's
+                                          standing Hybrid Identity Administrator
+      LifecycleWorkflows.ReadWrite.All    switch the joiner/leaver workflows'
+                                          schedule on, run one on demand
+      UserAuthenticationMethod.ReadWrite.All  one-time Temporary Access Pass for
+                                          the lab test users (staff sign-in tests)
+      User.ReadWrite.All                  test users' job attributes
+      GroupMember.ReadWrite.All           test users into app groups for the
+                                          staff sign-in tests
+      Team.Create, TeamMember.ReadWrite.All  the SOC team the alert and
+                                          containment playbooks post to
   EOT
   type        = list(string)
   default = [
@@ -73,6 +89,14 @@ variable "operator_graph_roles" {
     "DeviceManagementManagedDevices.Read.All",
     "DeviceManagementConfiguration.Read.All",
     "User.DeleteRestore.All",
+    "AdministrativeUnit.ReadWrite.All",
+    "RoleManagement.ReadWrite.Directory",
+    "LifecycleWorkflows.ReadWrite.All",
+    "UserAuthenticationMethod.ReadWrite.All",
+    "User.ReadWrite.All",
+    "GroupMember.ReadWrite.All",
+    "Team.Create",
+    "TeamMember.ReadWrite.All",
   ]
 }
 

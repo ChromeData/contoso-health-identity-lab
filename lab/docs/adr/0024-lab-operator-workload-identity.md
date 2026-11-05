@@ -45,7 +45,12 @@ private key's lasting copy is a login Keychain item; a session copy (mode
   EntitlementManagement.ReadWrite.All, Policy.Read.All; added 2026-11-05 after
   the map readiness check hit 403s: AccessReview, LifecycleWorkflows, PIM
   eligibility and policy reads, Intune device and configuration reads (all
-  read-only), and User.DeleteRestore.All for demo-hire resets
+  read-only), and User.DeleteRestore.All for demo-hire resets; then, to finish
+  the lab's last tenant steps without borrowing the admin account,
+  AdministrativeUnit.ReadWrite.All, RoleManagement.ReadWrite.Directory,
+  LifecycleWorkflows.ReadWrite.All, UserAuthenticationMethod.ReadWrite.All,
+  User.ReadWrite.All and GroupMember.ReadWrite.All (no new reach: the
+  operator was already Tier 0 through AppRoleAssignment.ReadWrite.All)
 - **Azure, lab subscription:** Owner, Storage Blob Data Contributor,
   Key Vault Secrets User
 - **Entra role:** Security Reader (refreshing the tenant diagnostic setting)
@@ -113,3 +118,15 @@ switch.
   UpdateAssumeRolePolicy. (The first guardrail set protected only the role
   itself; review moved it to the account-wide IAM-write Deny above.) Still to capture: the Entra service-principal
   sign-in record and the CloudTrail `AssumeRoleWithWebIdentity` record.
+
+## Amendment 2026-11-05: who applies `envs/operator`
+
+The owner asked for the lab's remaining work to run without them. From this
+date, after the first human apply, changes to `envs/operator` are applied by
+the operator itself once their pull request is reviewed and merged. This
+removes the last human-only change step for the operator, which was already a
+change-control boundary rather than a privilege boundary (Consequences above):
+the review and merge are now the control, as for every other change. Every
+such apply is a service-principal sign-in plus "Add app role assignment"
+audit events by the operator, which `app-consent-granted.kql` logs.
+
