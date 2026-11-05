@@ -230,7 +230,7 @@ Staged order (tenant time, after the AWS stages):
 | S1a | operator | Activate the signing certificate: output `servicenow_saml_signing_cert_activation_command` | Screenshot of the active certificate |
 | S2 | operator, ServiceNow | Activate *Integration – Multiple Provider Single Sign-On Installer*; create a SAML identity provider by importing output `servicenow_federation_metadata_url`; NameID policy `urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified`; *User Field* = `user_name` (ServiceNow `user_name` = Entra UPN, the lab's convention) | IdP record |
 | S3 | PR → CI apply | `servicenow_sso_sys_id` = the IdP record's sys_id, so the My Apps tile signs in through it | Plan comment |
-| S3a | operator, ServiceNow | The instance-wide switch `glide.authenticate.multisso.enabled = true` ([side door](#servicenow-side-door) first) and, on the IdP record, *SSO Script* `MultiSSOv2_SAML2_custom` (the form's default; a record made by API has none) | Table API read-back |
+| S3a | operator, ServiceNow | The instance-wide switch `glide.authenticate.multisso.enabled = true` ([side door](#servicenow-side-door) first). A record made by API also lacks two things the form adds: *SSO Script* `MultiSSOv2_SAML2_custom`, and the **`idp_certificate`** row linking the record to the Entra signing certificate - the IdP's `x509_certificate` field alone is not read, and every response fails with "Unable to locate the SAML 2.0 Certificate" (syslog, 2026-11-05) | Table API read-back; syslog |
 | S4 | operator | A member of `App-ServiceNow-Users` signs in from My Apps; a non-member is refused | SAML trace (NameID); sign-in log entries |
 
 ### ServiceNow side door
