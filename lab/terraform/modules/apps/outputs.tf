@@ -2,7 +2,8 @@
 # modules/apps :: outputs.tf
 # -----------------------------------------------------------------------------
 # Identifiers only - no credential is ever output (the signing certificate's
-# private key never leaves Entra; the SCIM token is write-only here). The
+# private key never leaves Entra; the provisioning credentials - AWS SCIM
+# token, ServiceNow integration password - are write-only here). The
 # *_command outputs are the exact tenant-time steps the provider cannot do,
 # printed with the real ids so nobody copies a GUID by hand.
 # =============================================================================
@@ -143,7 +144,14 @@ output "nhi_inventory" {
       owners                      = local.app_owners
       credential_type             = "saml-signing-certificate (Entra-held private key)"
       credential_expires          = azuread_service_principal_token_signing_certificate.servicenow[0].end_date
-      outbound_secret             = "none (provisioning to ServiceNow designed, not built)"
+      outbound_secret             = var.enable_servicenow_provisioning ? "none (accounts come from the separate ServiceNow provisioning app)" : "none (ServiceNow provisioning is off: enable_servicenow_provisioning)"
+    } : null
+    servicenow_provisioning = var.enable_servicenow_provisioning ? {
+      service_principal_object_id = azuread_service_principal.servicenow_provisioning[0].object_id
+      owners                      = local.app_owners
+      credential_type             = "none (gallery app used for provisioning only; no Entra-issued key or secret)"
+      credential_expires          = null
+      outbound_secret             = "servicenow-provisioning-password (Key Vault; ServiceNow integration user, web-service access only - nhi-secrets-register)"
     } : null
     okta_clinic_idp = var.enable_okta_federation ? {
       service_principal_object_id = azuread_service_principal.okta_idp[0].object_id
@@ -216,6 +224,34 @@ output "servicenow_sign_on_url" {
 output "servicenow_assigned_group_object_id" {
   description = "The single principal assigned to the ServiceNow app (App-ServiceNow-Users)."
   value       = one(azuread_app_role_assignment.servicenow_users[*].principal_object_id)
+}
+
+# ---- ServiceNow provisioning (servicenow_provisioning.tf) ----------------------
+# All null while enable_servicenow_provisioning is off.
+
+output "servicenow_provisioning_service_principal_object_id" {
+  description = "Object id of the ServiceNow provisioning enterprise app (provision-on-demand, provisioning logs, Test Connection run against it)."
+  value       = one(azuread_service_principal.servicenow_provisioning[*].object_id)
+}
+
+output "servicenow_provisioning_job_id" {
+  description = "ServiceNow provisioning job id (ServiceNowOutDelta.<tenant>.<app id>): provision-on-demand and validateCredentials operate on it."
+  value       = one(azuread_synchronization_job.servicenow[*].id)
+}
+
+output "servicenow_provisioning_job_enabled" {
+  description = "Whether the ServiceNow provisioning cycle is started (false = created stopped; null when off)."
+  value       = one(azuread_synchronization_job.servicenow[*].enabled)
+}
+
+output "servicenow_provisioning_reply_url_import_id" {
+  description = "SEEDING STEP (README \"ServiceNow provisioning\"): the id to `terraform import` the gallery app's existing Web redirect set under azuread_application_redirect_uris.servicenow_provisioning before the apply that replaces its wildcard."
+  value       = one([for a in azuread_application_from_template.servicenow_provisioning : "${a.application_id}/redirectUris/Web"])
+}
+
+output "servicenow_provisioning_assigned_group_object_id" {
+  description = "The single principal assigned to the provisioning app - the same App-ServiceNow-Users as the SSO app."
+  value       = one(azuread_app_role_assignment.servicenow_provisioning_users[*].principal_object_id)
 }
 
 # ---- okta-clinic-idp (okta.tf) -------------------------------------------------

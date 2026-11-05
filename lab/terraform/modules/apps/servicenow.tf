@@ -22,7 +22,7 @@
 # What the gallery app would add that this one lacks: the "Configure Now"
 # automatic ServiceNow-side setup (a convenience; the manual metadata-URL
 # import below is the documented alternative) and the ServiceNow provisioning
-# connector (see PROVISIONING). Switching to the gallery template later is a
+# connector (see PROVISIONING). Switching THIS app to the gallery template is a
 # replacement (new client id, new certificate, new ServiceNow IdP metadata),
 # so it is a design change, not a variable flip.
 #
@@ -38,27 +38,24 @@
 # User Field = user_name (ServiceNow user_name = Entra UPN, the lab's
 # convention - lab/pam/docker-compose.oidc.yml). Then put the IdP record's
 # sys_id in servicenow_sso_sys_id so the My Apps tile signs in through it.
+# Last, the instance-wide switch glide.authenticate.multisso.enabled = true.
+# ServiceNow refuses it (business rule "Check ACR and SSO") until an Account
+# Recovery user exists - a local account with sso_config_admin, a password and
+# MFA, enrolled in acr_user - and from then on ONLY recovery users can sign in
+# locally (password + authenticator code). README "ServiceNow side door".
 #
-# PROVISIONING (DESIGNED, NOT BUILT): Learn's ServiceNow provisioning tutorial
-# uses the GALLERY app's connector, which authenticates to the instance with a
-# ServiceNow admin user name + password (no bearer token). A non-gallery app
-# offers only the generic SCIM connector (verify:), not this one. The design:
-# a second, gallery "ServiceNow" instance (Learn recommends a separate app for
-# testing provisioning), assigned to the same App-ServiceNow-Users group so
-# the SSO scope and the provisioning scope can never drift; the integration
-# account vaulted in Key Vault and written once like the AWS SCIM credential
-# (ignore_changes); the job created STOPPED; matching userPrincipalName ->
-# user_name so provisioned accounts line up with the NameID below. Not built:
-# the gallery template id and the connector's credential keys are both
-# unverified (verify: GET /applicationTemplates?$filter=displayName eq
-# 'ServiceNow' and GET /servicePrincipals/<id>/synchronization/templates in
-# the tenant).
+# PROVISIONING: built in servicenow_provisioning.tf
+# (enable_servicenow_provisioning). The ServiceNow connector comes only with
+# the GALLERY app, so provisioning is a second, gallery "ServiceNow" app,
+# hidden from My Apps and assigned to the same App-ServiceNow-Users group as
+# this one: the SSO scope and the provisioning scope can never drift. Its
+# mapping userPrincipalName -> user_name lines up with the NameID below.
 #
 # LICENSING: same as the AWS app - SAML SSO is Entra ID Free; GROUP
 # assignment needs Entra ID P1 (envs/dev gates this module on enable_premium).
 #
-# Nothing here has run against a tenant. Runtime claims not proven by
-# Microsoft documentation are marked "verify:".
+# Applied in the lab tenant on 2026-10-28 (README "ServiceNow (PDI) SAML").
+# Runtime claims not proven by Microsoft documentation are marked "verify:".
 # =============================================================================
 
 locals {
@@ -142,7 +139,7 @@ resource "azuread_service_principal" "servicenow" {
 
   owners = local.app_owners
   tags   = local.servicenow_sp_tags
-  notes  = "Contoso Health lab: SAML SSO to the ServiceNow PDI (non-gallery SAML app). Access = App-ServiceNow-Users only. Provisioning designed, not built. Managed by Terraform - modules/apps (servicenow.tf)."
+  notes  = "Contoso Health lab: SAML SSO to the ServiceNow PDI (non-gallery SAML app). Access = App-ServiceNow-Users only. Accounts come from the separate ServiceNow - Provisioning app (same group). Managed by Terraform - modules/apps (servicenow.tf)."
 }
 
 # Identifier (Entity ID) = the instance URL, exactly what ServiceNow sends as
@@ -186,7 +183,7 @@ resource "azuread_service_principal_token_signing_certificate" "servicenow" {
 
 # Claims as code: NameID = userPrincipalName. ServiceNow matches it against
 # the IdP record's User Field (user_name), so UPN is the join key, the same
-# value a future provisioning job would write to user_name.
+# value the provisioning job writes to user_name (servicenow_provisioning.tf).
 # IncludeBasicClaimSet keeps the standard name / given name / surname / email
 # claims. ServiceNow asks for NameID format "unspecified".
 # verify: on first sign-in, the NameID value and format ServiceNow receives.

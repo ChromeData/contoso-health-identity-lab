@@ -136,7 +136,7 @@ Describe '06-NHI-Inventory.ps1 -SecretsRegisterPath (non-Entra long-lived secret
         $r = Get-Content -LiteralPath $script:Register -Raw | ConvertFrom-Json -AsHashtable
         $out = Test-SecretsRegister -Register $r -Now ([datetime]'2026-10-20')
         $names = @($out.Rows.Name)
-        foreach ($n in 'aws-scim-token', 'okta-clinic-idp-client-secret', 'midpoint-reader-client-secret', 'servicenow-integration-password', 'teams-webhook-url', 'splunk-hec-token', 'vault-unseal-keys-and-root-token') { $names | Should -Contain $n }
+        foreach ($n in 'aws-scim-token', 'servicenow-provisioning-password', 'okta-clinic-idp-client-secret', 'midpoint-reader-client-secret', 'servicenow-integration-password', 'teams-webhook-url', 'splunk-hec-token', 'vault-unseal-keys-and-root-token') { $names | Should -Contain $n }
         foreach ($row in $out.Rows) { $row.Owner | Should -Not -BeNullOrEmpty -Because "$($row.Name) needs an owner role" }
         # No value can hide in the register: no field looks like a token, key or password.
         (Get-Content -LiteralPath $script:Register -Raw) | Should -Not -Match '(hvs\.|-----BEGIN|AKIA[0-9A-Z]{16}|xox[bp]-|https://[^ "]*webhook[^ "]*/[A-Za-z0-9]{20,})'

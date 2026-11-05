@@ -4,14 +4,15 @@
 Identity Center connector and a ServiceNow developer instance, and a real
 OIDC app registration.
 
-**Status: BUILT** (AWS SAML + SCIM, ServiceNow SAML, Clinical Portal OIDC,
-guacamole-psm, okta-clinic-idp; `validate` and 46 mocked `terraform test`
-runs pass, 2026-10-26). **DESIGNED:** ServiceNow provisioning (below).
-**Nothing in it has run against a tenant yet.** Everything below comes from
+**Status: BUILT** (AWS SAML + SCIM, ServiceNow SAML, ServiceNow
+provisioning, Clinical Portal OIDC, guacamole-psm, okta-clinic-idp;
+`validate` and 57 mocked `terraform test` runs pass, 2026-11-05). The AWS,
+ServiceNow SAML and Okta stages were applied in the lab tenant on 2026-10-28
+(`lab/docs/your-turn/07-apps-sso.md`, capture-log E22-E24, E57); what has run
+live since is in `lab/evidence/capture-log.csv`. Statements below come from
 `terraform validate`, the mocked `terraform test` in `tests/`, provider
-source, or Microsoft and AWS documentation. Anything not yet proven is
-marked *verify:*. The tenant-time list at the end is the evidence to capture
-during the trial.
+source, Microsoft and AWS documentation, or a live Graph read (dated). Anything
+not yet proven is marked *verify:*.
 
 | # | What | Resources | Staging |
 |---|---|---|---|
@@ -19,8 +20,9 @@ during the trial.
 | 2 | **AWS IAM Identity Center, SCIM.** Provisioning job, created **stopped**, and its credential from Key Vault | `azuread_synchronization_job`, `azuread_synchronization_secret` | envs/dev `enable_scim_provisioning`; the job starts only when `aws_scim_job_enabled` is set |
 | 3 | **Contoso Clinical Portal, OIDC.** App roles Clinician, Pharmacist and Auditor; a `Clinical.Read` scope; a groups claim limited to app-assigned groups; assignment required; group-to-role grants | `azuread_application`, `azuread_application_identifier_uri`, `azuread_service_principal`, `azuread_app_role_assignment`, optional `azuread_application_pre_authorized` | envs/dev `enable_sso_apps` |
 | 4 | **guacamole-psm, OIDC sign-in for the PSM stand-in** ([`guacamole.tf`](guacamole.tf)). Implicit **id_token only** (Guacamole 1.6's OpenID extension), no client secret, redirect `http://localhost:8081/guacamole/`, assignment required, **one** assignment: the new `PAM-Operators` group. Replaces the portal click-path in `lab/pam/README.md` §6 | `azuread_group`, `azuread_application`, `azuread_service_principal`, `azuread_app_role_assignment` (default access role) | envs/dev `enable_pam_oidc_app` (needs `enable_sso_apps`) |
-| 5 | **ServiceNow, SAML** ([`servicenow.tf`](servicenow.tf)). Non-gallery SAML app with the settings Microsoft's ServiceNow tutorial documents, assignment required, an Entra-minted signing certificate, NameID = UPN, and **one** assignment: `App-ServiceNow-Users`. Provisioning is DESIGNED, not built ([below](#servicenow-pdi-saml)) | `azuread_application_from_template` (non-gallery template), `azuread_service_principal` (`use_existing`), `azuread_application_identifier_uri`, `azuread_application_redirect_uris`, `azuread_service_principal_token_signing_certificate`, `azuread_claims_mapping_policy` + assignment, `azuread_app_role_assignment` | envs/dev `enable_servicenow_sso` (needs `enable_sso_apps` and `servicenow_instance_url`) |
+| 5 | **ServiceNow, SAML** ([`servicenow.tf`](servicenow.tf)). Non-gallery SAML app with the settings Microsoft's ServiceNow tutorial documents, assignment required, an Entra-minted signing certificate, NameID = UPN, and **one** assignment: `App-ServiceNow-Users`. Accounts come from row 7 ([below](#servicenow-pdi-saml)) | `azuread_application_from_template` (non-gallery template), `azuread_service_principal` (`use_existing`), `azuread_application_identifier_uri`, `azuread_application_redirect_uris`, `azuread_service_principal_token_signing_certificate`, `azuread_claims_mapping_policy` + assignment, `azuread_app_role_assignment` | envs/dev `enable_servicenow_sso` (needs `enable_sso_apps` and `servicenow_instance_url`) |
 | 6 | **okta-clinic-idp, OIDC: Entra as the identity provider for the acquired clinic's Okta org** ([`okta.tf`](okta.tf)). Single tenant, implicit grants off, **one** redirect URI (the Okta authorize callback on `okta_org_domain`, https by construction), the Graph scopes Okta asks for declared, assignment required, **one** assignment: `App-Okta-Federation-Users`. The client secret is NOT created: a human mints it post-apply, bounded to 180 days ([below](#okta-coexistence-entra-side)). The Okta half is the human-applied root [`../../okta`](../../okta/README.md) | `azuread_application`, `azuread_service_principal`, `azuread_app_role_assignment` (default access role) | envs/dev `enable_okta_federation` (needs `enable_sso_apps` and `okta_org_domain`); ADR 0022 |
+| 7 | **ServiceNow provisioning** ([`servicenow_provisioning.tf`](servicenow_provisioning.tf)). A second app from the ServiceNow **gallery** template, provisioning only, hidden from My Apps, assignment required, **one** assignment: the SSO app's `App-ServiceNow-Users`. Its `ServiceNowOutDelta` job is created **stopped**; its credential (the ServiceNow integration user) comes from Key Vault and is written once by a local seeding apply ([below](#servicenow-provisioning)) | `azuread_application_from_template` (gallery template), `azuread_service_principal` (`use_existing`), `azuread_application_owner`, `azuread_application_redirect_uris`, `azuread_app_role_assignment`, `azuread_synchronization_job`, `azuread_synchronization_secret` | envs/dev `enable_servicenow_provisioning` (needs `enable_sso_apps`, `servicenow_instance_url`); the job starts only when `servicenow_provisioning_job_enabled` is set |
 
 Provider: **azuread `~> 3.10`** (checked against 3.10.0 source and schema).
 No other provider is used. App-role and scope ids are fixed GUIDs, and Entra
@@ -215,8 +217,8 @@ pre-authorized third-party scope.
 
 ## ServiceNow (PDI) SAML
 
-**BUILT, flag off** (`enable_servicenow_sso`, [`servicenow.tf`](servicenow.tf),
-13 mocked runs in `tests/servicenow.tftest.hcl`). The ServiceNow Personal
+**BUILT, applied 2026-10-28** (`enable_servicenow_sso`, [`servicenow.tf`](servicenow.tf),
+13 of the 23 mocked runs in `tests/servicenow.tftest.hcl`). The ServiceNow Personal
 Developer Instance is free, and it is also where the PAM broker validates
 change tickets at tenant time (`lab/pam/README.md` §5). Same shape as the AWS
 app: one assignment, assignment required, an Entra-minted certificate,
@@ -224,11 +226,11 @@ claims as code.
 
 **Non-gallery template, on purpose.** Microsoft publishes the non-gallery
 template id in the Graph docs; neither the Learn ServiceNow tutorial nor the
-Graph docs publish the ServiceNow *gallery* template id, and an unverified
-id is not committed. The gallery app would add Learn's "Configure Now"
-automatic setup and the ServiceNow provisioning connector. Moving to it later
-is a replacement (new client id, certificate and ServiceNow IdP metadata), so
-it is a design change, not a variable flip.
+Graph docs publish the ServiceNow *gallery* template id, so the SSO app was
+built without it. The gallery id was read live later (2026-11-05,
+[provisioning](#servicenow-provisioning)) and is used only by the separate
+provisioning app: moving THIS app to the gallery would be a replacement (new
+client id, certificate and ServiceNow IdP metadata) for no sign-in gain.
 
 | Setting (Microsoft Learn, *ServiceNow SSO tutorial*) | Value |
 |---|---|
@@ -246,21 +248,127 @@ Staged order (tenant time, after the AWS stages):
 | S1a | operator | Activate the signing certificate: output `servicenow_saml_signing_cert_activation_command` | Screenshot of the active certificate |
 | S2 | operator, ServiceNow | Activate *Integration – Multiple Provider Single Sign-On Installer*; create a SAML identity provider by importing output `servicenow_federation_metadata_url`; NameID policy `urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified`; *User Field* = `user_name` (ServiceNow `user_name` = Entra UPN, the lab's convention) | IdP record |
 | S3 | PR → CI apply | `servicenow_sso_sys_id` = the IdP record's sys_id, so the My Apps tile signs in through it | Plan comment |
+| S3a | operator, ServiceNow | The instance-wide switch `glide.authenticate.multisso.enabled = true` ([side door](#servicenow-side-door) first). A record made by API also lacks two things the form adds: *SSO Script* `MultiSSOv2_SAML2_custom`, and the **`idp_certificate`** row linking the record to the Entra signing certificate - the IdP's `x509_certificate` field alone is not read, and every response fails with "Unable to locate the SAML 2.0 Certificate" (syslog, 2026-11-05) | Table API read-back; syslog |
 | S4 | operator | A member of `App-ServiceNow-Users` signs in from My Apps; a non-member is refused | SAML trace (NameID); sign-in log entries |
 
-**Provisioning: DESIGNED, not built.** Learn's ServiceNow provisioning uses
-the gallery app's connector, which signs in to the instance with a
-ServiceNow admin user name and password, not a bearer token. The design: a
-second, gallery "ServiceNow" instance for provisioning only, assigned to the
-same `App-ServiceNow-Users` group so the SSO and provisioning scopes can
-never drift; the integration account in Key Vault, written once like the AWS
-SCIM credential; the job created stopped; `userPrincipalName` → `user_name`
-so provisioned accounts match the NameID. *verify:* the gallery template id
-and the connector's credential keys, in the tenant.
+### ServiceNow side door
+
+ServiceNow will not turn multi-provider SSO on (business rule *Check ACR and
+SSO* aborts the property change) until at least one **Account Recovery**
+user exists: a local account with the `sso_config_admin` role, a password
+and multi-factor authentication, enrolled in `acr_user`
+(`glide.sso.acr.enabled` is already true on a PDI). From then on **only
+recovery users can sign in to the UI locally**, with password + authenticator
+code; everyone else goes through Entra. Seen on dev459905, 2026-11-05: with
+SSO on, the built-in `admin` gets "User name or password invalid" at
+`login.do`; with SSO off the same password signs in.
+
+| Account | What it is for | How it signs in |
+|---|---|---|
+| `acr.breakglass` | The UI side door if Entra or the IdP record breaks: `admin` + `sso_config_admin`, enrolled in Account Recovery | `login.do`, password + authenticator code. Both live in the operator's login Keychain only (`contoso-lab-servicenow-acr`, `-acr-totp`), never together in Key Vault, so one store never holds both factors |
+| `admin` (built in) | Table API automation (basic auth) | API only while SSO is on. Do **not** enrol it in MFA: `glide.authenticate.multifactor.for_integrations = true` then refuses its basic auth (seen with `acr.breakglass`: 401) |
+| `svc-entra-provisioning` | The provisioning connector ([below](#servicenow-provisioning)) | Web-service access only, never the UI |
+
+Rotate `acr.breakglass` like a break-glass account: test it after every
+change to the IdP record, re-pair its authenticator if the seed is exposed.
+
+## ServiceNow provisioning
+
+**BUILT** (`enable_servicenow_provisioning`,
+[`servicenow_provisioning.tf`](servicenow_provisioning.tf), 10 of the 23
+mocked runs in `tests/servicenow.tftest.hcl`). Entra creates the ServiceNow
+account, keeps it in step, and switches it off (`active = false`) when the
+person leaves the group.
+
+**Read live, not guessed** (2026-11-05, on a throwaway instance of the
+template, deleted and purged afterwards):
+
+| Graph read | Result |
+|---|---|
+| `GET /applicationTemplates?$filter=displayName eq 'ServiceNow'` | `0919fd62-4056-4151-83f7-7cfd3fade8e3`, publisher ServiceNow, provisioning type `sync` |
+| `GET /servicePrincipals/{id}/synchronization/templates` | `ServiceNowOutDelta` (default; the connector Learn's tutorial configures) and `serviceNowScim` |
+| …its metadata `Basic` | credential keys `InstanceName`, `UserName`, `Password` (secret) |
+| …its User mapping | `user_name` ← `userPrincipalName` (matching), `active` ← `Switch([IsSoftDeleted], , "False", "1", "True", "0")` |
+| `POST …/jobs/{id}/validateCredentials` with the integration user | 204 (Test Connection) |
+
+**Why a second app.** The connector comes only with the gallery app, and the
+SSO app is non-gallery. A provisioning-only gallery app, hidden from My Apps
+(`HideApp`) and assigned to the **same** `App-ServiceNow-Users`, adds
+accounts without touching the sign-in that works: one group decides both who
+may sign in and who has an account. `user_name` ← `userPrincipalName` is the
+same value as the SSO NameID, so the account provisioning creates is the
+account the Entra sign-in lands in.
+
+**The integration user.** `svc-entra-provisioning` on the instance: the
+`admin` role, because Learn's tutorial requires "a user account in
+ServiceNow with the admin role", and *Web service access only*, so it can
+never sign in to the UI. It is not the instance's built-in `admin`.
+
+**The credential, written once.** Same rules as the AWS token
+([SCIM credential](#scim-credential)): Key Vault is the system of record
+(`servicenow-provisioning-username`, `servicenow-provisioning-password`);
+only the run that creates the credential reads it; PR plans only warn
+(`check.servicenow_provisioning_credential_supplied_on_create`); the gated
+apply (`require_scim_credentials = true`) fails closed instead of writing it
+empty; `ignore_changes` afterwards; the password sits in state as
+sensitive (accepted residual risk; revoke = reset it in ServiceNow).
+
+**Order, and why the CI apply waits.** CI runners cannot reach the vault, so
+the credential's creating run is local. After the PR merges:
+
+1. The seeding apply, as the operator, in three targeted steps (a full
+   local apply also tries to reconcile objects outside this change). The
+   gallery app arrives with a Web redirect set, so the provider will only
+   *update* `azuread_application_redirect_uris.servicenow_provisioning`
+   after an import (the AWS gallery app needed the same, PR #59):
+   ```bash
+   cd lab/terraform/envs/dev
+   # The values travel through a pipe only (never a command-line argument).
+   export TF_VAR_servicenow_provisioning_credentials="$(
+     { az keyvault secret show --vault-name <kv> --name servicenow-provisioning-username -o json
+       az keyvault secret show --vault-name <kv> --name servicenow-provisioning-password -o json; } \
+       | jq -cs '{user_name: .[0].value, password: .[1].value}')"
+   # export hides a failed read: check what arrived, and stop if it is not both values.
+   [ "$(printf '%s' "$TF_VAR_servicenow_provisioning_credentials" | jq -r '(.user_name // "" | length) > 0 and (.password // "" | length) >= 16')" = true ] \
+     || { echo "Key Vault read failed: no seeding" >&2; unset TF_VAR_servicenow_provisioning_credentials; return 1 2>/dev/null || exit 1; }
+   export TF_VAR_require_scim_credentials=true
+   apply_id="$(terraform -chdir=../bootstrap output -raw github_oidc_apply_client_id)" && [ -n "$apply_id" ] \
+     || { echo "no APPLY client id: init envs/bootstrap first" >&2; return 1 2>/dev/null || exit 1; }
+   # a) everything except the reply URL: app, SP, owner, assignment, stopped job, credential
+   terraform apply -var-file=lab.tfvars -var="apply_client_id=$apply_id" \
+     -target='module.apps[0].azuread_synchronization_secret.servicenow[0]' \
+     -target='module.apps[0].azuread_app_role_assignment.servicenow_provisioning_users[0]' \
+     -target='module.apps[0].azuread_application_owner.servicenow_provisioning[0]'
+   # b) adopt the template's Web redirect set
+   import_id="$(terraform output -raw servicenow_provisioning_reply_url_import_id)" && [ -n "$import_id" ] \
+     || { echo "no import id: step a did not create the app" >&2; return 1 2>/dev/null || exit 1; }
+   terraform import -var-file=lab.tfvars -var="apply_client_id=$apply_id" \
+     'module.apps[0].azuread_application_redirect_uris.servicenow_provisioning[0]' "$import_id"
+   # c) replace the wildcard with the instance's one URL (an in-place update)
+   terraform apply -var-file=lab.tfvars -var="apply_client_id=$apply_id" \
+     -target='module.apps[0].azuread_application_redirect_uris.servicenow_provisioning[0]'
+   unset TF_VAR_servicenow_provisioning_credentials
+   ```
+   Step a's plan must show only the provisioning objects (6 to add: app,
+   service principal, owner, assignment, job, credential) and step c's only
+   the reply-URL update (1 to change).
+2. Then approve the CI apply. One that ran before step 1 failed its plan on
+   the credential postcondition and changed nothing: re-run it.
+3. Test Connection (`validateCredentials`), then provision on demand one
+   member of `App-ServiceNow-Users` and read the ServiceNow `sys_user` back.
+   Read the job schema back too: `user_name` ← `userPrincipalName` matching.
+4. A separate PR sets `servicenow_provisioning_job_enabled = true` (the
+   ~40-minute cycle), as `aws_scim_job_enabled` did for AWS.
+
+The APPLY identity owns the provisioning app's registration through
+`azuread_application_owner`: an app-only instantiate records no owner (seen
+on the probe), and without it the pipeline (`Application.ReadWrite.OwnedBy`)
+could not keep the reply URL. The gallery's wildcard reply URL
+(`https://*.service-now.com/*`) is replaced by the instance's one URL.
 
 A PDI hibernates when idle and is reclaimed after a period of inactivity
-(*verify:* the current policy), so the flag stays off until the trial window
-and nothing in CI depends on the instance.
+(*verify:* the current policy). Nothing in CI calls the instance: the
+pipeline only manages the Entra side.
 
 ---
 
@@ -270,8 +378,8 @@ and nothing in CI depends on the instance.
 |---|---|
 | `terraform fmt -check -recursive` | clean |
 | `terraform init -backend=false` + `validate` (HashiCorp Terraform 1.16.5, azuread 3.10.0) | **Success** |
-| `terraform test` (`tests/apps.tftest.hcl` + `tests/servicenow.tftest.hcl` + `tests/okta.tftest.hcl`, mocked azuread) | **46 passed, 0 failed** (18 + 13 + 15): plan runs plus four mocked applies that exercise the provider's own id parsing (2026-10-26, the working tree; 31 on 2026-10-20 before `okta.tftest.hcl`) |
-| Checkov 3.3.20 (`-d modules/apps`) | 0 failed |
+| `terraform test` (`tests/apps.tftest.hcl` + `tests/servicenow.tftest.hcl` + `tests/okta.tftest.hcl`, mocked azuread) | **57 passed, 0 failed** (19 + 23 + 15): plan runs plus six mocked applies that exercise the provider's own id parsing (2026-11-05, HashiCorp Terraform 1.16.5; 46 on 2026-10-26 before ServiceNow provisioning) |
+| Checkov 3.3.20 (`-d modules/apps`) | 0 failed infrastructure checks. The secret scan (CKV_SECRET_6) flags the lines holding the synthetic test credentials (`tests/apps.tftest.hcl` AWS token since 2026-10-26, `tests/servicenow.tftest.hcl` integration user, 2026-11-05): mocked-test strings, no real secret |
 
 The tests pin:
 
@@ -298,6 +406,16 @@ The tests pin:
   wildcard, trailing-slash, path or Reply-URL, non-ServiceNow or plain-http
   instance URL and a malformed `sys_id` are refused; the assignment prefers
   the app's `User` role.
+- ServiceNow provisioning is absent by default; when on it plans the gallery
+  app (the template id read from Graph), a hidden service principal with
+  assignment required, APPLY as owner of the registration, the instance's one
+  reply URL instead of the wildcard, one assignment to the SSO app's group,
+  the `ServiceNowOutDelta` job stopped, and exactly the credential keys
+  `InstanceName` (the URL's host label), `UserName`, `Password`; an empty
+  credential fails the gated apply and only warns in a PR plan; the flag
+  without an instance URL or group fails the plan; a short password or an odd
+  user name is refused; the job can be started; the assignment falls back to
+  the gallery `User` role, never default access.
 - okta-clinic-idp is absent by default; when on it plans one app (single
   tenant, implicit grants off, exactly the delegated Graph scopes Okta asks
   for), one service principal (assignment required), one assignment to
@@ -337,6 +455,7 @@ strength, so a PSM session always starts with phishing-resistant MFA.
 - [ ] Leaver: Dana is out of the App group, deprovisioned on demand, and gone from the AWS portal.
 - [ ] OIDC: the token shows `roles`, `groups` (app groups only) and `acct`.
 - [ ] ServiceNow: the identifier URI is accepted (the SP is already in SAML mode; identifier-URI policy); the instantiated roles include `User`; NameID value and format as ServiceNow receives them; a non-member is refused at the tile.
+- [ ] ServiceNow provisioning: the seeding plan shows only the provisioning objects; Test Connection passes; the job schema keeps `user_name` ← `userPrincipalName` as the matching rule; provision on demand of a member creates a `sys_user` whose `user_name` = UPN, and that person's Entra sign-in lands in it; a member removed from the group is set `active = false` on the next on-demand run or cycle; a second CI plan shows **No changes**.
 - [ ] okta-clinic-idp: admin consent on the four delegated Graph scopes is accepted and no clinic user sees a consent prompt; `Add-MgApplicationPassword` with `Application.ReadWrite.OwnedBy` is enough for an owner (else record the fallback); a non-member of App-Okta-Federation-Users is refused by Entra before Okta sees them (record the AADSTS code); the Entra sign-in log row for `okta-clinic-idp` shows the CA result; the redirect URI equals the Okta root's `okta_callback_uri`.
 
 ---

@@ -8,11 +8,13 @@
 #   4. guacamole-psm            - PSM stand-in OIDC sign-in (off by default)
 #   5. ServiceNow               - SAML enterprise app (off by default)
 #   6. okta-clinic-idp          - Entra as OIDC IdP for the clinic Okta org (off by default)
+#   7. ServiceNow provisioning  - gallery app + sync job + credential (off by default)
 # plus ownership inputs shared by every app.
 #
 # Nothing here is committed with a real value. Tenant identifiers come from
-# terraform.tfvars / TF_VAR_* (never lab.tfvars), and the SCIM credential comes
-# from Key Vault at apply time (README "SCIM credential").
+# terraform.tfvars / TF_VAR_* (never lab.tfvars), and the provisioning
+# credentials (AWS SCIM token, ServiceNow integration user) come from Key Vault
+# at apply time (README "SCIM credential", "ServiceNow provisioning").
 # =============================================================================
 
 # ---- Ownership (both apps) --------------------------------------------------
@@ -357,11 +359,13 @@ variable "aws_scim_credentials" {
 variable "require_scim_credentials" {
   type        = bool
   description = <<-EOT
-    Fail closed instead of warning when this run would CREATE the SCIM
-    credential without aws_scim_credentials. Set true in the reviewer-gated
+    Fail closed instead of warning when this run would CREATE a provisioning
+    credential without its value: the AWS SCIM credential without
+    aws_scim_credentials, or the ServiceNow connector credential without
+    servicenow_provisioning_credentials. Set true in the reviewer-gated
     apply (and in a local seeding run); leave false for PR plans, which by
-    design can never read the token. Once the credential exists this has no
-    effect (the stored value satisfies it).
+    design can never read the vault. Once a credential exists this has no
+    effect on it (the stored value satisfies it).
   EOT
   default     = false
 }
@@ -469,9 +473,9 @@ variable "enable_servicenow_sso" {
     from the Learn ServiceNow SSO tutorial): assignment required, ONE
     assignment (App-ServiceNow-Users), Entra-minted signing certificate,
     NameID = userPrincipalName. Needs servicenow_instance_url and
-    servicenow_users_group_object_id. Provisioning to ServiceNow is designed,
-    not built (servicenow.tf header). envs/dev flag: enable_servicenow_sso.
-    Off by default.
+    servicenow_users_group_object_id. Provisioning to ServiceNow is the
+    separate enable_servicenow_provisioning (servicenow_provisioning.tf).
+    envs/dev flag: enable_servicenow_sso. Off by default.
   EOT
   default     = false
 }
@@ -499,8 +503,9 @@ variable "servicenow_users_group_object_id" {
   description = <<-EOT
     Object id of App-ServiceNow-Users (modules/groups output
     app_access_group_object_ids["servicenow"]) - the ONLY principal assigned
-    to the ServiceNow app, and the scope a future provisioning job would use.
-    Required when enable_servicenow_sso = true.
+    to the ServiceNow app, and the ONLY principal assigned to the ServiceNow
+    provisioning app (the provisioning scope). Required when
+    enable_servicenow_sso or enable_servicenow_provisioning is true.
   EOT
   default     = ""
 
@@ -657,5 +662,72 @@ variable "okta_idp_secret_lifetime_days" {
   validation {
     condition     = var.okta_idp_secret_lifetime_days >= 1 && var.okta_idp_secret_lifetime_days <= 180 && floor(var.okta_idp_secret_lifetime_days) == var.okta_idp_secret_lifetime_days
     error_message = "okta_idp_secret_lifetime_days must be a whole number of days from 1 to 180 (the register's P180D rotation is the ceiling)."
+  }
+}
+
+# ---- 7. ServiceNow provisioning (servicenow_provisioning.tf) -------------------
+
+variable "enable_servicenow_provisioning" {
+  type        = bool
+  description = <<-EOT
+    Create the ServiceNow PROVISIONING app (gallery template "ServiceNow",
+    hidden from My Apps, assignment required, ONE assignment:
+    App-ServiceNow-Users - the SSO app's group), its synchronization job
+    (ServiceNowOutDelta, STOPPED unless servicenow_provisioning_job_enabled)
+    and its credential (InstanceName from servicenow_instance_url + the
+    integration user from servicenow_provisioning_credentials). Needs
+    servicenow_instance_url and servicenow_users_group_object_id. The run
+    that creates the credential is a LOCAL seeding apply (README "ServiceNow
+    provisioning"). envs/dev flag: enable_servicenow_provisioning. Off by
+    default.
+  EOT
+  default     = false
+}
+
+variable "servicenow_provisioning_job_enabled" {
+  type        = bool
+  description = <<-EOT
+    Start the ServiceNow provisioning job (Entra's ~40-minute cycle). false
+    (default) = created STOPPED: Test Connection and one provision-on-demand
+    first, then flip this in its own PR (the AWS order).
+  EOT
+  default     = false
+}
+
+variable "servicenow_provisioning_credentials" {
+  type = object({
+    user_name = string # the ServiceNow integration user (admin role, web-service access only)
+    password  = string
+  })
+  description = <<-EOT
+    The ServiceNow integration user the connector signs in as (Basic auth;
+    keys UserName / Password). SOURCE: Key Vault secrets
+    servicenow-provisioning-username / servicenow-provisioning-password,
+    exported as TF_VAR_ only in the run that CREATES (or deliberately
+    replaces) the credential - README "ServiceNow provisioning". Never
+    committed, never in lab.tfvars, never available to PR plans or CI.
+    null (default) = not supplied; once the credential exists Terraform
+    ignores it (ignore_changes).
+  EOT
+  default     = null
+  sensitive   = true
+
+  validation {
+    condition = var.servicenow_provisioning_credentials == null || (
+      can(regex("^[A-Za-z0-9._-]+$", var.servicenow_provisioning_credentials.user_name))
+      && length(var.servicenow_provisioning_credentials.password) >= 16
+    )
+    error_message = "servicenow_provisioning_credentials must be null, or a ServiceNow user_name (letters, digits, . _ -) and a password of at least 16 characters."
+  }
+}
+
+variable "servicenow_provisioning_app_display_name" {
+  type        = string
+  description = "Display name of the ServiceNow provisioning app (Enterprise applications, provisioning logs). Hidden from My Apps."
+  default     = "ServiceNow - Provisioning"
+
+  validation {
+    condition     = length(trimspace(var.servicenow_provisioning_app_display_name)) > 0
+    error_message = "servicenow_provisioning_app_display_name must not be empty."
   }
 }
