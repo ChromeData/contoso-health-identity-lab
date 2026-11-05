@@ -305,7 +305,7 @@
    "where.2.label": "Guests from a partner tenant (built, not switched on)"
   },
   "SOD": {
-   "where.2.label": "Reported after the fact (built, not run in the tenant yet)"
+   "where.2.label": "Reported after the fact"
   },
   "CASESS": {
    "where.1.label": "Token-protection pilot (built, not switched on)",
