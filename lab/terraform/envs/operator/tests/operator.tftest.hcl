@@ -104,7 +104,7 @@ run "grants_are_exactly_the_reviewed_lists" {
     error_message = "PIM groups: eligibility write only (it includes the read); no PrivilegedAssignmentSchedule role, which could make a member ACTIVE without an activation"
   }
   assert {
-    condition     = toset(keys(azurerm_role_assignment.operator)) == toset(["Owner", "Storage Blob Data Contributor", "Key Vault Secrets User"])
+    condition     = toset(keys(azurerm_role_assignment.operator)) == toset(["Owner", "Storage Blob Data Contributor", "Key Vault Secrets Officer"])
     error_message = "Azure roles must be the three reviewed ones"
   }
   assert {

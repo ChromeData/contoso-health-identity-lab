@@ -125,10 +125,15 @@ variable "operator_azure_roles" {
                                     scope because the state account's ReadOnly
                                     lock blocks account- and container-scoped
                                     role assignments
-      Key Vault Secrets User        read lab secrets (e.g. the AWS SCIM token)
+      Key Vault Secrets Officer     read AND write lab secrets: the AWS SCIM
+                                    token, the ServiceNow provisioning and
+                                    Sentinel integration passwords (written
+                                    once by the operator, read by the deploy
+                                    and seeding steps). Was Secrets User until
+                                    2026-11-05; the finishing work needs writes.
   EOT
   type        = list(string)
-  default     = ["Owner", "Storage Blob Data Contributor", "Key Vault Secrets User"]
+  default     = ["Owner", "Storage Blob Data Contributor", "Key Vault Secrets Officer"]
 }
 
 variable "operator_directory_roles" {

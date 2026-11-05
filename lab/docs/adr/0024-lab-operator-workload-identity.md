@@ -52,7 +52,7 @@ private key's lasting copy is a login Keychain item; a session copy (mode
   User.ReadWrite.All and GroupMember.ReadWrite.All (no new reach: the
   operator was already Tier 0 through AppRoleAssignment.ReadWrite.All)
 - **Azure, lab subscription:** Owner, Storage Blob Data Contributor,
-  Key Vault Secrets User
+  Key Vault Secrets Officer (Secrets User until 2026-11-05)
 - **Entra role:** Security Reader (refreshing the tenant diagnostic setting)
 
 `lab/terraform/aws/entra-operator.tf` registers the tenant's v2 issuer as an
