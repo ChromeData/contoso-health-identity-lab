@@ -148,3 +148,76 @@ Describe 'config-drift.yml - a night the check could not run is never silent' -S
         (Get-Step $script:DJob 'Compare against the baseline*')['run'] | Should -Match 'compare_exit=3'
     }
 }
+
+Describe 'config-drift.yml - the "could not run" step, run under node with a mocked GitHub API' -Skip:(-not ($script:CanParse -and (Get-Command node -ErrorAction SilentlyContinue))) {
+    # Runs the step's real github-script body against a mock of the Octokit
+    # calls it makes, for each night type. (The string checks above pin the
+    # wiring; these pin the behaviour: one issue, never a duplicate, closed on
+    # recovery, the drift issue never touched.)
+    BeforeAll {
+        $step = Get-Step (Read-Workflow 'config-drift.yml')['jobs']['reconcile'] 'Open or close the "check could not run" issue'
+        $script:StepJs = Join-Path $TestDrive 'step.js'
+        Set-Content -LiteralPath $script:StepJs -Value ([string]$step['with']['script']) -Encoding utf8NoBOM
+        $script:Harness = Join-Path $TestDrive 'harness.js'
+        Set-Content -LiteralPath $script:Harness -Encoding utf8NoBOM -Value @'
+const fs = require('fs');
+const body = fs.readFileSync(process.argv[2], 'utf8');
+const sc = JSON.parse(process.argv[3]);
+if (sc.compareExit === null) delete process.env.COMPARE_EXIT; else process.env.COMPARE_EXIT = sc.compareExit;
+const calls = [];
+const issues = {
+  listForRepo: 'listForRepo',
+  getLabel: async () => { calls.push({ op: 'getLabel' }); if (!sc.labelExists) { const e = new Error('Not Found'); e.status = 404; throw e; } return {}; },
+  createLabel: async (a) => { calls.push({ op: 'createLabel', name: a.name }); },
+  create: async (a) => { calls.push({ op: 'create', title: a.title, labels: a.labels }); return { data: { number: 99 } }; },
+  createComment: async (a) => { calls.push({ op: 'comment', issue: a.issue_number }); },
+  update: async (a) => { calls.push({ op: 'update', issue: a.issue_number, state: a.state }); },
+};
+const github = { rest: { issues }, paginate: async (fn, a) => { calls.push({ op: 'list', label: a.labels, state: a.state }); return sc.open; } };
+const context = { repo: { owner: 'o', repo: 'r' }, serverUrl: 'https://github.com', runId: 1, sha: 'abcdef0' };
+const core = { info: () => {} };
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+new AsyncFunction('github', 'context', 'core', 'require', body)(github, context, core, require)
+  .then(() => process.stdout.write(JSON.stringify(calls)))
+  .catch((e) => { process.stdout.write(JSON.stringify([{ op: 'threw', message: String(e) }])); process.exitCode = 1; });
+'@
+        $script:Title = 'Nightly identity drift check could not run'
+        $script:DriftIssue = @{ number = 5; title = 'Identity configuration drift (nightly reconcile)' }
+        function Invoke-Night([AllowNull()][string]$CompareExit, [object[]]$Open = @(), [switch]$LabelExists) {
+            $sc = @{ compareExit = $CompareExit; open = @($Open); labelExists = [bool]$LabelExists } | ConvertTo-Json -Depth 5 -Compress
+            $out = & node $script:Harness $script:StepJs $sc
+            return @($out | ConvertFrom-Json)
+        }
+    }
+
+    It 'first night it could not run (no compare_exit): opens ONE issue with the label, creating the label if needed' {
+        $calls = Invoke-Night -CompareExit $null -Open @($script:DriftIssue)
+        @($calls | Where-Object op -eq 'create').Count | Should -Be 1
+        ($calls | Where-Object op -eq 'create').title | Should -Be $script:Title
+        ($calls | Where-Object op -eq 'create').labels | Should -Be @('identity-drift')
+        @($calls | Where-Object op -eq 'createLabel').Count | Should -Be 1
+        @($calls | Where-Object { $_.op -in 'comment', 'update' }).Count | Should -Be 0
+    }
+
+    It 'another night it could not run (compare_exit 3): comments on the open issue, never a duplicate, never touches the drift issue' {
+        $calls = Invoke-Night -CompareExit '3' -Open @($script:DriftIssue, @{ number = 7; title = $script:Title }) -LabelExists
+        @($calls | Where-Object op -eq 'create').Count | Should -Be 0
+        @($calls | Where-Object op -eq 'comment').issue | Should -Be @(7)
+        @($calls | Where-Object { $_.op -eq 'update' }).Count | Should -Be 0
+    }
+
+    It 'the next night that compared (0, 1 or 2) closes it; drift itself is left to the drift issue' -ForEach @('0', '1', '2') {
+        $calls = Invoke-Night -CompareExit $_ -Open @($script:DriftIssue, @{ number = 7; title = $script:Title }) -LabelExists
+        @($calls | Where-Object op -eq 'comment').issue | Should -Be @(7)
+        $u = @($calls | Where-Object op -eq 'update')
+        $u.Count | Should -Be 1
+        $u[0].issue | Should -Be 7
+        $u[0].state | Should -Be 'closed'
+        @($calls | Where-Object op -eq 'create').Count | Should -Be 0
+    }
+
+    It 'a normal night with nothing open does nothing but look' {
+        $calls = Invoke-Night -CompareExit '0' -Open @($script:DriftIssue) -LabelExists
+        @($calls | Where-Object { $_.op -ne 'list' }).Count | Should -Be 0
+    }
+}
