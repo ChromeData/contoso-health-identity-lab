@@ -335,3 +335,28 @@ run "client_id_that_is_not_a_guid_is_rejected" {
 
   expect_failures = [var.entra_client_id]
 }
+
+# The lab's routing decision (2026-11-05): clinic staff use hospital accounts
+# after the acquisition, so the routed domain is the hospital's. Both the
+# routing rule and the Clinic-Staff group rule must follow it, and nothing
+# wider than that one suffix may be routed.
+run "hospital_domain_routes_hospital_addresses_only" {
+  command = plan
+
+  variables {
+    clinic_login_domain     = "contosohealthlab.com"
+    enable_entra_federation = true
+    entra_tenant_id         = "11111111-1111-1111-1111-111111111111"
+    entra_client_id         = "14141414-1414-1414-1414-141414141414"
+    entra_client_secret     = "not-a-real-secret-0123456789"
+  }
+
+  assert {
+    condition     = [for p in okta_policy_rule_idp_discovery.clinic_to_entra[0].user_identifier_patterns : "${p.match_type}:${p.value}"] == ["SUFFIX:contosohealthlab.com"]
+    error_message = "the routing rule must match exactly the hospital domain suffix"
+  }
+  assert {
+    condition     = okta_group_rule.clinic_staff.expression_value == "String.substringAfter(user.login, \"@\") == \"contosohealthlab.com\""
+    error_message = "Clinic-Staff membership must follow the same domain as the routing rule"
+  }
+}
