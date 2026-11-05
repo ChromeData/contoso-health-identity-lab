@@ -68,10 +68,11 @@
       ]}
     },
     {
-      "id": "older-than-lookback",
-      "kind": "negative",
-      "label": "A bg-admin sign-in 2 h ago is outside the 1 h look-back",
-      "tables": {"SigninLogs": [{"UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "TimeGenerated": "ago:2h"}]}
+      "id": "late-ingested-old-row",
+      "kind": "positive",
+      "label": "A bg-admin sign-in generated 2 h ago and ingested only now STILL alerts: the Sentinel rule is NRT and judges rows by ingestion time, so the query carries no TimeGenerated or ingestion-time window a late row could fall out of (2026-11-05; formerly the negative 'older-than-lookback')",
+      "tables": {"SigninLogs": [{"UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "TimeGenerated": "ago:2h"}]},
+      "expect": [{"SignInType": "interactive", "UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "Country": "US", "ResultType": "0", "IPAddress": "198.51.100.20"}]
     }
   ]
 }

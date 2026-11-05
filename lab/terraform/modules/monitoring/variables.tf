@@ -258,9 +258,9 @@ variable "notify_on_alert_added_rule_keys" {
     Microsoft Learn "Automate threat response with automation rules",
     incident update trigger). For rules where every hit needs its own card
     and ticket even inside the incident grouping window. Default: the
-    break-glass sign-in rule, which raises one alert per sign-in
-    (break-glass-signin.kql, ingestion_time()). Only rules that alert once
-    per event belong here: a rule that re-alerts every run would post a card
+    break-glass sign-in rule, a near-real-time rule that judges each ingested
+    row once (main.tf, local.nrt_rule_keys). Only rules that alert once per
+    event belong here: a rule that re-alerts every run would post a card
     every five minutes.
   EOT
   default     = ["break_glass_signin"]

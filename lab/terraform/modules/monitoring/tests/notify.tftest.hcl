@@ -38,7 +38,7 @@ run "break_glass_notifies_again_when_an_alert_joins" {
   assert {
     condition = (
       jsonencode(jsondecode(azurerm_sentinel_automation_rule.notify_on_alert_added[0].condition_json)[1].conditionProperties.propertyValues) ==
-      jsonencode([azurerm_sentinel_alert_rule_scheduled.this["break_glass_signin"].id])
+      jsonencode([azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].id])
     )
     error_message = "Only the break-glass rule's incidents notify again (a re-alerting rule would post a card every five minutes)."
   }
@@ -46,13 +46,42 @@ run "break_glass_notifies_again_when_an_alert_joins" {
     condition     = azurerm_sentinel_automation_rule.notify_on_alert_added[0].action_playbook[0].logic_app_id == var.playbook_logic_app_id
     error_message = "It runs the same notify playbook."
   }
+}
+
+# The gap the NRT move closed (2026-11-05): a scheduled rule judges a fixed
+# window, so a late row, or a late or skipped run, can miss a break-glass
+# sign-in. These asserts fail if the rule ever goes back to being scheduled,
+# or if the query grows a time window again.
+run "break_glass_is_near_real_time_with_no_time_window" {
+  command = apply
+
   assert {
-    condition     = strcontains(azurerm_sentinel_alert_rule_scheduled.this["break_glass_signin"].query, "| where ingestion_time() > ago(RuleLookBack)")
-    error_message = "break-glass-signin.kql must alert once per sign-in (ingestion_time() window), or the alert-added rule would post a card every run."
+    condition     = length(azurerm_sentinel_alert_rule_nrt.this) == 1 && contains(keys(azurerm_sentinel_alert_rule_nrt.this), "break_glass_signin")
+    error_message = "The break-glass rule must be a near-real-time (NRT) rule."
   }
   assert {
-    condition     = strcontains(azurerm_sentinel_alert_rule_scheduled.this["break_glass_signin"].query, "let RuleLookBack = 5m;") && azurerm_sentinel_alert_rule_scheduled.this["break_glass_signin"].query_frequency == "PT5M"
-    error_message = "RuleLookBack must equal the rule's query frequency (5 minutes)."
+    condition     = !contains(keys(azurerm_sentinel_alert_rule_scheduled.this), "break_glass_signin")
+    error_message = "No scheduled twin of the break-glass rule: it would re-open the late-row gap and double the alerts."
+  }
+  assert {
+    # Comment lines removed first: the header explains the old windows.
+    condition = (
+      !strcontains(replace(azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].query, "/(?m)^\\s*//.*$/", ""), "ago(") &&
+      !strcontains(replace(azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].query, "/(?m)^\\s*//.*$/", ""), "ingestion_time(") &&
+      !strcontains(replace(azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].query, "/(?m)^\\s*//.*$/", ""), "TimeGenerated >")
+    )
+    error_message = "break-glass-signin.kql must carry no time window: NRT already judges each row once by ingestion time, and a window would drop a late row."
+  }
+  assert {
+    condition     = azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].severity == "High" && azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].incident[0].create_incident_enabled
+    error_message = "High, and it creates incidents."
+  }
+  assert {
+    condition = (
+      contains(jsondecode(azurerm_sentinel_automation_rule.notify[0].condition_json)[0].conditionProperties.propertyValues, azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].id) &&
+      jsonencode(jsondecode(azurerm_sentinel_automation_rule.notify_on_alert_added[0].condition_json)[1].conditionProperties.propertyValues) == jsonencode([azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].id])
+    )
+    error_message = "Both notify automation rules must name the NRT rule's id."
   }
 }
 

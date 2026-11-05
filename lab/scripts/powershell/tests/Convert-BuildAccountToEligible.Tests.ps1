@@ -33,6 +33,8 @@ BeforeAll {
             Standing = $true; Eligible = $false; EligibleAppears = $true; RemoveWorks = $true
             BuildInBg = $false; BgCount = 2; BgDisabled = $false; CaGap = $false; BgGaEnd = $null
             Fido2 = @{ 'bg-1' = 2; 'bg-2' = 2; 'u-build' = 1 }; RuleEnabled = $true; NoAz = $false
+            # The deployed Sentinel rule's name: NRT since 2026-11-05 ('none' = neither).
+            RuleName = 'contoso-break-glass-signin-nrt'
             # Key model per user (default: the issued model), the admin profile's
             # enforced allow-list (empty = not enforced) and the build account's groups.
             KeyModels = @{}; AllowList = @(); BuildGroups = @('g-admins')
@@ -59,7 +61,11 @@ BeforeAll {
             $a = $Arguments -join ' '
             if ($a -like 'account show*') { return 'sub-0000' }
             if ($a -like 'monitor log-analytics workspace show*') { return [pscustomobject]@{ customerId = 'ws-cust'; id = '/subscriptions/sub-0000/resourceGroups/rg-identity-lab/providers/Microsoft.OperationalInsights/workspaces/loga-idlab' } }
-            if ($a -like '*SecurityInsights/alertRules/contoso-break-glass-signin*') { return [pscustomobject]@{ properties = [pscustomobject]@{ enabled = $global:CvTest.RuleEnabled; displayName = 'Contoso - Break-glass account sign-in (any)' } } }
+            if ($a -match 'SecurityInsights/alertRules/([^?]+)\?') {
+                # Only the deployed name answers; any other name is a 404 ($null with -AllowNotFound).
+                if ($Matches[1] -eq $global:CvTest.RuleName) { return [pscustomobject]@{ properties = [pscustomobject]@{ enabled = $global:CvTest.RuleEnabled; displayName = 'Contoso - Break-glass account sign-in (any)' } } }
+                return $null
+            }
             if ($a -like '*scheduledQueryRules*') { return $null }
             throw "unexpected az call in test: $a"
         }
@@ -237,6 +243,13 @@ Describe 'Convert-BuildAccountToEligible.ps1 (mocked Graph and az)' {
         ($r.Lines -join "`n") | Should -Match '\[7/8\]'
     }
 
+    It 'finds the scheduled rule name of a workspace applied before the NRT change' {
+        Set-CvMocks -Over @{ RuleName = 'contoso-break-glass-signin' }
+        $r = Invoke-Cv -Name 'whatif-scheduled' -DryRun -ConfirmUpn ''
+        $r.Exit | Should -Be 0
+        ($r.Lines -join "`n") | Should -Match 'WhatIf: every check passed'
+    }
+
     It '-WhatIf with a failing check still refuses (exit 1)' {
         Set-CvMocks -Over @{ CaGap = $true }
         $r = Invoke-Cv -Name 'whatif-refuse' -DryRun -ConfirmUpn ''
@@ -254,6 +267,7 @@ Describe 'Convert-BuildAccountToEligible.ps1 (mocked Graph and az)' {
         @{ Case = 'the build account is in no passkey target (e.g. only a PIM group)'; Over = @{ BuildGroups = @('g-pim-tier0') }; Expect = 'no passkey include target covers this account' }
         @{ Case = 'the build account key is a blocked model'; Over = @{ AllowList = @('cb69481e-8ff7-4039-93ec-0a2729a154a8'); KeyModels = @{ 'u-build' = '99999999-9999-9999-9999-999999999999' } }; Expect = 'has no passkey its profile accepts' }
         @{ Case = 'the break-glass alert rule is disabled'; Over = @{ RuleEnabled = $false }; Expect = 'Alert rule: the break-glass rule exists but is DISABLED' }
+        @{ Case = 'no break-glass rule is deployed under either name'; Over = @{ RuleName = 'none' }; Expect = 'Alert rule: no break-glass sign-in rule deployed' }
         @{ Case = 'the az CLI is missing'; Over = @{ NoAz = $true }; Expect = 'Alert rule: could not check: az CLI not found' }
         @{ Case = 'break-glass GA is time-bound, not permanent'; Over = @{ BgGaEnd = '2026-12-01T00:00:00Z' }; Expect = 'Second GA path: Break-Glass-Admins holds no permanent' }
         @{ Case = 'GA activation needs no approval'; Over = @{ RuleArgs = @{ Approval = $false } }; Expect = 'GA PIM policy: activation does not require approval' }
