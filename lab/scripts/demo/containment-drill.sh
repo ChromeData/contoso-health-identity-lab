@@ -220,9 +220,16 @@ for i in d.get("value",[]):
     if p.get("title")==os.environ["NAME"]:
         print(i["name"], p["incidentNumber"], p["status"])'
 }
-# Ids of the temporary rule(s), by name.
+# Ids of the temporary rule(s), by name. Listed with the PREVIEW API: the GA
+# versions model only Fusion, MicrosoftSecurityIncidentCreation and
+# Scheduled rules (Learn REST "Alert Rules - List", every version to
+# 2025-09-01) and leave NRT rules out of the list (2024-09-01: 17 rules,
+# 2025-01-01-preview: 18 with the break-glass NRT one, read live
+# 2026-11-05). Our rule is Scheduled, but a list that silently drops a
+# kind is not one to trust for "nothing left".
+RULES_API="api-version=2025-01-01-preview"
 drill_rule_ids() {
-  rest_all "$SI/alertRules?$SENTINEL_API" | NAME="$RULE_NAME" py '
+  rest_all "$SI/alertRules?$RULES_API" | NAME="$RULE_NAME" py '
 import os
 for r in d.get("value",[]):
     if (r.get("properties") or {}).get("displayName")==os.environ["NAME"]: print(r["name"])'

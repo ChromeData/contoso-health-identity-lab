@@ -546,7 +546,8 @@ try {
     # Near-real-time rule since 2026-11-05 (modules/monitoring, name -nrt);
     # the scheduled name is still tried for a workspace applied before that.
     # 2025-01-01-preview: the GA alertRules versions do not return NRT rules
-    # ("not found in version 2023-02-01", read live 2026-11-05).
+    # ("not found in version 2023-02-01", read live 2026-11-05; Learn REST
+    # "Alert Rules - List": no NRT kind in any GA version up to 2025-09-01).
     $sentinel = $null
     foreach ($ruleName in @('contoso-break-glass-signin-nrt', 'contoso-break-glass-signin')) {
         $sentinel = Invoke-AzJson -Arguments @('rest', '--method', 'get', '--url', "https://management.azure.com$($ws.id)/providers/Microsoft.SecurityInsights/alertRules/$($ruleName)?api-version=2025-01-01-preview") -AllowNotFound

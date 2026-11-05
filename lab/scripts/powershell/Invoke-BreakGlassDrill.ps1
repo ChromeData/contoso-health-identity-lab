@@ -506,10 +506,12 @@ $wsCustomerId = [string]$ws.customerId
 # name -nrt); the scheduled name is still tried so the drill also works
 # against a workspace applied before that change.
 $sentinelRuleUris = @('contoso-break-glass-signin-nrt', 'contoso-break-glass-signin') | ForEach-Object {
-    # 2025-01-01-preview: the GA versions (2023-02-01 ... 2024-09-01) do not
-    # return the NRT rule at all - "Rule ... was not found in version
-    # 2023-02-01" (read live 2026-11-05) - while this one returns NRT,
-    # Scheduled and Fusion rules alike.
+    # 2025-01-01-preview: the GA versions do not return the NRT rule at all -
+    # "Rule ... was not found in version 2023-02-01" (read live 2026-11-05) -
+    # and their model has no NRT kind (Learn REST "Alert Rules - List": the
+    # value types are Fusion, MicrosoftSecurityIncidentCreation and
+    # Scheduled in every GA version up to 2025-09-01). This preview version
+    # returns NRT, Scheduled and Fusion rules alike.
     "https://management.azure.com$($ws.id)/providers/Microsoft.SecurityInsights/alertRules/$($_)?api-version=2025-01-01-preview"
 }
 function Get-BreakGlassSentinelRule {

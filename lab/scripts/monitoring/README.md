@@ -31,6 +31,16 @@ detections need.
 
 ## Detections
 
+> **Reading the rules back.** The break-glass sign-in rule is a
+> near-real-time (NRT) rule since 2026-11-05 (`contoso-break-glass-signin-nrt`).
+> The GA `alertRules` API versions do not return NRT rules (Learn REST
+> *Alert Rules - List*: no NRT kind in any GA version up to 2025-09-01; live,
+> 2024-09-01 lists 17 rules and 2025-01-01-preview 18). Every script that reads
+> rules uses `api-version=2025-01-01-preview`: `Invoke-BreakGlassDrill.ps1`,
+> `post-apply/Convert-BuildAccountToEligible.ps1`,
+> `../demo/containment-drill.sh`. Incidents from NRT rules are listed by the GA
+> incidents API as usual.
+
 All eleven live in `lab/kql/` with an SPL twin in `lab/splunk/detections/` and
 are deployed by `lab/terraform/modules/monitoring` (`itdr.tf`). Each rule maps
 ONE account entity: the identity containment would act on. Targets and victims
