@@ -5,14 +5,14 @@
   "joiner": "What a new hire gets on day one, and how extras are requested. Standard access comes from the job: a nurse gets nurse systems automatically. Anything extra is requested, approved by a manager, and expires. Some combinations are blocked because one person holding both would be a fraud risk. Why: day-one access by job removes the ticket queue, and expiring extras stop access piling up over the years.",
   "apps": "The places staff actually go after they sign in. AWS: Amazon's cloud, where hospitals run their own apps. ServiceNow: the help desk where staff raise IT tickets. Okta: a partner clinic's own login system. All three trust the hospital login, so staff have no separate password in any of them. For AWS and ServiceNow the account is created and switched off automatically from HR. Why one login: one place to turn a person off, one set of sign-in rules, no forgotten passwords in each app.",
   "signin": "The checks at the door, every time someone signs in. Where you are, what device, how risky this looks, and whether you proved it is you with more than a password. New rules start in report-only mode (it watches and logs, blocks nothing) so a mistake cannot lock a nurse out mid-shift. Why watch-only first: a bad rule in a hospital locks out clinicians mid-shift, so rules prove themselves before they enforce.",
-  "privileged": "No admin keeps power day to day. Admins ask for it, say why, get it for a few hours, and it switches off again. The exceptions are the build account and two locked emergency accounts. Shared passwords for servers live in a vault (a local stand-in for CyberArk) that rotates them and records who used them. Why: a stolen admin account that holds power all day is the worst case. Power that switches off limits the damage to hours.",
+  "privileged": "No admin keeps power day to day. Admins ask for it, say why, get it for a few hours, and it switches off again. AWS admin works the same way, borrowed through PIM. The exceptions are the build account and two locked emergency accounts. Shared passwords for servers live in a vault (a local stand-in for CyberArk) that rotates them and records who used them. Why: a stolen admin account that holds power all day is the worst case. Power that switches off limits the damage to hours.",
   "detect": "The alarm system. Sign-in and change records flow into one place, and rules written as code spot trouble such as a sign-in from a blocked country. Before the lockout playbook cuts anyone off, it asks a person in Teams to approve. Why a human approves lockouts: an automatic lockout of the wrong clinician is itself a patient-safety incident.",
   "leaver": "When someone leaves, HR flips one field and everything closes: account off, sessions cut, app access gone, each step timed. Any robot account left without an owner is flagged by the inventory. Why timed: the gap between someone leaving and losing access is the number an auditor asks for.",
   "proof": "Showing an auditor it works, on demand. Regular reviews of who has what, an evidence binder where every page is fingerprinted and stored where nobody can edit it, and a nightly check that nothing has drifted from the approved setup. Why: a control nobody can prove is a control nobody can trust. Evidence is produced by the system, not assembled by hand before an audit."
  },
  "nodes": {
   "SSO": [
-   "AWS's own login door, set to trust the hospital login. Staff sign in with their hospital account and have no separate AWS password. SCIM is the part that creates her AWS account when HR hires her and switches it off when HR says she left.",
+   "AWS's own login door, set to trust the hospital login. Staff sign in with their hospital account and have no separate AWS password. SCIM is the part that creates her AWS account when HR hires her and switches it off when HR says she left. Admins borrow AWS admin rights through PIM, a few hours at a time.",
    "A second building that accepts our staff badge."
   ],
   "SNOW": [
@@ -48,7 +48,7 @@
    "The front desk and badge office."
   ],
   "CABASE": [
-   "The core sign-in rules: everyone proves it is them with more than a password, and old insecure sign-in methods are blocked. Admins also have phishing-proof passkeys.",
+   "The core sign-in rules: everyone proves it is them with more than a password, and old insecure sign-in methods are blocked. The IT admins have phishing-proof passkeys, and the rule that demands one from every admin is watching first, like every new rule.",
    "The guard at every door."
   ],
   "PIM": [
@@ -120,7 +120,7 @@
    "A fresh check at the secure wing."
   ],
   "BG": [
-   "Two emergency Global Admin accounts that sit outside every rule, so a bad rule can always be undone. Each has its own passkey, and any use raises an alarm.",
+   "Two emergency Global Admin accounts that sit outside every rule, so a bad rule can always be undone. Each has its own passkey, and any use raises an alarm; a drill proved it end to end.",
    "The fire axe behind glass."
   ],
   "HDAU": [
@@ -156,7 +156,7 @@
    "The phone tree."
   ],
   "CONTAIN": [
-   "A person approves in Teams; only then are sessions cut and the account disabled or flagged.",
+   "High identity alerts start it on their own. A person approves in Teams; only then are sessions cut and the account disabled or flagged.",
    "The supervisor's yes."
   ],
   "FEED": [
@@ -168,7 +168,7 @@
    "A second security desk."
   ],
   "REVIEW": [
-   "Regular checks of who still needs what. Admin access is reviewed every quarter in the tenant today; reviews of everyday clinical access are built, not switched on.",
+   "Regular checks of who still needs what. Admin access is reviewed every quarter in the tenant; reviews of everyday clinical access are written as code and switched off.",
    "The badge audit."
   ],
   "MID": [
@@ -176,7 +176,7 @@
    "The badge audit, beyond Entra."
   ],
   "KPI": [
-   "Scorecards taken before and after the build, so improvement is measured, not claimed. A security scan was taken before; the after-scan is still to run.",
+   "Scorecards taken before and after the build, so improvement is measured, not claimed: staff under an enforced second-check rule went from none to all. A security scan set the starting point.",
    "A before-and-after check-up."
   ],
   "OPMODEL": [
