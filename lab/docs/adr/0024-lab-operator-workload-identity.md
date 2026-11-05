@@ -118,3 +118,15 @@ switch.
   UpdateAssumeRolePolicy. (The first guardrail set protected only the role
   itself; review moved it to the account-wide IAM-write Deny above.) Still to capture: the Entra service-principal
   sign-in record and the CloudTrail `AssumeRoleWithWebIdentity` record.
+
+## Amendment 2026-11-05: who applies `envs/operator`
+
+The owner asked for the lab's remaining work to run without them. From this
+date, after the first human apply, changes to `envs/operator` are applied by
+the operator itself once their pull request is reviewed and merged. This
+removes the last human-only change step for the operator, which was already a
+change-control boundary rather than a privilege boundary (Consequences above):
+the review and merge are now the control, as for every other change. Every
+such apply is a service-principal sign-in plus "Add app role assignment"
+audit events by the operator, which `app-consent-granted.kql` logs.
+

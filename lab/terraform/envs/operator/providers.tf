@@ -1,8 +1,10 @@
 # =============================================================================
 # envs/operator :: providers.tf
 # -----------------------------------------------------------------------------
-# Applied LOCALLY by a human Global Administrator (`az login` as the admin),
-# never by CI and never by the operator identity this root creates.
+# Applied LOCALLY, never by CI. First apply: a human Global Administrator.
+# Since 2026-11-05, by the owner's standing approval (ADR 0024), later
+# changes may be applied by the operator itself (`op tofu apply`) after the
+# pull request is reviewed and merged - the same review every other change gets.
 # =============================================================================
 
 provider "azuread" {
