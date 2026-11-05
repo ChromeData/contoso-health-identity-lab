@@ -1,0 +1,124 @@
+{
+  "_comment": "Who the lab's sign-in tool can sign in as, and how. NO SECRETS HERE: every secret is a reference - a macOS login Keychain item (service + account) or, for Splunk's own admin, the gitignored lab/splunk/.env key the stack is built around. identity.mjs validates this file (validateRegistry) and refuses plain strings where a reference belongs. GitHub is not here on purpose: it stays the owner's own sign-in.",
+  "identities": {
+    "adm-presenter": {
+      "kind": "entra",
+      "upn": "adm-presenter@contosohealthlab.onmicrosoft.com",
+      "use": "Demo presenter: read-only portals (Entra, Azure, Defender, Sentinel) through PIM-Demo-Readers",
+      "method": "passkey",
+      "secrets": { "passkey": { "service": "contoso-lab-passkey-adm-presenter", "account": "adm-presenter@contosohealthlab.onmicrosoft.com" } },
+      "fallback": "tap",
+      "home": "https://myaccount.microsoft.com/",
+      "pim": [{ "group": "PIM-Demo-Readers", "hours": 8 }]
+    },
+    "adm-labops": {
+      "kind": "entra",
+      "upn": "adm-labops@contosohealthlab.onmicrosoft.com",
+      "use": "Lab operations admin account",
+      "method": "password+totp",
+      "secrets": {
+        "password": { "service": "contoso-lab-pw-adm-labops", "account": "adm-labops@contosohealthlab.onmicrosoft.com" },
+        "totp": { "service": "contoso-lab-totp-adm-labops", "account": "adm-labops@contosohealthlab.onmicrosoft.com" }
+      },
+      "home": "https://myaccount.microsoft.com/"
+    },
+    "adm-ava.lin": {
+      "kind": "entra",
+      "upn": "adm-ava.lin@contosohealthlab.onmicrosoft.com",
+      "use": "Admin badge of Ava Lin: the PIM piece of the demo",
+      "method": "passkey",
+      "secrets": { "passkey": { "service": "contoso-lab-passkey-adm-ava.lin", "account": "adm-ava.lin@contosohealthlab.onmicrosoft.com" } },
+      "fallback": "tap",
+      "home": "https://myaccount.microsoft.com/"
+    },
+    "adm-raj.patel": {
+      "kind": "entra",
+      "upn": "adm-raj.patel@contosohealthlab.onmicrosoft.com",
+      "use": "Admin badge of Raj Patel (help desk, PIM-Tier1-Helpdesk)",
+      "method": "passkey",
+      "secrets": { "passkey": { "service": "contoso-lab-passkey-adm-raj.patel", "account": "adm-raj.patel@contosohealthlab.onmicrosoft.com" } },
+      "fallback": "tap",
+      "home": "https://myaccount.microsoft.com/"
+    },
+    "adm-mei.tanaka": {
+      "kind": "entra",
+      "upn": "adm-mei.tanaka@contosohealthlab.onmicrosoft.com",
+      "use": "Admin badge of Mei Tanaka",
+      "method": "passkey",
+      "secrets": { "passkey": { "service": "contoso-lab-passkey-adm-mei.tanaka", "account": "adm-mei.tanaka@contosohealthlab.onmicrosoft.com" } },
+      "fallback": "tap",
+      "home": "https://myaccount.microsoft.com/"
+    },
+    "test-user-a": {
+      "kind": "entra",
+      "upn": "test-user-a@contosohealthlab.com",
+      "use": "Staff user: My Apps, AWS access portal, Teams (SOC approver)",
+      "method": "password+totp",
+      "secrets": {
+        "password": { "service": "contoso-lab-test-user-a", "account": "test-user-a@contosohealthlab.com" },
+        "totp": { "service": "contoso-lab-totp-test-user-a", "account": "test-user-a@contosohealthlab.com" }
+      },
+      "home": "https://myapps.microsoft.com/"
+    },
+    "test-user-b": {
+      "kind": "entra",
+      "upn": "test-user-b@contosohealthlab.com",
+      "use": "Clinic staff user: Okta through Entra",
+      "method": "password+totp",
+      "secrets": {
+        "password": { "service": "contoso-lab-test-user-b", "account": "test-user-b@contosohealthlab.com" },
+        "totp": { "service": "contoso-lab-totp-test-user-b", "account": "test-user-b@contosohealthlab.com" }
+      },
+      "home": "https://myapps.microsoft.com/"
+    },
+    "test-user-c": {
+      "kind": "entra",
+      "upn": "test-user-c@contosohealthlab.com",
+      "use": "Joiner test user: no authenticator on purpose (Lifecycle Workflows issue its pass), so each sign-in uses a one-time pass",
+      "method": "tap",
+      "secrets": {},
+      "home": "https://myapps.microsoft.com/"
+    },
+    "svc-soc-automation": {
+      "kind": "entra",
+      "upn": "svc-soc-automation@contosohealthlab.onmicrosoft.com",
+      "use": "SOC automation account (Teams team owner)",
+      "method": "password+totp",
+      "secrets": {
+        "password": { "service": "contoso-lab-svc-soc-automation", "account": "svc-soc-automation@ContosoHealthLab.onmicrosoft.com" },
+        "totp": { "service": "contoso-lab-totp-svc-soc-automation", "account": "svc-soc-automation@contosohealthlab.onmicrosoft.com" }
+      },
+      "home": "https://myaccount.microsoft.com/"
+    },
+    "acr.breakglass": {
+      "kind": "servicenow-local",
+      "username": "acr.breakglass",
+      "use": "ServiceNow admin side door (Account Recovery user; password + ServiceNow authenticator code)",
+      "method": "password+totp",
+      "secrets": {
+        "password": { "service": "contoso-lab-servicenow-acr", "account": "acr.breakglass" },
+        "totp": { "service": "contoso-lab-servicenow-acr-totp", "account": "acr.breakglass" }
+      },
+      "loginUrl": "https://dev459905.service-now.com/login.do",
+      "home": "https://dev459905.service-now.com/now/nav/ui/home"
+    },
+    "splunk-admin": {
+      "kind": "splunk-local",
+      "username": "admin",
+      "use": "Splunk admin (local Docker stack; its password is generated into lab/splunk/.env by splunk-up.sh)",
+      "method": "password",
+      "secrets": { "password": { "file": "lab/splunk/.env", "key": "SPLUNK_PASSWORD" } },
+      "loginUrl": "http://127.0.0.1:8000/en-US/account/login",
+      "home": "http://127.0.0.1:8000/en-US/app/search/search"
+    },
+    "splunk-feed-check": {
+      "kind": "splunk-local",
+      "username": "contoso-feed-check",
+      "use": "Splunk search-only user (index entra) the live feed checks with",
+      "method": "password",
+      "secrets": { "password": { "service": "contoso-splunk-feed-reader", "account": "contoso-feed-check" } },
+      "loginUrl": "http://127.0.0.1:8000/en-US/account/login",
+      "home": "http://127.0.0.1:8000/en-US/app/search/search"
+    }
+  }
+}

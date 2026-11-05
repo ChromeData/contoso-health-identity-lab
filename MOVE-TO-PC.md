@@ -28,6 +28,7 @@ On the Mac they are Keychain items. On Windows use Credential Manager (`cmdkey`)
 | `contoso-lab-dc01-admin`, `contoso-lab-cloudsync` | DC01 local admin, Cloud Sync agent account |
 | `contoso-lab-porkbun`, `contoso-lab-porkbun-api` | Registrar login and API |
 | `contoso-lab-test-user-a/b/c`, `contoso-lab-tap-adm-raj`, `contoso-lab-totp-adm-raj` | Test users and the adm-raj MFA seed |
+| `contoso-lab-passkey-adm-presenter` (and the other `contoso-lab-passkey-adm-*`) | Lab passkeys (base64 JSON credential records) used by `lab/scripts/demo/signin/identity.mjs`; re-register with `passkey.mjs register` on a new machine |
 | `contoso-lab-totp-<user>`, `contoso-lab-pw-<user>` | Authenticator seeds and passwords written by `lab/scripts/demo/signin/enroll.mjs` (account = UPN); re-run `enroll.mjs --force` on a new machine instead of copying |
 | `greptile-api` | Greptile API key (MCP server in `.mcp.json`) |
 

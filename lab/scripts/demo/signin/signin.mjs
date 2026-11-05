@@ -45,6 +45,7 @@ export function entraBlocker(text) {
     return `Entra wants an admin to consent to ${app ? `the app "${app.trim()}"` : 'this app'} first (Enterprise applications > Permissions > Grant admin consent)`;
   }
   if (/More information required|Let's keep your account secure/i.test(text)) return 'Entra wants security info registered first (run enroll.mjs)';
+  if (/couldn.t sign you in with (a|your) passkey|passkey (was|is) not recogni[sz]ed|We couldn.t find a passkey/i.test(text)) return 'Entra did not accept the passkey (check the Keychain record against the registered method: passkey.mjs status)';
   return null;
 }
 
@@ -120,6 +121,18 @@ async function step(page, upn, s) {
   // Password.
   const pw = await onScreen(page, 'input[name=passwd], #i0118');
   if (pw) {
+    if (s.mode === 'passkey') {
+      // A passkey sign-in never types a password: the direct link first
+      // ("Use your face, fingerprint, PIN, or security key instead"), else the
+      // list of other ways. The virtual authenticator (identity.mjs) answers
+      // the WebAuthn prompt that follows.
+      if (s.switches++ > 3) throw new Error('Entra keeps asking for a password in a passkey sign-in');
+      const pk = await onScreen(page, 'a:has-text("security key instead"), [role=link]:has-text("security key instead"), a:has-text("passkey instead"), #idA_PWD_SwitchToFido');
+      if (pk) { await pk.click(); return 'use a passkey instead'; }
+      const sw = await onScreen(page, '#idA_PWD_SwitchToCredPicker, a:has-text("Other ways to sign in"), a:has-text("Sign in another way"), a:has-text("Sign-in options")');
+      if (sw) { await sw.click(); s.credPicker = true; return 'other ways to sign in'; }
+      throw new Error('Entra asked for a password and offers no passkey option');
+    }
     if (s.tap && !s.password) {
       // A TAP sign-in that landed on the password page: switch to the pass.
       const sw = await onScreen(page, '#idA_PWD_SwitchToCredPicker, a:has-text("Other ways to sign in"), a:has-text("Sign in another way")');
@@ -136,6 +149,10 @@ async function step(page, upn, s) {
   }
 
   // Credential picker (after "Other ways to sign in").
+  if (s.credPicker && s.mode === 'passkey') {
+    const t = await onScreen(page, 'div[role=button]:has-text("Face, fingerprint, PIN"), div[role=button]:has-text("security key"), div[role=button]:has-text("passkey"), [data-test-cred-id="fido"]');
+    if (t) { if (s.picks++ > 3) throw new Error('Entra keeps offering the passkey choice: the passkey was not accepted'); await t.click(); s.credPicker = false; return 'chose the passkey'; }
+  }
   if (s.credPicker && s.tap) {
     const t = await onScreen(page, 'div[role=button]:has-text("Temporary Access Pass"), [data-test-cred-id="accesspass"]');
     if (t) { await t.click(); s.credPicker = false; return 'chose temporary access pass'; }
@@ -205,9 +222,24 @@ export const APPS = [
   // enrollment wall and its IdP error (both seen live on the first clinic runs).
   { name: 'Okta', host: /\.(okta|oktapreview|okta-emea)\.com$/i, url: /\/app\/UserHome|\/enduser\//i, ok: /My Apps|Dashboard/i,
     denied: /Set up security methods|identity provider had a problem|Unable to sign in|not assigned to this application/i },
+  // Admin portals the recording browser opens (signed-in shell text).
+  { name: 'Entra admin center', host: /(^|\.)entra\.microsoft\.com$/i, ok: /Microsoft Entra admin center|Home|Overview|My roles/i },
+  { name: 'Azure portal', host: /(^|\.)portal\.azure\.com$/i, ok: /Azure services|Microsoft Azure|Home|Dashboard/i },
+  { name: 'Microsoft Defender', host: /(^|\.)security\.microsoft\.com$/i, ok: /Microsoft Defender|Home|Incidents/i },
+  { name: 'Microsoft Teams', host: /(^|\.)teams\.(microsoft|cloud\.microsoft)(\.com)?$/i, ok: /Teams|Chat|Activity|Calendar/i },
+  // Splunk (local Docker): signed in = an app page, never the login form.
+  { name: 'Splunk', host: /^(127\.0\.0\.1|localhost)$/i, url: /\/app\//i, notUrl: /\/account\/login/i, notText: /Forgot your password|First time signing in/i, ok: /Search|Apps|Splunk/i,
+    denied: /Login failed|Invalid username or password/i },
   // ServiceNow: the SSO refusal pages name the user or the SAML step
-  // (verify: wording on the lab's dev instance).
-  { name: 'ServiceNow', host: /\.service-now\.com$/i, ok: /Service Portal|Now Platform|ServiceNow/i,
+  // (verify: wording on the lab's dev instance). Its login and MFA pages
+  // also say "ServiceNow", so they never count as signed in (notUrl).
+  // Signed in = the Next Experience shell (/now/nav/ui/...) or a classic
+  // home/nav page; navpage.do with "Log in to your account" is the SIGN-IN page
+  // (seen live 2026-11-05), so sign-in text never counts (notText).
+  { name: 'ServiceNow', host: /\.service-now\.com$/i, url: /\/now\/(nav|workspace|sow)\/|\/(home|nav_to)\.do/i,
+    // URL-only positive signal: the Next Experience shell renders in shadow
+    // DOM, so its signed-in page has no readable text (seen live).
+    notUrl: /login\.do|validate_multifactor_auth_code\.do|side_door\.do|logout/i, notText: /Log in to your account|Log in\s+User name|Forgot Password|Verify your identity/i,
     denied: /User:?\s*\S+\s+not (found|active|authenticated)|Ensure that the user you are logging in with is active|SAML2? (error|Error)|not authorized|Logged out/i },
 ];
 // 'ok' | 'denied: <app>' | 'wait' | 'unknown'. `custom` = { url, text, denied }
@@ -221,6 +253,8 @@ export function landing(url, text, custom = {}) {
   if (denied.some((re) => re.test(text))) return `denied: ${app ? app.name : h}`;
   const okUrl = custom.url || (app && app.url), okText = custom.text || (app && app.ok);
   if (!okUrl && !okText) return 'unknown';
+  if (app && app.notUrl && app.notUrl.test(url)) return 'wait';
+  if (app && app.notText && app.notText.test(text)) return 'wait';
   return (!okUrl || okUrl.test(url)) && (!okText || okText.test(text)) ? 'ok' : 'wait';
 }
 
@@ -243,18 +277,19 @@ export function verdict({ onApp, untilGiven, untilOk, land, passwordOnScreen, st
 
 // Drive Entra until the browser is back on the app (see verdict()).
 export async function drive(page, upn, opts = {}) {
-  const s = { kmsi: true, pwTries: 0, otcTries: 0, userTries: 0, ...opts };
+  const s = { kmsi: true, pwTries: 0, otcTries: 0, userTries: 0, switches: 0, picks: 0, ...opts };
   const deadline = Date.now() + (opts.timeoutMs || 180000);
-  let steadyUrl = '', steadySince = 0;
+  let steadyUrl = '', steadySince = 0, reloads = 0;
   while (Date.now() < deadline) {
     await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
     const did = await step(page, upn, s);
     if (did) { log(`${localPart(upn)}: ${did}`); steadyUrl = ''; await sleep(1500); continue; }
-    const h = host(page.url());
+    // One snapshot of the URL per pass, so the verdict and its message agree.
+    const url = page.url(), h = host(url);
     const onApp = !LOGIN_HOST.test(h) && !(OKTA_HOST.test(h) && await onScreen(page, 'input[name="identifier"], input[name="username"], input[name="credentials.passcode"]'));
-    if (onApp && page.url() !== steadyUrl) { steadyUrl = page.url(); steadySince = Date.now(); }
+    if (onApp && url !== steadyUrl) { steadyUrl = url; steadySince = Date.now(); }
     const text = onApp ? await pageText(page) : '';
-    const land = onApp ? landing(page.url(), text, opts.landing) : null;
+    const land = onApp ? landing(url, text, opts.landing) : null;
     const v = verdict({
       onApp, untilGiven: !!opts.until, untilOk: onApp && opts.until ? await opts.until(page).catch(() => false) : false,
       land, passwordOnScreen: onApp && !opts.until ? !!(await onScreen(page, 'input[type=password]')) : false,
@@ -264,6 +299,13 @@ export async function drive(page, upn, opts = {}) {
     if (v === 'denied') throw new Error(`the app refused the sign-in (${land}): ${text.replace(/\s+/g, ' ').slice(0, 200)}`);
     if (v === 'signed-out') throw new Error(`back on ${h} but it shows a password box: the app did not accept the sign-in`);
     if (v === 'unknown-app') throw new Error(`${h} has no known "signed in" signal: pass until / --until (and landing.denied) for this app`);
+    // Back on a known app that stays blank: reload it (at most twice). Seen
+    // live 2026-11-05 on My Account and Security info after the redirect; the
+    // session is set by then, so a reload renders the signed-in page.
+    if (onApp && land === 'wait' && !text.trim() && Date.now() - steadySince > 20000 && reloads < 2) {
+      reloads++; log(`${localPart(upn)}: ${h} stayed blank; reloading`);
+      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {}); steadyUrl = ''; continue;
+    }
     await sleep(700);
   }
   throw new Error(`sign-in did not finish in ${(opts.timeoutMs || 180000) / 1000}s (at ${host(page.url())})`);

@@ -70,6 +70,72 @@ caller closes it), `timeoutMs`.
   (class `moveOffScreen`, opacity 0, `aria-hidden`); the driver acts only on
   what is really on screen.
 
+## One sign-in for every lab identity: `identity.mjs`, `identities.json`, `doctor.mjs`
+
+**Status: RAN · tenant** (2026-11-05, capture-log E103). The recording
+browser signs itself in as any lab identity, with no human. GitHub is the one
+exception: it stays the owner's own sign-in.
+
+```js
+import { signIn, keepSignedIn, activatePim } from './lab/scripts/demo/signin/identity.mjs';
+// In the cockpit's own (persistent, headful) context - never closed by us:
+const { page } = await signIn('adm-presenter', 'https://entra.microsoft.com/', { context });
+const stop = keepSignedIn(context, 'adm-presenter');   // silent re-sign-in on expiry / CA020
+await activatePim('adm-presenter', 'PIM-Demo-Readers', 8, 'INC-1234: demo, read-only', { context });
+```
+
+| Identity | Method | Used for |
+|---|---|---|
+| `adm-presenter` | passkey (virtual authenticator, Keychain credential) | read-only portals through PIM-Demo-Readers |
+| `adm-ava.lin`, `adm-raj.patel`, `adm-mei.tanaka` | passkey | the PIM piece (admin badges) |
+| `adm-labops`, `svc-soc-automation`, `test-user-a`, `test-user-b` | password + authenticator code | lab ops, SOC team, staff (My Apps, AWS, Teams), clinic (Okta) |
+| `test-user-c` | one-time pass per sign-in | joiner user: no authenticator on purpose |
+| `acr.breakglass` | ServiceNow `login.do` + ServiceNow authenticator code | ServiceNow admin side door |
+| `splunk-admin`, `splunk-feed-check` | Splunk login form | Splunk Web |
+
+- **`identities.json`** holds who and how. It contains **no secrets**, only
+  references: Keychain `{service, account}`, or `{file, key}` for Splunk's own
+  `.env`. `validateRegistry()` refuses a plain string where a reference
+  belongs, any extra field in a reference, the owner's and break-glass
+  accounts, and file paths outside the repo.
+- **`signIn(id, url, { context, page, allowTap, until, landing })`** picks the
+  method from the registry.
+  - With `context` it works inside the caller's context and never closes it.
+    A passkey identity gets a CDP virtual authenticator on the page being
+    signed in (and its popups) only. The new signature counter is written back
+    to the Keychain.
+  - `allowTap` lets an identity with `fallback: "tap"` use a one-time pass if
+    its own method fails. It is off by default because a pass is a credential
+    issued in the tenant.
+- **One Entra identity per context.** `signIn` refuses a context that is
+  already signed in to Entra as someone else; switching users inside one
+  context would let an app keep the old account silently. A context with an
+  Entra session the tool did not make is checked once, on My Account. The
+  cockpit therefore uses one context (or profile) per Entra identity.
+  ServiceNow and Splunk identities can share any context.
+- **Local passwords and codes are typed only into the exact origin** (scheme,
+  host, port) of the identity's `loginUrl`.
+- **`keepSignedIn(context, id)`** watches every page of the context, including
+  pages already on a sign-in screen when it starts. When an
+  app sends one back to a sign-in page, it signs in again where the page is:
+  an expired session, CA020's 4-hour re-authentication, ServiceNow's or
+  Splunk's login form. This was seen live after wiping the session.
+  "Stay signed in?" is answered yes.
+- **`activatePim(id, group, hours, reason)`** (**BUILT**, not yet run live: its first live run is adm-presenter → PIM-Demo-Readers after that group's apply). The duration must be set and read back. Success means the group's row under *Active assignments* with Deactivate; otherwise it throws and records nothing. It goes through Entra admin center →
+  PIM → My roles → Groups → Activate, with duration and justification. If the
+  blade asks for a fresh MFA, the identity's own method answers it in place.
+  The end time is recorded in `~/.contoso-operator/session/browser/<id>.pim.json`
+  for the doctor. The operator cannot read active PIM assignments, and isn't
+  given that right.
+- **`doctor.mjs`** (signin-doctor) tries every identity with a fresh headless
+  sign-in and prints: identity, method, works, session age, PIM state, next
+  expiry. `--summary` is the line `preflight.sh` prints, `--json` gives one
+  object per identity, and `--with-tap` also tries the pass-based identities.
+- **Success needs a positive landing signal** (`APPS` in `signin.mjs`, now
+  including the admin portals, Teams, Splunk and ServiceNow's Next Experience
+  shell). A sign-in page never counts: ServiceNow's `navpage.do` "Log in to
+  your account" was a false positive found live and is now a test.
+
 ## Known limits (seen live)
 
 - **`--force` on an account that already has an authenticator** stops at
@@ -89,7 +155,7 @@ caller closes it), `timeoutMs`.
 ## Tests
 
 ```bash
-node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs   # offline: no tenant, browser or Keychain
+node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs lab/scripts/demo/signin/tests/identity.test.mjs   # offline: no tenant, browser or Keychain
 ```
 
 CI runs them in `lab-tests.yml` (*Shell tests (no containers)*).
