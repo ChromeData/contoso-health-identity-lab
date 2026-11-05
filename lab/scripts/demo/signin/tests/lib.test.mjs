@@ -118,21 +118,54 @@ test('keychainRead: any other failure (e.g. 36, Keychain locked) throws - never 
   });
 });
 
-// A fake where contoso-lab-pw-<user> does not exist and every other item has
-// the given account attribute (and that text as its value with -w).
-function fakeOlderItem(acct) {
-  const f = path.join(home, `fake-older-${acct.replace(/[^a-z]/g, '')}.sh`);
-  fs.writeFileSync(f, `#!/bin/sh\ncase "$3" in contoso-lab-pw-*) exit 44;; esac\nprintf '%s' '"acct"<blob>="${acct}"'\nexit 0\n`, { mode: 0o755 });
+// A fake `security` that holds ONE item: service `svc`, account `acct`,
+// value `val`. A lookup must match both (-s and, when given, -a), as the real
+// Keychain does; anything else is "not found" (exit 44).
+function fakeItem(svc, acct, val) {
+  const f = path.join(home, `fake-item-${Math.random().toString(36).slice(2)}.sh`);
+  fs.writeFileSync(f, `#!/bin/sh
+s=""; a=""; while [ $# -gt 0 ]; do case "$1" in -s) s="$2"; shift;; -a) a="$2"; shift;; esac; shift; done
+[ "$s" = "${svc}" ] || exit 44
+[ -z "$a" ] || [ "$a" = "${acct}" ] || exit 44
+printf '%s' '${val}'
+`, { mode: 0o755 });
   return f;
 }
 
 test('passwordFor: an older contoso-lab-<user> item is used only when its account is the UPN', async () => {
-  await withFake(fakeOlderItem('someone-else@contosohealthlab.com'), (l) => {
+  await withFake(fakeItem('contoso-lab-test-user-a', 'someone-else@contosohealthlab.com', 'pw-x'), (l) => {
     assert.equal(l.passwordFor('test-user-a@contosohealthlab.com'), null);
   });
-  await withFake(fakeOlderItem('test-user-a@contosohealthlab.com'), (l) => {
-    assert.equal(l.passwordFor('test-user-a@contosohealthlab.com').service, 'contoso-lab-test-user-a');
+  await withFake(fakeItem('contoso-lab-test-user-a', 'test-user-a@contosohealthlab.com', 'pw-a'), (l) => {
+    assert.deepEqual(l.passwordFor('test-user-a@contosohealthlab.com'), { service: 'contoso-lab-test-user-a', value: 'pw-a' });
   });
+});
+
+test('same local part on the two lab domains: secrets never cross over (password and seed)', async () => {
+  await withFake(fakeItem('contoso-lab-pw-dana.okafor', 'dana.okafor@contosohealthlab.com', 'pw-com'), (l) => {
+    assert.equal(l.passwordFor('dana.okafor@contosohealthlab.onmicrosoft.com'), null);
+    assert.equal(l.passwordFor('dana.okafor@contosohealthlab.com').value, 'pw-com');
+  });
+  await withFake(fakeItem('contoso-lab-totp-dana.okafor', 'dana.okafor@contosohealthlab.com', 'SEEDCOM'), (l) => {
+    assert.equal(l.seedFor('dana.okafor@contosohealthlab.onmicrosoft.com'), null);
+    assert.equal(l.seedFor('dana.okafor@contosohealthlab.com'), 'SEEDCOM');
+  });
+});
+
+// ---- saved sessions belong to one UPN ------------------------------------------
+test('readOwnedState: only the owner gets the saved cookies; foreign, legacy and broken files are ignored', () => {
+  const f = lib.statePath('dana.okafor@contosohealthlab.com');
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  const st = { cookies: [{ name: 'ESTSAUTH', value: 'x', domain: '.login.microsoftonline.com', path: '/' }], origins: [] };
+  fs.writeFileSync(f, JSON.stringify({ owner: 'dana.okafor@contosohealthlab.com', ...st }));
+  assert.deepEqual(lib.readOwnedState('dana.okafor@contosohealthlab.com'), st);
+  assert.equal(lib.readOwnedState('dana.okafor@contosohealthlab.onmicrosoft.com'), null, 'same file name, other domain');
+  fs.writeFileSync(f, JSON.stringify(st));
+  assert.equal(lib.readOwnedState('dana.okafor@contosohealthlab.com'), null, 'a file without an owner');
+  fs.writeFileSync(f, '{"owner":"dana.okafor@contosohealthlab.com","cookies":[');
+  assert.equal(lib.readOwnedState('dana.okafor@contosohealthlab.com'), null, 'a truncated file');
+  fs.rmSync(f);
+  assert.equal(lib.readOwnedState('dana.okafor@contosohealthlab.com'), null, 'no file');
 });
 
 test('keychainWrite: a failing security -i reports the exit code, never its output', async () => {

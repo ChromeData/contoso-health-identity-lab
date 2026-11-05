@@ -52,7 +52,7 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  checkUpn, localPart, graph, keychain, keychainRead, passwordFor, pwService, pendingService, totpService,
+  checkUpn, localPart, graph, keychain, seedFor, passwordFor, pwService, pendingService, totpService,
   randomPassword, totp, markTotpStep, playwright, shot, pageText, sleep, log,
 } from './lib.mjs';
 import { drive, signIn } from './signin.mjs';
@@ -104,12 +104,12 @@ export function setRandomPassword({ upn, uid, g = graph, kc = keychain, gen = ra
   const final = pwService(upn), pending = pendingService(final);
   const value = gen();
   kc.write(pending, upn, `Contoso lab password for ${upn} (pending)`, value);
-  if (kc.read(pending) !== value) throw new Error(`Keychain item ${pending} did not read back: the account was not changed`);
+  if (kc.read(pending, upn) !== value) throw new Error(`Keychain item ${pending} did not read back: the account was not changed`);
   try { g('PATCH', `users/${uid}`, { passwordProfile: { password: value, forceChangePasswordNextSignIn: false } }); }
-  catch (e) { kc.del(pending); throw e; } // the account kept its old password; the unused one goes
+  catch (e) { kc.del(pending, upn); throw e; } // the account kept its old password; the unused one goes
   try { kc.write(final, upn, `Contoso lab password for ${upn}`, value); }
   catch (e) { throw new Error(`the account's new password is in force and saved ONLY in Keychain item ${pending} (promoting it to ${final} failed: ${e.message})`); }
-  kc.del(pending);
+  kc.del(pending, upn);
   return { service: final, value };
 }
 
@@ -124,7 +124,7 @@ export function stageSeed({ upn, seed, kc = keychain }) {
 }
 export function promoteSeed({ upn, seed, kc = keychain }) {
   kc.write(totpService(upn), upn, `Contoso lab authenticator seed for ${upn}`, seed);
-  kc.del(pendingService(totpService(upn)));
+  kc.del(pendingService(totpService(upn)), upn);
 }
 
 // The pass we issued, and its removal. Only a pass that is confirmed gone (404)
@@ -155,7 +155,7 @@ export async function enroll(upn, { force = false, headless = true, verify = tru
 
   // ---- 0. already enrolled? ----------------------------------------------------
   const oldOath = (graph('GET', `users/${uid}/authentication/softwareOathMethods`).value || []).map((m) => m.id);
-  const haveSeed = !!keychainRead(totpService(upn));
+  const haveSeed = !!seedFor(upn);
   if (oldOath.length && haveSeed && !force) { log(`${local}: already enrolled (authenticator app + Keychain seed); --force to redo`); return { upn, already: true }; }
   if (oldOath.length && !force) throw new Error(`${upn} has an authenticator-app method the Keychain has no seed for; re-run with --force to replace it`);
 

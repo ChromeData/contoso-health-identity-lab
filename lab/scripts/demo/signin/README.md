@@ -41,7 +41,7 @@ caller closes it), `timeoutMs`.
 | Password | Keychain `contoso-lab-pw-<local>`; the test users' older `contoso-lab-test-user-a/b/c` (account = UPN) are used as they are | Secrets only in the login Keychain (AGENT-RULES) |
 | Authenticator seed | Keychain `contoso-lab-totp-<local>` (account = UPN), written over stdin to `security -i` **before** the code is submitted | A crash after Entra accepts the code cannot lose the seed |
 | Temporary Access Pass | This process's memory only; deleted through Graph afterwards | One-time, never printed or stored |
-| Cookies | `~/.contoso-operator/session/browser/<local>.json`, mode 600 | The operator's private session folder; reused by the next `signIn` |
+| Cookies | `~/.contoso-operator/session/browser/<local>.json`, mode 600, with the owner's full UPN inside | The operator's private session folder; reused by the next `signIn` **only for that UPN** (a same-named user on the other lab domain, an owner-less or unreadable file starts clean) |
 | Last code used | `~/.contoso-operator/session/browser/<local>.totp-step` (a counter, not a secret) and a `.totp-lock` while a code is chosen | Entra refuses a code twice: a second sign-in inside 30 s waits for the next code, also when two run at once (lock; a lock older than 90 s is taken over) |
 | Failure screenshots | `$SIGNIN_SHOTS_DIR` (default `$TMPDIR/signin-shots`) | Seeds, QR codes and inputs are blurred before every screenshot |
 

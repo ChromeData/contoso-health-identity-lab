@@ -76,17 +76,13 @@ function security(args) {
   }
 }
 // Read: value straight into this process. Null when the item is missing.
-export function keychainRead(service) {
-  const out = security(['find-generic-password', '-s', service, '-w']);
+// With `account`, the item must ALSO have that account attribute: the
+// secrets are named by the UPN's local part, and the lab has two domains
+// (contosohealthlab.com, contosohealthlab.onmicrosoft.com), so the account
+// (the full UPN) is what tells two same-named users apart.
+export function keychainRead(service, account) {
+  const out = security(['find-generic-password', '-s', service, ...(account ? ['-a', account] : []), '-w']);
   return out === null ? null : out.replace(/\n$/, '');
-}
-// The item's account attribute (no secret: attributes only, never -g).
-// Null when the item is missing.
-export function keychainAccount(service) {
-  const out = security(['find-generic-password', '-s', service]);
-  if (out === null) return null;
-  const m = out.match(/"acct"<blob>="([^"]*)"/);
-  return m ? m[1] : '';
 }
 // Write (create or update, -U) over STDIN to `security -i`. The value must be
 // a single token: the interactive parser splits on spaces and quotes, so a
@@ -100,19 +96,19 @@ export function keychainWrite(service, account, label, secret) {
       stdio: ['pipe', 'ignore', 'ignore'], // stderr dropped: a parser error could echo the line, secret included
     });
   } catch (e) { throw new Error(`Keychain write to ${service} failed (security exit ${e.status})`); }
-  if (keychainRead(service) !== secret) throw new Error(`Keychain write to ${service} did not read back`);
+  if (keychainRead(service, account) !== secret) throw new Error(`Keychain write to ${service} did not read back`);
 }
 
 // Delete an item (no secret in argv). Missing (exit 44) is fine; anything
 // else throws.
-export function keychainDelete(service) {
-  try { execFileSync(SECURITY, ['delete-generic-password', '-s', service], { stdio: ['ignore', 'ignore', 'ignore'] }); return true; } catch (e) {
+export function keychainDelete(service, account) {
+  try { execFileSync(SECURITY, ['delete-generic-password', '-s', service, ...(account ? ['-a', account] : [])], { stdio: ['ignore', 'ignore', 'ignore'] }); return true; } catch (e) {
     if (e.status === ITEM_NOT_FOUND) return false;
     throw new Error(`Keychain delete failed (security exit ${e.status}) for ${service}`);
   }
 }
 // The default Keychain, as one object, so steps can be tested with a fake.
-export const keychain = { read: (s) => keychainRead(s), write: (s, a, l, v) => keychainWrite(s, a, l, v), del: (s) => keychainDelete(s) };
+export const keychain = { read: (s, a) => keychainRead(s, a), write: (s, a, l, v) => keychainWrite(s, a, l, v), del: (s, a) => keychainDelete(s, a) };
 
 // Names used for a user's secrets.
 export const totpService = (upn) => `contoso-lab-totp-${localPart(upn)}`;
@@ -121,18 +117,18 @@ export const pwService = (upn) => `contoso-lab-pw-${localPart(upn)}`;
 // above always holds what Entra accepts (see enroll.mjs).
 export const pendingService = (svc) => `${svc}-pending`;
 // The user's password: contoso-lab-pw-<local> (set by enroll.mjs), else the
-// older contoso-lab-<local> items (the test users' contoso-lab-test-user-a/b/c),
-// accepted only when the item's account attribute is this UPN.
+// older contoso-lab-<local> items (the test users' contoso-lab-test-user-a/b/c).
+// Both are read by service AND account = this UPN, so a same-named user on
+// the other lab domain never gets this user's password.
 export function passwordFor(upn) {
   for (const svc of [pwService(upn), `contoso-lab-${localPart(upn)}`]) {
-    const acct = keychainAccount(svc);
-    if (acct === null) continue;
-    if (svc !== pwService(upn) && acct.toLowerCase() !== upn.toLowerCase()) continue;
-    const v = keychainRead(svc);
+    const v = keychainRead(svc, upn);
     if (v) return { service: svc, value: v };
   }
   return null;
 }
+// The user's authenticator seed (enroll.mjs), by service AND account.
+export const seedFor = (upn) => keychainRead(totpService(upn), upn);
 
 // ---- TOTP (RFC 6238 over RFC 4226), node:crypto only -----------------------
 const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -251,12 +247,22 @@ export function playwright() {
 }
 
 // ---- storage state -------------------------------------------------------------
+// One file per local part (~/.contoso-operator/session/browser/<local>.json,
+// mode 600). The file records its owner (the full UPN): a file written for a
+// same-named user on the other lab domain, a file from before owners were
+// recorded, or an unreadable file is ignored, and the sign-in starts clean.
 export const statePath = (upn) => path.join(STATE_DIR, `${localPart(upn)}.json`);
+export function readOwnedState(upn) {
+  let st;
+  try { st = JSON.parse(fs.readFileSync(statePath(upn), 'utf8')); } catch { return null; }
+  if (!st || typeof st !== 'object' || st.owner !== upn.toLowerCase()) return null;
+  return { cookies: st.cookies || [], origins: st.origins || [] };
+}
 export async function saveState(context, upn) {
   fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
   const f = statePath(upn);
   const st = await context.storageState();
-  fs.writeFileSync(f, JSON.stringify(st), { mode: 0o600 });
+  fs.writeFileSync(f, JSON.stringify({ owner: upn.toLowerCase(), ...st }), { mode: 0o600 });
   fs.chmodSync(f, 0o600);
   return f;
 }

@@ -26,8 +26,8 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  checkUpn, localPart, keychainRead, passwordFor, totpService, freshTotp, playwright,
-  statePath, saveState, shot, pageText, sleep, log,
+  checkUpn, localPart, seedFor, passwordFor, totpService, freshTotp, playwright,
+  readOwnedState, saveState, shot, pageText, sleep, log,
 } from './lib.mjs';
 
 const LOGIN_HOST = /(^|\.)(login\.microsoftonline\.com|login\.microsoft\.com|login\.live\.com|login\.windows\.net|autologon\.microsoftazuread-sso\.com|device\.login\.microsoftonline\.com)$/i;
@@ -144,7 +144,7 @@ async function step(page, upn, s) {
   // Authenticator-app code.
   const otc = await onScreen(page, 'input[name=otc], #idTxtBx_SAOTCC_OTC');
   if (otc) {
-    const seed = s.seed || keychainRead(totpService(upn));
+    const seed = s.seed || seedFor(upn);
     if (!seed) throw new Error(`no authenticator seed in the Keychain for ${upn} (${totpService(upn)}): run enroll.mjs first`);
     if (s.otcTries++ > 2) throw new Error('Entra refused the authenticator code three times');
     const code = await freshTotp(upn, seed);
@@ -243,23 +243,22 @@ export async function signIn(upn, url, opts = {}) {
   const { headless = true, fresh = false, browser: given, contextOptions = {} } = opts;
   const pw = passwordFor(upn);
   const browser = given || await playwright().chromium.launch({ headless });
-  const st = statePath(upn);
-  const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 }, locale: 'en-US',
-    ...(fresh || !fs.existsSync(st) ? {} : { storageState: st }), ...contextOptions,
-  });
-  const page = await context.newPage();
-  const close = async () => { await context.close().catch(() => {}); if (!given) await browser.close().catch(() => {}); };
+  // From here on, every failure closes what this call opened.
+  let context = null, page = null;
+  const close = async () => { if (context) await context.close().catch(() => {}); if (!given) await browser.close().catch(() => {}); };
   try {
+    const saved = fresh ? null : readOwnedState(upn);
+    context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', ...(saved ? { storageState: saved } : {}), ...contextOptions });
+    page = await context.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await drive(page, upn, { ...opts, password: pw && pw.value });
-    const saved = await saveState(context, upn);
+    const file = await saveState(context, upn);
     log(`${localPart(upn)}: signed in at ${host(page.url())}`);
-    return { browser, context, page, statePath: saved, close };
+    return { browser, context, page, statePath: file, close };
   } catch (e) {
-    const f = await shot(page, `signin-fail-${localPart(upn)}`);
+    const f = page ? await shot(page, `signin-fail-${localPart(upn)}`).catch(() => null) : null;
     await close();
-    e.message += ` [screenshot: ${f}]`;
+    if (f) e.message += ` [screenshot: ${f}]`;
     throw e;
   }
 }
