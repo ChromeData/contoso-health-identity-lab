@@ -39,6 +39,21 @@
 //   Frequency 5m · Lookback 1h · Trigger > 0 rows · Severity High ·
 //   Entities: Account=UserPrincipalName, IP=IPAddress.
 //
+// ONE ALERT PER SIGN-IN (2026-11-05)
+//   The rule runs every 5 minutes over a 1-hour window, so one sign-in used
+//   to sit in 12 runs and raise 12 alerts (incidents #42 and #48: 12 and 15
+//   alerts). That hid the next sign-in: a second break-glass sign-in inside
+//   the hour joined the open incident, and the notify automation rule only
+//   fired on incident creation. Two changes, both from Microsoft Learn:
+//   * here, "Handle ingestion delay in scheduled analytics rules": keep the
+//     wide TimeGenerated window (sign-in logs can arrive minutes late) and
+//     tie each row to the ONE run after it was ingested with
+//     `ingestion_time() > ago(RuleLookBack)`, RuleLookBack = the rule's
+//     query frequency (modules/monitoring, break_glass_signin.frequency);
+//   * in modules/monitoring, an automation rule on "incident updated, alerts
+//     added" for this rule runs the notify playbook again, so a sign-in that
+//     joins an open incident still posts its own card and ticket.
+//
 // AUTOMATED RESPONSE (Logic App - lab/monitoring/playbook-notify.json)
 //   Shared by all five rules, Sentinel path only (the post-trial Log
 //   Analytics alerts just email the ag-identity-secops action group).
@@ -56,6 +71,8 @@
 
 // Break-glass naming convention from lab/terraform/modules/groups.
 let BreakGlassPattern = @"(?i)^bg-admin-\d{2}@";
+// = the rule's query frequency: each row alerts in exactly one run.
+let RuleLookBack = 5m;
 // SCHEMA TRAP: LocationDetails is `dynamic` in SigninLogs but `string` in
 // AADNonInteractiveUserSignInLogs. A plain union splits it into
 // LocationDetails_dynamic / LocationDetails_string and the property access
@@ -68,6 +85,7 @@ union
         | extend SignInType = "non-interactive"
         | extend LocationDetails = todynamic(tostring(LocationDetails)))
 | where TimeGenerated > ago(1h)
+| where ingestion_time() > ago(RuleLookBack)
 | where UserPrincipalName matches regex BreakGlassPattern
 | extend Country = tostring(LocationDetails.countryOrRegion)
 | project TimeGenerated, SignInType, UserPrincipalName, IPAddress, Country,

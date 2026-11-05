@@ -354,6 +354,57 @@ resource "azurerm_sentinel_automation_rule" "notify" {
   }
 }
 
+# Notify AGAIN when an alert is added to an open incident, for the rules in
+# notify_on_alert_added_rule_keys (default: break-glass sign-in). Incident
+# grouping (1 h, all entities) puts a second break-glass sign-in into the
+# open incident, and the rule above only fires on creation: that sign-in
+# posted no card and opened no ticket (found 2026-11-05). Microsoft Learn's
+# incident update trigger lists "Alerts are added to an incident" as an
+# update event; the condition below is the ARM shape for it
+# (PropertyArrayChanged, arrayType Alerts, changeType Added - the same shape
+# as itdr.tf's contain_on_alert_added). Each added alert = one more card and
+# one more ServiceNow ticket (same correlation_id: the incident).
+resource "azurerm_sentinel_automation_rule" "notify_on_alert_added" {
+  count = length(azurerm_sentinel_automation_rule.notify) == 1 && length(local.notify_on_alert_added_rule_ids) > 0 ? 1 : 0
+
+  name                       = uuidv5("url", "https://contoso-health-identity-lab/automation/notify-alert-added")
+  log_analytics_workspace_id = azurerm_sentinel_log_analytics_workspace_onboarding.this[0].workspace_id
+  display_name               = "Contoso - notify again when an alert joins an open incident (break-glass)"
+  # Update-trigger rules have their own order queue (Learn): first in it.
+  order         = 1
+  triggers_on   = "Incidents"
+  triggers_when = "Updated"
+
+  condition_json = jsonencode([
+    {
+      conditionType = "PropertyArrayChanged"
+      conditionProperties = {
+        arrayType  = "Alerts"
+        changeType = "Added"
+      }
+    },
+    {
+      conditionType = "Property"
+      conditionProperties = {
+        propertyName   = "IncidentRelatedAnalyticRuleIds"
+        operator       = "Contains"
+        propertyValues = local.notify_on_alert_added_rule_ids
+      }
+    },
+  ])
+
+  action_playbook {
+    logic_app_id = var.playbook_logic_app_id
+    order        = 1
+  }
+}
+
+locals {
+  notify_on_alert_added_rule_ids = [
+    for k, r in azurerm_sentinel_alert_rule_scheduled.this : r.id if contains(var.notify_on_alert_added_rule_keys, k)
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # 2. Post-trial path: the same KQL as Log Analytics scheduled query alerts.
 # -----------------------------------------------------------------------------
