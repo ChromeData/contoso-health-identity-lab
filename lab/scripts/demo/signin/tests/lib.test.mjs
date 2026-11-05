@@ -208,9 +208,10 @@ test('entraBlocker: ordinary sign-in pages are not blockers', () => {
 
 // ---- the lock across processes ------------------------------------------------
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 function child(env) {
   return new Promise((resolve, reject) => {
-    const c = spawn(process.execPath, [path.join(path.dirname(new URL(import.meta.url).pathname), 'totp-child.mjs')], { env: { ...process.env, ...env } });
+    const c = spawn(process.execPath, [fileURLToPath(new URL('./totp-child.mjs', import.meta.url))], { env: { ...process.env, ...env } });
     let out = '', err = ''; c.stdout.on('data', (d) => { out += d; }); c.stderr.on('data', (d) => { err += d; });
     c.on('close', (code) => (code === 0 ? resolve(out) : reject(new Error(err))));
   });
