@@ -1,6 +1,6 @@
 # ADR 0024: The lab operator — a certificate workload identity for unattended admin work, trusted by AWS through Entra
 
-- **Status:** BUILT (offline: validate, mocked tests). Applied by a human once; this line changes after that run.
+- **Status:** RAN · tenant (2026-11-04): applied by the admin; the operator signed in to Entra with its certificate and to AWS account 182002546409 as contoso-lab-operator; CreateAccessKey and UpdateAssumeRolePolicy were refused by the guardrail Denies.
 - **Date:** 2026-11-04
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** 2027-02-04, or earlier on any revisit trigger
@@ -98,6 +98,8 @@ switch.
 
 - Offline: `tofu test` in `lab/terraform/envs/operator` and `lab/terraform/aws`
   (`tests/operator.tftest.hcl`, `tests/entra_operator.tftest.hcl`).
-- First run: `lab-signin.sh` output (operator service principal, lab tenant,
-  AWS account 182002546409), plus one Entra service-principal sign-in and
-  one CloudTrail `AssumeRoleWithWebIdentity` record. Fill after running.
+- First run (2026-11-04): `lab-signin.sh` printed the operator in the lab
+  tenant and the AWS role contoso-lab-operator in account 182002546409; the
+  guardrail check returned "explicit deny" for CreateAccessKey and
+  UpdateAssumeRolePolicy. Still to capture: the Entra service-principal
+  sign-in record and the CloudTrail `AssumeRoleWithWebIdentity` record.
