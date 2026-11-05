@@ -206,10 +206,16 @@ break-glass drill has a key to sign in with. Runs as the lab operator.
   (`fido2Methods/creationOptions` + `POST fido2Methods`, beta), the key
   still made by the virtual authenticator.
 - The credential (id, private key, user handle, counter) goes to the login
-  Keychain as `contoso-lab-passkey-<local-part>`, written over stdin, never
-  printed.
+  Keychain, written over stdin, never printed: first as
+  `contoso-lab-passkey-<local-part>-pending`, and as
+  `contoso-lab-passkey-<local-part>` once Graph lists the new method.
+- `--replace` registers the new key next to the old one, signs in with it,
+  and only then swaps the Keychain item and deletes the old method: an
+  account is never left without a working key (break-glass has one).
 - **prove**: a fresh browser loads the key from the Keychain and signs in
-  to My Account with the passkey only. Screenshot to `$PASSKEY_SHOTS_DIR`.
+  to My Account with the passkey only. It fails unless the key's counter
+  rose, the browser went through Entra's sign-in, and My Account shows the
+  account. Screenshot to `$PASSKEY_SHOTS_DIR`.
   Every break-glass `prove` is a real break-glass sign-in: the Sentinel rule
   raises a High incident, on purpose (run it as part of the drill,
   `lab/docs/runbooks/break-glass-drill.md`).

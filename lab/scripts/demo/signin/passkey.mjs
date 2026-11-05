@@ -41,15 +41,25 @@
 //     The credential is still made by the virtual authenticator, on a page
 //     served by Playwright at https://login.microsoft.com (the rp.id Entra
 //     returns), so clientDataJSON carries the origin Entra expects.
-//   Both paths then export the credential (WebAuthn.getCredentials:
-//   credentialId, privateKey, rpId, userHandle, signCount) to the Keychain as
-//   contoso-lab-passkey-<local-part> (base64 JSON, written with `security -i`
-//   over STDIN - never argv) and read it back.
+//   Both paths export the credential (WebAuthn.getCredentials: credentialId,
+//   privateKey, rpId, userHandle, signCount) to the Keychain (base64 JSON,
+//   written with `security -i` over STDIN - never argv - and read back),
+//   first as contoso-lab-passkey-<local-part>-pending. Only once Graph lists
+//   the new method does it become contoso-lab-passkey-<local-part>. A POST
+//   that fails or returns no id is checked against Graph's list before the
+//   pending key is ever deleted (the response can be lost after Entra
+//   registered the key).
+//   --replace never deletes the working key first: the new key must sign in
+//   (as in `prove`) before it replaces the old one in the Keychain, and the
+//   old method is deleted last. On break-glass that proof raises the
+//   break-glass incident, on purpose.
 //   prove
 //     A FRESH browser context, a new virtual authenticator, the credential
 //     loaded from the Keychain (WebAuthn.addCredential), and a passkey-only
 //     sign-in to https://myaccount.microsoft.com (no password is typed). The
-//     screenshot goes to $PASSKEY_SHOTS_DIR. The authenticator's new
+//     screenshot goes to $PASSKEY_SHOTS_DIR. It fails unless the
+//     authenticator's counter rose, the browser went through Entra's sign-in
+//     pages, it ended on the app, and My Account shows the account. The new
 //     signCount is written back so the next sign-in's counter keeps rising
 //     (a relying party may reject a counter that goes backwards).
 //
@@ -177,6 +187,35 @@ export function pickCredential(creds, rpId = 'login.microsoft.com') {
   return c;
 }
 
+// Passkey methods Graph lists now that it did not list before.
+export const newMethods = (before, after) => (after || []).filter((m) => !(before || []).some((b) => b.id === m.id));
+// What a POST /fido2Methods outcome means for the pending key. A failed or
+// empty response does NOT prove Entra rejected the key (the response can be
+// lost after Entra registered it), so Graph's list decides:
+//   methodId  - registered (from the response, or the one new method listed)
+//   rejected  - nothing new is listed: the pending key is useless, delete it
+//   ambiguous - several new methods: keep the pending key, a person decides
+export function resolvePost(postResult, added) {
+  if (postResult && postResult.id) return { methodId: postResult.id };
+  if ((added || []).length === 1) return { methodId: added[0].id };
+  if (!(added || []).length) return { rejected: true };
+  return { ambiguous: true };
+}
+// Did a proof really sign in with the passkey? All of: the authenticator's
+// counter rose (an assertion was made), the browser went through Entra's
+// sign-in pages, it ended on the app, no Temporary Access Pass was used, and
+// (when given) the app shows the account. A public landing page passes none
+// of the first two.
+export function proofVerdict({ signCountBefore, signCountAfter, sawLogin, landedHost, targetHost, trail = [], expectText = null, text = '' }) {
+  const reasons = [];
+  if (!(Number.isInteger(signCountAfter) && signCountAfter > signCountBefore)) reasons.push(`the passkey was not used (signCount ${signCountBefore} -> ${signCountAfter})`);
+  if (!sawLogin) reasons.push('the browser never went through the Entra sign-in pages');
+  if (landedHost !== targetHost) reasons.push(`ended on ${landedHost}, not ${targetHost}`);
+  if (trail.includes('temporary access pass')) reasons.push('a Temporary Access Pass was used, not the passkey');
+  if (expectText && !String(text).toLowerCase().includes(String(expectText).toLowerCase())) reasons.push(`the app does not show ${expectText}`);
+  return { ok: !reasons.length, reasons };
+}
+
 // ---- Keychain ------------------------------------------------------------------
 // Read: value into this process only. Null = no such item ("not found" and
 // "could not read" are told apart by the exit code: 44 is errSecItemNotFound).
@@ -199,7 +238,12 @@ export function keychainWrite(service, account, label, secret) {
 function keychainDelete(service) {
   try { execFileSync('security', ['delete-generic-password', '-s', service], { stdio: 'ignore' }); } catch (e) { if (e.status !== 44) throw new Error(`could not delete Keychain item ${service}`); }
 }
-const saveRecord = (upn, rec) => keychainWrite(keychainService(upn), upn, `Contoso lab passkey for ${upn}`, encodeRecord(rec));
+// A key being registered (or replacing the current one) lives in the
+// -pending item until Graph confirms it (and, on --replace, until it has
+// signed in); only then does it become contoso-lab-passkey-<local>. So the
+// key in use is never overwritten or deleted before its successor works.
+export const pendingService = (upn) => `${keychainService(upn)}-pending`;
+const saveRecord = (upn, rec, service = keychainService(upn)) => keychainWrite(service, upn, `Contoso lab passkey for ${upn}${service === keychainService(upn) ? '' : ' (pending)'}`, encodeRecord(rec));
 
 // ---- Graph, as the lab operator ---------------------------------------------------
 // Bodies reach az on STDIN, so nothing secret is in argv. A failed call
@@ -359,6 +403,7 @@ const PASSKEY_CHOICE = /Face, fingerprint, PIN,? or security key|Sign in with a 
 // One pass: do the one thing Entra is asking for. s.mode is 'tap' or 'passkey'.
 async function step(page, upn, s) {
   if (!LOGIN_HOST.test(host(page.url()))) return null;
+  s.sawLogin = true;
   const text = await pageText(page);
   const aadsts = text.match(/AADSTS\d+[^\n]*/);
   if (aadsts && !(await onScreen(page, 'input[name=loginfmt], input[name=accesspass]'))) throw new Error(`Entra refused the sign-in: ${aadsts[0].slice(0, 300)}`);
@@ -377,11 +422,11 @@ async function step(page, upn, s) {
     if (s.mode !== 'tap') throw new Error('Entra asked for a Temporary Access Pass in a passkey sign-in (a pass is still active on the account?)');
     // Asked again after the pass was used: the first sign-in did not stick
     // (seen 2026-11-05: AADSTS90202 "transient error" on the app's code
-    // redemption, Security info blank). The single-use pass is spent, so a
-    // NEW one is issued - once.
+    // redemption, Security info blank; twice in a row once). The single-use
+    // pass is spent, so a NEW one is issued - at most twice.
     if (s.tapUsed) {
-      if (!s.reissue || s.reissued) throw new Error('Entra asked for the Temporary Access Pass again: it was refused');
-      s.reissued = true; s.tap = s.reissue(); s.tapUsed = false;
+      if (!s.reissue || (s.reissued || 0) >= 2) throw new Error('Entra asked for the Temporary Access Pass again: it was refused');
+      s.reissued = (s.reissued || 0) + 1; s.tap = s.reissue(); s.tapUsed = false;
     }
     if (!s.tap) throw new Error('no Temporary Access Pass in hand');
     await tapBox.fill(s.tap); s.tapUsed = true; s.tap = null;
@@ -441,7 +486,7 @@ async function step(page, upn, s) {
 async function drive(page, upn, s, until, { timeoutMs = 180000, retryUrl = null } = {}) {
   Object.assign(s, { switches: 0, picks: 0, userTries: 0, trail: [] });
   const deadline = Date.now() + timeoutMs;
-  let onAppSince = 0, retried = false;
+  let onAppSince = 0, retried = 0;
   while (Date.now() < deadline) {
     await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
     const did = await step(page, upn, s);
@@ -454,8 +499,8 @@ async function drive(page, upn, s, until, { timeoutMs = 180000, retryUrl = null 
         await shot(page, `debug-drive-${localPart(upn)}`);
       }
       onAppSince = onAppSince || Date.now();
-      if (retryUrl && !retried && Date.now() - onAppSince > 25000) {
-        retried = true; s.trail.push('reopened the app page'); log(`${localPart(upn)}: the app page stayed empty; opening it again`);
+      if (retryUrl && retried < 3 && Date.now() - onAppSince > 25000) {
+        retried++; onAppSince = 0; s.trail.push('reopened the app page'); log(`${localPart(upn)}: the app page stayed empty; opening it again`);
         await page.goto(retryUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
       }
     } else onAppSince = 0;
@@ -496,6 +541,11 @@ async function clickMethod(page, prefs, timeout = 20000) {
         for (let i = 0; i < n; i++) {
           const l = all.nth(i);
           if (!(await l.isVisible().catch(() => false))) continue;
+          // Only what is ON TOP at its own centre: the page behind the "Add a
+          // sign-in method" dialog lists the methods already registered
+          // ("Passkey (Device bound) ... Delete"), covered by the dialog's
+          // overlay, and must never be picked (seen 2026-11-05 on --replace).
+          if (!(await l.evaluate((e) => { const r = e.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!t && (t === e || e.contains(t)); }).catch(() => false))) continue;
           const t = ((await l.innerText().catch(() => '')) || (await l.getAttribute('aria-label').catch(() => '')) || '').trim().replace(/\s+/g, ' ');
           if (t && t.length < 160 && !/Authenticator/i.test(t)) seen.push({ l, t });
         }
@@ -516,7 +566,7 @@ function existingState(upn, uid) {
   return { methods, rec, registered };
 }
 
-async function registerViaGraph(upn, uid, { headless }) {
+async function registerViaGraph(upn, uid, before, { headless }) {
   // BETA on purpose: on v1.0 this tenant answers 400 "Invalid value for KeyId:
   // creationOptions(...)" (2026-11-05); the beta function is the documented one.
   const optsResp = graph('GET', `${BETA}/users/${uid}/authentication/fido2Methods/creationOptions(challengeTimeoutInMinutes=10)`);
@@ -541,11 +591,11 @@ async function registerViaGraph(upn, uid, { headless }) {
     }, opts);
     checkClientData(made.clientDataJSON, opts.challenge, origin);
     const cred = pickCredential(await credentials(), opts.rp.id);
-    // Keychain FIRST (methodId unknown yet), then register: a crash after
-    // Entra accepts the key can then never lose it.
+    // Keychain FIRST (pending item, methodId unknown yet), then register: a
+    // crash after Entra accepts the key can then never lose it.
     const rec = { upn, rpId: cred.rpId, credentialId: cred.credentialId, privateKey: cred.privateKey, userHandle: cred.userHandle, signCount: cred.signCount, via: 'graph', createdUtc: new Date().toISOString(), methodId: null };
-    saveRecord(upn, rec);
-    let m;
+    saveRecord(upn, rec, pendingService(upn));
+    let m = null, postError = null;
     try {
       // No "@odata.type" although Learn's example has one: with it, beta
       // answers 400 "The request is missing a fido2AuthenticationMethod
@@ -555,10 +605,22 @@ async function registerViaGraph(upn, uid, { headless }) {
         displayName: DISPLAY_NAME,
         publicKeyCredential: { id: made.id, response: { clientDataJSON: made.clientDataJSON, attestationObject: made.attestationObject } },
       });
-    } catch (e) { keychainDelete(keychainService(upn)); throw e; }
-    if (!m || !m.id) { keychainDelete(keychainService(upn)); throw new Error('Graph did not return the new passkey method'); }
-    saveRecord(upn, { ...rec, methodId: m.id, aaGuid: m.aaGuid || null, attestationLevel: m.attestationLevel || null });
-    return { methodId: m.id, aaGuid: m.aaGuid, attestationLevel: m.attestationLevel };
+    } catch (e) { postError = e; }
+    let r = resolvePost(m, []);
+    if (!r.methodId) {
+      // No id back: ask Graph what is registered now before touching the key.
+      let added;
+      try { added = newMethods(before, fido2Methods(uid)); } catch (e) {
+        throw new Error(`the passkey POST ${postError ? `failed (${postError.message})` : 'returned no id'} and Graph could not be read (${e.message}); the key is KEPT in Keychain ${pendingService(upn)} - check the account's passkey methods before deleting it`);
+      }
+      r = resolvePost(m, added);
+      if (r.rejected) { keychainDelete(pendingService(upn)); throw postError || new Error('Graph did not register the passkey'); }
+      if (r.ambiguous) throw new Error(`the passkey POST outcome is unclear and Graph lists ${added.length} new passkey methods; the key is KEPT in Keychain ${pendingService(upn)} for a person to match`);
+      log(`${localPart(upn)}: the POST ${postError ? 'failed' : 'returned no id'}, but Graph lists the new method: keeping the key`);
+    }
+    const done = { ...rec, methodId: r.methodId, aaGuid: (m && m.aaGuid) || null, attestationLevel: (m && m.attestationLevel) || null };
+    saveRecord(upn, done, pendingService(upn));
+    return { rec: done };
   } finally { await browser.close().catch(() => {}); }
 }
 
@@ -642,14 +704,17 @@ async function registerViaTap(upn, uid, before, { headless }) {
     await sleep(2000);
     const cred = pickCredential(await credentials(), 'login.microsoft.com');
     const rec = { upn, rpId: cred.rpId, credentialId: cred.credentialId, privateKey: cred.privateKey, userHandle: cred.userHandle, signCount: cred.signCount, via: 'tap', createdUtc: new Date().toISOString(), methodId: null };
-    saveRecord(upn, rec);
-    log(`${localPart(upn)}: credential exported to Keychain ${keychainService(upn)}`);
-    // Graph must list a NEW passkey method; its id ties the Keychain copy to it.
+    saveRecord(upn, rec, pendingService(upn));
+    log(`${localPart(upn)}: credential exported to Keychain ${pendingService(upn)}`);
+    // Graph must list a NEW passkey method; its id ties the Keychain copy to
+    // it. A Graph read that fails throws here and KEEPS the pending key.
     let added = [];
-    for (let i = 0; i < 10 && !added.length; i++) { added = fido2Methods(uid).filter((m) => !before.some((b) => b.id === m.id)); if (!added.length) await sleep(3000); }
-    if (added.length !== 1) throw new Error(`Graph lists ${added.length} new passkey methods after registration (expected 1). On screen: ${await ui(page)}`);
-    saveRecord(upn, { ...rec, methodId: added[0].id, aaGuid: added[0].aaGuid || null, attestationLevel: added[0].attestationLevel || null });
-    return { methodId: added[0].id, aaGuid: added[0].aaGuid, attestationLevel: added[0].attestationLevel, screenshot: await shot(page, `register-ok-${localPart(upn)}`) };
+    for (let i = 0; i < 10 && !added.length; i++) { added = newMethods(before, fido2Methods(uid)); if (!added.length) await sleep(3000); }
+    if (!added.length) { keychainDelete(pendingService(upn)); throw new Error(`Graph lists no new passkey method after registration (the key was discarded). On screen: ${await ui(page)}`); }
+    if (added.length > 1) throw new Error(`Graph lists ${added.length} new passkey methods (expected 1); the key is KEPT in Keychain ${pendingService(upn)} for a person to match`);
+    const done = { ...rec, methodId: added[0].id, aaGuid: added[0].aaGuid || null, attestationLevel: added[0].attestationLevel || null };
+    saveRecord(upn, done, pendingService(upn));
+    return { rec: done, screenshot: await shot(page, `register-ok-${localPart(upn)}`) };
   } catch (e) {
     const f = await shot(page, `register-fail-${localPart(upn)}`);
     e.message += ` [screenshot: ${f}]`;
@@ -666,21 +731,43 @@ async function registerViaTap(upn, uid, before, { headless }) {
   }
 }
 
+// --replace never removes the working key first (break-glass has only one):
+// the new key is registered next to it, kept in the -pending item, and must
+// sign in (passkey only, My Account) before it becomes the Keychain key; the
+// old method is deleted last. For a break-glass account that proof is a real
+// break-glass sign-in and raises the Sentinel incident, on purpose.
 export async function register(upn, { via, breakGlass = false, replace = false, headless = true } = {}) {
   upn = checkUpn(upn, { breakGlass });
   via = chooseVia(upn, via);
   const user = getUser(upn);
   const st = existingState(upn, user.id);
+  if (keychainRead(pendingService(upn)) !== null) throw new Error(`${upn}: Keychain item ${pendingService(upn)} holds a key from an unfinished run. Check \`status\`: if its methodId is listed, use or delete that method in Entra; then remove the item (security delete-generic-password -s ${pendingService(upn)}) and run again`);
   if (st.registered && !replace) { log(`${localPart(upn)}: already has the lab passkey (method ${st.registered.id}); --replace to make a new one`); return { upn, already: true, methodId: st.registered.id }; }
   if (st.rec && !st.registered && !replace) throw new Error(`${upn}: the Keychain holds a passkey whose method is not registered any more; --replace to make a new one`);
-  if (replace && st.registered) { graph('DELETE', `users/${user.id}/authentication/fido2Methods/${st.registered.id}`); log(`${localPart(upn)}: removed the old lab passkey method`); }
   // Only the method this script made is ever deleted; any other key stays.
   const before = fido2Methods(user.id);
-  const r = via === 'graph' ? await registerViaGraph(upn, user.id, { headless }) : await registerViaTap(upn, user.id, before, { headless });
-  const listed = fido2Methods(user.id).find((m) => m.id === r.methodId);
-  if (!listed) throw new Error(`${upn}: Graph does not list the new passkey method ${r.methodId}`);
+  const r = via === 'graph' ? await registerViaGraph(upn, user.id, before, { headless }) : await registerViaTap(upn, user.id, before, { headless });
+  let rec = r.rec;
+  const listed = fido2Methods(user.id).find((m) => m.id === rec.methodId);
+  if (!listed) throw new Error(`${upn}: Graph does not list the new passkey method ${rec.methodId}; the key is KEPT in Keychain ${pendingService(upn)}`);
   log(`${localPart(upn)}: passkey registered (${via}); Graph lists it as "${listed.displayName}" (${listed.model || 'no model'}, ${listed.attestationLevel || 'attestation n/a'})`);
-  return { upn, via, methodId: r.methodId, displayName: listed.displayName, model: listed.model || null, aaGuid: listed.aaGuid || null, attestationLevel: listed.attestationLevel || null, keychainItem: keychainService(upn), screenshot: r.screenshot || null };
+  let proof = null;
+  if (replace && st.rec) {
+    try { proof = await proveRecord(upn, rec, { headless }); } catch (e) {
+      throw new Error(`the new passkey (method ${rec.methodId}) is registered but did not sign in: ${e.message}. The old key and method are untouched; the new key is KEPT in Keychain ${pendingService(upn)}`);
+    }
+    rec = { ...rec, signCount: proof.signCount, lastProvedUtc: new Date().toISOString() };
+  }
+  // Promote: the new key becomes the Keychain key, then the pending copy goes.
+  saveRecord(upn, rec);
+  keychainDelete(pendingService(upn));
+  if (replace && st.registered) {
+    try { graph('DELETE', `users/${user.id}/authentication/fido2Methods/${st.registered.id}`); } catch (e) {
+      throw new Error(`the new passkey is in use (Keychain ${keychainService(upn)}), but the old method ${st.registered.id} could not be deleted: ${e.message}. Delete it in Entra`);
+    }
+    log(`${localPart(upn)}: removed the old lab passkey method (after the new one signed in)`);
+  }
+  return { upn, via, methodId: rec.methodId, displayName: listed.displayName, model: listed.model || null, aaGuid: listed.aaGuid || null, attestationLevel: listed.attestationLevel || null, keychainItem: keychainService(upn), screenshot: r.screenshot || null, proof };
 }
 
 // ---- prove -----------------------------------------------------------------------------
@@ -690,6 +777,16 @@ export async function prove(upn, { breakGlass = false, startUrl = DEFAULT_PROOF_
   if (!raw) throw new Error(`no Keychain item ${keychainService(upn)}: run register first`);
   const rec = decodeRecord(raw);
   if (rec.upn && rec.upn.toLowerCase() !== upn) throw new Error(`Keychain item ${keychainService(upn)} belongs to ${rec.upn}`);
+  const r = await proveRecord(upn, rec, { startUrl, headless });
+  // Keep the counter rising: write the authenticator's new signCount back
+  // (a relying party may refuse a counter that goes backwards).
+  saveRecord(upn, { ...rec, signCount: r.signCount, lastProvedUtc: new Date().toISOString() });
+  return r;
+}
+
+// One passkey-only sign-in with `rec` in a fresh browser; throws unless
+// proofVerdict says the passkey really signed in.
+async function proveRecord(upn, rec, { startUrl = DEFAULT_PROOF_URL, headless = true } = {}) {
   const startedUtc = new Date().toISOString();
   const browser = await playwright().chromium.launch({ headless });
   // A fresh context: no cookies, no session, nothing but the Keychain copy.
@@ -700,15 +797,17 @@ export async function prove(upn, { breakGlass = false, startUrl = DEFAULT_PROOF_
   try {
     await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     const targetHost = host(startUrl);
-    const trail = await drive(page, upn, { mode: 'passkey' }, async (p) => host(p.url()) === targetHost && (await pageText(p)).length > 200, { retryUrl: startUrl });
-    if (trail.includes('temporary access pass')) throw new Error('the sign-in used a Temporary Access Pass, not the passkey');
+    const s = { mode: 'passkey' };
+    const trail = await drive(page, upn, s, async (p) => host(p.url()) === targetHost && (await pageText(p)).length > 200, { retryUrl: startUrl });
     await sleep(4000);
     const f = await shot(page, `prove-${localPart(upn)}`);
-    // Keep the counter rising: write the authenticator's new signCount back.
     const now = (await credentials()).find((c) => c.credentialId === rec.credentialId);
-    if (!now) throw new Error('the credential vanished from the virtual authenticator');
-    if (now.signCount > rec.signCount) saveRecord(upn, { ...rec, signCount: now.signCount, lastProvedUtc: new Date().toISOString() });
-    else log(`${localPart(upn)}: WARNING the signCount did not rise (${rec.signCount} -> ${now.signCount}); was the passkey used?`);
+    // My Account shows the signed-in account's UPN; another app may not.
+    const v = proofVerdict({
+      signCountBefore: rec.signCount, signCountAfter: now ? now.signCount : null, sawLogin: !!s.sawLogin,
+      landedHost: host(page.url()), targetHost, trail, expectText: startUrl === DEFAULT_PROOF_URL ? upn : null, text: await pageText(page),
+    });
+    if (!v.ok) throw new Error(`not proven: ${v.reasons.join('; ')}`);
     log(`${localPart(upn)}: passkey-only sign-in reached ${host(page.url())}`);
     return { upn, startedUtc, landed: page.url(), title: await page.title(), trail, signCount: now.signCount, screenshot: f };
   } catch (e) {
@@ -727,6 +826,7 @@ export function status(upn, { breakGlass = false } = {}) {
     upn,
     passkeyMethods: st.methods.map((m) => ({ id: m.id, displayName: m.displayName, model: m.model || null, aaGuid: m.aaGuid || null, attestationLevel: m.attestationLevel || null, createdDateTime: m.createdDateTime })),
     keychainItem: st.rec ? { service: keychainService(upn), via: st.rec.via, methodId: st.rec.methodId, signCount: st.rec.signCount, registered: !!st.registered } : null,
+    pendingItem: (() => { const raw = keychainRead(pendingService(upn)); if (raw === null) return null; const p = decodeRecord(raw); return { service: pendingService(upn), via: p.via, methodId: p.methodId, registered: !!(p.methodId && st.methods.some((m) => m.id === p.methodId)) }; })(),
     coverage: passkeyCoverage(user.id),
   };
 }

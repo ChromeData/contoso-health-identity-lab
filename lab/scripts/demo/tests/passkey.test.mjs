@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import {
   checkUpn, chooseVia, keychainService, b64ToB64url, b64urlToB64, encodeRecord, decodeRecord,
   toBrowserCreationOptions, checkClientData, pickCredential, SECURITY_KEY_CHOICE, DISPLAY_NAME, AUTHENTICATOR,
+  pendingService, newMethods, resolvePost, proofVerdict,
 } from '../signin/passkey.mjs';
 
 const BG = 'bg-admin-01@ContosoHealthLab.onmicrosoft.com';
@@ -105,4 +106,35 @@ test('the wizard choice prefers a security key; the passkey name fits Entra and 
   assert.ok(!SECURITY_KEY_CHOICE.test('Microsoft Authenticator'));
   assert.ok(DISPLAY_NAME.length <= 30); // Entra keeps 30 characters
   assert.deepEqual([AUTHENTICATOR.protocol, AUTHENTICATOR.hasResidentKey, AUTHENTICATOR.hasUserVerification, AUTHENTICATOR.isUserVerified], ['ctap2', true, true, true]);
+});
+
+test('a new key waits in the -pending item; only methods Graph did not list before count as new', () => {
+  assert.equal(pendingService(BG), 'contoso-lab-passkey-bg-admin-01-pending');
+  assert.deepEqual(newMethods([{ id: 'old' }], [{ id: 'old' }, { id: 'new' }]).map((m) => m.id), ['new']);
+  assert.deepEqual(newMethods([], undefined), []);
+});
+
+test('a lost POST response never discards a key Entra registered', () => {
+  assert.deepEqual(resolvePost({ id: 'm1' }, []), { methodId: 'm1' });
+  // The POST failed or came back empty, but Graph now lists exactly one new method: keep the key.
+  assert.deepEqual(resolvePost(null, [{ id: 'm2' }]), { methodId: 'm2' });
+  assert.deepEqual(resolvePost({}, [{ id: 'm2' }]), { methodId: 'm2' });
+  // Nothing new is listed: Entra really refused it, the pending key may go.
+  assert.deepEqual(resolvePost(null, []), { rejected: true });
+  // Two new methods: a person decides, the key is kept.
+  assert.deepEqual(resolvePost(null, [{ id: 'a' }, { id: 'b' }]), { ambiguous: true });
+});
+
+test('a proof only passes when the passkey really signed in', () => {
+  const ok = { signCountBefore: 1, signCountAfter: 2, sawLogin: true, landedHost: 'myaccount.microsoft.com', targetHost: 'myaccount.microsoft.com', trail: ['username'], expectText: ADM, text: `Welcome back ${ADM.toUpperCase()}` };
+  assert.deepEqual(proofVerdict(ok), { ok: true, reasons: [] });
+  // A public landing page: right host, plenty of text, but no assertion and no Entra.
+  const landing = proofVerdict({ ...ok, signCountAfter: 1, sawLogin: false, expectText: null });
+  assert.equal(landing.ok, false);
+  assert.match(landing.reasons.join(' '), /not used/);
+  assert.match(landing.reasons.join(' '), /never went through/);
+  assert.equal(proofVerdict({ ...ok, signCountAfter: null }).ok, false); // credential vanished
+  assert.match(proofVerdict({ ...ok, landedHost: 'login.microsoftonline.com' }).reasons.join(' '), /ended on/);
+  assert.match(proofVerdict({ ...ok, trail: ['username', 'temporary access pass'] }).reasons.join(' '), /Temporary Access Pass/);
+  assert.match(proofVerdict({ ...ok, text: 'Welcome back, someone else' }).reasons.join(' '), /does not show/);
 });

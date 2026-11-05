@@ -1,0 +1,55 @@
+{
+  "schema": "contoso-lab-passkeys/v1",
+  "capturedUtc": "2026-11-05T11:27:00Z",
+  "generator": "lab/scripts/demo/signin/passkey.mjs register --replace (after the review fixes: pending item, proof before swap, old method deleted last)",
+  "note": "adm-mei.tanaka re-keyed through the TAP path, adm-raj.patel through the Graph path; each new key signed in (passkey only) before it replaced the old one. Earlier failed attempts left the old key and Keychain item untouched.",
+  "accounts": [
+    {
+      "account": "adm-ava.lin",
+      "passkeyMethodsOnAccount": 1,
+      "keychainMatchesGraph": true,
+      "pendingItem": false,
+      "currentKey": {
+        "registeredVia": "tap",
+        "registeredUtc": "2026-11-05T10:47:09Z",
+        "attestationLevel": "notAttested"
+      },
+      "replacedInThisRun": false,
+      "replaceProof": null
+    },
+    {
+      "account": "adm-raj.patel",
+      "passkeyMethodsOnAccount": 1,
+      "keychainMatchesGraph": true,
+      "pendingItem": false,
+      "currentKey": {
+        "registeredVia": "graph",
+        "registeredUtc": "2026-11-05T11:25:09Z",
+        "attestationLevel": "notAttested"
+      },
+      "replacedInThisRun": true,
+      "replaceProof": {
+        "landedHost": "myaccount.microsoft.com",
+        "signCountAfter": 3,
+        "screenshotFile": "2026-11-05T11-25-24-696Z-prove-adm-raj.patel.png"
+      }
+    },
+    {
+      "account": "adm-mei.tanaka",
+      "passkeyMethodsOnAccount": 1,
+      "keychainMatchesGraph": true,
+      "pendingItem": false,
+      "currentKey": {
+        "registeredVia": "tap",
+        "registeredUtc": "2026-11-05T11:23:53Z",
+        "attestationLevel": "notAttested"
+      },
+      "replacedInThisRun": true,
+      "replaceProof": {
+        "landedHost": "myaccount.microsoft.com",
+        "signCountAfter": 3,
+        "screenshotFile": "2026-11-05T11-24-14-470Z-prove-adm-mei.tanaka.png"
+      }
+    }
+  ]
+}
