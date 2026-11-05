@@ -369,6 +369,14 @@ Describe 'Measure-HrToDisable / Test-IsDisableAudit' {
         $r.MedianMinutes | Should -Be 2.5
     }
 
+    It 'one leaver per HR id even when the rows carry different or missing names' {
+        $users = @(@{ id = 'u-dana'; employeeId = '100492'; displayName = 'Dana Okafor' })
+        $prov = @((New-ProvEvent '100492' 'Dana Okafor' $script:T0), (New-ProvEvent '100492' '' $script:T0.AddSeconds(2)), (New-ProvEvent '100492' 'D. Okafor' $script:T0.AddSeconds(3)))
+        $r = Measure-HrToDisable -ProvisioningEvents $prov -DirectoryAudits @((New-DisableAudit 'u-dana' $script:T0.AddMinutes(3))) -Users $users
+        $r.Leavers | Should -Be 1
+        $r.MedianMinutes | Should -Be 3
+    }
+
     It 'Test-IsHrLeaverEvent: disable, or update that sets accountDisabled true; never a failed row or another update' {
         Test-IsHrLeaverEvent (New-ProvEvent 'E1' '' $script:T0) | Should -BeTrue
         Test-IsHrLeaverEvent (New-ProvEvent 'E1' '' $script:T0 -Status 'failure') | Should -BeFalse

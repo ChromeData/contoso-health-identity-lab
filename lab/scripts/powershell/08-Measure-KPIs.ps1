@@ -840,8 +840,11 @@ function Measure-HrToDisable {
         Sort-Object { ([datetime](Get-Field $_ @('activityDateTime'))).ToUniversalTime() })
     $seen = [System.Collections.Generic.HashSet[string]]::new()
     foreach ($e in $leaverEvents) {
-        $key = "$(Get-Field $e @('sourceIdentity', 'id'))|$(Get-Field $e @('sourceIdentity', 'displayName'))"
-        if ($key -ne '|' -and -not $seen.Add($key)) { continue }
+        # The stable HR id is the key; the name only when there is no id
+        # (the same person can be logged with and without a display name).
+        $srcKeyId = [string](Get-Field $e @('sourceIdentity', 'id')); $srcKeyName = [string](Get-Field $e @('sourceIdentity', 'displayName'))
+        $key = if ($srcKeyId) { "id:$srcKeyId" } elseif ($srcKeyName) { "name:$srcKeyName" } else { '' }
+        if ($key -and -not $seen.Add($key)) { continue }
         $srcId = [string](Get-Field $e @('sourceIdentity', 'id')); $srcName = [string](Get-Field $e @('sourceIdentity', 'displayName'))
         $uid = if ($srcId -and $byEmployeeId.ContainsKey($srcId)) { $byEmployeeId[$srcId] } elseif ($srcName -and $byName.ContainsKey($srcName)) { $byName[$srcName] } else { $null }
         $t0 = ([datetime](Get-Field $e @('activityDateTime'))).ToUniversalTime()

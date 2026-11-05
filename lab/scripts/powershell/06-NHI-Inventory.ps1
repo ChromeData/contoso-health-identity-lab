@@ -1295,7 +1295,11 @@ $failedSources = @($dataSources | Where-Object { $_.Status -like 'FAILED*' })
 # and 09-SoD-Report.ps1 (pseudonyms vs sod-detail.json).
 if ($PublicSummaryDirectory -and $PSCmdlet.ShouldProcess($PublicSummaryDirectory, 'write the public counts-only NHI summary (+ SHA256SUMS)')) {
     $privateHashes = [ordered]@{}
-    foreach ($n in 'nhi_inventory.json', 'nhi_inventory.csv', 'nhi_credentials.csv', 'nhi_findings.csv', 'nhi_secrets.csv') {
+    # Only the files THIS run wrote: nhi_secrets.csv exists only when the
+    # register was read; a copy left by an earlier run must never be tied to
+    # these counts.
+    $written = @('nhi_inventory.json', 'nhi_inventory.csv', 'nhi_credentials.csv', 'nhi_findings.csv') + @(if ($SecretsRegisterPath) { 'nhi_secrets.csv' })
+    foreach ($n in $written) {
         $p = Join-Path $OutputDirectory $n
         if (Test-Path -LiteralPath $p) { $privateHashes[$n] = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant() }
     }

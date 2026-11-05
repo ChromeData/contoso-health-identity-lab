@@ -139,6 +139,17 @@ Describe '06-NHI-Inventory.ps1 online path (mocked Graph)' {
         $sums | Should -Be "$((Get-FileHash (Join-Path $dir[0].FullName 'nhi-summary.json') -Algorithm SHA256).Hash.ToLowerInvariant())  nhi-summary.json"
     }
 
+    It '-PublicSummaryDirectory hashes only the files this run wrote (no stale nhi_secrets.csv)' {
+        Set-NhiTenantMocks
+        $out = Join-Path $TestDrive 'nhi-pub-stale'; $pub = Join-Path $TestDrive 'nhi-pub-stale-public'
+        New-Item -ItemType Directory -Path $out -Force | Out-Null
+        'old,rows' | Set-Content -LiteralPath (Join-Path $out 'nhi_secrets.csv')   # left by an earlier run with the register
+        $null = & $script:Nhi -OutputDirectory $out -PublicSummaryDirectory $pub -SkipSignInActivity -WarningAction SilentlyContinue
+        $j = Get-Content -LiteralPath (Get-ChildItem -LiteralPath $pub -Recurse -Filter 'nhi-summary.json').FullName -Raw | ConvertFrom-Json
+        @($j.privateFiles.PSObject.Properties.Name) | Should -Not -Contain 'nhi_secrets.csv'
+        @($j.privateFiles.PSObject.Properties.Name) | Should -Contain 'nhi_inventory.json'
+    }
+
     It '-PublicSummaryDirectory is refused with -Offline (mock data never sits next to tenant evidence)' {
         { & $script:Nhi -Offline -PublicSummaryDirectory (Join-Path $TestDrive 'nhi-pub-offline') } | Should -Throw '*tenant runs only*'
         Test-Path (Join-Path $TestDrive 'nhi-pub-offline') | Should -BeFalse
