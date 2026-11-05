@@ -1,0 +1,157 @@
+{
+ "ci_apply": "terraform-apply run 42020110832 on ed1d4e8 (PR #154): Plan 0 to add, 1 to change (azuread_synchronization_job.servicenow enabled false -> true); Apply complete 11:36:35Z",
+ "job": {
+  "code": "Active",
+  "schedule": {
+   "expiration": null,
+   "interval": "PT40M",
+   "state": "Active"
+  },
+  "lastExecution": {
+   "timeBegan": "2026-11-05T11:36:29.7219193Z",
+   "timeEnded": "2026-11-05T11:36:37.1610079Z",
+   "state": "Succeeded",
+   "error": null
+  },
+  "steadyStateFirstAchievedTime": "2026-11-05T11:36:37.1590105Z",
+  "quarantine": null
+ },
+ "provisioning_log_first_cycle": [
+  {
+   "at": "2026-11-05T11:36:36Z",
+   "action": "update",
+   "source": "App-ServiceNow-Users",
+   "status": "success",
+   "error": null
+  },
+  {
+   "at": "2026-11-05T11:36:36Z",
+   "action": "update",
+   "source": "App-ServiceNow-Users",
+   "status": "success",
+   "error": null
+  },
+  {
+   "at": "2026-11-05T11:36:36Z",
+   "action": "update",
+   "source": "App-ServiceNow-Users",
+   "status": "success",
+   "error": null
+  },
+  {
+   "at": "2026-11-05T11:36:36Z",
+   "action": "update",
+   "source": "App-ServiceNow-Users",
+   "status": "success",
+   "error": null
+  },
+  {
+   "at": "2026-11-05T11:36:36Z",
+   "action": "update",
+   "source": "App-ServiceNow-Users",
+   "status": "success",
+   "error": null
+  },
+  {
+   "at": "2026-11-05T11:36:34Z",
+   "action": "other",
+   "source": "App-ServiceNow-Users",
+   "status": "skipped",
+   "error": null
+  },
+  {
+   "at": "2026-11-05T11:36:34Z",
+   "action": "create",
+   "source": "Marcus Bello",
+   "status": "success",
+   "error": null
+  },
+  {
+   "at": "2026-11-05T11:36:34Z",
+   "action": "create",
+   "source": "Grace Mwangi",
+   "status": "success",
+   "error": null
+  },
+  {
+   "at": "2026-11-05T11:36:34Z",
+   "action": "create",
+   "source": "Sofia Reyes",
+   "status": "success",
+   "error": null
+  },
+  {
+   "at": "2026-11-05T11:36:34Z",
+   "action": "create",
+   "source": "Test User C",
+   "status": "success",
+   "error": null
+  },
+  {
+   "at": "2026-11-05T11:36:32Z",
+   "action": "other",
+   "source": "Test User A",
+   "status": "skipped",
+   "error": null
+  }
+ ],
+ "servicenow_accounts_from_entra": [
+  {
+   "user_name": "snow-mover-test@contosohealthlab.com",
+   "sys_created_on": "2026-11-05 11:19:11",
+   "locked_out": "true",
+   "active": "false",
+   "sys_updated_on": "2026-11-05 11:19:30"
+  },
+  {
+   "user_name": "snow-leaver-test@contosohealthlab.com",
+   "sys_created_on": "2026-11-05 10:59:44",
+   "locked_out": "true",
+   "active": "false",
+   "sys_updated_on": "2026-11-05 11:00:49"
+  },
+  {
+   "user_name": "marcus.bello@contosohealthlab.com",
+   "sys_created_on": "2026-11-05 11:36:32",
+   "locked_out": "false",
+   "active": "true",
+   "sys_updated_on": "2026-11-05 11:36:32"
+  },
+  {
+   "user_name": "test-user-a@contosohealthlab.com",
+   "sys_created_on": "2026-11-05 11:05:55",
+   "locked_out": "false",
+   "active": "true",
+   "sys_updated_on": "2026-11-05 11:05:55"
+  },
+  {
+   "user_name": "sofia.reyes@contosohealthlab.com",
+   "sys_created_on": "2026-11-05 11:36:32",
+   "locked_out": "false",
+   "active": "true",
+   "sys_updated_on": "2026-11-05 11:36:32"
+  },
+  {
+   "user_name": "test-user-c@contosohealthlab.com",
+   "sys_created_on": "2026-11-05 11:36:34",
+   "locked_out": "false",
+   "active": "true",
+   "sys_updated_on": "2026-11-05 11:36:34"
+  },
+  {
+   "user_name": "grace.mwangi@contosohealthlab.com",
+   "sys_created_on": "2026-11-05 11:36:33",
+   "locked_out": "false",
+   "active": "true",
+   "sys_updated_on": "2026-11-05 11:36:33"
+  }
+ ],
+ "servicenow_group_members": [
+  "marcus.bello@contosohealthlab.com",
+  "test-user-c@contosohealthlab.com",
+  "test-user-a@contosohealthlab.com",
+  "sofia.reyes@contosohealthlab.com",
+  "grace.mwangi@contosohealthlab.com"
+ ],
+ "times": "ServiceNow times are UTC"
+}
