@@ -49,11 +49,11 @@ function buildMapData() {
         tiles: [{ name: 'Microsoft Entra', note: 'Where every staff login lives', img: BIMG('entra'), kind: 'hand' }, { name: 'Azure', note: 'Hosts the server and the evidence files', img: BIMG('azure'), kind: 'hand' }, { name: 'AWS', note: "Amazon's cloud, where hospitals run their own apps", img: BIMG('aws'), kind: 'hand' },
                 { name: 'ServiceNow', note: 'The IT help desk', img: BIMG('servicenow'), kind: 'hand' }, { name: 'Okta', note: "A partner clinic's own login system", img: BIMG('okta'), kind: 'hand' }, { name: 'GitHub', note: 'Where the code and the change history live', img: BIMG('github'), kind: 'hand' }],
         outs: ['<b>6</b> accounts', '<b>1</b> verified domain'] },
-      { title: 'The pipeline', kicker: 'More than 90 reviewed changes', goal: 'Reviewed, repeatable, provable', text: 'Every change is a pull request. Checks rehearse it, a person approves it, Terraform applies it. That is how the lab was built, in days.',
+      { title: 'The pipeline', kicker: 'More than 100 reviewed changes', goal: 'Reviewed, repeatable, provable', text: 'Every change is a pull request. Checks rehearse it, a person approves it, Terraform applies it. That is how the lab was built, in days.',
         bullets: ['Day 1: sign-in rules, report-only', 'Day 2: admin tiers (PIM)', 'Day 3: access governance (packages, workflows)', 'Then: 17 detection rules, then the domain controller, then single sign-on for AWS, ServiceNow and Okta, with automatic accounts for AWS and ServiceNow'],
         chips: [{ text: 'AS CODE', kind: 'code' }, { text: 'DONE', kind: 'done' }],
         tiles: [{ name: 'Pull request', note: 'A change, its plan and an AI review', img: BIMG('github'), kind: 'code' }, { name: 'Checks', note: 'Automatic, on every change', glyph: '✓', kind: 'code' }, { name: 'Approve', note: 'A person types it', glyph: 'approve', kind: 'hand' }, { name: 'Terraform apply', note: 'Makes the tenant match', glyph: 'TF', kind: 'code' }],
-        outs: ['<b>90+</b> reviewed changes', 'Automatic checks on every change'] },
+        outs: ['<b>100+</b> reviewed changes', 'Automatic checks on every change'] },
       { title: 'The directory', kicker: 'DC01 + Cloud Sync', goal: 'On-site accounts flow to the cloud', text: 'A Windows server in Azure was promoted to a domain controller, the on-site directory most hospitals still run. The Cloud Sync agent on it copies accounts up to Entra.',
         bullets: ['DC01: Windows Server 2022, created by the pipeline, shuts down nightly', 'Cloud Sync: copies the Workforce and Disabled folders up to Entra on a schedule', 'One password in both places, carried as a scrambled hash'],
         chips: [{ text: 'AS CODE', kind: 'code' }, { text: 'AGENT BY SCRIPT', kind: 'hand' }, { text: 'DONE', kind: 'done' }],
@@ -91,7 +91,7 @@ export function scenes(ids) {
   { id: '01-built', kind: 'local', beats: [
     { say: "Here's how it's wired. One, the sign-ups. Microsoft is the center: Entra is everyone's work badge, and Azure runs the servers. HR decides who works here, and everything else plugs into Entra: ServiceNow, AWS and Okta. GitHub holds the code.", audio: `${OUT}/clips/km/01-built-0.mp3`, prep: async (r) => { await r.page.goto(BMAP); await r.ov('hideCursor', true); await r.page.evaluate((d) => window.bmap.init(d), buildMapData()); await sleep(1400); await r.page.evaluate(() => window.bmap.overview(false)); await sleep(300); },
       run: async (r, b) => { await b.until(0.02); await bmapGo(r, 0); } },
-    { say: "Two, the pipeline. Every change is written as code, tested, and approved by a person before it goes live. More than ninety reviewed changes, so anyone can see what changed and who approved it.", audio: `${OUT}/clips/km/01-built-1.mp3`,
+    { say: "Two, the pipeline. Every change is written as code, tested, and approved by a person before it goes live. More than a hundred reviewed changes, so anyone can see what changed and who approved it.", audio: `${OUT}/clips/km/01-built-1.mp3`,
       run: async (r, b) => { await b.until(0.02); await bmapGo(r, 1); } },
     { say: "Three, the directory. Hospital PCs still use an older on-site login system, Active Directory. Cloud Sync copies it to Entra, so one login works on old PCs and new cloud apps.", audio: `${OUT}/clips/km/01-built-2.mp3`,
       run: async (r, b) => { await b.until(0.02); await bmapGo(r, 2); } },
@@ -125,7 +125,7 @@ export function scenes(ids) {
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'delivery').catch(() => {}); } },
   ] },
   { id: '03-delivery', kind: 'local', beats: [
-    { say: "Piece one, the blueprints. This is the change history: more than ninety approved changes. Each one is a pull request, a proposed edit shown line by line before anything is built. Read the titles like chapters: sign-in rules, then admin power, then access, then the cameras, the server and the outside doors. From here I follow one nurse, Dana, from her first day to her last.", audio: `${OUT}/clips/km/03-delivery-0.mp3`,
+    { say: "Piece one, the blueprints. This is the change history: more than a hundred approved changes. Each one is a pull request, a proposed edit shown line by line before anything is built. Read the titles like chapters: sign-in rules, then admin power, then access, then the cameras, the server and the outside doors. From here I follow one nurse, Dana, from her first day to her last.", audio: `${OUT}/clips/km/03-delivery-0.mp3`,
       prep: termOpen,
       run: async (r, b) => { await cmd(r, 'gh pr list --state merged --limit 40'); await out(r, T('prs.txt'), 22); await r.define('Pull request', 'A proposed change plus a reviewer. Merged means accepted.'); await b.until(0.55); await mark(r, 'Day 1'); await b.until(0.65); await mark(r, 'Day 2'); await b.until(0.72); await mark(r, 'Day 3'); await b.until(0.8); await mark(r, 'enable_sentinel'); await b.until(0.86); await mark(r, 'enable_dc'); await b.until(0.92); await mark(r, '^#3[5-7]|^#36'); } },
     { say: "Before a person even looks, the change is tested. Thirteen tests rehearse it against a fake copy of the hospital. Some are guard rails. This one refuses to demand the strongest sign-in for admins while the rule that provides it is switched off. Otherwise every admin would be locked out.", audio: `${OUT}/clips/km/03-delivery-1.mp3`,
@@ -264,7 +264,7 @@ export function scenes(ids) {
         for (const f of r.page.frames()) { const x = f.getByRole('button', { name: /^Clear priority/i }).first(); if (await x.isVisible().catch(() => false)) await x.click().catch(() => {}); }
         await sleep(4000); await r.settle(); },
       run: async (r, b) => { await r.define('Incident', 'One case: its alerts, the accounts involved, and the raw log lines.'); await r.ring({ text: /Directory role assigned outside PIM/, nth: 0, row: true }, 'High'); await b.until(0.4); await r.ring({ text: /Permission granted to an applicati/, nth: 0, row: true }, 'App permissions'); await b.until(0.62); await r.ring({ text: /Authentication method changed/, nth: 0, row: true }, 'The pass issued to Raj').catch(() => {}); await b.until(0.8); await r.ring({ text: /PIM activation/, nth: 0, row: true }, "Raj's activation").catch(() => {}); } },
-    { say: "Each alarm opens with what fired, who was involved, and the raw evidence, ready for an analyst.", audio: `${OUT}/clips/km/12-detect-3.mp3`,
+    { say: "Each alarm opens with what fired, who was involved, and the raw evidence, ready for an analyst. A break-glass sign-in alarms within minutes, every time, each with its own Teams card and ServiceNow ticket.", audio: `${OUT}/clips/km/12-detect-3.mp3`,
       prep: async (r) => { await r.unring(); },
       run: async (r) => { await r.click({ text: /Directory role assigned outside PIM/, nth: 0 }); await sleep(6000); await r.settle(200); } },
   ] },
@@ -297,7 +297,7 @@ export function scenes(ids) {
         await out(r, T('elog.txt'), 8); await r.define('Hash', 'A fingerprint of a file. Change one byte and it changes.'); await b.until(0.55); await mark(r, '^E52|^E06|^E03'); } },
   ] },
   { id: '17-close', kind: 'local', beats: [
-    { say: "That's Contoso Health. One badge per person, made from HR on day one, opening the right doors in every building, checked at each one, watched by two camera systems, and gone from every building within nine minutes of leaving, with a logbook to prove it. More than ninety reviewed changes. The code is available on request. Thanks for watching.", audio: `${OUT}/clips/km/17-close-0.mp3`,
+    { say: "That's Contoso Health. One badge per person, made from HR on day one, opening the right doors in every building, checked at each one, watched by two camera systems, and locked out of every building within nine minutes of leaving, with a logbook to prove it. More than a hundred reviewed changes. The code is available on request. Thanks for watching.", audio: `${OUT}/clips/km/17-close-0.mp3`,
       prep: card({ kick: 'Contoso Health identity lab', title: 'Access follows HR.<br>Admin power is <em>temporary</em>.<br>Every change is proven.', sub: 'Glossary: lab/docs/glossary.md', chips: [] }) },
   ] },
   { id: '20-tf-pipeline', kind: 'local', beats: [

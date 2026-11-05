@@ -85,6 +85,14 @@ function buildMap() {
   for (const st of d.delivery.steps) st.status = 'RAN · tenant';
   s = s.replace(re, (_, a, __, c) => a + JSON.stringify(d).replace(/</g, '\\u003c') + c);
   s = s.replace('RAN · tenant: none yet', 'RAN · tenant').replace('RAN · tenant: nothing yet.', 'RAN · tenant: running in the lab tenant now.').replace("Plan and apply haven't run: no tenant yet.", 'Plan and apply now run against the lab tenant.').replace(/Nothing has run in a Microsoft tenant yet: that's the\s+next step\./, 'Now running in a real Microsoft Entra tenant.');
+  // The overview's "four rules", rules 2 and 3, as true today (same text as tools/combine-map.py, which
+  // reads this file's output). Rule 2: the Cloud Sync account no longer holds a standing role and nothing
+  // is "next to go". Rule 3: none of the 9 vault secrets has an expiry, so it says only where they live.
+  // The base map holds them as single-quoted JS strings, hence the \' escapes.
+  s = s.replace("'Nobody keeps admin power when they\\'re not using it. The exceptions are two emergency accounts and the build account, which is flagged and next to go.'",
+    "'No admin keeps power when they\\'re not using it. The exceptions are the build account and two locked emergency accounts.'");
+  s = s.replace("'No passwords are stored in the system that rolls out changes, and every other secret has an owner, an expiry and a plan to replace it. A few lab secrets don\\'t meet that yet; they\\'re tracked.'",
+    "'No passwords are stored in the system that rolls out changes. The few secrets the lab needs sit in a locked vault, reached over a private link plus one allow-listed admin address.'");
   s = injectSheet(s);
   fs.writeFileSync(path.join(OUT, 'map-video.html'), s);
   console.log('map-video.html written', RAN_TENANT.length, 'tiles marked RAN · tenant');
