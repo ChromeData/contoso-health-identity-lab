@@ -75,7 +75,7 @@ function Get-KpiCatalog {
         [pscustomobject]@{ Key = 'admin_standing_users'; Title = 'Standing privileged humans'; Good = 'down'; Board = $true; Why = 'People who hold admin power when they are not using it' }
         [pscustomobject]@{ Key = 'phishing_resistant_pct'; Title = 'Workforce on phishing-resistant sign-in'; Good = 'up'; Board = $true; Why = 'Share of staff a stolen password cannot get past' }
         [pscustomobject]@{ Key = 'hr_to_disable_minutes'; Title = 'Minutes from HR leaver to account disabled'; Good = 'down'; Board = $true; Why = 'How long a leaver keeps a working badge' }
-        [pscustomobject]@{ Key = 'admin_jit_pct'; Title = 'Admins who elevate just in time'; Good = 'up'; Board = $false; Why = '' }
+        [pscustomobject]@{ Key = 'admin_jit_pct'; Title = 'Share of admins on just-in-time access only'; Good = 'up'; Board = $false; Why = 'Eligible-only admins out of all admins: who can only elevate, not who did' }
         [pscustomobject]@{ Key = 'admin_eligible_only_users'; Title = 'Admins eligible only (no standing role)'; Good = 'up'; Board = $false; Why = '' }
         [pscustomobject]@{ Key = 'privileged_service_principals'; Title = 'Workload identities with privileged access'; Good = 'down'; Board = $false; Why = '' }
         [pscustomobject]@{ Key = 'phishing_resistant_device_bound_pct'; Title = 'Workforce with device-bound (attested) passkeys'; Good = 'up'; Board = $false; Why = '' }
