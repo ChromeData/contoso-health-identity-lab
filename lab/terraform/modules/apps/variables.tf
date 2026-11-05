@@ -141,10 +141,16 @@ variable "aws_saml_entity_id" {
 variable "aws_saml_acs_urls" {
   type        = list(string)
   description = <<-EOT
-    Reply URL(s) (Assertion Consumer Service) from the same AWS page, pattern
-    https://<region>.signin.aws.amazon.com/platform/saml/acs/<id>. One per
-    enabled Identity Center region (IPv4 and dual-stack variants are separate
-    URLs). Replaces the gallery template's wildcard reply URL, so assertions
+    Reply URL(s) (Assertion Consumer Service) for THIS Identity Center
+    instance, pattern https://<host>/platform/saml/acs/<id>. List every ACS
+    URL AWS uses, not only the first one its console shows: the same <id>
+    appears on more than one host (IPv4 and dual-stack variants are separate
+    URLs), and Entra refuses a sign-in whose AuthnRequest names an ACS URL
+    that is not listed (AADSTS50011). Read live on 2026-11-05: the console
+    panel showed https://us-east-1.sso.signin.aws/platform/saml/acs/<id>, but
+    the AuthnRequest the access portal sends names
+    https://us-east-1.signin.aws/platform/saml/acs/<id> - so the lab lists
+    both. Replaces the gallery template's wildcard reply URL, so assertions
     can only be posted to THIS instance. Empty = not managed yet.
   EOT
   default     = []

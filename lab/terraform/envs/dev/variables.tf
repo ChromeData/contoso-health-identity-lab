@@ -458,7 +458,7 @@ variable "aws_saml_entity_id" {
 
 variable "aws_saml_acs_urls" {
   type        = list(string)
-  description = "IAM Identity Center ACS URL(s), one per enabled region. Empty = not managed yet (no wildcard reply URL is ever kept). Tenant-specific."
+  description = "IAM Identity Center ACS URL(s): every host AWS uses for this instance (the console panel's and the one in the access portal's AuthnRequest - they differ; modules/apps variables.tf). Empty = not managed yet (no wildcard reply URL is ever kept). Tenant-specific: TF_AWS_SAML_ACS_URLS."
   default     = []
 }
 

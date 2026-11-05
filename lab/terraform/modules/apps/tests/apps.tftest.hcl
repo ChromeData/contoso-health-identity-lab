@@ -142,6 +142,29 @@ run "saml_basic_configuration_and_claims" {
   }
 }
 
+# The access portal's AuthnRequest names a different ACS host than the one
+# the console panel shows (read live 2026-11-05, AADSTS50011 until both were
+# listed): both hosts of the same instance must become reply URLs, unchanged.
+run "every_acs_host_of_the_instance_is_a_reply_url" {
+  command = plan
+
+  variables {
+    aws_saml_entity_id = "https://us-east-1.signin.aws.amazon.com/platform/saml/d-1234567890"
+    aws_saml_acs_urls = [
+      "https://us-east-1.sso.signin.aws/platform/saml/acs/abcd-1234",
+      "https://us-east-1.signin.aws/platform/saml/acs/abcd-1234",
+    ]
+  }
+
+  assert {
+    condition = azuread_application_redirect_uris.aws[0].redirect_uris == toset([
+      "https://us-east-1.sso.signin.aws/platform/saml/acs/abcd-1234",
+      "https://us-east-1.signin.aws/platform/saml/acs/abcd-1234",
+    ])
+    error_message = "both ACS hosts of the instance must be reply URLs (the portal's AuthnRequest uses the second)"
+  }
+}
+
 run "wildcard_reply_url_is_rejected" {
   command = plan
 
