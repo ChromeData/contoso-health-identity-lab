@@ -677,6 +677,12 @@ variable "enable_helpdesk_au_scoping" {
   default     = false
 }
 
+variable "helpdesk_au_excluded_employee_ids" {
+  type        = list(string)
+  description = "HR employee ids kept out of AU-Workforce-Standard (modules/pim workforce_au_excluded_employee_ids): the VIPs in the restricted management AU RMAU-VIP (post-apply/New-RestrictedAdminUnit.ps1). Changes the rendered rule in output pim_workforce_au_membership_body only; the PATCH that applies it stays a tenant-time step."
+  default     = []
+}
+
 variable "enable_global_admin_pim_policy" {
   type        = bool
   description = "Render the Global Administrator role's own PIM policy (approval by PIM-Approvers-Tier0, MFA or the Tier-0 auth context, justification + ticket, 2h, eligibility expires after 180 days) as output directory_role_pim_policies for post-apply/Set-DirectoryRolePimPolicies.ps1, and - with enable_access_reviews_privileged - the quarterly review of ELIGIBLE Global Administrators. Break-glass keeps its standing assignment. Needs enable_premium and Tier-0 approvers."

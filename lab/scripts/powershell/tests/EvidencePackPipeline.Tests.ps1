@@ -417,5 +417,6 @@ Describe 'Connect-GraphFromAzureCli parity' {
         $canonical = (Get-ScriptFunctionBlock -Path (Get-LabScriptPath 'post-apply/Set-AutoAssignmentPolicies.ps1') -Name 'Connect-GraphFromAzureCli').ToString()
         $canonical | Should -Match 'get-access-token --resource-type ms-graph'
         (Get-ScriptFunctionBlock -Path (Get-LabScriptPath 'Export-EvidencePack.ps1') -Name 'Connect-GraphFromAzureCli').ToString() | Should -Be $canonical
+        (Get-ScriptFunctionBlock -Path (Get-LabScriptPath 'post-apply/New-RestrictedAdminUnit.ps1') -Name 'Connect-GraphFromAzureCli').ToString() | Should -Be $canonical
     }
 }

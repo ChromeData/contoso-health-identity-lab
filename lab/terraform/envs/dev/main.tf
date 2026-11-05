@@ -423,8 +423,9 @@ module "pim" {
 
   # Help-desk scoping (AU-Workforce-Standard) and Global Administrator's own
   # PIM policy (rendered for post-apply/Set-DirectoryRolePimPolicies.ps1).
-  enable_helpdesk_au_scoping     = var.enable_helpdesk_au_scoping
-  enable_global_admin_pim_policy = var.enable_global_admin_pim_policy
+  enable_helpdesk_au_scoping         = var.enable_helpdesk_au_scoping
+  workforce_au_excluded_employee_ids = var.helpdesk_au_excluded_employee_ids
+  enable_global_admin_pim_policy     = var.enable_global_admin_pim_policy
 
   # Tier-0 activation step-up (CA021). Two gates: this module's
   # preconditions, and modules/conditional-access's output precondition on

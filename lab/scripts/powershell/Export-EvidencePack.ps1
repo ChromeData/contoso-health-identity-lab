@@ -212,8 +212,8 @@ function Connect-GraphFromAzureCli {
     # GitHub OIDC). The token never leaves this process: masked in Actions,
     # handed to Connect-MgGraph as a SecureString, then dropped. Same as
     # mock-hr/Invoke-InboundProvisioning.ps1, through Write-Console for the
-    # analyzer; one copy each in Set-AutoAssignmentPolicies.ps1 and
-    # Export-EvidencePack.ps1 (parity-tested).
+    # analyzer; one copy each in Set-AutoAssignmentPolicies.ps1,
+    # Export-EvidencePack.ps1 and New-RestrictedAdminUnit.ps1 (parity-tested).
     $global:LASTEXITCODE = 0
     $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {

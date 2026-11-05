@@ -49,6 +49,13 @@ enable_global_admin_pim_policy = true
 # where lab/terraform/aws gives them the LabAdministrator permission set.
 enable_pim_aws_admin = true
 
+# VIPs in the restricted management AU RMAU-VIP (post-apply/
+# New-RestrictedAdminUnit.ps1), kept out of the help desk's AU by HR
+# employee id: 300001 Helen Carter (Chief Nursing Officer), 400100 Joan
+# Ferris (IT Director). Only the rendered AU rule changes; the Graph PATCH
+# that applies it is the tenant-time step (done 2026-11-05).
+helpdesk_au_excluded_employee_ids = ["300001", "400100"]
+
 # Tier-0 PIM activation step-up on auth context c1 (CA021). The plan refuses
 # the context unless CA021 is DECLARED "enabled" (ca_policy_states) AND
 # ca021_enforced_in_tenant = true. Terraform cannot see whether
