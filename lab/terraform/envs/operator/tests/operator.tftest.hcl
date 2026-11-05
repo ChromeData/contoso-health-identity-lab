@@ -133,3 +133,28 @@ run "grants_are_exactly_the_reviewed_lists" {
     error_message = "the only directory role is Security Reader"
   }
 }
+
+# ADR 0018: the operator is Tier 0, so its owners are the lead's decision;
+# by default no owners change is planned, and a named owner lands on both
+# the app registration and the service principal.
+run "owners_only_when_named" {
+  command = plan
+
+  assert {
+    condition     = azuread_application.operator.owners == null && azuread_service_principal.operator.owners == null
+    error_message = "no owners change unless operator_owner_object_ids names someone"
+  }
+}
+
+run "named_owners_on_app_and_sp" {
+  command = plan
+
+  variables {
+    operator_owner_object_ids = ["b0b0b0b0-0000-4000-8000-0000000000b1", "b0b0b0b0-0000-4000-8000-0000000000b2"]
+  }
+
+  assert {
+    condition     = length(azuread_application.operator.owners) == 2 && toset(azuread_service_principal.operator.owners) == toset(azuread_application.operator.owners)
+    error_message = "named owners go on the app registration and the service principal"
+  }
+}

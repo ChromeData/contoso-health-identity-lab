@@ -58,6 +58,12 @@ module "pipeline_identity" {
   # Graph for the evidence pack. Its only Azure right is the create-only
   # grant on the evidence container below.
   evidence_enabled = var.enable_evidence_pack
+
+  # Accountable human owners per CI identity (ADR 0018). Who and why:
+  # lab/iga/nhi-owners.json. Once set, keep them in terraform.tfvars: a
+  # bootstrap apply without them plans no owners change only while the list
+  # was never set - after that, dropping a list here removes those owners.
+  owner_object_ids = var.pipeline_owner_object_ids
 }
 
 locals {

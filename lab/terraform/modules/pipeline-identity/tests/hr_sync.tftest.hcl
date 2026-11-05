@@ -170,3 +170,43 @@ run "hr_sync_log_roles_are_read_only" {
 
   expect_failures = [var.hr_sync_log_read_graph_roles]
 }
+
+# ADR 0018: accountable human owners per identity, on the app AND its service
+# principal; an identity nobody is named for plans no owners change (null),
+# and the HR provisioning app's human owners are added one resource each, so
+# HR-SYNC's own ownership of it is untouched.
+run "owners_named_per_identity" {
+  command = plan
+
+  variables {
+    hr_sync_enabled               = true
+    hr_provisioning_app_client_id = "a0a0a0a0-0000-4000-8000-00000000000f"
+    owner_object_ids = {
+      hr_sync         = ["b0b0b0b0-0000-4000-8000-0000000000b1"]
+      hr_provisioning = ["b0b0b0b0-0000-4000-8000-0000000000b1", "b0b0b0b0-0000-4000-8000-0000000000b2"]
+    }
+  }
+
+  assert {
+    condition     = toset(azuread_application.hr_sync[0].owners) == toset(["b0b0b0b0-0000-4000-8000-0000000000b1"]) && toset(azuread_service_principal.hr_sync[0].owners) == toset(["b0b0b0b0-0000-4000-8000-0000000000b1"])
+    error_message = "HR-SYNC's named owner must be on its app registration AND its service principal"
+  }
+  assert {
+    condition     = azuread_application.plan.owners == null && azuread_service_principal.plan.owners == null && azuread_application.apply.owners == null && azuread_service_principal.apply.owners == null
+    error_message = "PLAN and APPLY (Tier 0) get no owners change until someone is named for them"
+  }
+  assert {
+    condition     = length(azuread_application_owner.hr_provisioning_humans) == 2 && alltrue([for o in azuread_application_owner.hr_provisioning_humans : o.application_id == "/applications/a0a0a0a0-0000-4000-8000-00000000000e"]) && length(azuread_application_owner.hr_sync_owns_provisioning_app) == 1
+    error_message = "the HR provisioning app gets one owner resource per named person, next to HR-SYNC's own"
+  }
+}
+
+run "owner_ids_must_be_guids" {
+  command = plan
+
+  variables {
+    owner_object_ids = { evidence = ["adm-mei.tanaka"] }
+  }
+
+  expect_failures = [var.owner_object_ids]
+}

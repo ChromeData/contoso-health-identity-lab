@@ -44,6 +44,10 @@ data "azurerm_subscription" "current" {}
 locals {
   microsoft_graph_app_id = "00000003-0000-0000-c000-000000000000"
   certificate_path       = pathexpand(var.operator_certificate_path)
+
+  # Named human owners (ADR 0018), on the app and its service principal. null
+  # while none is named, so the provider plans no owners change.
+  operator_owners = length(var.operator_owner_object_ids) > 0 ? distinct(var.operator_owner_object_ids) : null
 }
 
 data "azuread_service_principal" "msgraph" {
@@ -53,6 +57,7 @@ data "azuread_service_principal" "msgraph" {
 resource "azuread_application" "operator" {
   display_name     = var.operator_display_name
   sign_in_audience = "AzureADMyOrg"
+  owners           = local.operator_owners
   notes            = "Lab operator: unattended automation from the admin's Mac (certificate, Keychain). Managed by lab/terraform/envs/operator, human-applied. Kill switch: lab/scripts/operator/kill-switch.sh"
 
   # v2 access tokens (iss = login.microsoftonline.com/<tenant>/v2.0, aud =
@@ -90,6 +95,7 @@ resource "azuread_application_identifier_uri" "operator" {
 
 resource "azuread_service_principal" "operator" {
   client_id = azuread_application.operator.client_id
+  owners    = local.operator_owners
   notes     = azuread_application.operator.notes
 }
 
