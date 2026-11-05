@@ -31,40 +31,27 @@
 # Without --ready-cmd the client waits a fixed --settle seconds (SSH: the
 # prompt is up within a second or two).
 #
-# HOW THE SESSION ENDED. The server ending the session after the keys were
-# typed is the expected end, and for RDP guacd 1.6.0 can report that same
-# end in two ways. xrdp ends a session by sending the MCS Disconnect Provider
-# Ultimatum, a TLS close_notify and FIN while guacd may still be writing, so
-# xrdp's kernel answers guacd's next write with RST (a packet capture of
-# rdp-target sessions shows FIN then RST on every one). Then either:
-#   * FreeRDP parses the Ultimatum first: FreeRDP 2.11.7 rdp.c:459-466 maps
-#     it to ERRINFO_LOGOFF_BY_USER, guacd logs "Manually logged off." and
-#     sends NO error (guacd src/protocols/rdp/error.c:294-295 sends one only
-#     for a status other than SUCCESS) - the usual case; or
-#   * the reset wins: FreeRDP's failed write/read marks the transport closed
-#     with FREERDP_ERROR_CONNECT_TRANSPORT_FAILED (transport.c:580-583,
-#     887-890: "A write error indicates that the peer has dropped the
-#     connection") before the Ultimatum is read, and guacd reports the end as
-#     an error: UPSTREAM_NOT_FOUND "Server refused connection (wrong security
-#     type?)" (error.c:172-174) or UPSTREAM_UNAVAILABLE "Connection closed."
-#     (src/protocols/rdp/rdp.c:655-656). Same end, different report: which
-#     one is a matter of thread scheduling, so a test that treats the second
-#     as a failed session fails some nights and not others.
-# --server-close-status NAME|CODE (repeatable) lists the statuses that count
-# as "the server ended it" - ONLY when the error arrives after the Return was
-# accepted and the tunnel then closes. The output names the status, so the
-# run log says exactly how the end was reported. An error before or while
-# typing, or with any other status, is still a failure (exit 2). Default: no
-# such status (SSH sessions end without an error). The caller should also
-# check, on the target, that the session really ended because of what was
-# typed (test/e2e.sh: xrdp-sesman "finished normally").
+# KEEP-ALIVE. Every 5 s the client sends "nop", as guacamole-common-js 1.6.0
+# does (Client.js KEEP_ALIVE_FREQUENCY = 5000, "to ensure the server knows
+# we're still here, even if not active"). guacd needs it to END a session
+# cleanly, not only to keep an idle one: its per-user input thread waits up
+# to 15 s for the next instruction from the client (guacd proc.h:34
+# GUACD_TIMEOUT 15000, proc.c:99) and checks whether the connection is still
+# running only between reads (libguac user-handshake.c:142-148). So when the
+# RDP/SSH side ends, guacd closes the tunnel on the client's NEXT instruction;
+# with none it waits the full 15 s and then sends "Aborted. See logs."
+# CLIENT_TIMEOUT (user.c:185-192) instead of a clean close. Without a
+# keep-alive the only instructions this client sent were sync replies, so
+# the end was clean only when the last one happened to land after the
+# session stopped - the nightly RDP check's intermittent 282/284.
+# Any "error" instruction is a failure (exit 2), reported with its status by
+# name and whether it came before, during or after the typing.
 #
 # Stdlib only. The operator's Guacamole auth token is read from stdin (never
 # argv). Usage:
 #   printf '%s' "$TOKEN" | python3 test/guac_tunnel.py --base http://127.0.0.1:8081/guacamole \
 #       --connection-id 3 --type "id; hostname; exit"
 #   (RDP: ... --connection-id 5 --mouse 512,384 --ready-cmd "docker compose ... test -e MARKER"
-#        --server-close-status UPSTREAM_NOT_FOUND --server-close-status UPSTREAM_UNAVAILABLE
 #        --type "id > proof; exit")
 # Exit: 0 tunnel opened, keys sent, session ended by the server (or by
 #       --disconnect-after); 2 Guacamole error / connect refused;
@@ -80,6 +67,7 @@ import time
 import urllib.parse
 
 KEYSYM_RETURN = 0xFF0D
+KEEP_ALIVE_SECONDS = 5.0                     # guacamole-common-js 1.6.0 Client.js KEEP_ALIVE_FREQUENCY
 READY_POLL_SECONDS = 0.5
 READY_PROGRESS_SECONDS = 10.0
 
@@ -95,7 +83,6 @@ STATUS_NAMES = {
     0x0303: "CLIENT_FORBIDDEN", 0x0308: "CLIENT_TIMEOUT", 0x030D: "CLIENT_OVERRUN",
     0x030F: "CLIENT_BAD_TYPE", 0x031D: "CLIENT_TOO_MANY",
 }
-STATUS_CODES = {name: code for code, name in STATUS_NAMES.items()}
 
 
 def describe_status(code) -> str:
@@ -105,22 +92,6 @@ def describe_status(code) -> str:
     except (TypeError, ValueError):
         return f"status {code!r}"
     return f"0x{n:04X} {STATUS_NAMES.get(n, 'UNKNOWN')}"
-
-
-def status_arg(value: str) -> int:
-    """--server-close-status: a status NAME (UPSTREAM_UNAVAILABLE) or a code (0x0208, 520)."""
-    if value.upper() in STATUS_CODES:
-        n = STATUS_CODES[value.upper()]
-    else:
-        try:
-            n = int(value, 0)
-        except ValueError:
-            raise argparse.ArgumentTypeError(f"not a Guacamole status name or code: {value!r}")
-    if n not in STATUS_NAMES:
-        raise argparse.ArgumentTypeError(f"not a Guacamole status code: {value!r}")
-    if n == 0:
-        raise argparse.ArgumentTypeError("SUCCESS is never sent as an error; nothing to accept")
-    return n
 
 
 def encode(*elements: str) -> str:
@@ -203,8 +174,6 @@ def main() -> int:
                     help="without --ready-cmd: seconds to wait for the shell before typing")
     ap.add_argument("--ready-cmd", default="",
                     help="command (no shell) that exits 0 once the session can take keys; polled before typing")
-    ap.add_argument("--server-close-status", type=status_arg, action="append", default=[],
-                    help="guacd error status (name or code) that, AFTER the keys were typed, means the server ended it")
     ap.add_argument("--timeout", type=float, default=60.0)
     ap.add_argument("--mouse", default="", help="X,Y: move the pointer there before typing")
     ap.add_argument("--disconnect-after", type=float, default=0.0,
@@ -243,10 +212,29 @@ def main() -> int:
 
     def write(data: str):
         with lock:
-            writer.request("POST", f"{path}?write:{uuid}", body=data.encode(),
-                           headers=dict(hdrs, **{"Content-Type": "application/octet-stream"}))
-            resp = writer.getresponse()
-            resp.read()
+            try:
+                writer.request("POST", f"{path}?write:{uuid}", body=data.encode(),
+                               headers=dict(hdrs, **{"Content-Type": "application/octet-stream"}))
+                writer.getresponse().read()
+            except (OSError, http.client.HTTPException):
+                # A failed request can leave the shared connection mid-exchange;
+                # close it so the next write opens a fresh one (http.client
+                # reconnects on demand), then let the caller decide.
+                writer.close()
+                raise
+
+    def keep_alive():
+        # "nop" every KEEP_ALIVE_SECONDS until the tunnel closes (see KEEP-ALIVE
+        # above). A failed ping is not fatal: the session's end or a timeout
+        # still decides the result.
+        while not state["closed"]:
+            time.sleep(KEEP_ALIVE_SECONDS)
+            if state["closed"]:
+                break
+            try:
+                write(encode("nop"))
+            except (OSError, http.client.HTTPException):
+                pass
 
     def reader():
         rc = conn()
@@ -267,7 +255,7 @@ def main() -> int:
                 if op == "sync" and len(ins) > 1:
                     try:
                         write(encode("sync", ins[1]))
-                    except OSError:
+                    except (OSError, http.client.HTTPException):
                         pass
                 elif op == "error" and state["error"] is None:
                     # error,MESSAGE,STATUS (the first one is the cause)
@@ -281,6 +269,7 @@ def main() -> int:
 
     t = threading.Thread(target=reader, daemon=True)
     t.start()
+    threading.Thread(target=keep_alive, daemon=True).start()
 
     deadline = time.time() + args.timeout
     while state["first"] is None and time.time() < deadline and not state["closed"]:
@@ -330,14 +319,9 @@ def main() -> int:
     how = "client sent disconnect" if client_disconnect else "the server ended it"
     if state["error"]:
         after = state["error_at"] - typed_at
-        if (after >= 0 and state["closed"] and not client_disconnect
-                and state["error_code"] in args.server_close_status):
-            how = (f"the server ended it; guacd reported the close as {state['error']} "
-                   f"{after:.1f}s after the last key, an accepted --server-close-status")
-        else:
-            when = "while the keys were being typed" if after < 0 else f"{after:.1f}s after the keys were typed"
-            print(f"guac_tunnel: Guacamole error {when}: {state['error']}", file=sys.stderr)
-            return 2
+        when = "while the keys were being typed" if after < 0 else f"{after:.1f}s after the keys were typed"
+        print(f"guac_tunnel: Guacamole error {when}: {state['error']}", file=sys.stderr)
+        return 2
     if not state["closed"]:
         print("guac_tunnel: session did not end before the timeout", file=sys.stderr)
         return 3

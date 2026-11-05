@@ -18,10 +18,9 @@
 #     AlwaysGroupCheck); root may not. Clipboard and drive redirection off.
 #   * The session is ONE xterm, no desktop; typing `exit` ends the session
 #     and xrdp drops the connection, so a scripted session ends by itself
-#     (guacd reports that end as a log-off, or, when its own write races
-#     xrdp's close, as an upstream error: test/guac_tunnel.py explains). The
-#     session writes ~/.rdp-session-ready once it can take keys
-#     (startwm.sh), so the harness types then, not after a fixed wait.
+#     (guacd logs "Manually logged off."). The session writes
+#     ~/.rdp-session-ready once it can take keys (startwm.sh), so the
+#     harness types then, not after a fixed wait.
 #
 # Built from the same pinned Debian image as pam-tools / ssh-target / the Samba
 # DC, pinned here by tag AND digest (the multi-arch index digest). TEST/LAB

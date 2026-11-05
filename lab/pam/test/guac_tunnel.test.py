@@ -7,11 +7,13 @@
 # that streams scripted instructions and records what the client sends:
 #
 #   * the server ends the session after the Return -> exit 0
-#   * guacd reports that end as an error with an ACCEPTED status
-#     (--server-close-status), after the Return -> exit 0, status named;
-#     the same without the flag -> exit 2 (strict by default)
-#   * an accepted status BEFORE the keys were typed -> exit 2, nothing typed
-#   * any other status after the Return -> exit 2
+#   * the session stops after the client's last sync reply and, like guacd
+#     1.6.0's user input thread, the fake closes the tunnel only on the
+#     client's NEXT instruction (else CLIENT_TIMEOUT): the 5 s "nop"
+#     keep-alive ends it cleanly -> exit 0 (the nightly RDP failure)
+#   * keep-alive "nop"s also go out while waiting for --ready-cmd
+#   * an error after the Return (CLIENT_TIMEOUT) -> exit 2, status named
+#   * an error before the keys were typed -> exit 2, nothing typed
 #   * the session never ends -> exit 3
 #   * --ready-cmd: nothing is typed until it succeeds; never ready -> exit 3,
 #     nothing typed
@@ -42,19 +44,31 @@ def ins(*elems) -> str:
 
 
 class Fake:
-    """One scripted tunnel. on_return / up_front: instructions to stream at that moment.
+    """One scripted tunnel. up_front: instructions streamed at once; then, after the Return:
 
-    end_after_return=False: the stream stays open (a session that never ends).
+    end="close"  - a last sync, on_return, then the stream ends (session over);
+    end="guacd"  - a last sync; once the client has answered it the session is
+                   STOPPED, and (as guacd's user input thread does) the tunnel
+                   closes on the client's next instruction, or after
+                   user_timeout seconds with "error ... CLIENT_TIMEOUT";
+    end="never"  - the stream stays open.
     """
 
-    def __init__(self, up_front="", on_return="", end_after_return=True):
-        self.up_front, self.on_return, self.end_after_return = up_front, on_return, end_after_return
+    def __init__(self, up_front="", on_return="", end="close", user_timeout=8.0):
+        self.up_front, self.on_return, self.end, self.user_timeout = up_front, on_return, end, user_timeout
         self.writes = []                     # (time, body) of every ?write
         self.returned = threading.Event()
         self.stop = threading.Event()
+        self.stopped_at = None
 
     def keys(self):
         return "".join(b for _, b in self.writes if "3.key," in b)
+
+    def first_key_at(self):
+        return min((t for t, b in self.writes if "3.key," in b), default=None)
+
+    def nops(self):
+        return [t for t, b in self.writes if "3.nop;" in b]
 
 
 def serve(fake: Fake):
@@ -100,12 +114,27 @@ def serve(fake: Fake):
             while not fake.returned.wait(0.1):
                 if fake.stop.is_set():
                     return
-            if not fake.end_after_return:
+            if fake.end == "never":
                 fake.stop.wait(30)
                 return
             time.sleep(0.2)                  # the command runs, then the session ends
-            self.wfile.write((ins("sync", "2000") + fake.on_return + "0.;").encode())
+            if fake.end == "close":
+                self.wfile.write((ins("sync", "2000") + fake.on_return + "0.;").encode())
+                self.wfile.flush()
+                return
+            # end == "guacd": the last frame, its reply, then the session stops
+            self.wfile.write(ins("sync", "2000").encode())
             self.wfile.flush()
+            t0 = time.time()
+            while time.time() - t0 < 2 and not any("4.sync,4.2000;" in b for _, b in fake.writes):
+                time.sleep(0.02)
+            fake.stopped_at = time.time()
+            while time.time() - fake.stopped_at < fake.user_timeout:
+                if any(t > fake.stopped_at for t, _ in fake.writes):
+                    self.wfile.write(b"0.;")         # next instruction read: user leaves, tunnel closes
+                    return
+                time.sleep(0.05)
+            self.wfile.write((ins("error", "Aborted. See logs.", "776") + "0.;").encode())   # 0x0308
 
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
     srv.daemon_threads = True
@@ -134,39 +163,32 @@ def case(name, ok, out=""):
             print("      " + line)
 
 
-UPSTREAM_GONE = ins("error", "Aborted. See logs.", "520")         # 0x0208 UPSTREAM_UNAVAILABLE
-FORBIDDEN = ins("error", "Aborted. See logs.", "771")             # 0x0303 CLIENT_FORBIDDEN
+CLIENT_TIMEOUT = ins("error", "Aborted. See logs.", "776")       # 0x0308 CLIENT_TIMEOUT
 
 f = Fake()
 rc, out = run(f)
 case("the server ends the session after the Return (no error) -> exit 0, 'the server ended it'",
      rc == 0 and "the server ended it" in out and f.keys(), out)
 
-f = Fake(on_return=UPSTREAM_GONE)
-rc, out = run(f, "--server-close-status", "UPSTREAM_UNAVAILABLE")
-case("guacd reports the end as 0x0208 UPSTREAM_UNAVAILABLE after the Return, status accepted -> exit 0, status named",
-     rc == 0 and "the server ended it" in out and "0x0208 UPSTREAM_UNAVAILABLE" in out, out)
+f = Fake(end="guacd")
+rc, out = run(f, timeout="20")
+case("session stops after the last sync reply; guacd closes on the next instruction: the 5 s 'nop' keep-alive "
+     "ends it cleanly -> exit 0 (no CLIENT_TIMEOUT)",
+     rc == 0 and "the server ended it" in out and f.stopped_at is not None
+     and any(t > f.stopped_at for t in f.nops()), out)
 
-f = Fake(on_return=UPSTREAM_GONE)
-rc, out = run(f, "--server-close-status", "0x0208")
-case("--server-close-status takes the hex code as well as the name", rc == 0 and "the server ended it" in out, out)
-
-f = Fake(on_return=UPSTREAM_GONE)
+f = Fake(on_return=CLIENT_TIMEOUT)
 rc, out = run(f)
-case("the same error without --server-close-status -> exit 2 (strict by default; SSH runs this way)",
-     rc == 2 and "the server ended it" not in out and "0x0208 UPSTREAM_UNAVAILABLE" in out, out)
+case("an error after the Return (0x0308 CLIENT_TIMEOUT) -> exit 2, status named, 'after the keys were typed'",
+     rc == 2 and "0x0308 CLIENT_TIMEOUT" in out and "after the keys were typed" in out
+     and "the server ended it" not in out, out)
 
-f = Fake(up_front=UPSTREAM_GONE)
-rc, out = run(f, "--server-close-status", "UPSTREAM_UNAVAILABLE")
-case("an accepted status BEFORE the keys were typed -> exit 2 and nothing typed (a session that never ran)",
+f = Fake(up_front=CLIENT_TIMEOUT)
+rc, out = run(f)
+case("an error BEFORE the keys were typed -> exit 2 and nothing typed (a session that never ran)",
      rc == 2 and "before the keys were typed" in out and not f.keys(), out)
 
-f = Fake(on_return=FORBIDDEN)
-rc, out = run(f, "--server-close-status", "UPSTREAM_UNAVAILABLE")
-case("any other status after the Return (0x0303 CLIENT_FORBIDDEN) -> exit 2",
-     rc == 2 and "0x0303 CLIENT_FORBIDDEN" in out and "the server ended it" not in out, out)
-
-f = Fake(end_after_return=False)
+f = Fake(end="never")
 rc, out = run(f, timeout="3")
 case("the session never ends -> exit 3 'did not end before the timeout'",
      rc == 3 and "did not end before the timeout" in out, out)
@@ -190,6 +212,16 @@ with tempfile.TemporaryDirectory() as d:
     case("--ready-cmd: nothing typed until it succeeds, then typed and 'target ready after' logged -> exit 0",
          rc == 0 and "target ready after" in out and first_key is not None and "at" in made and first_key >= made["at"], out)
 
+with tempfile.TemporaryDirectory() as d:
+    marker = os.path.join(d, "ready")
+    threading.Timer(6.5, lambda: open(marker, "w").close()).start()
+    f = Fake()
+    rc, out = run(f, "--ready-cmd", f"{sys.executable} -I -c \"import os,sys; sys.exit(0 if os.path.exists({marker!r}) else 1)\"",
+                  timeout="20")
+    fk = f.first_key_at()
+    case("keep-alive 'nop' goes out while waiting 6.5 s for --ready-cmd (guacd would drop a silent client at 15 s)",
+         rc == 0 and fk is not None and any(t < fk for t in f.nops()), out)
+
 f = Fake()
 rc, out = run(f, "--ready-cmd", f"{sys.executable} -I -c \"import sys; print('no marker yet', file=sys.stderr); sys.exit(1)\"",
               timeout="3")
@@ -199,11 +231,6 @@ case("--ready-cmd never succeeds -> exit 3 'never became ready' with the last ch
 f = Fake()
 rc, out = run(f, token="wrong-token")
 case("a refused connect (HTTP 403) -> exit 2 'connect refused'", rc == 2 and "connect refused" in out, out)
-
-p = subprocess.run([sys.executable, "-I", TOOL, "--base", "http://127.0.0.1:9/guacamole", "--connection-id", "1",
-                    "--server-close-status", "SUCCESS"], input=b"x", capture_output=True)
-case("--server-close-status SUCCESS is refused (guacd never sends SUCCESS as an error)", p.returncode == 2,
-     p.stderr.decode())
 
 print(f"\nguac_tunnel.py session verdicts: {'all cases behaved' if FAILS == 0 else f'{FAILS} case(s) FAILED'}")
 sys.exit(1 if FAILS else 0)

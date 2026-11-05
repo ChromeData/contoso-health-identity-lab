@@ -16,6 +16,9 @@
 #                  client's verdicts (server ended it / error / never
 #                  ended / not ready) against a fake Guacamole HTTP
 #                  tunnel, so e2e's session checks mean what they say  python3
+#   log-scrub      test/scrub_logs.test.py: the scrubber that takes
+#                  every generated credential out of the logs the
+#                  workflow uploads on failure (fail closed)          python3
 #   e2e            test/e2e.sh: the AD-dependent PAM flow against a
 #                  Samba AD DC (onboarding, check-out + dual control,
 #                  RDP to the Linux xrdp stand-in, discovery,
@@ -65,7 +68,7 @@
 source "$(dirname "$0")/../lib.sh"   # cd's to lab/pam
 need jq
 
-ALL_SUITES="dependency-scan ingest itsm-dual-control recording-format tunnel-client e2e midpoint dynamic-db vault-anomaly scale"
+ALL_SUITES="dependency-scan ingest itsm-dual-control recording-format tunnel-client log-scrub e2e midpoint dynamic-db vault-anomaly scale"
 OPTIONAL_SUITES="scale"   # never part of a default run: --scale, or named in --only
 ONLY="" SKIP="" SKIP_HA=0 UP=1 CLEANUP=0 PUBLISH=0 SCALE=0
 while [[ $# -gt 0 ]]; do
@@ -153,6 +156,7 @@ selected ingest && run_suite ingest bash ../scripts/monitoring/tests/ingest-vaul
 selected itsm-dual-control && run_suite itsm-dual-control ./test/itsm-dual-control.test.sh
 selected recording-format && run_suite recording-format python3 -I test/guac_recording.test.py
 selected tunnel-client && run_suite tunnel-client python3 -I test/guac_tunnel.test.py
+selected log-scrub && run_suite log-scrub python3 -I test/scrub_logs.test.py
 # e2e (with --publish: writing its sealed run records). Called through
 # run_suite (SC2329).
 # shellcheck disable=SC2329
