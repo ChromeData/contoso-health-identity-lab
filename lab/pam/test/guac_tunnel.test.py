@@ -13,7 +13,9 @@
 #     keep-alive ends it cleanly -> exit 0 (the nightly RDP failure)
 #   * keep-alive "nop"s also go out while waiting for --ready-cmd
 #   * an error after the Return (CLIENT_TIMEOUT) -> exit 2, status named
-#   * an error before the keys were typed -> exit 2, nothing typed
+#   * an error before the keys were typed -> exit 2, nothing typed; an
+#     error or a clean close WHILE typing stops the typing (no Return):
+#     exit 2 / exit 3 "never ran", never "the server ended it"
 #   * the session never ends -> exit 3
 #   * --ready-cmd: nothing is typed until it succeeds; never ready -> exit 3,
 #     nothing typed
@@ -113,7 +115,7 @@ def serve(fake: Fake):
                 time.sleep(fake.up_front_delay)
                 self.wfile.write(fake.up_front.encode())
                 self.wfile.flush()
-            if fake.up_front and "5.error" in fake.up_front:
+            if fake.up_front and ("5.error" in fake.up_front or "10.disconnect" in fake.up_front):
                 self.wfile.write(b"0.;")     # guacd stopped: the servlet ends the stream
                 return
             while not fake.returned.wait(0.1):
@@ -194,6 +196,12 @@ f = Fake(up_front=CLIENT_TIMEOUT, up_front_delay=0.3)
 rc, out = run(f, "--settle", "1")
 case("an error BEFORE the keys were typed -> exit 2 and nothing typed (a session that never ran)",
      rc == 2 and "before the keys were typed" in out and not f.keys(), out)
+
+f = Fake(up_front=ins("disconnect"), up_front_delay=0.4)
+rc, out = run(f, "--type", "x" * 200)
+case("a clean close (no error) WHILE typing -> exit 3 'never ran', no Return sent (not 'the server ended it')",
+     rc == 3 and "the typed command never ran" in out and "the server ended it" not in out
+     and RETURN_DOWN not in "".join(b for _, b in f.writes), out)
 
 f = Fake(up_front=CLIENT_TIMEOUT, up_front_delay=0.4)
 rc, out = run(f, "--type", "x" * 200)

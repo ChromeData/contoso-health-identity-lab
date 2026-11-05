@@ -53,9 +53,10 @@
 #       --connection-id 3 --type "id; hostname; exit"
 #   (RDP: ... --connection-id 5 --mouse 512,384 --ready-cmd "docker compose ... test -e MARKER"
 #        --type "id > proof; exit")
-# Exit: 0 tunnel opened, keys sent, session ended by the server (or by
-#       --disconnect-after); 2 Guacamole error / connect refused;
-#       3 timeout / no data / target never ready.
+# Exit: 0 tunnel opened, every key and the Return sent, session ended by the
+#       server (or by --disconnect-after); 2 Guacamole error / connect
+#       refused; 3 timeout / no data / target never ready / tunnel closed
+#       before the Return was sent.
 # =============================================================================
 import argparse
 import http.client
@@ -295,19 +296,23 @@ def main() -> int:
         x, y = (str(int(v)) for v in args.mouse.split(","))
         write(encode("mouse", x, y, "0"))
         time.sleep(0.3)
+    sent = 0
     for ch in args.text:
         if state["error"] or state["closed"]:
             break                                # the session is gone: no keys into the void (reported below)
         ks = ord(ch)                             # Latin-1 printable: keysym == code point
         write(encode("key", str(ks), "1") + encode("key", str(ks), "0"))
+        sent += 1
         time.sleep(0.02)
     # typed_at: the moment the Return is SENT. Timings in the report are
     # measured from here; an error can arrive before the Return's own HTTP
     # response does (a quick `exit`), and that is still "after the keys were
     # typed". Every error is a failure either way - this only words the report.
     typed_at = time.time()
+    return_sent = False
     if args.text and not (state["error"] or state["closed"]):
         write(encode("key", str(KEYSYM_RETURN), "1") + encode("key", str(KEYSYM_RETURN), "0"))
+        return_sent = True
 
     client_disconnect = False
     while not state["closed"] and time.time() < deadline:
@@ -321,6 +326,12 @@ def main() -> int:
             break
         time.sleep(0.2)
     how = "client sent disconnect" if client_disconnect else "the server ended it"
+    if args.text and not return_sent and not state["error"]:
+        # Closed with no error before the command line was complete: the
+        # typed command never ran, so this is NOT "the server ended it".
+        print(f"guac_tunnel: the tunnel closed while the keys were being typed ({sent} of {len(args.text)} "
+              f"characters sent, Return not sent): the typed command never ran", file=sys.stderr)
+        return 3
     if state["error"]:
         after = state["error_at"] - typed_at
         when = "while the keys were being typed" if after < 0 else f"{after:.1f}s after the keys were typed (Return sent)"
