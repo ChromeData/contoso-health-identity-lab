@@ -11,13 +11,22 @@ mock_provider "azuread" {
     defaults = {
       object_id = "44444444-4444-4444-4444-444444444444"
       app_role_ids = {
-        "Application.ReadWrite.All"           = "1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9"
-        "AppRoleAssignment.ReadWrite.All"     = "06b708a9-e830-4db3-a914-8e69da51d44f"
-        "Directory.Read.All"                  = "7ab1d382-f21e-4acd-a863-ba3e13f7da61"
-        "Synchronization.ReadWrite.All"       = "9b50c33d-700f-43b1-b2eb-87e89b703581"
-        "AuditLog.Read.All"                   = "b0afded3-3588-46d8-8b3d-9842eff778da"
-        "EntitlementManagement.ReadWrite.All" = "9acd699f-1e81-4958-b001-93b1d2506e19"
-        "Policy.Read.All"                     = "246dd0d5-5bd0-4def-940b-0421030a5b68"
+        "Application.ReadWrite.All"                       = "1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9"
+        "AppRoleAssignment.ReadWrite.All"                 = "06b708a9-e830-4db3-a914-8e69da51d44f"
+        "Directory.Read.All"                              = "7ab1d382-f21e-4acd-a863-ba3e13f7da61"
+        "Synchronization.ReadWrite.All"                   = "9b50c33d-700f-43b1-b2eb-87e89b703581"
+        "AuditLog.Read.All"                               = "b0afded3-3588-46d8-8b3d-9842eff778da"
+        "EntitlementManagement.ReadWrite.All"             = "9acd699f-1e81-4958-b001-93b1d2506e19"
+        "Policy.Read.All"                                 = "246dd0d5-5bd0-4def-940b-0421030a5b68"
+        "AccessReview.Read.All"                           = "d07a8cc0-3d51-4b77-b3b0-32704d1f69fa"
+        "LifecycleWorkflows.Read.All"                     = "7c67316a-232a-4b84-be22-cea2c0906404"
+        "RoleEligibilitySchedule.Read.Directory"          = "ff278e11-4a33-4d0c-83d2-d01dc58929a5"
+        "RoleManagementPolicy.Read.Directory"             = "fdc4c997-9942-4479-bfcb-75a36d1138df"
+        "RoleManagementPolicy.Read.AzureADGroup"          = "69e67828-780e-47fd-b28c-7b27d14864e6"
+        "PrivilegedEligibilitySchedule.Read.AzureADGroup" = "edb419d6-7edc-42a3-9345-509bfdf5d87c"
+        "DeviceManagementManagedDevices.Read.All"         = "2f51be20-0bb4-4fed-bf7b-db946066c75e"
+        "DeviceManagementConfiguration.Read.All"          = "dc377aa6-52d8-4e23-b271-2a7ae04cedf3"
+        "User.DeleteRestore.All"                          = "eccc023d-eccf-4e7b-9683-8813ab36cecc"
       }
     }
   }
