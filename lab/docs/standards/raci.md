@@ -32,7 +32,7 @@ I = Informed.
 | CA policy graduation to enforced | | **C (sign-off)** | R | C | I | C | I | **A** | `lab.tfvars` PR |
 | PIM eligibility grant | | | R | I | I | | | **A** | `Set-PimGroupEligibility.ps1` |
 | PIM activation approval | | | R (approver group) | I (alert) | | | | **A** | `modules/pim`, `kql/pim-activation.kql` |
-| Break-glass custody and 90-day drill | | | R | R (confirms alert) | I | | | **A** | Human step 6; `kql/break-glass-signin.kql`; [break-glass-drill.md](../runbooks/break-glass-drill.md) and `Invoke-BreakGlassDrill.ps1` (not yet run) |
+| Break-glass custody and 90-day drill | | | R | R (confirms alert) | I | | | **A** | Human step 6; `kql/break-glass-signin.kql`; [break-glass-drill.md](../runbooks/break-glass-drill.md) and `Invoke-BreakGlassDrill.ps1` (first lab drill 2026-11-05) |
 | Vault onboarding and rotation policy | | | **A/R** | I | C | C (dependencies) | | | `lab/pam/vault-onboard-ad.sh` |
 | NHI ownership and attestation | | | **A** (process) | | I | R (owner attests) | | | [nhi-standard.md](nhi-standard.md) |
 | Detection rule lifecycle | | | C | **A/R** | I | | | | `lab/kql/`, `modules/monitoring` |

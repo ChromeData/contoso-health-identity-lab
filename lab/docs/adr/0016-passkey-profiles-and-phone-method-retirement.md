@@ -1,6 +1,6 @@
 # ADR 0016: Passkey profiles and retiring phone-based MFA
 
-- **Status:** Accepted (lab). BUILT: the authentication methods policy is a post-apply script with offline tests; CA008 and CA009 are in Terraform behind staging flags and start in report-only. Applied: CA009 is enforced in the lab tenant, CA008 still behind its flag; no key has been registered yet (E11b).
+- **Status:** Accepted (lab). BUILT: the authentication methods policy is a post-apply script with offline tests; CA008 and CA009 are in Terraform behind staging flags and start in report-only. Applied: CA009 is enforced in the lab tenant, CA008 still behind its flag. Since 2026-11-05 the three lab admins and both break-glass accounts hold one SOFTWARE passkey each (lab deviation, not attested; see Consequences; E11c, E11d).
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
@@ -119,6 +119,25 @@
   policies also govern Windows Hello for Business and macOS Platform SSO
   registration. A password-plus-push user provisioning Windows Hello needs
   a TAP. Measure this in report-only before enforcing.
+- **Lab deviation: software passkeys for admins and break-glass
+  (2026-11-05).** The lab has no hardware keys, so each lab admin and
+  break-glass account holds one passkey made by Chromium's virtual
+  authenticator (AAGUID `01020304-0506-0708-0102-030405060708`,
+  `notAttested`, device-bound), kept in the operator Mac's Keychain
+  (`lab/scripts/demo/signin/passkey.mjs`). Entra accepts it only because the
+  tenant still has Microsoft's `all_users` passkey target with the
+  unattested Default profile, and any one profile in scope is enough (Learn,
+  passkey profiles). That target breaks this ADR's own rule ("never all
+  users"; `Set-AuthenticationMethodsPolicy.ps1` reports it as a FAIL for
+  break-glass). Two consequences for whoever changes the policy next:
+  removing `all_users` should leave these keys usable for sign-in
+  (attestation is checked at registration only, the keys are device-bound,
+  and the admin profile enforces no AAGUID list - Learn; not yet observed
+  in this tenant), but **enforcing an AAGUID allow-list** on the admin
+  profile or setting `admin_fido2_allowed_aaguids` without the virtual
+  authenticator's AAGUID would block these keys at sign-in too, which
+  locks break-glass out (its only method). `Invoke-BreakGlassDrill.ps1`
+  preflight fails in that case.
 - **Turning on passkey profiles can't be undone,** so the script never does
   it implicitly. verify: Microsoft's limit of three profiles, including the
   default.

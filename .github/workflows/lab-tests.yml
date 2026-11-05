@@ -167,6 +167,9 @@ jobs:
           bash lab/scripts/demo/tests/reset-demo-hire.test.sh
           node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs
           (cd lab/splunk && ./render-savedsearches.sh --check)
+          # Pure parts of the lab passkey tool (no browser, Graph or Keychain);
+          # node is preinstalled on ubuntu-latest, node:test needs no package.
+          node --test lab/scripts/demo/tests/passkey.test.mjs
 
       # The plain-English plan/apply summaries run with continue-on-error in
       # terraform-plan.yml / terraform-apply.yml (a summary bug must never

@@ -134,6 +134,18 @@ Describe 'Assessment and record guards' {
         $r.SignIns[0].signInToAlertMinutes | Should -Be 7
     }
 
+    It 'app roles cover the read scopes they include (ReadWrite covers Read, Directory.Read.All covers users and members)' {
+        $req = @('User.Read.All', 'GroupMember.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.Read.All')
+        # The lab operator's application roles (AGENT-RULES access list).
+        @(Get-MissingGraphScope -Have @('User.ReadWrite.All', 'GroupMember.ReadWrite.All', 'Directory.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.ReadWrite.All') -Required $req) | Should -BeNullOrEmpty
+        @(Get-MissingGraphScope -Have @('Directory.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.Read.All') -Required $req) | Should -BeNullOrEmpty
+        @(Get-MissingGraphScope -Have $req -Required $req) | Should -BeNullOrEmpty
+        @(Get-MissingGraphScope -Have @('User.ReadWrite.All', 'GroupMember.ReadWrite.All', 'UserAuthenticationMethod.ReadWrite.All') -Required $req) | Should -Be @('Policy.Read.All')
+        # Directory.Read.All does not read authentication methods.
+        @(Get-MissingGraphScope -Have @('Directory.Read.All', 'Policy.Read.All') -Required $req) | Should -Be @('UserAuthenticationMethod.Read.All')
+        @(Get-MissingGraphScope -Have @() -Required $req) | Should -BeNullOrEmpty
+    }
+
     It 'catches identifiers before a public record is written' {
         @(Test-PublicRecordSafe -Json '{"account":"bg-admin-01","signInUtc":"2026-11-02T14:00:00.0000000Z","incidentNumber":"42"}').Count | Should -Be 0
         @(Test-PublicRecordSafe -Json '{"upn":"bg-admin-01@contoso.onmicrosoft.com"}').Count | Should -Be 2   # the address and the domain
@@ -175,6 +187,47 @@ Describe 'Invoke-BreakGlassDrill.ps1 (mocked Graph, az and Log Analytics)' {
         Should -Invoke Write-Host -ParameterFilter { "$Object" -match '\[PASS\] Keys bg-admin-01 - 2 usable FIDO2 key' }
     }
 
+    It 'App-only: refuses -Phase All (it prompts a person) before any sign-in' {
+        Set-DrillMocks
+        Mock az { throw 'tests must not call az' }
+        { & $script:Drill -Phase All -UseAzureCliToken -WarningAction SilentlyContinue } | Should -Throw '*Preflight or -Phase Verify only*'
+        Should -Invoke az -Times 0
+        Should -Invoke Connect-MgGraph -Times 0
+    }
+
+    It 'App-only Preflight (lab: one software passkey each): token from the Azure CLI, app roles accepted, passes' {
+        Set-DrillMocks -KeysPerAccount 1
+        Mock az { $global:LASTEXITCODE = 0; 'eyJ0ZXN0IjoidG9rZW4ifQ' } -ParameterFilter { "$args" -match 'get-access-token' }
+        Mock Connect-MgGraph {}
+        Mock Get-MgContext { New-MgContextStub -Scopes @('User.ReadWrite.All', 'GroupMember.ReadWrite.All', 'Directory.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.ReadWrite.All') }
+        Mock Write-Warning {}
+        $global:LASTEXITCODE = 0
+        & $script:Drill -Phase Preflight -UseAzureCliToken -ExpectedKeysPerAccount 1
+        $LASTEXITCODE | Should -Be 0
+        Should -Invoke Connect-MgGraph -Times 1 -Exactly -ParameterFilter { $null -ne $AccessToken -and -not $Scopes }
+        Should -Invoke Write-Warning -Times 0 -ParameterFilter { "$Message" -match 'does not cover' }
+        Should -Invoke Write-Host -ParameterFilter { "$Object" -match '\[PASS\] Keys bg-admin-01 - 1 usable FIDO2 key' }
+    }
+
+    It 'App-only: an app missing a read permission is named in a warning' {
+        Set-DrillMocks
+        Mock az { $global:LASTEXITCODE = 0; 'eyJ0ZXN0IjoidG9rZW4ifQ' } -ParameterFilter { "$args" -match 'get-access-token' }
+        Mock Connect-MgGraph {}
+        Mock Get-MgContext { New-MgContextStub -Scopes @('Directory.Read.All', 'Policy.Read.All') }
+        Mock Write-Warning {}
+        $global:LASTEXITCODE = 0
+        & $script:Drill -Phase Preflight -UseAzureCliToken
+        Should -Invoke Write-Warning -Times 1 -ParameterFilter { "$Message" -match 'does not cover: UserAuthenticationMethod\.Read\.All' }
+    }
+
+    It 'App-only: no token from the Azure CLI stops the run before Graph' {
+        Set-DrillMocks
+        Mock az { $global:LASTEXITCODE = 1; '' } -ParameterFilter { "$args" -match 'get-access-token' }
+        Mock Connect-MgGraph {}
+        { & $script:Drill -Phase Preflight -UseAzureCliToken -WarningAction SilentlyContinue } | Should -Throw '*No Microsoft Graph token from the Azure CLI*'
+        Should -Invoke Connect-MgGraph -Times 0
+    }
+
     It 'Verify: both sign-ins alerted -> Pass, with incident number and latency, exit 0' {
         Set-DrillMocks
         $v = Invoke-Verify 'pass'
@@ -197,6 +250,67 @@ Describe 'Invoke-BreakGlassDrill.ps1 (mocked Graph, az and Log Analytics)' {
         $text | Should -Not -Match '@|onmicrosoft|203\.0\.113\.10|bg-1|g-bg'
         $detail = @(Get-ChildItem -LiteralPath $v.PrivateDir -Filter '*-detail.json')[0]
         (Get-Content -LiteralPath $detail.FullName -Raw) | Should -Match '203\.0\.113\.10'
+    }
+
+    It 'Verify: keeps polling after a Pass until the Sentinel incident reaches the workspace, and records it' {
+        Set-DrillMocks
+        $global:DrillTest.IncidentPolls = 0
+        Mock Invoke-LaQuery {
+            $t = $global:DrillTest
+            if ($Query -match '^SecurityIncident') {
+                # The first poll sees the alerts but not yet the incident.
+                $t.IncidentPolls++
+                if ($t.IncidentPolls -lt 2) { return @() }
+                return @([pscustomobject]@{ IncidentNumber = 42; CreatedTime = $t.Start.AddMinutes(12).ToString('o'); Status = 'New'; AlertIds = @('alert-1', 'alert-2') })
+            }
+            if ($Query -match 'AADNonInteractiveUserSignInLogs') {
+                return @(
+                    [pscustomobject]@{ TimeGenerated = $t.Start.AddMinutes(5).ToString('o'); UserPrincipalName = 'bg-admin-01@contosolab.onmicrosoft.com'; SignInType = 'interactive'; ResultType = '0'; Methods = 'Passkey (device-bound)'; IPAddress = '203.0.113.10'; CorrelationId = 'c1' },
+                    [pscustomobject]@{ TimeGenerated = $t.Start.AddMinutes(9).ToString('o'); UserPrincipalName = 'bg-admin-02@contosolab.onmicrosoft.com'; SignInType = 'interactive'; ResultType = '0'; Methods = 'Passkey (device-bound)'; IPAddress = '203.0.113.10'; CorrelationId = 'c2' })
+            }
+            if ($Query -match '^SecurityAlert') { return @([pscustomobject]@{ TimeUtc = $t.Start.AddMinutes(11).ToString('o'); AlertId = 'alert-1'; Accounts = @('bg-admin-01', 'bg-admin-02') }) }
+            if ($Query -match '^AuditLogs') { return @([pscustomobject]@{ Operations = 0 }) }
+            if ($Query -match '^SigninLogs \| where TimeGenerated > ago\(1d\) \| count') { return @([pscustomobject]@{ Count = 12 }) }
+            throw "unexpected KQL in test: $Query"
+        }
+        $pub = Join-Path $TestDrive 'wait-pub'; $priv = Join-Path $TestDrive 'wait-priv'
+        $global:LASTEXITCODE = 0
+        & $script:Drill -Phase Verify -DrillStartUtc $global:DrillTest.Start -DeclaredSignIns 'bg-admin-01:key 1', 'bg-admin-02:key 1' `
+            -WaitMinutes 5 -PollSeconds 15 -EvidenceDirectory $pub -PrivateDirectory $priv -WarningAction SilentlyContinue
+        $LASTEXITCODE | Should -Be 0
+        $global:DrillTest.IncidentPolls | Should -Be 2
+        Should -Invoke Start-Sleep -Times 1 -Exactly
+        $rec = Get-Content -LiteralPath @(Get-ChildItem -LiteralPath $pub -Filter '*.json')[0].FullName -Raw | ConvertFrom-Json
+        $rec.result | Should -Be 'Pass'
+        @($rec.signIns | ForEach-Object incidentNumber) | Should -Be @('42', '42')
+    }
+
+    It 'Verify: alerts but no Sentinel incident by the deadline -> Partial, exit 1' {
+        Set-DrillMocks
+        Mock Invoke-LaQuery {
+            $t = $global:DrillTest
+            if ($Query -match '^SecurityIncident') { return @() }
+            if ($Query -match 'AADNonInteractiveUserSignInLogs') {
+                return @([pscustomobject]@{ TimeGenerated = $t.Start.AddMinutes(5).ToString('o'); UserPrincipalName = 'bg-admin-01@contosolab.onmicrosoft.com'; SignInType = 'interactive'; ResultType = '0'; Methods = 'Passkey (device-bound)'; IPAddress = '203.0.113.10'; CorrelationId = 'c1' })
+            }
+            if ($Query -match '^SecurityAlert') { return @([pscustomobject]@{ TimeUtc = $t.Start.AddMinutes(11).ToString('o'); AlertId = 'alert-1'; Accounts = @('bg-admin-01') }) }
+            if ($Query -match '^AuditLogs') { return @([pscustomobject]@{ Operations = 0 }) }
+            if ($Query -match '^SigninLogs \| where TimeGenerated > ago\(1d\) \| count') { return @([pscustomobject]@{ Count = 12 }) }
+            throw "unexpected KQL in test: $Query"
+        }
+        $pub = Join-Path $TestDrive 'noinc-pub'; $priv = Join-Path $TestDrive 'noinc-priv'
+        $global:LASTEXITCODE = 0
+        & $script:Drill -Phase Verify -DrillStartUtc $global:DrillTest.Start -DeclaredSignIns 'bg-admin-01:key 1' -WaitMinutes 0 -EvidenceDirectory $pub -PrivateDirectory $priv -WarningAction SilentlyContinue
+        $LASTEXITCODE | Should -Be 1
+        $rec = Get-Content -LiteralPath @(Get-ChildItem -LiteralPath $pub -Filter '*.json')[0].FullName -Raw | ConvertFrom-Json
+        $rec.result | Should -Be 'Partial'
+        ($rec.resultReasons -join ' ') | Should -Match 'no Sentinel incident .* bg-admin-01'
+    }
+
+    It 'Pending incidents: Sentinel path only, alerted sign-ins without an incident number' {
+        $a = [pscustomobject]@{ SignIns = @([pscustomobject]@{ account = 'bg-admin-01'; alertObserved = $true; incidentNumber = $null }, [pscustomobject]@{ account = 'bg-admin-02'; alertObserved = $true; incidentNumber = '42' }, [pscustomobject]@{ account = 'bg-admin-03'; alertObserved = $false; incidentNumber = $null }) }
+        @(Get-PendingIncident -Assessment $a -AlertPath 'sentinel') | Should -Be @('bg-admin-01')
+        @(Get-PendingIncident -Assessment $a -AlertPath 'log-analytics') | Should -BeNullOrEmpty
     }
 
     It 'Verify: one sign-in without an alert -> Partial, exit 1' {
