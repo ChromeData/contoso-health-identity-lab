@@ -355,6 +355,31 @@ Describe 'Measure-HrToDisable / Test-IsDisableAudit' {
         $r.MaxMinutes | Should -Be 40
     }
 
+    It 'counts the inbound-to-AD leaver logged as update + accountDisabled -> True, once per person, from the earliest row' {
+        $users = @(@{ id = 'u-dana'; employeeId = '100492'; displayName = 'Dana Okafor' })
+        $upd = { param([datetime]$At, [object[]]$Props) $e = New-ProvEvent '100492' '' $At -Action 'update'; $e['modifiedProperties'] = $Props; $e }
+        $prov = @(
+            (& $upd $script:T0.AddSeconds(1) @(@{ displayName = 'accountDisabled'; oldValue = ''; newValue = 'True' }, @{ displayName = 'parentDistinguishedName'; newValue = 'OU=Disabled,DC=corp,DC=contoso' })),
+            (& $upd $script:T0 @(@{ displayName = 'accountDisabled'; oldValue = ''; newValue = 'True' })),
+            (& $upd $script:T0 @(@{ displayName = 'department'; newValue = 'ICU' }))       # an ordinary update: not a leaver
+        )
+        $r = Measure-HrToDisable -ProvisioningEvents $prov -DirectoryAudits @((New-DisableAudit 'u-dana' $script:T0.AddMinutes(2.5))) -Users $users
+        $r.Leavers | Should -Be 1
+        $r.Unmatched | Should -Be 0
+        $r.MedianMinutes | Should -Be 2.5
+    }
+
+    It 'Test-IsHrLeaverEvent: disable, or update that sets accountDisabled true; never a failed row or another update' {
+        Test-IsHrLeaverEvent (New-ProvEvent 'E1' '' $script:T0) | Should -BeTrue
+        Test-IsHrLeaverEvent (New-ProvEvent 'E1' '' $script:T0 -Status 'failure') | Should -BeFalse
+        $u = New-ProvEvent 'E1' '' $script:T0 -Action 'update'
+        $u['modifiedProperties'] = @(@{ displayName = 'accountDisabled'; newValue = 'False' })
+        Test-IsHrLeaverEvent $u | Should -BeFalse
+        $u['modifiedProperties'] = @(@{ displayName = 'accountDisabled'; newValue = '["True"]' })
+        Test-IsHrLeaverEvent $u | Should -BeTrue
+        Test-IsHrLeaverEvent (New-ProvEvent 'E1' '' $script:T0 -Action 'create') | Should -BeFalse
+    }
+
     It 'does not guess between two users with the same display name' {
         $users = @(@{ id = 'a'; displayName = 'Sam Lee' }, @{ id = 'b'; displayName = 'Sam Lee' })
         $r = Measure-HrToDisable -ProvisioningEvents @((New-ProvEvent '' 'Sam Lee' $script:T0)) -DirectoryAudits @((New-DisableAudit 'a' $script:T0.AddMinutes(5))) -Users $users

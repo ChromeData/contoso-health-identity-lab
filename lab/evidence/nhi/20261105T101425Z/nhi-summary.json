@@ -1,0 +1,166 @@
+{
+  "schema": "contoso-nhi-summary/1",
+  "generatedAtUtc": "2026-11-05T10:14:25.9740630Z",
+  "generator": "lab/scripts/powershell/06-NHI-Inventory.ps1",
+  "source": "tenant",
+  "complete": true,
+  "parameters": {
+    "StaleDays": 90,
+    "ExpiryWarningDays": 30,
+    "MaxCredentialLifetimeDays": 180
+  },
+  "dataSources": [
+    {
+      "name": "applications+servicePrincipals",
+      "status": "ok"
+    },
+    {
+      "name": "owner accountEnabled",
+      "status": "ok"
+    },
+    {
+      "name": "federatedIdentityCredentials",
+      "status": "ok"
+    },
+    {
+      "name": "graph appRoleAssignedTo",
+      "status": "ok"
+    },
+    {
+      "name": "privileged directory roles",
+      "status": "ok"
+    },
+    {
+      "name": "oauth2PermissionGrants",
+      "status": "ok"
+    },
+    {
+      "name": "servicePrincipalSignInActivities (beta)",
+      "status": "ok"
+    },
+    {
+      "name": "secretsRegister",
+      "status": "ok"
+    }
+  ],
+  "summary": {
+    "nhiCount": 19,
+    "excludedMicrosoftFirstParty": 359,
+    "byKind": {
+      "AppRegistration": 12,
+      "ManagedIdentity": 5,
+      "ThirdPartyApp": 2
+    },
+    "findingsBySeverity": {
+      "Critical": 3,
+      "High": 2,
+      "Medium": 19,
+      "Low": 3,
+      "Info": 0
+    },
+    "findingsByOwasp": {
+      "NHI1:2025": 8,
+      "NHI2:2025": 3,
+      "NHI3:2025": 0,
+      "NHI4:2025": 0,
+      "NHI5:2025": 5,
+      "NHI6:2025": 3,
+      "NHI7:2025": 7,
+      "NHI8:2025": 1,
+      "NHI9:2025": 0,
+      "NHI10:2025": 0
+    },
+    "kpi": {
+      "orphanedNhi": 8,
+      "nhiWithExpiredCredential": 0,
+      "expiredOrOrphanedNhi": 8,
+      "nhiWithSecrets": 3,
+      "tierZeroNhi": 2,
+      "staleNhi": 0,
+      "registeredSecrets": 12,
+      "secretsWithoutOwnerOrExpiry": 7
+    }
+  },
+  "findingsById": {
+    "FIC-BRANCH / Low": 3,
+    "FIC-MULTI-ENV / Medium": 1,
+    "OWNER-NO-HUMAN / Medium": 1,
+    "OWNER-NONE / High": 2,
+    "OWNER-NONE / Medium": 5,
+    "PERM-SENSITIVE / Medium": 2,
+    "PERM-TIER0 / Critical": 2,
+    "ROLE-PRIVILEGED / Critical": 1,
+    "SECRET-NO-EXPIRY / Medium": 7,
+    "SECRET-PRESENT / Medium": 3
+  },
+  "owaspCoverage": [
+    {
+      "owasp": "NHI1:2025",
+      "title": "Improper Offboarding",
+      "findings": 8,
+      "coveredHere": true
+    },
+    {
+      "owasp": "NHI2:2025",
+      "title": "Secret Leakage",
+      "findings": 3,
+      "coveredHere": true
+    },
+    {
+      "owasp": "NHI3:2025",
+      "title": "Vulnerable Third-Party NHI",
+      "findings": 0,
+      "coveredHere": true
+    },
+    {
+      "owasp": "NHI4:2025",
+      "title": "Insecure Authentication",
+      "findings": 0,
+      "coveredHere": true
+    },
+    {
+      "owasp": "NHI5:2025",
+      "title": "Overprivileged NHI",
+      "findings": 5,
+      "coveredHere": true
+    },
+    {
+      "owasp": "NHI6:2025",
+      "title": "Insecure Cloud Deployment Configurations",
+      "findings": 3,
+      "coveredHere": true
+    },
+    {
+      "owasp": "NHI7:2025",
+      "title": "Long-Lived Secrets",
+      "findings": 7,
+      "coveredHere": true
+    },
+    {
+      "owasp": "NHI8:2025",
+      "title": "Environment Isolation",
+      "findings": 1,
+      "coveredHere": true
+    },
+    {
+      "owasp": "NHI9:2025",
+      "title": "NHI Reuse",
+      "findings": 0,
+      "coveredHere": true
+    },
+    {
+      "owasp": "NHI10:2025",
+      "title": "Human Use of NHI",
+      "findings": 0,
+      "coveredHere": false
+    }
+  ],
+  "privateFiles": {
+    "nhi_inventory.json": "fc5fd9258e8750f5e1ae6f4d0c9d7b11c9227218560d20d03aecb1081879c84a",
+    "nhi_inventory.csv": "eecefbd9a28d917b775f390e0903d51ed3474349409bd7427720b40f19799052",
+    "nhi_credentials.csv": "25f7d30883ae0239112c3b35926f2ab45ad5c1c3e5506eaa5eb8f913b44dc894",
+    "nhi_findings.csv": "834ac2687cf04ae3e5d7e89f0ff783072aa53a22c9ac75dbbdc89043efba7eb5",
+    "nhi_secrets.csv": "e63a7c411b6a2dea2d785b76617171722f6b877783ee4a6aeea6273b5335921e"
+  },
+  "note": "Counts only. The named rows are in the gitignored lab/evidence/out (nhi_*.csv / nhi_inventory.json); privateFiles holds their SHA-256."
+}

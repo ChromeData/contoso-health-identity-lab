@@ -150,6 +150,14 @@
 .PARAMETER PamReconcilePath
     The reconcile report. Default lab/pam/out/reconcile-latest.csv.
 
+.PARAMETER UseAzureCliToken
+    App-only sign-in: take a Microsoft Graph token from the Azure CLI session
+    (`az account get-access-token --resource-type ms-graph`) and connect
+    with it, always that identity, never a leftover context. For the lab
+    operator: `lab/scripts/operator/op pwsh ./<this script> -UseAzureCliToken`
+    (its own az profile, certificate sign-in). The token stays in this
+    process: never in argv, a file or the output (masked in GitHub Actions).
+
 .EXAMPLE
     Connect-MgGraph -Scopes 'User.Read.All','Group.Read.All','Directory.Read.All','AuditLog.Read.All','RoleManagement.Read.Directory','PrivilegedEligibilitySchedule.Read.AzureADGroup','PrivilegedAssignmentSchedule.Read.AzureADGroup','Policy.Read.All','AccessReview.Read.All','Application.Read.All'
     ./08-Measure-KPIs.ps1 -Label baseline -SkipPam
@@ -160,7 +168,9 @@
     The snapshot object (also written as JSON).
 
 .NOTES
-    TENANT-TIME: nothing here has run against Entra or a live Vault yet.
+    RAN - tenant: baseline 2026-10-27 (E11), after 2026-10-29 (E11b) and
+    2026-11-05 (app-only as the lab operator, E72). The PAM KPIs have not
+    read a live Vault (-SkipPam on every tenant run so far).
     roleAssignmentScheduleInstances includes assignments made directly through
       the role assignments API (Graph docs, "List roleAssignmentScheduleInstances").
     verify: such direct assignments (Terraform, the tenant-creation Global
@@ -176,8 +186,10 @@
       /identityGovernance/accessReviews/definitions.
     verify: Cloud Sync's disable of a synced user is logged in directoryAudits
       as "Update user" (AccountEnabled -> false) or "Disable account".
-    verify: provisioning log sourceIdentity.id is the HR externalId
-      (employeeId) for API-driven inbound provisioning.
+    Checked live 2026-11-05: the inbound provisioning log's sourceIdentity.id
+      is the HR externalId (= the Entra employeeId), and a leaver is logged as
+      provisioningAction 'update' with accountDisabled -> True
+      (Test-IsHrLeaverEvent).
     verify: Guacamole 1.6 history entries list a recording in "logs" when
       RECORDING_SEARCH_PATH is set (lab/pam/docker-compose.yml sets it).
     lab/pam/reconcile.sh contract used here: CSV columns account, status
@@ -273,7 +285,12 @@ param(
 
     [Parameter()]
     [ValidateRange(1, 365)]
-    [int]$PamSessionLookbackDays = 30
+    [int]$PamSessionLookbackDays = 30,
+
+    # App-only sign-in from the Azure CLI session (the lab operator via
+    # lab/scripts/operator/op, or azure/login over OIDC).
+    [Parameter()]
+    [switch]$UseAzureCliToken
 )
 
 # Operator console output. Write-Host on purpose (colour, -NoNewline); every
@@ -283,6 +300,49 @@ function Write-Console {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Interactive operator console (colour, -NoNewline): status lines for the person running the script, not pipeline data.')]
     param()
     Write-Host @args
+}
+
+function Connect-GraphFromAzureCli {
+    # App-only: the Azure CLI is already signed in as an app (azure/login over
+    # GitHub OIDC, or the lab operator's certificate through
+    # lab/scripts/operator/op). The token never leaves this process: masked in
+    # Actions, handed to Connect-MgGraph as a SecureString, then dropped. Same
+    # as mock-hr/Invoke-InboundProvisioning.ps1, through Write-Console for the
+    # analyzer; every lab/scripts/powershell copy is identical (parity test in
+    # tests/EvidencePackPipeline.Tests.ps1).
+    $global:LASTEXITCODE = 0
+    $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {
+        throw 'No Microsoft Graph token from the Azure CLI. Sign it in first (azure/login with OIDC in GitHub Actions, or az login locally).'
+    }
+    $token = ([string]$token).Trim()
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Console "::add-mask::$token" }
+    # NetworkCredential.SecurePassword: the same SecureString as
+    # ConvertTo-SecureString -AsPlainText, without the analyzer error rule.
+    Connect-MgGraph -AccessToken ([System.Net.NetworkCredential]::new('', $token).SecurePassword) -NoWelcome | Out-Null
+    Remove-Variable -Name token
+}
+
+function Get-MissingGraphScope {
+    # Required Graph permissions the current context does not cover, for the
+    # "does not list" warning. An app-only identity (-UseAzureCliToken, e.g.
+    # the lab operator) often holds the ReadWrite role, not the Read one a
+    # delegated admin consents to. Microsoft Learn's permission tables list
+    # X.ReadWrite.Y as a higher-privileged permission wherever X.Read.Y is the
+    # least privileged one, and Directory.Read.All for the user, group,
+    # membership and application reads (checked 2026-11-05 on "List
+    # applications" and "List group transitive members"). Empty -Have
+    # (unknown context) = no warning. Identical in 06-NHI-Inventory.ps1,
+    # 08-Measure-KPIs.ps1 and 09-SoD-Report.ps1 (parity test in
+    # tests/EvidencePackPipeline.Tests.ps1).
+    param([AllowEmptyCollection()][string[]]$Have = @(), [Parameter(Mandatory)][string[]]$Required)
+    if (-not @($Have | Where-Object { $_ })) { return @() }
+    $directoryCovers = @('User.Read.All', 'Group.Read.All', 'GroupMember.Read.All', 'Application.Read.All')
+    $hasDirectory = ('Directory.Read.All' -in $Have) -or ('Directory.ReadWrite.All' -in $Have)
+    return @($Required | Where-Object {
+            ($_ -notin $Have) -and (($_ -replace '\.Read\.', '.ReadWrite.') -notin $Have) -and
+            -not ($hasDirectory -and $_ -in $directoryCovers)
+        })
 }
 
 Set-StrictMode -Version Latest
@@ -729,6 +789,25 @@ function Test-IsDisableAudit {
     return $false
 }
 
+function Test-IsHrLeaverEvent {
+    # An inbound-provisioning log row that is an HR leaver reaching AD.
+    # provisioningAction 'disable' is the documented case; API-driven inbound
+    # provisioning to on-premises AD logs the lab's leaver as 'update' with
+    # the modified property accountDisabled -> True instead (and the move to
+    # OU=Disabled as parentDistinguishedName): read live from
+    # /auditLogs/provisioning on 2026-11-05 for the 2026-10-28 leaver (E52),
+    # which the 'disable'-only rule had reported as "no matched leaver".
+    param([System.Collections.IDictionary]$Row)
+    if ([string](Get-Field $Row @('provisioningStatusInfo', 'status')) -ne 'success') { return $false }
+    $action = [string](Get-Field $Row @('provisioningAction'))
+    if ($action -eq 'disable') { return $true }
+    if ($action -ne 'update') { return $false }
+    foreach ($mp in @(Get-Field $Row @('modifiedProperties'))) {
+        if ($mp -and [string](Get-Field $mp @('displayName')) -eq 'accountDisabled' -and [string](Get-Field $mp @('newValue')) -match '^\s*\[?\s*"?true"?\s*\]?\s*$') { return $true }
+    }
+    return $false
+}
+
 function Measure-HrToDisable {
     # Pairs each successful inbound-provisioning "disable" (HR leaver reached
     # the provisioning service and AD) with the first Entra disable audit for
@@ -754,9 +833,15 @@ function Measure-HrToDisable {
             }
         })
     $minutes = [System.Collections.Generic.List[double]]::new(); $unmatched = 0
-    foreach ($e in @($ProvisioningEvents)) {
-        if ([string](Get-Field $e @('provisioningAction')) -ne 'disable') { continue }
-        if ([string](Get-Field $e @('provisioningStatusInfo', 'status')) -ne 'success') { continue }
+    # One leaver per HR identity: the provisioning service can log the same
+    # leaver more than once (the disable and the OU move); the clock starts
+    # at the EARLIEST of them.
+    $leaverEvents = @($ProvisioningEvents | Where-Object { $_ -and (Test-IsHrLeaverEvent $_) } |
+        Sort-Object { ([datetime](Get-Field $_ @('activityDateTime'))).ToUniversalTime() })
+    $seen = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($e in $leaverEvents) {
+        $key = "$(Get-Field $e @('sourceIdentity', 'id'))|$(Get-Field $e @('sourceIdentity', 'displayName'))"
+        if ($key -ne '|' -and -not $seen.Add($key)) { continue }
         $srcId = [string](Get-Field $e @('sourceIdentity', 'id')); $srcName = [string](Get-Field $e @('sourceIdentity', 'displayName'))
         $uid = if ($srcId -and $byEmployeeId.ContainsKey($srcId)) { $byEmployeeId[$srcId] } elseif ($srcName -and $byName.ContainsKey($srcName)) { $byName[$srcName] } else { $null }
         $t0 = ([datetime](Get-Field $e @('activityDateTime'))).ToUniversalTime()
@@ -908,9 +993,17 @@ function Get-PrincipalType { param($Principal) return ([string](Get-Field $Princ
 $requiredScopes = @('User.Read.All', 'Group.Read.All', 'Directory.Read.All', 'AuditLog.Read.All', 'RoleManagement.Read.Directory',
     'PrivilegedEligibilitySchedule.Read.AzureADGroup', 'PrivilegedAssignmentSchedule.Read.AzureADGroup', 'Policy.Read.All', 'AccessReview.Read.All',
     'Application.Read.All')   # Graph application-permission grants (always) + NHI fallback read
+if ($UseAzureCliToken) {
+    # App-only: always this identity, never a leftover context.
+    Write-Console 'Signing in to Microsoft Graph app-only (token from the Azure CLI session)...' -ForegroundColor Yellow
+    Connect-GraphFromAzureCli
+}
 $ctx = $null; try { $ctx = Get-MgContext } catch { Write-Verbose "Get-MgContext failed: $($_.Exception.Message)"; $ctx = $null }
-if (-not $ctx) { Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes -NoWelcome; $ctx = Get-MgContext }
-$missingScopes = @($requiredScopes | Where-Object { $ctx.Scopes -and $_ -notin $ctx.Scopes })
+if (-not $ctx) {
+    if ($UseAzureCliToken) { throw 'No Microsoft Graph context after the app-only sign-in.' }
+    Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes -NoWelcome; $ctx = Get-MgContext
+}
+$missingScopes = @(Get-MissingGraphScope -Have @($ctx.Scopes) -Required $requiredScopes)
 if ($missingScopes) { Write-Warning "Current Graph context does not list: $($missingScopes -join ', '). KPIs needing them are recorded as failed." }
 
 $now = (Get-Date).ToUniversalTime()
