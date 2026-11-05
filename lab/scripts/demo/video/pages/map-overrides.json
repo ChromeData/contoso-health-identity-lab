@@ -112,7 +112,7 @@
    "The guard's alert list."
   ],
   "CAPR": [
-   "Passkeys are switched on, with a stricter kind for admins; none registered yet. Adding a new sign-in method needs a one-time pass or a phishing-proof method.",
+   "Passkeys are switched on for everyone, and the IT admins' separate logins each have one. Adding a new sign-in method needs a one-time pass or a phishing-proof method.",
    "A badge only the real door accepts."
   ],
   "CASESS": [
@@ -120,7 +120,7 @@
    "A fresh check at the secure wing."
   ],
   "BG": [
-   "Two emergency Global Admin accounts that sit outside every rule, so a bad rule can always be undone. They are meant to use hardware keys; those are not registered yet, which is tracked. Any use raises an alarm.",
+   "Two emergency Global Admin accounts that sit outside every rule, so a bad rule can always be undone. Each has its own passkey, and any use raises an alarm.",
    "The fire axe behind glass."
   ],
   "HDAU": [
