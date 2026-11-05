@@ -458,7 +458,7 @@ variable "aws_saml_entity_id" {
 
 variable "aws_saml_acs_urls" {
   type        = list(string)
-  description = "IAM Identity Center ACS URL(s), one per enabled region. Empty = not managed yet (no wildcard reply URL is ever kept). Tenant-specific."
+  description = "IAM Identity Center ACS URL(s): every host AWS uses for this instance (the console panel's and the one in the access portal's AuthnRequest - they differ; modules/apps variables.tf). Empty = not managed yet (no wildcard reply URL is ever kept). Tenant-specific: TF_AWS_SAML_ACS_URLS."
   default     = []
 }
 
@@ -637,6 +637,12 @@ variable "enable_pim_tiers" {
 variable "enable_pim_azure_resources" {
   type        = bool
   description = "Make PIM-Azure-RG-Contributors ELIGIBLE for Contributor on the lab RG (Azure PIM, MFA + justification + approval, 4h). Needs enable_premium and a HUMAN applier with Owner / User Access Administrator on the RG - the CI APPLY identity cannot write PIM role-management policies (modules/pim/README.md)."
+  default     = false
+}
+
+variable "enable_pim_aws_admin" {
+  type        = bool
+  description = "AWS admin without root (ADR 0025): create PIM-AWS-Lab-Admins (modules/pim aws.tf; eligible-only, 2-hour MFA + justification activation, every activation mailed) and assign it to the AWS IAM Identity Center app as its second principal (modules/apps), so SCIM copies only ACTIVE members to AWS. lab/terraform/aws grants the SCIM copy the LabAdministrator permission set. Needs enable_premium and enable_sso_apps; eligibility is a post-apply step."
   default     = false
 }
 

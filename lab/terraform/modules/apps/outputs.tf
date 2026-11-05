@@ -51,8 +51,13 @@ output "aws_claims_mapping_policy_id" {
 }
 
 output "aws_assigned_group_object_id" {
-  description = "The single principal assigned to the AWS app (= the SCIM scope)."
+  description = "The staff principal assigned to the AWS app (App-AWS-IdentityCenter-Users; part of the SCIM scope)."
   value       = azuread_app_role_assignment.aws_users.principal_object_id
+}
+
+output "aws_admins_assigned_group_object_id" {
+  description = "The PIM admin group assigned to the AWS app (PIM-AWS-Lab-Admins; null unless enable_aws_admins_assignment). ADR 0025."
+  value       = one(azuread_app_role_assignment.aws_admins[*].principal_object_id)
 }
 
 # ---- AWS IAM Identity Center (SCIM) -----------------------------------------

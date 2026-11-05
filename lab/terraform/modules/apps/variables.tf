@@ -74,10 +74,11 @@ variable "aws_users_group_object_id" {
   type        = string
   description = <<-EOT
     Object id of App-AWS-IdentityCenter-Users (modules/groups output
-    app_access_group_object_ids["aws"]). The ONLY principal assigned to the
-    AWS enterprise app. Assignment is the access decision AND the SCIM scope:
-    the provisioning service syncs assigned users/groups only, so this one
-    group is everything AWS will ever see.
+    app_access_group_object_ids["aws"]). The STAFF principal on the AWS
+    enterprise app (ViewOnlyAccess in AWS). Assignment is the access decision
+    AND the SCIM scope: the provisioning service syncs assigned users/groups
+    only. The one other principal the module allows is the PIM admin group
+    (enable_aws_admins_assignment, ADR 0025); there is no list of extras.
   EOT
 
   validation {
@@ -85,6 +86,36 @@ variable "aws_users_group_object_id" {
     # then runs at apply.
     condition     = can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.aws_users_group_object_id))
     error_message = "aws_users_group_object_id must be a group object id (GUID)."
+  }
+}
+
+variable "enable_aws_admins_assignment" {
+  type        = bool
+  description = <<-EOT
+    Assign a SECOND principal to the AWS app: the PIM-for-Groups admin group
+    (modules/pim output aws_admin_group_object_id, PIM-AWS-Lab-Admins). A
+    plain bool, not "is the id set", because the group id is unknown at plan
+    when the group is created in the same apply (count needs a known value).
+    ADR 0025.
+  EOT
+  default     = false
+}
+
+variable "aws_admins_group_object_id" {
+  type        = string
+  description = <<-EOT
+    Object id of PIM-AWS-Lab-Admins (modules/pim output
+    aws_admin_group_object_id). Only read when enable_aws_admins_assignment.
+    Its members are ELIGIBLE-only, so at rest it holds nobody: SCIM creates
+    the group in AWS empty, and copies a member only while their PIM
+    activation lasts. It must never be App-AWS-IdentityCenter-Users (that
+    would hand the staff group the admin permission set).
+  EOT
+  default     = ""
+
+  validation {
+    condition     = var.aws_admins_group_object_id == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.aws_admins_group_object_id))
+    error_message = "aws_admins_group_object_id must be empty or a group object id (GUID)."
   }
 }
 
@@ -143,10 +174,16 @@ variable "aws_saml_entity_id" {
 variable "aws_saml_acs_urls" {
   type        = list(string)
   description = <<-EOT
-    Reply URL(s) (Assertion Consumer Service) from the same AWS page, pattern
-    https://<region>.signin.aws.amazon.com/platform/saml/acs/<id>. One per
-    enabled Identity Center region (IPv4 and dual-stack variants are separate
-    URLs). Replaces the gallery template's wildcard reply URL, so assertions
+    Reply URL(s) (Assertion Consumer Service) for THIS Identity Center
+    instance, pattern https://<host>/platform/saml/acs/<id>. List every ACS
+    URL AWS uses, not only the first one its console shows: the same <id>
+    appears on more than one host (IPv4 and dual-stack variants are separate
+    URLs), and Entra refuses a sign-in whose AuthnRequest names an ACS URL
+    that is not listed (AADSTS50011). Read live on 2026-11-05: the console
+    panel showed https://us-east-1.sso.signin.aws/platform/saml/acs/<id>, but
+    the AuthnRequest the access portal sends names
+    https://us-east-1.signin.aws/platform/saml/acs/<id> - so the lab lists
+    both. Replaces the gallery template's wildcard reply URL, so assertions
     can only be posted to THIS instance. Empty = not managed yet.
   EOT
   default     = []

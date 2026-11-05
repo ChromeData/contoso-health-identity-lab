@@ -32,12 +32,23 @@ holds the signing certificate's private key.
 
 ## The design decisions, and why
 
-- **Entra decides who reaches AWS. AWS decides what they get.** The one
+- **Entra decides who reaches AWS. AWS decides what they get.** Each
   assignment on the AWS app does two jobs. It is the SSO gate, and it is the
   SCIM scope, because provisioning syncs assigned principals only.
-  [`lab/terraform/aws`](../../aws/README.md) then grants that group a
-  permission set. Adding a second principal is deliberately a code change
-  (a new SCIM scope and a new AWS principal), not one more list element.
+  [`lab/terraform/aws`](../../aws/README.md) then grants each group a
+  permission set. A new principal is deliberately a code change (a new SCIM
+  scope and a new AWS principal), not one more list element: each is its own
+  named resource. There are exactly two:
+  - `aws_users`: App-AWS-IdentityCenter-Users, the staff path (access
+    package, ViewOnlyAccess in AWS);
+  - `aws_admins` (`enable_aws_admins_assignment`, ADR 0025):
+    PIM-AWS-Lab-Admins, whose members are eligible-only. At rest the group
+    is empty, so SCIM creates it empty in AWS and nobody can complete the
+    SAML sign-in as an AWS admin. A member is copied to AWS only while a PIM
+    activation lasts, and gets the LabAdministrator permission set there.
+    Not a nested group (app assignment and SCIM do not expand nesting), not
+    a direct user assignment (that would keep the admin account provisioned
+    and able to sign in all the time).
 - **`azuread_application_from_template`, not `azuread_application` with
   `template_id`.** The first resource manages nothing on the objects it
   creates, so Terraform can never strip the template's `User` and
@@ -51,7 +62,14 @@ holds the signing certificate's private key.
 - **The Reply URL replaces the template's wildcard.** The template ships
   `https://*.signin.aws.amazon.com/platform/saml/acs/*`. After apply, Entra
   posts assertions only to this Identity Center instance. Wildcards are
-  rejected at plan.
+  rejected at plan. List **every** ACS URL of the instance: on 2026-11-05 the
+  first staff sign-in through the access portal failed with AADSTS50011
+  because the portal's AuthnRequest names
+  `https://us-east-1.signin.aws/platform/saml/acs/<id>` while only the
+  console panel's `https://us-east-1.sso.signin.aws/...` was listed. To read
+  the URL AWS really sends: open the access portal in a private window and
+  decode the `SAMLRequest` it posts to `login.microsoftonline.com/<tenant>/saml2`
+  (base64; `AssertionConsumerServiceURL` attribute).
 - **Claims are code.** A claims-mapping policy supersedes the portal's
   *Attributes & Claims* blade, which becomes read-only. NameID is pinned to
   `userPrincipalName`, the value the connector's default mapping sends as the

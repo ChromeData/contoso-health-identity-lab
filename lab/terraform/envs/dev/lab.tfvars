@@ -43,6 +43,12 @@ enable_pim_azure_resources     = false
 enable_helpdesk_au_scoping     = true
 enable_global_admin_pim_policy = true
 
+# AWS admin without root (ADR 0025): PIM-AWS-Lab-Admins, eligible-only, 2-hour
+# activation (MFA + justification, mailed to the security mailbox), assigned to
+# the AWS IAM Identity Center app so SCIM copies only ACTIVE members to AWS,
+# where lab/terraform/aws gives them the LabAdministrator permission set.
+enable_pim_aws_admin = true
+
 # Tier-0 PIM activation step-up on auth context c1 (CA021). The plan refuses
 # the context unless CA021 is DECLARED "enabled" (ca_policy_states) AND
 # ca021_enforced_in_tenant = true. Terraform cannot see whether

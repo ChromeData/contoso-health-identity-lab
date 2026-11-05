@@ -213,6 +213,14 @@ check "b2b_requires_governance" {
   }
 }
 
+# The AWS admin group is only useful assigned to the AWS app (module.apps).
+check "pim_aws_admin_requires_sso_apps" {
+  assert {
+    condition     = !var.enable_pim_aws_admin || (var.enable_premium && var.enable_sso_apps)
+    error_message = "enable_pim_aws_admin = true needs enable_premium and enable_sso_apps: PIM-AWS-Lab-Admins reaches AWS only as a principal of the AWS IAM Identity Center app."
+  }
+}
+
 check "pim_extensions_require_premium" {
   assert {
     condition     = !(var.enable_pim_tiers || var.enable_pim_azure_resources || var.enable_helpdesk_au_scoping || var.enable_global_admin_pim_policy) || var.enable_premium
@@ -436,6 +444,11 @@ module "pim" {
   # PIM for Azure resources: group eligible for Contributor on the lab RG.
   enable_pim_azure_resources = var.enable_pim_azure_resources
   azure_pim_scope_id         = azurerm_resource_group.idlab.id
+
+  # AWS admin as a PIM-for-Groups activation (ADR 0025). The group is
+  # assigned to the AWS app in module.apps below; it stays out of the CA002 /
+  # CA020 scope (privileged_review_targets) on purpose.
+  enable_pim_aws_admin = var.enable_pim_aws_admin
 }
 
 # -----------------------------------------------------------------------------
@@ -595,6 +608,11 @@ locals {
     [module.groups[0].break_glass_group_object_id, module.groups[0].priv_iam_admins_group_object_id],
     values(module.pim[0].tier_group_object_ids),
     [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null],
+    # PIM-AWS-Lab-Admins (ADR 0025): members arrive only by PIM activation
+    # (written by MS-PIM), so a direct add is a way around the 2-hour,
+    # MFA + reason activation into AWS admin. Watched here, but deliberately
+    # NOT in the CA002/CA020 scope (privileged_review_targets).
+    var.enable_pim_aws_admin ? [module.pim[0].aws_admin_group_object_id] : [],
     values(module.pim[0].approver_group_object_ids),
   ) : []
 
@@ -624,8 +642,13 @@ module "apps" {
   source = "../../modules/apps"
   count  = var.enable_premium && var.enable_sso_apps ? 1 : 0
 
-  # The ONE principal on the AWS app = the SCIM scope.
-  aws_users_group_object_id = module.groups[0].app_access_group_object_ids["aws"]
+  # The two principals on the AWS app = the SCIM scope: the staff group
+  # (ViewOnlyAccess in AWS) and, with enable_pim_aws_admin, the PIM admin
+  # group (LabAdministrator in AWS, ADR 0025). module.pim exists whenever
+  # this module does (both need enable_premium).
+  aws_users_group_object_id    = module.groups[0].app_access_group_object_ids["aws"]
+  enable_aws_admins_assignment = var.enable_pim_aws_admin
+  aws_admins_group_object_id   = var.enable_pim_aws_admin ? module.pim[0].aws_admin_group_object_id : ""
 
   aws_saml_entity_id                    = var.aws_saml_entity_id
   saml_signing_cert_end_date            = var.saml_signing_cert_end_date

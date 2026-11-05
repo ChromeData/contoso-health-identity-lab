@@ -141,6 +141,11 @@ run "plan_lab_tfvars" {
     condition     = output.pim_privileged_role_template_ids != null && nonsensitive(output.directory_role_pim_policies) != null
     error_message = "Day 1: modules/pim renders the tier map and the Global Administrator policy body with enable_premium; they are APPLIED only on Day 2 (enable_pim_tiers, Set-DirectoryRolePimPolicies.ps1)"
   }
+  # ADR 0025: AWS admin is a PIM-for-Groups activation, not the root user.
+  assert {
+    condition     = output.aws_admin_activation_policy != null && output.aws_admin_activation_policy.maximum_duration == "PT2H" && output.aws_admin_activation_policy.mfa && output.aws_admin_activation_policy.in_ca_admin_scope == false
+    error_message = "enable_pim_aws_admin (lab.tfvars): PIM-AWS-Lab-Admins with a 2-hour MFA activation, kept out of the CA002/CA020 group scope"
+  }
 }
 
 # The committed lab.tfvars hold-back list, with the ITDR flags flipped on (as
@@ -243,6 +248,7 @@ run "plan_legacy_flags_on_new_flags_off" {
     enable_shared_clinical_ca               = false
     enable_helpdesk_au_scoping              = false
     enable_global_admin_pim_policy          = false
+    enable_pim_aws_admin                    = false
     enable_itdr_detections_v2               = false
     vault_feed_v2_columns                   = false
     pim_tier0_activation_auth_context_id    = ""
@@ -306,6 +312,10 @@ run "plan_legacy_flags_on_new_flags_off" {
     error_message = "neither the ServiceNow SAML app nor the provisioning app may be planned while their flags are off"
   }
   assert {
+    condition     = output.aws_admin_activation_policy == null
+    error_message = "no AWS admin PIM group (and no second AWS app principal) while enable_pim_aws_admin is off"
+  }
+  assert {
     condition     = output.apps_nhi_inventory.okta_clinic_idp == null && output.okta_idp_client_id == null
     error_message = "okta-clinic-idp must not be planned while enable_okta_federation is off"
   }
@@ -349,6 +359,7 @@ run "plan_all_flags_on_sentinel" {
     enable_helpdesk_au_scoping          = true
     enable_global_admin_pim_policy      = true
     enable_pim_azure_resources          = true
+    enable_pim_aws_admin                = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
     enable_agent_identity               = true
@@ -414,9 +425,14 @@ run "plan_all_flags_on_sentinel" {
     error_message = "enable_protected_actions_ca must render CA023 on auth context c2, report-only"
   }
   assert {
-    # 18 group reviews (IAM + 16 tiers + Azure), GA eligibility, inactive users.
-    condition     = length(output.access_review_definitions) == 20 && contains(keys(output.access_review_definitions), "privileged:Global Administrator (eligible)")
-    error_message = "expected 18 privileged group reviews + the GA eligibility review + 1 inactive-user review"
+    # 19 group reviews (IAM + 16 tiers + Azure + AWS admin), GA eligibility,
+    # inactive users.
+    condition     = length(output.access_review_definitions) == 21 && contains(keys(output.access_review_definitions), "privileged:Global Administrator (eligible)") && contains(keys(output.access_review_definitions), "privileged:PIM-AWS-Lab-Admins")
+    error_message = "expected 19 privileged group reviews (incl. PIM-AWS-Lab-Admins) + the GA eligibility review + 1 inactive-user review"
+  }
+  assert {
+    condition     = output.aws_admin_activation_policy != null && output.aws_admin_activation_policy.approval == false && output.aws_admin_activation_policy.activation_mail
+    error_message = "enable_pim_aws_admin: no approval (one human admin, ADR 0025), so every activation must be mailed to pim_alert_mailbox"
   }
   assert {
     condition     = output.b2b_post_apply != null
@@ -488,6 +504,7 @@ run "plan_all_flags_on_la_alerts" {
     enable_helpdesk_au_scoping          = true
     enable_global_admin_pim_policy      = true
     enable_pim_azure_resources          = true
+    enable_pim_aws_admin                = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
     enable_agent_identity               = true
@@ -541,7 +558,7 @@ run "plan_all_flags_on_la_alerts" {
     error_message = "all seventeen ITDR rules are selected on the Log Analytics path, and the two Sentinel-only ones must be reported as such"
   }
   assert {
-    condition     = length(nonsensitive(output.directory_role_pim_policies)) == 1 && length(output.access_review_definitions) == 20
+    condition     = length(nonsensitive(output.directory_role_pim_policies)) == 1 && length(output.access_review_definitions) == 21
     error_message = "the PIM and review bodies do not depend on the detection path"
   }
   assert {
@@ -753,6 +770,7 @@ run "flags_without_premium_warn" {
     enable_pim_tiers                    = true
     enable_helpdesk_au_scoping          = true
     enable_global_admin_pim_policy      = true
+    enable_pim_aws_admin                = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
     enable_access_reviews_privileged    = true
@@ -770,6 +788,7 @@ run "flags_without_premium_warn" {
     check.servicenow_provisioning_requires_sso_apps,
     check.okta_federation_requires_sso_apps,
     check.pim_extensions_require_premium,
+    check.pim_aws_admin_requires_sso_apps,
     check.b2b_requires_governance,
     check.nhi_governance_requires_premium,
     check.access_reviews_require_governance,
