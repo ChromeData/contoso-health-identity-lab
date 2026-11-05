@@ -36,6 +36,7 @@ mock_provider "azuread" {
         "GroupMember.ReadWrite.All"                            = "dbaae8cf-10b5-4b86-a4a1-f871c94c6695"
         "Team.Create"                                          = "23fc2474-f741-46ce-8465-674744c5c361"
         "TeamMember.ReadWrite.All"                             = "0121dc95-1b9f-4aed-8bac-58c5ac466691"
+        "DelegatedPermissionGrant.ReadWrite.All"               = "8e8e4742-1d95-4f68-9d56-6ee75648c72a"
       }
     }
   }
