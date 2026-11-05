@@ -318,7 +318,7 @@ else { $null }
 Save-PublishResult -Outcome $outcome -Refusal $refusal
 Write-Console ("`n{0}: {1} of {2} file(s) stored as new blobs under {3}/" -f $outcome, $uploaded, $files.Count, $Prefix) -ForegroundColor $(if ($outcome -eq 'filed') { 'Green' } else { 'Red' })
 if ($unchecked) {
-    Write-Console ("{0} of the stored file(s) could not be read back to check them against their fingerprints (see the warnings above). They are in the store and cannot be changed, but nobody has confirmed they match what was collected, so the pack does not count as filed. Run it again under a new -Prefix to file a checked copy." -f $unchecked) -ForegroundColor Red
+    Write-Console ("{0} of the stored file(s) could not be read back to check them against their fingerprints (see the warnings above). They are in the store under whatever retention it reported above, but nobody has confirmed they match what was collected, so the pack does not count as filed. Run it again under a new -Prefix to file a checked copy." -f $unchecked) -ForegroundColor Red
 }
 if ($outcome -ne 'filed') { exit 1 }
 exit 0

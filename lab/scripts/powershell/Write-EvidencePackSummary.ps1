@@ -149,6 +149,18 @@ function Get-RetentionInfo {
     return [pscustomobject]@{ Days = $days; Until = $first; Mode = $mode; Reported = $exp.Count; Uploaded = $up.Count }
 }
 
+function Get-StoredRetentionText {
+    # For a run that stored files but did not finish: what the store itself
+    # reported about them, never more. A failed run must not promise a lock
+    # the store did not confirm (or reported as still Unlocked).
+    param([AllowEmptyCollection()][object[]]$Files = @(), [Parameter(Mandatory)][datetime]$Now)
+    $ret = Get-RetentionInfo -Files $Files -Now $Now
+    if ($ret.Uploaded -eq 0) { return 'Nothing was stored.' }
+    if ($null -eq $ret.Days) { return 'The store did not report a retention lock for what was stored, so do not rely on those files until the lock is checked.' }
+    if ($ret.Mode -eq 'Unlocked') { return "What was stored stays: the store reports a $($ret.Days)-day retention lock, still in its trial setting, so an Azure administrator could shorten it." }
+    return "What was stored stays: the store reports nobody can change or delete it for $($ret.Days) days."
+}
+
 function Test-ReadBackUnchecked {
     # One Publish-EvidencePack.ps1 file row -> stored, but the read-back that
     # compares it with its fingerprint never finished ('read-back failed: ...'
@@ -267,8 +279,8 @@ elseif ($outcome -eq 'refused' -or $outcome -eq 'invalid' -or $outcome -eq 'fail
                 'exists' { 'The store already holds files with these names, and it never replaces a file. Nothing was overwritten; run the workflow again to file a new copy under a new folder.' }
                 'not-found' { 'The storage account or its evidence container does not exist under the configured name (`TF_EVIDENCE_STORAGE_ACCOUNT_NAME`). Nothing was stored.' }
                 'fingerprint-mismatch' { 'Before upload, every file is checked against the fingerprint list, and one did not match. Nothing was stored. Re-run the workflow to collect a fresh pack.' }
-                'read-back' { "All $($pubFiles.Count) files were uploaded to the locked evidence store, but $unchecked of them could not be downloaded again to check them against their fingerprints (most often a time-out or a sign-in that expired during the run). A file nobody has checked does not count as filed. What was stored stays and cannot be changed or removed; re-run the workflow to file a checked copy in a new folder." }
-                default { 'The upload did not complete (see the upload step''s log). Nothing that was stored can be changed or removed; re-running files a new copy.' }
+                'read-back' { "All $($pubFiles.Count) files were uploaded to the evidence store, but $unchecked of them could not be downloaded again to check them against their fingerprints (most often a time-out or a sign-in that expired during the run). A file nobody has checked does not count as filed. $(Get-StoredRetentionText -Files $pubFiles -Now $Now) Re-run the workflow to file a checked copy in a new folder." }
+                default { "The upload did not complete (see the upload step's log). $(Get-StoredRetentionText -Files $pubFiles -Now $Now) Re-running files a new copy." }
             }))
 }
 elseif ($outcome -eq 'dry-run') {

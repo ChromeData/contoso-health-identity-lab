@@ -356,7 +356,7 @@ Describe 'Write-EvidencePackSummary.ps1 - the plain-English story' {
         Invoke-Publish $dir
         $text = Invoke-Summary @{ ManifestPath = (Join-Path $dir 'manifest.json'); PublishResultPath = $script:PubResult }
         ($text -split "`n")[0] | Should -BeExactly '## Evidence pack not filed: the stored files could not be checked'
-        $text | Should -Match ([regex]::Escape('All 9 files were uploaded to the locked evidence store, but 1 of them could not be downloaded again to check them against their fingerprints'))
+        $text | Should -Match ([regex]::Escape('All 9 files were uploaded to the evidence store, but 1 of them could not be downloaded again to check them against their fingerprints'))
         $text | Should -Match 'A file nobody has checked does not count as filed\.'
         $text | Should -Not -Match 'Evidence pack filed|Stored in the locked'
         $text | Should -Match ([regex]::Escape('9 of 9 file(s) uploaded as new blobs (overwrite refused), 8 read back and matched, 1 could not be checked (outcome `failed`, read-back)'))
@@ -365,6 +365,20 @@ Describe 'Write-EvidencePackSummary.ps1 - the plain-English story' {
         @(($text -split "`n") | Where-Object { $_ -like '*(stored, could not be checked)*' }).Count | Should -Be 1
         $text | Should -Not -Match 'AADSTS|refresh token'
         $text | Should -Not -Match ([regex]::Escape($script:Upn))
+    }
+
+    It 'a failed run states only the lock the store reported (<Case>), never a lock it did not confirm' -ForEach @(
+        @{ Case = 'Locked'; Expiry = '2032-10-31T23:15:05+00:00'; Mode = 'Locked'; Says = 'the store reports nobody can change or delete it for 2190 days' }
+        @{ Case = 'Unlocked'; Expiry = '2032-10-31T23:15:05+00:00'; Mode = 'Unlocked'; Says = 'still in its trial setting, so an Azure administrator could shorten it' }
+        @{ Case = 'not reported'; Expiry = ''; Mode = ''; Says = 'did not report a retention lock for what was stored' }
+    ) {
+        $dir = New-TestPack (Join-Path $TestDrive "s-rbret-$($Case -replace ' ', '')")
+        Set-StoreMock -FailDownload 'operation timed out' -FailOnDownload 2 -Expiry $Expiry -Mode $Mode
+        Invoke-Publish $dir
+        $text = Invoke-Summary @{ ManifestPath = (Join-Path $dir 'manifest.json'); PublishResultPath = $script:PubResult }
+        ($text -split "`n")[0] | Should -BeExactly '## Evidence pack not filed: the stored files could not be checked'
+        $text | Should -Match ([regex]::Escape($Says))
+        $text | Should -Not -Match 'cannot be changed or removed|locked evidence store'
     }
 
     It 'a partly filed pack names the stored files that could not be checked' {
