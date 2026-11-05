@@ -114,6 +114,13 @@ records both exceptions, with User Administrator. Contributor on the RG is Tier 
 - azuread 3.10's administrative unit has no dynamic membership and no
   restricted-management attribute: the dynamic rule is a Graph PATCH, and
   the VIP restricted AU is created by `post-apply/New-RestrictedAdminUnit.ps1`.
+  `workforce_au_excluded_employee_ids` keeps that AU's VIPs out of the
+  help desk's AU by HR employee id (appended to the rule as
+  `-and (user.employeeId -notIn [...])`). The VIP AU's own responder roles
+  (Helpdesk + Authentication Administrator held by
+  `PIM-Tier0-Privileged-Auth-Admins` at `RMAU-VIP` scope) are granted by
+  that script through PIM, not by this module: Terraform never sees the
+  RMAU. Both ran in the lab tenant on 2026-11-05 (capture E16c).
 - AU-scoped role assignments are not evaluated by Conditional Access's
   directory-role condition, so CA002 / CA020 include `PIM-Tier1-Helpdesk` by
   group.

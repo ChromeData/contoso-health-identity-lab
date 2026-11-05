@@ -587,6 +587,30 @@ variable "workforce_au_membership_rule" {
   default     = "(user.userType -eq \"Member\") -and (user.employeeId -ne null) -and (user.userPrincipalName -notStartsWith \"adm-\")"
 }
 
+variable "workforce_au_excluded_employee_ids" {
+  type        = list(string)
+  description = <<-EOT
+    HR employee ids (employeeId) kept OUT of AU-Workforce-Standard: the VIPs
+    that post-apply/New-RestrictedAdminUnit.ps1 puts in the restricted
+    management AU (RMAU-VIP). Appended to workforce_au_membership_rule as
+    -and (user.employeeId -notIn [...]) in output workforce_au_membership_body.
+    WHY BOTH: the RMAU alone already stops the help desk (an RMAU member can
+    be changed only by roles scoped to THAT RMAU - Learn, "Restricted
+    management administrative units", Who can modify objects), but leaving a
+    VIP in the help desk's own AU makes its member list say the opposite of
+    the design and would hand the VIP straight back to the help desk if the
+    RMAU were ever deleted. Keyed on employeeId (HR's key, written by the
+    inbound provisioning path) rather than UPN, so no tenant domain sits in
+    a tfvars file. Default empty = rule unchanged.
+  EOT
+  default     = []
+
+  validation {
+    condition     = alltrue([for id in var.workforce_au_excluded_employee_ids : can(regex("^[A-Za-z0-9-]{1,32}$", id))])
+    error_message = "workforce_au_excluded_employee_ids: HR employee ids only (letters, digits, '-'; at most 32) - they are embedded in a dynamic membership rule."
+  }
+}
+
 # =============================================================================
 # Global Administrator: direct eligibility policy (directory-roles.tf) - OFF
 # =============================================================================

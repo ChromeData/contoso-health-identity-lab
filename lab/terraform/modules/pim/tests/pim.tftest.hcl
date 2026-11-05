@@ -559,6 +559,51 @@ run "helpdesk_au_scoping" {
   }
 }
 
+run "helpdesk_au_excludes_vips" {
+  command = plan
+
+  variables {
+    enable_pim_tiers                   = true
+    enable_helpdesk_au_scoping         = true
+    workforce_au_excluded_employee_ids = ["300001", "400100"]
+  }
+
+  # The VIPs in RMAU-VIP are kept out of the help desk's AU by HR employee
+  # id, AFTER the base rule (which still keeps adm- accounts and anyone
+  # without an employeeId out).
+  assert {
+    condition     = jsondecode(output.workforce_au_membership_body).membershipRule == "${var.workforce_au_membership_rule} -and (user.employeeId -notIn [\"300001\",\"400100\"])"
+    error_message = "The rendered AU rule must append the employeeId -notIn exclusion to the base rule."
+  }
+}
+
+run "helpdesk_au_default_rule_unchanged" {
+  command = plan
+
+  variables {
+    enable_pim_tiers           = true
+    enable_helpdesk_au_scoping = true
+  }
+
+  assert {
+    condition     = jsondecode(output.workforce_au_membership_body).membershipRule == var.workforce_au_membership_rule && !strcontains(jsondecode(output.workforce_au_membership_body).membershipRule, "notIn")
+    error_message = "With no excluded ids the AU rule is exactly workforce_au_membership_rule."
+  }
+}
+
+run "helpdesk_au_excluded_id_must_be_plain" {
+  command = plan
+
+  variables {
+    enable_pim_tiers                   = true
+    enable_helpdesk_au_scoping         = true
+    workforce_au_excluded_employee_ids = ["300001\"]) -or (user.userType -eq \"Guest"]
+  }
+
+  # An id that could break out of the quoted list is refused.
+  expect_failures = [var.workforce_au_excluded_employee_ids]
+}
+
 run "au_scoping_without_tiers_warns_and_plans_nothing" {
   command = plan
 
