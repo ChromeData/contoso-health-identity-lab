@@ -598,6 +598,11 @@ locals {
     [module.groups[0].break_glass_group_object_id, module.groups[0].priv_iam_admins_group_object_id],
     values(module.pim[0].tier_group_object_ids),
     [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null],
+    # PIM-AWS-Lab-Admins (ADR 0025): members arrive only by PIM activation
+    # (written by MS-PIM), so a direct add is a way around the 2-hour,
+    # MFA + reason activation into AWS admin. Watched here, but deliberately
+    # NOT in the CA002/CA020 scope (privileged_review_targets).
+    var.enable_pim_aws_admin ? [module.pim[0].aws_admin_group_object_id] : [],
     values(module.pim[0].approver_group_object_ids),
   ) : []
 
