@@ -140,11 +140,14 @@ Record every time in UTC.
    `bg-admin-01`/`02` in the drill window; expect none. The second admin
    reviews that result.
 7. **Close out.** Keys back in their safes. Close the Sentinel incident
-   only **after the rule's 1 h lookback has passed the last drill sign-in**:
-   the rule re-alerts every 5 minutes on every sign-in still in its window
-   (suppression off) and groups those alerts into the open incident, so an
-   incident closed earlier is followed by a new one, with a new Teams card
-   and ServiceNow ticket each time (seen 2026-11-05). For the same reason,
+   only **once no break-glass sign-in row has reached the workspace for an
+   hour**: the rule re-alerts every 5 minutes on every row in its 1 h
+   window (suppression off), the window counts from ingestion time, and late
+   copies of one sign-in kept arriving for 27 minutes (2026-11-05). Alerts
+   group into the open incident; an incident closed earlier is followed by a
+   new one, with a new Teams card and ServiceNow ticket. Check with
+   `union SigninLogs, AADNonInteractiveUserSignInLogs | where UserPrincipalName startswith "bg-admin" | summarize max(TimeGenerated)`.
+   For the same reason,
    a second drill sign-in while the first incident is open is grouped into
    it and sends no new card or ticket: close the previous drill's incident
    (after its hour) before a re-drill. The Verify phase re-runs the
