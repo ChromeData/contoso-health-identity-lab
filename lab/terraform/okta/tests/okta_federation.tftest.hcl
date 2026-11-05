@@ -117,6 +117,10 @@ run "federation_on_plans_the_idp_and_one_routing_rule" {
     error_message = "account link by email, JIT on (lab), groups never copied from the IdP, org URL as issuer"
   }
   assert {
+    condition     = okta_idp_oidc.entra[0].request_signature_scope == "NONE"
+    error_message = "the authorize request must be unsigned: Entra refuses a signed request object (AADSTS70013, first clinic sign-in 2026-11-05)"
+  }
+  assert {
     condition     = okta_policy_rule_idp_discovery.clinic_to_entra[0].priority == 1 && okta_policy_rule_idp_discovery.clinic_to_entra[0].status == "ACTIVE" && okta_policy_rule_idp_discovery.clinic_to_entra[0].network_connection == "ANYWHERE"
     error_message = "the routing rule must be first, active, and location-agnostic (Conditional Access decides location at Entra)"
   }

@@ -167,11 +167,15 @@ resource "okta_idp_oidc" "entra" {
   suspended_action     = "NONE"
   deprovisioned_action = "NONE"
 
-  # verify: on the first sign-in, that Entra accepts Okta's authorization
-  # request as sent (the provider's defaults for the request-signature
-  # settings; Entra does not accept signed request objects, so if the
-  # exchange fails on the authorize call, set request_signature_scope =
-  # "NONE" here).
+  # Entra does not accept a signed request object on its authorize endpoint.
+  # With the provider's default (request_signature_scope = "REQUEST", HS256)
+  # the first clinic sign-in (2026-11-05, test-user-b) was routed to Entra
+  # and refused there: AADSTS70013 "The 'request' request parameter is not
+  # supported". So the authorization request is sent unsigned, like every
+  # other Entra OIDC client's: it carries no secret, and what protects the
+  # exchange is TLS, the registered redirect URI and the client secret on
+  # the back-channel token call. (Was a "verify:" item; resolved live.)
+  request_signature_scope = "NONE"
 
   lifecycle {
     precondition {
