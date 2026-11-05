@@ -317,7 +317,9 @@ privacy-only exceptions follow the list):
 - [ ] `AZURE_APPLY_CLIENT_ID` (APPLY app client ID)
 - [ ] (HR feed, optional) `HR_SYNC_CLIENT_ID` (bootstrap output `github_oidc_hr_sync_client_id`),
       `HR_PROV_SP_ID`, `HR_PROV_JOB_ID` (the HR provisioning app, `lab/setup/handback.env`),
-      `HR_UPN_DOMAIN`; optional `HR_FEED_WAIT_SECONDS` (default 180)
+      `HR_UPN_DOMAIN`; optional `HR_FEED_WAIT_SECONDS` (default 180) and
+      `HR_FEED_BASE_SHA` (the commit the first push is compared with; default
+      the point where `hr-feed` left `main`)
 - [ ] (Evidence pack, optional) `EVIDENCE_CLIENT_ID` (bootstrap output
       `github_oidc_evidence_client_id`); it also reads `AZURE_TENANT_ID`,
       `AZURE_SUBSCRIPTION_ID` and `TF_EVIDENCE_STORAGE_ACCOUNT_NAME`. Optional:

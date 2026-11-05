@@ -3,10 +3,12 @@
 #     (--overwrite false, Entra auth), every fingerprint checked before
 #     upload and read back after, companion evidence never copied, the
 #     store's retention lock recorded; the firewall / permission refusals,
-#     a tampered file and a bad read-back all stop it (exit 1).
+#     a tampered file, a bad read-back and a read-back that never finished
+#     all stop it (exit 1); only -SkipReadBack files without the read-back.
 #   * Write-EvidencePackSummary.ps1 - the plain-English job summary
 #     ("Evidence pack filed (em dash) 7 records, each fingerprinted", "nobody can
-#     change or delete these files for N days"), counts only: no name, UPN,
+#     change or delete these files for N days"; an unfinished read-back is
+#     "could not be checked", never "filed"), counts only: no name, UPN,
 #     raw Graph error or token.
 # az is a Pester mock backed by a folder that plays the blob store. No
 # tenant, no storage account.
@@ -52,9 +54,14 @@ BeforeAll {
         # az storage blob upload / show / download against a folder. Records
         # every call's arguments. -FailUpload: the error text the Nth upload
         # returns (exit 1). -CorruptDownload: the read-back returns other bytes.
-        param([string]$FailUpload = '', [int]$FailOnUpload = 1, [switch]$CorruptDownload, [string]$Expiry = '2032-10-31T23:15:05+00:00', [string]$Mode = 'Locked')
-        $global:StoreTest = @{ Dir = (Join-Path $TestDrive ('store-' + [guid]::NewGuid().ToString('N'))); Calls = [System.Collections.Generic.List[object]]::new(); Uploads = 0
-            FailUpload = $FailUpload; FailOnUpload = $FailOnUpload; Corrupt = [bool]$CorruptDownload; Expiry = $Expiry; Mode = $Mode; Out = [System.Collections.Generic.List[string]]::new() }
+        # -FailDownload: the error text the Nth download (only that one)
+        # returns, exit 1 and no file; -EmptyDownload: the Nth download says
+        # exit 0 but writes nothing. Either way that read-back never finished.
+        param([string]$FailUpload = '', [int]$FailOnUpload = 1, [switch]$CorruptDownload, [string]$FailDownload = '', [switch]$EmptyDownload, [int]$FailOnDownload = 1,
+            [string]$Expiry = '2032-10-31T23:15:05+00:00', [string]$Mode = 'Locked')
+        $global:StoreTest = @{ Dir = (Join-Path $TestDrive ('store-' + [guid]::NewGuid().ToString('N'))); Calls = [System.Collections.Generic.List[object]]::new(); Uploads = 0; Downloads = 0
+            FailUpload = $FailUpload; FailOnUpload = $FailOnUpload; Corrupt = [bool]$CorruptDownload; FailDownload = $FailDownload; EmptyDownload = [bool]$EmptyDownload; FailOnDownload = $FailOnDownload
+            Expiry = $Expiry; Mode = $Mode; Out = [System.Collections.Generic.List[string]]::new() }
         New-Item -ItemType Directory -Path $global:StoreTest.Dir -Force | Out-Null
         Mock Write-Host { $global:StoreTest.Out.Add([string]$Object) }
         Mock az {
@@ -70,6 +77,11 @@ BeforeAll {
                 }
                 'show' { $global:LASTEXITCODE = 0; return (@{ versionId = '2026-11-02T23:15:06.0000000Z'; expiry = $t.Expiry; mode = $t.Mode } | ConvertTo-Json) }
                 'download' {
+                    $t.Downloads++
+                    if ($t.Downloads -eq $t.FailOnDownload) {
+                        if ($t.FailDownload) { $global:LASTEXITCODE = 1; return "ERROR: $($t.FailDownload)" }
+                        if ($t.EmptyDownload) { $global:LASTEXITCODE = 0; return }
+                    }
                     if ($t.Corrupt) { 'tampered' | Set-Content -LiteralPath (& $arg '--file') } else { Copy-Item -LiteralPath $local -Destination (& $arg '--file') }
                     $global:LASTEXITCODE = 0; return
                 }
@@ -217,6 +229,41 @@ Describe 'Publish-EvidencePack.ps1 - filing in the WORM store' {
         (Get-PubResult)['outcome'] | Should -Be 'failed'
     }
 
+    It 'fails when a read-back never finishes (<Case>): stored, never compared, so not filed (exit 1)' -ForEach @(
+        @{ Case = 'expired sign-in'; Mock = @{ FailDownload = 'AADSTS700082: The refresh token has expired due to inactivity.' } }
+        @{ Case = 'time-out'; Mock = @{ FailDownload = 'The operation was timed out.' } }
+        @{ Case = 'no file written'; Mock = @{ EmptyDownload = $true } }
+    ) {
+        # Every upload succeeds; only the 5th file's read-back does not finish.
+        $dir = New-TestPack (Join-Path $TestDrive ('p-rb-' + [guid]::NewGuid().ToString('N')))
+        Set-StoreMock @Mock -FailOnDownload 5
+        Invoke-Publish $dir
+        $LASTEXITCODE | Should -Be 1
+        $r = Get-PubResult
+        $r['outcome'] | Should -Be 'failed'
+        $r['refusal']['kind'] | Should -Be 'read-back'
+        $r['refusal']['unchecked'] | Should -Be 1
+        @($r['files'] | Where-Object { $_['uploaded'] }).Count | Should -Be 9
+        @($r['files'] | Where-Object { $_['verified'] }).Count | Should -Be 8
+        $bad = @($r['files'] | Where-Object { -not $_['verified'] })
+        $bad.Count | Should -Be 1
+        $bad[0]['file'] | Should -Be 'conditional_access_policies.json'
+        $bad[0]['error'] | Should -BeLike 'read-back failed*'
+        ($global:StoreTest.Out -join "`n") | Should -Match '1 of the stored file\(s\) could not be read back to check them against their fingerprints.*does not count as filed'
+    }
+
+    It '-SkipReadBack, asked for explicitly, files without the read-back (no download, exit 0)' {
+        $dir = New-TestPack (Join-Path $TestDrive 'p-skiprb')
+        Set-StoreMock -FailDownload 'never reached' -FailOnDownload 1
+        Invoke-Publish $dir -Extra @{ SkipReadBack = $true }
+        $LASTEXITCODE | Should -Be 0
+        @($global:StoreTest.Calls | Where-Object { $_[2] -eq 'download' }).Count | Should -Be 0
+        $r = Get-PubResult
+        $r['outcome'] | Should -Be 'filed'
+        $r['refusal'] | Should -BeNullOrEmpty
+        @($r['files'] | Where-Object { $_['uploaded'] -and -not $_['verified'] -and -not $_['error'] }).Count | Should -Be 9
+    }
+
     It '-WhatIf lists the blobs and calls nothing' {
         $dir = New-TestPack (Join-Path $TestDrive 'p-whatif')
         Set-StoreMock
@@ -301,6 +348,34 @@ Describe 'Write-EvidencePackSummary.ps1 - the plain-English story' {
         ($text -split "`n")[0] | Should -BeExactly '## Evidence pack not filed: the evidence store refused the connection'
         $text | Should -Match 'firewall only lets in the lab operator''s network'
         $text | Should -Not -Match 'Stored in the locked'
+    }
+
+    It 'a read-back that never finished says the stored files could not be checked - never "filed" - and quotes no error' {
+        $dir = New-TestPack (Join-Path $TestDrive 's-rbfail')
+        Set-StoreMock -FailDownload "AADSTS700082: The refresh token has expired due to inactivity. User: $($script:Upn)" -FailOnDownload 5
+        Invoke-Publish $dir
+        $text = Invoke-Summary @{ ManifestPath = (Join-Path $dir 'manifest.json'); PublishResultPath = $script:PubResult }
+        ($text -split "`n")[0] | Should -BeExactly '## Evidence pack not filed: the stored files could not be checked'
+        $text | Should -Match ([regex]::Escape('All 9 files were uploaded to the locked evidence store, but 1 of them could not be downloaded again to check them against their fingerprints'))
+        $text | Should -Match 'A file nobody has checked does not count as filed\.'
+        $text | Should -Not -Match 'Evidence pack filed|Stored in the locked'
+        $text | Should -Match ([regex]::Escape('9 of 9 file(s) uploaded as new blobs (overwrite refused), 8 read back and matched, 1 could not be checked (outcome `failed`, read-back)'))
+        $sha = (Get-FileHash (Join-Path $dir 'conditional_access_policies.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+        $text | Should -Match ([regex]::Escape("``conditional_access_policies.json`` ``$sha`` (stored, could not be checked)"))
+        @(($text -split "`n") | Where-Object { $_ -like '*(stored, could not be checked)*' }).Count | Should -Be 1
+        $text | Should -Not -Match 'AADSTS|refresh token'
+        $text | Should -Not -Match ([regex]::Escape($script:Upn))
+    }
+
+    It 'a partly filed pack names the stored files that could not be checked' {
+        $dir = New-TestPack (Join-Path $TestDrive 's-part-rb')
+        Set-StoreMock -FailUpload 'ErrorCode:AuthorizationFailure' -FailOnUpload 4 -FailDownload 'The operation was timed out.' -FailOnDownload 2
+        Invoke-Publish $dir
+        (Get-PubResult)['outcome'] | Should -Be 'partial'
+        $text = Invoke-Summary @{ ManifestPath = (Join-Path $dir 'manifest.json'); PublishResultPath = $script:PubResult }
+        ($text -split "`n")[0] | Should -BeLike '## Evidence pack partly filed*'
+        $text | Should -Match ([regex]::Escape('**1 of the stored files could not be checked:** reading them back to compare with their fingerprints did not finish.'))
+        $text | Should -Match '`pim_active_assignments\.json` `[0-9a-f]{64}` \(stored, could not be checked\)'
     }
 
     It 'names the missing setup, the main-only rule and a refused sign-in in plain words: <Case>' -ForEach @(

@@ -43,6 +43,15 @@ on:
       # kind cluster, applied and destroyed by lab/k8s/ci/pipeline.sh
       # (k8s-identity.yml), never by this Entra apply.
       - "!lab/terraform/k8s/**"
+      # And the lab operator root (envs/operator, ADR 0024): human-applied
+      # from the admin's laptop, never by this pipeline.
+      - "!lab/terraform/envs/operator/**"
+      # The automatic access rules are applied by this workflow too (step
+      # "Set who gets each automatic access package"), so a rule-only merge
+      # must start it - otherwise the live policies lag the reviewed file.
+      - "lab/iga/birthright-rules.json"
+      - "lab/iga/access-catalog.json"
+      - "lab/scripts/powershell/post-apply/Set-AutoAssignmentPolicies.ps1"
       - ".github/workflows/terraform-apply.yml"
   workflow_dispatch: {}        # manual, reviewer-gated re-apply of main only
 

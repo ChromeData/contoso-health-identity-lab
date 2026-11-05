@@ -177,6 +177,12 @@ person, with the technical details folded underneath:
 >
 > **Next:** Cloud Sync copies the change from Active Directory to Entra ID on its next run (about every 20 minutes); AWS follows by SCIM after that.
 
+**What gets sent.** Each push sends the rows that changed since the last
+push Microsoft accepted, so a failed run's rows go out with the next one,
+never skipped. Before the first successful run the comparison starts at
+`HR_FEED_BASE_SHA` if set, otherwise where `hr-feed` left `main`. If the
+run history can't be read, the run stops rather than guess.
+
 The run waits up to 3 minutes (`HR_FEED_WAIT_SECONDS`) for the provisioning
 log. Microsoft's log can lag several minutes, so "not logged yet" is a note,
 not a failure; a failure Microsoft logged turns the run red. The summary

@@ -201,7 +201,9 @@ then deletes the Entra user on its next cycle and SCIM removes the AWS user;
 record again once the Entra user is gone (about 20 minutes), or the new AD
 account collides with the old Entra user's UPN. `--purge-entra` (after that
 cycle) empties it from *Deleted users* too. The script refuses an employeeId
-from main's shipped roster (use `Reset-DemoState.ps1` for Dana and Marcus).
+from main's shipped roster (use `Reset-DemoState.ps1` for Dana and Marcus),
+and refuses every employeeId when it cannot read that roster (offline, or a
+checkout without `origin/main`) rather than treat it as empty.
 Needs `az login` as an admin and DC01 running for the AD step.
 
 ## Rewind and replay the whole lab: `rewind-lab.sh`

@@ -23,6 +23,11 @@
                           stored, read back, and the store's retention lock).
                           Missing = the upload never started.
 
+    A file that was stored but whose read-back never finished (time-out,
+    expired sign-in) is "could not be checked", never "filed": Publish fails
+    the run (outcome failed, kind read-back) and the summary says the files
+    are in the store but unconfirmed.
+
     "N days" comes from the store itself: the earliest retention expiry the
     store reported on the uploaded files. When the lock is still Unlocked the
     summary says so in one plain sentence; when the store reported none, it
@@ -144,6 +149,15 @@ function Get-RetentionInfo {
     return [pscustomobject]@{ Days = $days; Until = $first; Mode = $mode; Reported = $exp.Count; Uploaded = $up.Count }
 }
 
+function Test-ReadBackUnchecked {
+    # One Publish-EvidencePack.ps1 file row -> stored, but the read-back that
+    # compares it with its fingerprint never finished ('read-back failed: ...'
+    # in error). Not a mismatch ('read-back: the stored copy ...'), and not
+    # -SkipReadBack (no error at all). The error text itself is never printed.
+    param($File)
+    return [bool]($File -and $File['uploaded'] -and -not $File['verified'] -and ([string]$File['error']) -like 'read-back failed*')
+}
+
 function Get-StoreLink {
     # The evidence account's Containers page in the Azure portal (the viewer
     # then opens the container and the run's folder). Generic storage list
@@ -178,6 +192,7 @@ $pubFiles = @(@(Get-Field $result 'files') | Where-Object { $_ })
 $account = [string](Get-Field $result 'account')
 $container = [string](Get-Field $result 'container')
 $prefix = [string](Get-Field $result 'prefix')
+$unchecked = @($pubFiles | Where-Object { Test-ReadBackUnchecked $_ }).Count
 
 $records = @(Get-EvidenceRecordInfo)
 $artifacts = @(@(Get-Field $manifest 'artifacts') | Where-Object { $_ })
@@ -241,6 +256,7 @@ elseif ($outcome -eq 'refused' -or $outcome -eq 'invalid' -or $outcome -eq 'fail
                 'exists' { '## Evidence pack not filed: these file names are already in the store' }
                 'not-found' { '## Evidence pack not filed: the evidence store was not found' }
                 'fingerprint-mismatch' { '## Evidence pack not filed: a file changed after it was fingerprinted' }
+                'read-back' { '## Evidence pack not filed: the stored files could not be checked' }
                 default { '## Evidence pack not filed' }
             }))
     $md.Add('')
@@ -251,6 +267,7 @@ elseif ($outcome -eq 'refused' -or $outcome -eq 'invalid' -or $outcome -eq 'fail
                 'exists' { 'The store already holds files with these names, and it never replaces a file. Nothing was overwritten; run the workflow again to file a new copy under a new folder.' }
                 'not-found' { 'The storage account or its evidence container does not exist under the configured name (`TF_EVIDENCE_STORAGE_ACCOUNT_NAME`). Nothing was stored.' }
                 'fingerprint-mismatch' { 'Before upload, every file is checked against the fingerprint list, and one did not match. Nothing was stored. Re-run the workflow to collect a fresh pack.' }
+                'read-back' { "All $($pubFiles.Count) files were uploaded to the locked evidence store, but $unchecked of them could not be downloaded again to check them against their fingerprints (most often a time-out or a sign-in that expired during the run). A file nobody has checked does not count as filed. What was stored stays and cannot be changed or removed; re-run the workflow to file a checked copy in a new folder." }
                 default { 'The upload did not complete (see the upload step''s log). Nothing that was stored can be changed or removed; re-running files a new copy.' }
             }))
 }
@@ -283,6 +300,7 @@ if ($filedLike) {
         $md.Add('Stored in the evidence store as new files that cannot be replaced. The store did not report its retention lock for them, so check it before relying on it.')
     }
     if ($outcome -eq 'partial') { $md.Add(''); $md.Add("**$stored of $($pubFiles.Count) files were stored.** The rest were refused (details below); what was stored stays. Re-run the workflow to file a complete copy.") }
+    if ($unchecked) { $md.Add(''); $md.Add("**$unchecked of the stored files could not be checked:** reading them back to compare with their fingerprints did not finish. They stay in the store, unchanged, but are not confirmed.") }
     $md.Add('')
     $md.Add("[Open the evidence store in the Azure portal]($link), then the **$container** container and the folder **$($prefix.TrimEnd('/'))**.")
 }
@@ -307,14 +325,14 @@ if ($manifest) {
 }
 if ($result) {
     $verified = @($pubFiles | Where-Object { $_['verified'] }).Count
-    $md.Add("- **Store:** ``$account`` / ``$container`` / ``$prefix`` $Dash $(@($pubFiles | Where-Object { $_['uploaded'] }).Count) of $($pubFiles.Count) file(s) uploaded as new blobs (overwrite refused), $verified read back and matched (outcome ``$outcome``$(if ($refusal) { ", $refusal" }))")
+    $md.Add("- **Store:** ``$account`` / ``$container`` / ``$prefix`` $Dash $(@($pubFiles | Where-Object { $_['uploaded'] }).Count) of $($pubFiles.Count) file(s) uploaded as new blobs (overwrite refused), $verified read back and matched$(if ($unchecked) { ", $unchecked could not be checked" }) (outcome ``$outcome``$(if ($refusal) { ", $refusal" }))")
     if ($filedLike) {
         $ret = Get-RetentionInfo -Files $pubFiles -Now $Now
         $md.Add("- **Retention lock (as the store reported it):** $(if ($ret.Until) { "until $($ret.Until.ToString('yyyy-MM-dd')) (earliest of $($ret.Reported) file(s))" } else { "reported for $($ret.Reported) of $($ret.Uploaded) file(s)" }), policy mode $(if ($ret.Mode) { $ret.Mode } else { 'not reported' })")
     }
     $md.Add('- **Fingerprints (SHA-256):**')
     foreach ($f in $pubFiles) {
-        $state = if ($f['verified']) { 'stored, read back' } elseif ($f['uploaded']) { 'stored' } else { 'not stored' }
+        $state = if ($f['verified']) { 'stored, read back' } elseif (Test-ReadBackUnchecked $f) { 'stored, could not be checked' } elseif ($f['uploaded']) { 'stored' } else { 'not stored' }
         $md.Add("  - ``$($f['file'])`` ``$($f['sha256'])`` ($state)")
     }
 }

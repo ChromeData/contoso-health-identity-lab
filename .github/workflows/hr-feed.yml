@@ -21,9 +21,13 @@
 # of the step that uses it.
 #
 # WHICH ROWS: hr_feed.csv at this commit vs. the commit of the last
-# SUCCESSFUL hr-feed push run (everything since then is unsent, so a push
-# whose run was superseded in the concurrency queue, or failed, is never
-# skipped); else the commit before this push; else where hr-feed left main.
+# SUCCESSFUL hr-feed push run: everything since then is unsent, so a push
+# whose run failed, or was superseded in the concurrency queue, is sent by
+# the next push, never skipped. Before the first successful send, a known
+# starting point: the repo variable HR_FEED_BASE_SHA when set, else where
+# hr-feed left main. Never "the commit before this push": if the first push
+# failed, its change sits in that commit and would be skipped for good. A
+# push that cannot read its run history stops before sending anything.
 # Deleting a row sends nothing (HR marks leavers, it never deletes them).
 # workflow_dispatch: the employee ids given, or every row as a dry run.
 #
@@ -94,8 +98,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
-          BEFORE: ${{ github.event.before }}
           EMPLOYEE_IDS: ${{ inputs.employee_ids }}
+          HR_FEED_BASE_SHA: ${{ vars.HR_FEED_BASE_SHA }}
           REPO: ${{ github.repository }}
           HR_SYNC_CLIENT_ID: ${{ vars.HR_SYNC_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -112,23 +116,67 @@ jobs:
             Write-Output "::error::A real send runs only on the hr-feed branch (HR-SYNC trusts no other). Run it there, or tick 'dry run'."
             exit 1
           }
+          function Test-Ancestor([string]$Old, [string]$New) {
+            git merge-base --is-ancestor $Old $New 2>$null
+            return ($LASTEXITCODE -eq 0)
+          }
           function Test-Commit([string]$Sha) {
+            # A commit in this checkout (fetch-depth 0: all history) that HEAD descends from.
             if (-not $Sha -or $Sha -match '^0+$') { return $false }
             git cat-file -e "$Sha^{commit}" 2>$null
             if ($LASTEXITCODE -ne 0) { return $false }
-            git merge-base --is-ancestor $Sha HEAD
-            return ($LASTEXITCODE -eq 0)
+            return (Test-Ancestor $Sha HEAD)
           }
           # The diff base: everything after it has not been sent yet.
+          #  1. The last SUCCESSFUL hr-feed push run's commit. A failed or
+          #     superseded run sent nothing that counts, so its change is
+          #     still after this base and goes out with this push.
+          #  2. No successful send yet: a KNOWN starting point, never the
+          #     commit before this push (if the first push failed, its change
+          #     sits in that commit and is skipped for good once this run
+          #     succeeds). HR_FEED_BASE_SHA when set (an admin's explicit
+          #     choice, e.g. if main ever merges hr-feed and moves the
+          #     merge-base), else where hr-feed left main: every HR change
+          #     made on the branch goes out. Re-sending a row Microsoft
+          #     already has is harmless (it matches on the employee id and
+          #     updates in place); skipping one is not.
+          #  3. A push that cannot read the run history stops: a guess could
+          #     skip someone. So does a re-run of a push OLDER than the last
+          #     successful send: its file would undo the later change (a
+          #     re-run hire after the leaver went out switches them back on).
+          # workflow_dispatch sends the ids it is given, not a diff: the base
+          # only labels them (hired / moved) and feeds the guard, so it takes
+          # 1, else where hr-feed left main, and never stops here.
           $base = ''; $why = ''
-          $last = gh api "repos/$env:REPO/actions/workflows/hr-feed.yml/runs?branch=hr-feed&event=push&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty' 2>$null
-          $lastOk = $LASTEXITCODE -eq 0
-          $last = "$last".Trim()
-          if ($lastOk -and (Test-Commit $last)) { $base = $last; $why = 'the last successful HR send' }
-          elseif ($env:EVENT -eq 'push' -and (Test-Commit $env:BEFORE)) { $base = $env:BEFORE; $why = 'the commit before this push' }
+          $last = gh api "repos/$env:REPO/actions/workflows/hr-feed.yml/runs?branch=hr-feed&event=push&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty'
+          $lookupOk = $LASTEXITCODE -eq 0
+          $last = if ($lookupOk) { "$last".Trim() } else { '' }
+          $mb = git merge-base origin/main HEAD 2>$null
+          $mb = if ($LASTEXITCODE -eq 0) { "$mb".Trim() } else { '' }
+          if ($last -and (Test-Commit $last)) { $base = $last; $why = 'the last successful HR send' }
+          elseif ($env:EVENT -ne 'push') { if ($mb) { $base = $mb; $why = 'where hr-feed left main' } }
+          elseif (-not $lookupOk) {
+            Write-Output "::error::GitHub's run history for this workflow could not be read (the gh error is above), so this run cannot tell which HR changes were already sent. Nothing was sent. Re-run the job: it sends everything since the last successful send."
+            exit 1
+          }
+          elseif ($last -and (Test-Ancestor HEAD $last)) {
+            Write-Output "::error::This commit is older than the last successful HR send ($($last.Substring(0, 7))). Sending its HR file now would undo the later change. Nothing was sent: the later run already sent everything up to its commit."
+            exit 1
+          }
           else {
-            $mb = git merge-base origin/main HEAD 2>$null
-            if ($LASTEXITCODE -eq 0 -and $mb) { $base = "$mb".Trim(); $why = 'where hr-feed left main' }
+            if ($last) { Write-Output "::warning::The last successful HR send ($($last.Substring(0, [Math]::Min(7, $last.Length)))) is not in this branch's history (was hr-feed rewritten?). Comparing with the branch's starting point instead: some rows may be sent again (harmless), none are skipped." }
+            if ($env:HR_FEED_BASE_SHA) {
+              if (-not (Test-Commit $env:HR_FEED_BASE_SHA)) {
+                Write-Output "::error::The repository variable HR_FEED_BASE_SHA ($env:HR_FEED_BASE_SHA) is not a commit in this branch's history. Set it to the commit whose HR file Microsoft already has, or delete it to start from where hr-feed left main. Nothing was sent."
+                exit 1
+              }
+              $base = "$(git rev-parse "$($env:HR_FEED_BASE_SHA)^{commit}")".Trim(); $why = 'HR_FEED_BASE_SHA, the starting point set for hr-feed'
+            }
+            elseif ($mb) { $base = $mb; $why = 'where hr-feed left main, no successful send yet' }
+            else {
+              Write-Output "::error::No successful HR send yet, and no starting point: this branch shares no history with main. Set the repository variable HR_FEED_BASE_SHA to the commit whose HR file Microsoft already has. Nothing was sent."
+              exit 1
+            }
           }
           $prev = Join-Path $work 'previous.csv'
           if ($base) {

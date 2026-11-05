@@ -30,8 +30,12 @@
 # --purge-entra, which says whether Cloud Sync has run yet).
 #
 # Guard rails: refuses an employeeId that is in main's hr_feed.csv (the
-# shipped roster: Dana, Marcus, the IT personas...) unless --force; never
-# force-pushes; every step is idempotent (re-run after a failure).
+# shipped roster: Dana, Marcus, the IT personas...) unless --force, and
+# refuses EVERY employeeId while that roster cannot be read (main never
+# fetched, e.g. a single-branch checkout with no network; the file missing
+# or empty on main): "could not look" is never taken for "not on the
+# roster". --force skips this check altogether. Never force-pushes; every
+# step is idempotent (re-run after a failure).
 # Needs: git with push access to origin; for steps 2 and --purge-entra,
 # `az login` as an admin and DC01 running (az vm start -g rg-identity-lab -n vm-dc01).
 # =============================================================================
@@ -43,7 +47,7 @@ REMOTE="${HR_FEED_REMOTE:-origin}"
 
 usage() { sed -n '3,8p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
-ID=""; APPLY=0; FORCE=0; SKIP_GIT=0; SKIP_AD=0; PURGE=0
+ID=""; APPLY=0; FORCE=0; SKIP_GIT=0; SKIP_AD=0; PURGE=0; HR_UNCHECKED=0
 for arg in "$@"; do
   case "$arg" in
     --apply) APPLY=1 ;;
@@ -63,29 +67,64 @@ say()  { printf '%s\n' "$*"; }
 step() { printf '\n== %s\n' "$*"; }
 plan() { if [ "$APPLY" -eq 1 ]; then printf '   doing: %s\n' "$*"; else printf '   would: %s\n' "$*"; fi; }
 
-# The row on a ref, or nothing. Exact employeeId match on the first column.
-row_on() { git -C "$ROOT" show "$1:$CSV" 2>/dev/null | awk -F, -v id="$ID" '$1 == id' || true; }
+# The employee's row in hr_feed.csv on a ref (exact employeeId match on the
+# first column). Three answers, kept apart on purpose, because the guard
+# below must never read "could not look" as "not there":
+#   0  found: prints the row
+#   1  the roster was read and has no such employeeId
+#   2  the roster could not be read: the ref is missing (never fetched), the
+#      file is missing on it, or it does not start with the employeeId
+#      header (empty, truncated, not the roster)
+# Call it as  rc=0; row="$(row_on REF)" || rc=$?  (set -e stops on 1 and 2).
+row_on() {
+  local csv rows
+  csv="$(git -C "$ROOT" show "$1:$CSV" 2>/dev/null)" || return 2
+  case "$csv" in employeeId,*) ;; *) return 2 ;; esac
+  rows="$(awk -F, -v id="$ID" '$1 == id' <<<"$csv")" || return 2
+  [ -n "$rows" ] || return 1
+  printf '%s\n' "$rows"
+}
 
-git -C "$ROOT" fetch -q "$REMOTE" "$BRANCH" main 2>/dev/null || git -C "$ROOT" fetch -q "$REMOTE" main 2>/dev/null ||
+# Explicit refspecs: a single-branch checkout tracks one branch only, and a
+# plain `git fetch origin main` there updates FETCH_HEAD, not origin/main, so
+# the guard would read a stale or missing roster. These update the
+# remote-tracking refs the lookups read. hr-feed may not exist yet: then
+# main alone. Offline: the refs fetched last time (the guard still refuses
+# when main's roster is not there at all).
+MAIN_SPEC="+refs/heads/main:refs/remotes/$REMOTE/main"
+HR_SPEC="+refs/heads/$BRANCH:refs/remotes/$REMOTE/$BRANCH"
+git -C "$ROOT" fetch -q "$REMOTE" "$HR_SPEC" "$MAIN_SPEC" 2>/dev/null || git -C "$ROOT" fetch -q "$REMOTE" "$MAIN_SPEC" 2>/dev/null ||
   say "note: could not fetch $REMOTE; using the refs fetched last time"
 HR_REF="$REMOTE/$BRANCH"
-git -C "$ROOT" rev-parse -q --verify "$HR_REF" >/dev/null || HR_REF=""
 
-if [ -n "$(row_on "$REMOTE/main")" ] && [ "$FORCE" -eq 0 ]; then
-  say "REFUSED: employeeId $ID is in main's hr_feed.csv, the shipped roster - not a demo hire."
-  say "         (Re-takes of the shipped people: lab/scripts/demo/Reset-DemoState.ps1. Override with --force.)"
-  exit 1
-fi
+# The shipped-roster guard: main's hr_feed.csv is the real workforce, and
+# deleting one of them is never a retake. It runs before anything changes,
+# dry run included, whatever --skip-git / --skip-ad say (step 2 deletes an
+# AD account even when step 1 is skipped).
+main_rc=0; row_on "$REMOTE/main" >/dev/null || main_rc=$?
+case "$main_rc:$FORCE" in
+  1:*) ;;   # read, and not on it: a demo hire
+  0:0)
+    say "REFUSED: employeeId $ID is in main's hr_feed.csv, the shipped roster - not a demo hire."
+    say "         (Re-takes of the shipped people: lab/scripts/demo/Reset-DemoState.ps1. Override with --force.)"
+    exit 1 ;;
+  *:0)
+    say "REFUSED: could not read main's hr_feed.csv ($REMOTE/main:$CSV), so there is no telling whether"
+    say "         employeeId $ID is a shipped employee or a demo hire. Nothing was changed."
+    say "         Fetch main, then re-run: git fetch $REMOTE $MAIN_SPEC   (--force skips this check.)"
+    exit 1 ;;
+  0:1) say "note: --force: employeeId $ID IS in main's shipped roster; going ahead anyway" ;;
+  *:1) say "note: --force: main's hr_feed.csv could not be read; going ahead without the shipped-roster check" ;;
+esac
 
-ROW=""
-if [ -n "$HR_REF" ]; then ROW="$(row_on "$HR_REF")"; fi
+hr_rc=0; ROW="$(row_on "$HR_REF")" || hr_rc=$?
 GIVEN=""; SURNAME=""
-if [ -n "$ROW" ]; then
-  IFS=, read -r _ GIVEN SURNAME DEPT TITLE _ STATUS _ <<<"$ROW"
-  WHO="$GIVEN $SURNAME, $TITLE ($DEPT), status $STATUS"
-else
-  WHO="employeeId $ID (no row on ${HR_REF:-$REMOTE/$BRANCH})"
-fi
+case "$hr_rc" in
+  0) IFS=, read -r _ GIVEN SURNAME DEPT TITLE _ STATUS _ <<<"$ROW"
+     WHO="$GIVEN $SURNAME, $TITLE ($DEPT), status $STATUS" ;;
+  1) WHO="employeeId $ID (no row on $HR_REF)" ;;
+  *) WHO="employeeId $ID (hr_feed.csv on $HR_REF could not be read)" ;;
+esac
 say "Reset demo hire: $WHO"
 [ "$APPLY" -eq 1 ] || say "(dry run: nothing changes; add --apply)"
 
@@ -93,8 +132,13 @@ say "Reset demo hire: $WHO"
 step "1. HR file: remove the row on $REMOTE/$BRANCH"
 if [ "$SKIP_GIT" -eq 1 ]; then
   say "   skipped (--skip-git)"
-elif [ -z "$ROW" ]; then
-  say "   already done: no row for $ID on ${HR_REF:-$REMOTE/$BRANCH}"
+elif [ "$hr_rc" -eq 1 ]; then
+  say "   already done: no row for $ID on $HR_REF"
+elif [ "$hr_rc" -ne 0 ]; then
+  # Not "already done": nobody looked. The row may still be there.
+  say "   NOT checked: hr_feed.csv on $HR_REF could not be read (branch not fetched?); nothing removed."
+  say "   Fetch it and re-run, or --skip-git if there is no $BRANCH branch at all."
+  HR_UNCHECKED=1
 else
   plan "commit 'HR: remove demo hire ${GIVEN} ${SURNAME} (retake reset)' on $BRANCH and push it to $REMOTE"
   plan "hr-feed.yml then reports 'Removed from the HR file: nothing sent' (no change in the tenant)"
@@ -161,4 +205,5 @@ else
   say "   (optional, after that cycle: re-run with --apply --purge-entra --skip-git --skip-ad)"
 fi
 
+if [ "$HR_UNCHECKED" -eq 1 ] && [ "$APPLY" -eq 1 ]; then say $'\nNot done: step 1 could not check the HR file (see above).'; exit 1; fi
 if [ "$APPLY" -eq 1 ]; then say $'\nDone.'; else say $'\nDry run only. Re-run with --apply to do it.'; fi

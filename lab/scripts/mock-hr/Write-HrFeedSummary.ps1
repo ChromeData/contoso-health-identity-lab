@@ -30,10 +30,13 @@
       bulkUpload answers 202 Accepted and processes asynchronously, so the
       script polls GET /auditLogs/provisioning for each person sent
       (jobid + sourceIdentity/id = the employeeId, the filter Microsoft's
-      inbound-provisioning quickstart uses) until each has an entry newer
-      than the send or -WaitSeconds runs out. Microsoft says these logs can
-      lag several minutes: running out is reported as "not logged yet",
-      never as a failure. Needs a Microsoft Graph connection (the workflow
+      inbound-provisioning quickstart uses) until each has an entry logged
+      at or after the send (sentAtUtc) or -WaitSeconds runs out. An entry
+      from before the send is an EARLIER change to the same person (last
+      push's hire must never confirm this push's departure), so it is
+      ignored and polling goes on. Microsoft says these logs can lag
+      several minutes: running out is reported as "not logged yet", never
+      as a failure. Needs a Microsoft Graph connection (the workflow
       connects HR-SYNC app-only first) with a provisioning-log read role; a
       403 is reported as "log not readable" and the run still succeeds.
 
@@ -140,6 +143,50 @@ function Get-PersonText {
     $role = (@($title, $(if ($dept) { "($dept)" } else { '' })) | Where-Object { $_ }) -join ' '
     if ($role) { return "$name, $role" }
     return $name
+}
+
+function ConvertTo-UtcTime {
+    # A timestamp as JSON readers hand it over (ConvertFrom-Json and
+    # Invoke-MgGraphRequest turn ISO-8601 strings into [datetime]; anything
+    # else stays a string) -> a UTC [datetime], or $null when there is none
+    # or it does not parse. No zone = UTC: both producers write UTC.
+    param($Value)
+    if ($Value -is [datetimeoffset]) { return $Value.UtcDateTime }
+    if ($Value -is [datetime]) {
+        if ($Value.Kind -eq [System.DateTimeKind]::Unspecified) { return [datetime]::SpecifyKind($Value, [System.DateTimeKind]::Utc) }
+        return $Value.ToUniversalTime()
+    }
+    $parsed = [datetime]::MinValue
+    $styles = [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal
+    if ($Value -and [datetime]::TryParse([string]$Value, [cultureinfo]::InvariantCulture, $styles, [ref]$parsed)) { return $parsed }
+    return $null
+}
+
+function Select-SendEntry {
+    # The provisioning-log entries that can belong to THIS send of one
+    # person: theirs (sourceIdentity/id), logged at or after the send.
+    # Why time and not the upload's own id: bulkUpload answers 202 with an
+    # empty body, its Location header is the job-wide log filter (jobid eq
+    # ...), and a log entry carries no bulkId or request id, so nothing
+    # ties an entry to one upload. sentAtUtc is taken (whole seconds,
+    # rounded down) just before the first POST, and Microsoft logs a record
+    # only after it has received it, so an entry for this send is never
+    # older than sentAtUtc - except by clock skew between the runner and
+    # Microsoft (both NTP-synced, well under a second): -ClockSkewSeconds
+    # (5) covers that. An entry with no time is never taken: it cannot be
+    # shown to be this send's.
+    # What time cannot tell apart: an EARLIER send of the same person that
+    # Microsoft only logs after this send started. Runs are queued one at a
+    # time and each waits for its own confirmation, so that needs the
+    # earlier entry to arrive later than the earlier run's whole wait (that
+    # run's summary then said "not logged yet").
+    param([object[]]$Entries = @(), [Parameter(Mandatory)][string]$EmployeeId, [Parameter(Mandatory)][datetime]$SentAtUtc, [ValidateRange(0, 60)][int]$ClockSkewSeconds = 5)
+    $from = $SentAtUtc.AddSeconds(-$ClockSkewSeconds)
+    return @($Entries | Where-Object {
+            $_ -and [string](Get-Field $_ 'sourceIdentity', 'id') -eq $EmployeeId -and $(
+                $when = ConvertTo-UtcTime (Get-Field $_ 'activityDateTime')
+                $null -ne $when -and $when -ge $from)
+        })
 }
 
 function Resolve-ProvisioningOutcome {
@@ -261,9 +308,16 @@ $waited = 0
 if ($acceptedIds -and $jobId -and $outcome -in 'sent', 'partial') {
     $ctx = $null
     if (Get-Command -Name Get-MgContext -ErrorAction SilentlyContinue) { try { $ctx = Get-MgContext } catch { $ctx = $null } }
+    # Entries count from the send onwards (Select-SendEntry). No send time
+    # in the result = no way to tell this send's entries from older ones:
+    # say so rather than guess a window.
+    $sentAt = ConvertTo-UtcTime $result['sentAtUtc']
     if (-not $ctx) { $logNote = 'not read: no Microsoft Graph sign-in in this step' }
+    elseif (-not $sentAt) {
+        $logNote = 'not readable: the send result has no send time, so older entries could not be told apart from this send'
+        foreach ($id in $acceptedIds) { $personOutcome[$id] = @{ state = 'unreadable'; action = ''; errorCode = '' } }
+    }
     else {
-        $since = if ($result['sentAtUtc']) { ([datetime]::Parse([string]$result['sentAtUtc'], [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal)).AddMinutes(-2) } else { [datetime]::UtcNow.AddMinutes(-10) }
         $start = [datetime]::UtcNow
         $deadline = $start.AddSeconds($WaitSeconds)
         $open = [System.Collections.Generic.List[string]]::new(); foreach ($i in $acceptedIds) { $open.Add($i) }
@@ -279,12 +333,10 @@ if ($acceptedIds -and $jobId -and $outcome -in 'sent', 'partial') {
                     Write-Warning "Provisioning log read failed: $msg"
                     break
                 }
-                $entries = @(@(Get-Field $resp 'value') | Where-Object {
-                        $_ -and [string](Get-Field $_ 'sourceIdentity', 'id') -eq $id -and $(
-                            $t = Get-Field $_ 'activityDateTime'
-                            $when = if ($t -is [datetime]) { $t.ToUniversalTime() } elseif ($t) { [datetime]::Parse([string]$t, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal) } else { [datetime]::MaxValue }
-                            $when -ge $since)
-                    })
+                # Only entries from this send: an older one (last push's hire
+                # for this push's departure) leaves the person open, and the
+                # loop polls again.
+                $entries = @(Select-SendEntry -Entries @(Get-Field $resp 'value') -EmployeeId $id -SentAtUtc $sentAt)
                 $o = Resolve-ProvisioningOutcome -Entries $entries
                 if ($o.state -ne 'pending') { $personOutcome[$id] = $o; [void]$open.Remove($id) }
             }
@@ -310,8 +362,8 @@ $mode = switch ($outcome) { 'dry-run' { 'dry-run' } { $_ -in 'sent', 'partial' }
 $failedInLog = @($personOutcome.Values | Where-Object { $_.state -eq 'failure' }).Count
 
 if ($null -eq $changes) {
-    $md.Add('## HR change not sent: the HR file could not be read')
-    $md.Add(''); $md.Add('The step that reads the change stopped first (see its log). Nothing was sent to Microsoft.')
+    $md.Add('## HR change not sent: the change could not be read')
+    $md.Add(''); $md.Add('The step that reads the change stopped first, and its log says why (a problem in the HR file, or GitHub could not tell which changes were already sent). Nothing was sent to Microsoft.')
 }
 elseif (-not $sendable -and -not $result) {
     $md.Add('## No HR change to send')

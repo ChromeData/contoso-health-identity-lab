@@ -29,7 +29,12 @@
       * A refusal that would repeat for every file (the store's firewall,
         no permission, no sign-in, store not found) stops at the first file.
       * After upload each blob is downloaded again and re-hashed; a mismatch
-        fails the run.
+        fails the run. So does a read-back that never finished (a time-out,
+        a sign-in that expired mid-run, a download that wrote nothing): that
+        file is in the store but was never compared with its fingerprint,
+        and an unchecked file is not a filed one (outcome failed, kind
+        read-back). Only -SkipReadBack, asked for explicitly, files a pack
+        without that comparison.
 
     PRIVACY
       The pack files hold names and UPNs; they go to the private WORM
@@ -68,7 +73,9 @@
     manifest hashed.
 
 .PARAMETER SkipReadBack
-    Do not download and re-hash each blob after upload.
+    Do not download and re-hash each blob after upload: the run can then end
+    "filed" with no stored copy compared against its fingerprint. Without
+    it, a read-back that does not complete fails the run, as a mismatch does.
 
 .EXAMPLE
     ./Publish-EvidencePack.ps1 -PackDirectory ../../evidence/out -StorageAccountName stidlabevidence7f3a `
@@ -277,7 +284,10 @@ try {
                 $row.verified = ((Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant() -eq $f.sha256)
                 if (-not $row.verified) { $row.error = 'read-back: the stored copy does not match the fingerprint' }
             }
-            else { $row.error = "read-back failed: $((($dl | Out-String).Trim()))" }
+            else {
+                $row.error = "read-back failed: $((($dl | Out-String).Trim()))"
+                Write-Warning "Could not read $($f.file) back from the store to check it ($(Get-StoreFailureKind $row.error)): $($row.error)"
+            }
         }
         Write-Console ("  [+] {0}  sha256 {1}{2}" -f $blob, $f.sha256, $(if ($row.verified) { '  (read back, matches)' } else { '' })) -ForegroundColor Green
     }
@@ -287,12 +297,28 @@ finally { Remove-Item -LiteralPath $readDir -Recurse -Force -ErrorAction Silentl
 # ---- 3. Outcome ---------------------------------------------------------------
 $uploaded = @($files | Where-Object { $_.uploaded }).Count
 $mismatch = @($files | Where-Object { $_.uploaded -and $_.error -like 'read-back: the stored copy*' }).Count
+# Unchecked: stored, but the read-back that compares it with its fingerprint
+# never finished (time-out, a sign-in that expired mid-run, no file written).
+# Counted as "uploaded and not verified, other than a mismatch" rather than
+# from the error text, so ANY read-back that did not end in a match fails
+# closed. Silence is not a pass: a pack is filed only when every stored copy
+# was compared, unless -SkipReadBack waived the comparison explicitly.
+$unchecked = if ($SkipReadBack) { 0 } else { @($files | Where-Object { $_.uploaded -and -not $_.verified }).Count - $mismatch }
 $outcome = if ($mismatch) { 'failed' }
+elseif ($uploaded -eq $files.Count -and $unchecked) { 'failed' }
 elseif ($uploaded -eq $files.Count) { 'filed' }
 elseif ($uploaded -gt 0) { 'partial' }
 elseif ($stop) { 'refused' }
 else { 'failed' }
-Save-PublishResult -Outcome $outcome -Refusal $(if ($stop -and $outcome -ne 'filed') { $stop } else { $null })
+# Every upload succeeding means no $stop, so a read-back failure carries its
+# own kind: the summary must say "stored but not checked", not "not stored".
+$refusal = if ($stop -and $outcome -ne 'filed') { $stop }
+elseif ($outcome -eq 'failed' -and $unchecked -and -not $mismatch) { @{ kind = 'read-back'; unchecked = $unchecked } }
+else { $null }
+Save-PublishResult -Outcome $outcome -Refusal $refusal
 Write-Console ("`n{0}: {1} of {2} file(s) stored as new blobs under {3}/" -f $outcome, $uploaded, $files.Count, $Prefix) -ForegroundColor $(if ($outcome -eq 'filed') { 'Green' } else { 'Red' })
+if ($unchecked) {
+    Write-Console ("{0} of the stored file(s) could not be read back to check them against their fingerprints (see the warnings above). They are in the store and cannot be changed, but nobody has confirmed they match what was collected, so the pack does not count as filed. Run it again under a new -Prefix to file a checked copy." -f $unchecked) -ForegroundColor Red
+}
 if ($outcome -ne 'filed') { exit 1 }
 exit 0

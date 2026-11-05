@@ -160,7 +160,10 @@ identity engineer:
 "N days" is what the store itself reported for the files just uploaded
 (the earliest retention expiry), never a configured number; while the
 policy is still Unlocked the summary says an administrator could shorten
-it. Technical details (store, folder, every SHA-256, read-back result,
+it. Every stored file is downloaded again and its SHA-256 compared: a
+read-back that does not finish (time-out, expired sign-in) fails the run
+as "could not be checked", never "filed". Technical details (store,
+folder, every SHA-256, read-back result,
 lock mode) are folded underneath. Counts only: no name, UPN, raw Graph
 error or token, in the summary or the log. The pack files name people, so
 they exist only in the job's temp folder (emptied after the job) and in the

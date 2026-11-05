@@ -166,3 +166,9 @@ jobs:
           bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
           bash lab/scripts/demo/tests/reset-demo-hire.test.sh
           (cd lab/splunk && ./render-savedsearches.sh --check)
+
+      # The plain-English plan/apply summaries run with continue-on-error in
+      # terraform-plan.yml / terraform-apply.yml (a summary bug must never
+      # block an apply), so THIS is the check that fails when one breaks.
+      - name: Plain-English summary tests (plain-plan.py)
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
