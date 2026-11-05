@@ -33,18 +33,14 @@ Provider: **hashicorp/aws `~> 6.0`** (6.69.1 current on 2026-10-19).
 ## The identity chain this closes
 
 ```
-HR feed ─► AD ─► Cloud Sync ─► Entra user (a cloud engineer, e.g. Sam Rivera)
-  ─► access package "IT – Cloud Engineering Apps"    modules/entitlement
+HR feed ─► AD ─► Cloud Sync ─► Entra user (Dana)
+  ─► access package "Nurse – Clinical Apps"          modules/entitlement
   ─► Entra group App-AWS-IdentityCenter-Users        modules/groups
   ─► SCIM (Entra provisioning, ~40-min cycle / on demand)
   ─► Identity Store group, same DisplayName          READ by this root
   ─► account assignment + ViewOnlyAccess             OWNED by this root
   ─► IAM role AWSReservedSSO_ViewOnlyAccess_<suffix> in the target account
 ```
-
-Nurses no longer get AWS: cloud engineers do, because they run the patient
-portal there. The first run (E22 to E24) went through Dana and "Nurse –
-Clinical Apps" before that change, so "Dana" below means that run.
 
 **Ownership boundary.** This root never creates an `aws_identitystore_group`
 and never touches group membership. An AWS-local group would sit outside the

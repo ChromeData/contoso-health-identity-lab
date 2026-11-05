@@ -176,7 +176,7 @@ output "pim_workforce_au_membership_body" {
 # ---- Entitlement ------------------------------------------------------------
 
 output "access_package_ids" {
-  description = "Map of package key (nurse/icu/cloud_engineering/icu_float/pharmacy) => access package id."
+  description = "Map of package key (nurse/icu/icu_float/pharmacy) => access package id."
   value       = one(module.entitlement[*].access_package_ids)
 }
 

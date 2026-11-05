@@ -12,9 +12,7 @@ disabled becomes a measured number.
 then *Contoso 08 · Leaver + non-human identities*.
 
 **Starts from:** run sheets 06 and 07 are done: Dana holds **Nurse - Clinical
-Apps** and has an AWS account created by SCIM. (First run only: nurses no
-longer get AWS, so on a rebuild the AWS steps 14, 16 and 17 need a cloud
-engineer leaver.) `turn where` says `apps` or
+Apps** and has an AWS account created by SCIM. `turn where` says `apps` or
 later. You have `<spId>` and `<jobId>`.
 
 **Heads-up (first run, 2026-10-28):** DC01 must be running - the HR agent and Cloud Sync agent live on it and the 19:00 auto-shutdown put both Cloud Sync jobs in quarantine (`HybridIdentityServiceNoActiveAgents`); start the VM, restart `AADConnectProvisioningAgent`, then restart + start the jobs. Marcus moved to ICU (AD 7 s after the push, Entra at the next 20-minute cycle); `03-Mover.ps1` then waits for the ICU birthright package (PR #84 fixed its crash after the wait). Dana's leaver: AD disabled + OU=Disabled 7 s after the push, Entra `accountEnabled=false` 3 minutes later, `04-Leaver.ps1` revoked sessions, removed the package and the three app groups, then waited on the package removal.

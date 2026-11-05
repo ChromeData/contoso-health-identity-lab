@@ -7,7 +7,6 @@
 #     assignment model:
 #       nurse     "Nurse - Clinical Apps"                 T3 automatic (birthright)
 #       icu       "ICU - Critical Care Apps"              T3 automatic (birthright, mover target)
-#       cloud_engineering "IT - Cloud Engineering Apps"   T3 automatic (birthright, ServiceNow + AWS)
 #       icu_float "ICU - Float Access"                    T2 request   (float / agency ICU shifts)
 #       pharmacy  "Pharmacy - Controlled Substances Apps" T2 request   (SoD side of SOD-01)
 #   * A REQUEST policy only for request packages (T1/T2): approval,
