@@ -152,7 +152,7 @@
    "A ten-minute visitor pass."
   ],
   "PB": [
-   "Each alert from the lab's own rules is posted to the security team's Teams channel and opened as a ServiceNow ticket, automatically.",
+   "Each new incident from the lab's own rules is posted to the security team's Teams channel and opened as a ServiceNow ticket, automatically.",
    "The phone tree."
   ],
   "CONTAIN": [
