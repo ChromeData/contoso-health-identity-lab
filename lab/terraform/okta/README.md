@@ -5,14 +5,15 @@ org: the real Okta product on its free plan, standing in for the acquired
 clinic's enterprise Okta tenant (the Okta row in
 [`lab/docs/STAND-INS.md`](../../docs/STAND-INS.md)).
 
-> **Status: RAN · tenant.** Applied to the lab's Okta Integrator Free org
-> (capture-log E58), the authorize-request fix live 2026-11-05 (#140), and the
-> routing domain switched to `contosohealthlab.com` the same day (targeted
-> apply of the routing rule and the group rule). The first federated sign-in
-> (capture-log E102, added by PR #131) reached Okta through Entra: Okta created the user by JIT, put her in
-> Clinic-Staff and started her session; the Okta dashboard then asked for an
-> Okta factor (see the verify list). Runtime statements still marked *verify:*
-> are not proven by that run.
+> **Status: RAN · tenant, verified end to end** (capture-log E102). Applied to
+> the lab's Okta Integrator Free org (E58); the authorize-request fix (#140), the
+> routing domain `contosohealthlab.com` (#159) and Entra's v1.0 endpoints with
+> trust claims (#162) went live on 2026-11-05. That day a clinic user typed her
+> hospital address at Okta, was sent to Entra, signed in with her password and
+> an authenticator code (CA001 applied), and landed on the Okta dashboard with
+> the clinic's legacy app - with no Okta factor enrolled: Okta's *Any two
+> factors* was met by the MFA Entra asserted (`amr`). Runtime statements still
+> marked *verify:* are not proven by that run.
 
 It is Phase 1 of [`lab/docs/okta-migration-runbook.md`](../../docs/okta-migration-runbook.md)
 as code, decided in [ADR 0022](../../docs/adr/0022-okta-coexistence-as-code.md).
@@ -196,7 +197,7 @@ app in `modules/apps`, then `hide_web = true` here for one sign-in cycle, then
 - [ ] Rollback: `routing_rule_active = false` applied and timed; the next sign-in uses an Okta password; then `true` again.
 - [x] The first sign-in exchange succeeds with the provider's default request-signature settings; if the authorize call fails at Entra, set `request_signature_scope = "NONE"` and record it. **Resolved 2026-11-05:** the default (`REQUEST`, HS256) failed at Entra with AADSTS70013 (*the 'request' request parameter is not supported*) on the first clinic sign-in; `main.tf` now sets `NONE`, and the live IdP was set to match through the Okta API (the step this item documents).
 - [x] The routed domain is the one users type at Okta **and** the domain of their Entra email (Okta names a JIT user after `idpuser.email`, and the next sign-in is routed by it). **Decided 2026-11-05:** after the acquisition, clinic staff use hospital accounts, so `clinic_login_domain = contosohealthlab.com`: Okta sends staff with a hospital address to the hospital login. Okta's own admin (an `onmicrosoft.com` login) matches neither the routing rule nor the group rule, so it keeps the Default Rule.
-- [ ] Okta's own sign-on policy for the Okta dashboard (catch-all *Any two factors*) does not count the Entra MFA (IdP `trustClaims` false; provider 4.20 has no attribute for it on `okta_idp_oidc`): on 2026-11-05 a JIT-created clinic user was signed in to Okta and then asked to enroll Okta Verify or a passkey. Open decision: an Okta Dashboard rule for Clinic-Staff that accepts the IdP sign-in as enough (MFA already enforced at Entra by CA001), or Okta *Trust claims*.
+- [x] Okta's own sign-on policy for the Okta dashboard (catch-all *Any two factors*) counts the Entra MFA. **Decided and verified 2026-11-05:** MFA stays required in Okta; Okta accepts Entra's: the IdP is on Entra's v1.0 endpoints (its ID token carries `amr`) and `trust-claims.mjs` sets `trustClaims`. Before that, a JIT-created clinic user was asked to enroll Okta Verify or a passkey; after it, she reached the dashboard with no Okta factor (E102).
 - [ ] Users need a first and last name in Entra: Okta's JIT refuses a user without them (`firstName`/`lastName` *cannot be left blank*, seen live). HR-fed users always have both.
 - [ ] Integrator Free exposed everything used here (OIDC IdP, routing rules, group rules, bookmark apps, API tokens).
 - [ ] The state file holds the client secret: it stayed on the applier's laptop, and `terraform.tfstate*` is gitignored (`git status` shows nothing from this directory except the lock file and code).
