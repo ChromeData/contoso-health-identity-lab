@@ -42,6 +42,18 @@ variable "operator_graph_roles" {
       AuditLog.Read.All                   provisioning and sign-in logs
       EntitlementManagement.ReadWrite.All access packages and their policies
       Policy.Read.All                     Conditional Access, auth methods
+    Added 2026-11-05 after the map readiness check hit 403s (read-only, plus
+    one restore/purge right for demo resets):
+      AccessReview.Read.All               access reviews (map: REVIEW)
+      LifecycleWorkflows.Read.All         joiner/leaver workflows and runs (LCW)
+      RoleEligibilitySchedule.Read.Directory  who is eligible for which role (PIM)
+      RoleManagementPolicy.Read.Directory     PIM activation rules, directory roles
+      RoleManagementPolicy.Read.AzureADGroup  PIM activation rules, PIM groups
+      PrivilegedEligibilitySchedule.Read.AzureADGroup  PIM-for-Groups eligibility
+      DeviceManagementManagedDevices.Read.All  the Intune pilot device (INTUNE)
+      DeviceManagementConfiguration.Read.All   its compliance policy
+      User.DeleteRestore.All              empty a demo hire from Deleted users
+                                          (reset-demo-hire.sh --purge-entra)
   EOT
   type        = list(string)
   default = [
@@ -52,6 +64,15 @@ variable "operator_graph_roles" {
     "AuditLog.Read.All",
     "EntitlementManagement.ReadWrite.All",
     "Policy.Read.All",
+    "AccessReview.Read.All",
+    "LifecycleWorkflows.Read.All",
+    "RoleEligibilitySchedule.Read.Directory",
+    "RoleManagementPolicy.Read.Directory",
+    "RoleManagementPolicy.Read.AzureADGroup",
+    "PrivilegedEligibilitySchedule.Read.AzureADGroup",
+    "DeviceManagementManagedDevices.Read.All",
+    "DeviceManagementConfiguration.Read.All",
+    "User.DeleteRestore.All",
   ]
 }
 

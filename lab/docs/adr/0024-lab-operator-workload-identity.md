@@ -42,7 +42,10 @@ private key's lasting copy is a login Keychain item; a session copy (mode
 
 - **Microsoft Graph:** Application.ReadWrite.All, AppRoleAssignment.ReadWrite.All,
   Directory.Read.All, Synchronization.ReadWrite.All, AuditLog.Read.All,
-  EntitlementManagement.ReadWrite.All, Policy.Read.All
+  EntitlementManagement.ReadWrite.All, Policy.Read.All; added 2026-11-05 after
+  the map readiness check hit 403s: AccessReview, LifecycleWorkflows, PIM
+  eligibility and policy reads, Intune device and configuration reads (all
+  read-only), and User.DeleteRestore.All for demo-hire resets
 - **Azure, lab subscription:** Owner, Storage Blob Data Contributor,
   Key Vault Secrets User
 - **Entra role:** Security Reader (refreshing the tenant diagnostic setting)
