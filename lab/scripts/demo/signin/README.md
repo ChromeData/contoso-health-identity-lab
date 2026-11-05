@@ -12,7 +12,7 @@ with Conditional Access evaluated for real, instead of an admin session.
 | Script | What it does |
 |---|---|
 | `enroll.mjs <upn> [--force] [--headed] [--no-verify]` | Checks first, changes after: Playwright/Chromium must load and the password must be known (or settable) before anything on the account changes. Keeps the user's Keychain password (or sets a random one through Graph), issues a **one-time Temporary Access Pass** (60 min, the TAP policy minimum), signs in with it at `mysignins.microsoft.com/security-info`, adds an **authenticator app** ("Set up a different authentication app" → "Can't scan image?"), reads the secret key, stores it in the Keychain, enters the computed code, deletes any pass left, checks Graph lists the method, then proves a password + code sign-in reaches My Apps. `--force` replaces an authenticator the Keychain has no seed for: the new one is registered **first** and the old one deleted only once Graph lists the new one. The pass is deleted in a `finally`. |
-| `signin.mjs <upn> <start-url> [--fresh] [--headed] [--identifier <name>] [--until <regex>] [--no-kmsi] [--shot <name>]` | Opens the start URL and answers Entra's pages as the user (username, password, authenticator code, *Stay signed in?*, postponable nudges; Okta's identifier box when the start URL is Okta). Prints `{ok, landed, title, screenshot, storageState}`. |
+| `signin.mjs <upn> <start-url> [--fresh] [--headed] [--identifier <name>] [--until <regex>] [--denied <regex>] [--no-kmsi] [--shot <name>]` | Opens the start URL and answers Entra's pages as the user (username, password, authenticator code, *Stay signed in?*, postponable nudges; Okta's identifier box when the start URL is Okta). Prints `{ok, landed, title, screenshot, storageState}`. |
 | `lib.mjs` | Keychain read/write, TOTP (RFC 6238, node:crypto), Graph as the operator, Playwright loader, secret-blurring screenshots. |
 
 As a module (other scripts):
@@ -26,10 +26,14 @@ await close();
 ```
 
 Options: `fresh` (ignore the saved cookies), `until` (the app's own "signed
-in" test - recommended; without it, success needs a round trip through Entra
-in this run, no password box on the app page and a URL steady for 2.5 s, and
-an app reached without any Entra visit is an error, never "ok"; see
-`verdict()`),
+in" test), `landing` (`{ url, text, denied }` RegExps). Success needs a
+**positive** landing signal: `APPS` in `signin.mjs` holds one per app the lab
+signs in to (My Apps, My Account, My Sign-ins, AWS access portal and console,
+Okta's dashboard, ServiceNow) together with that app's known **refusal** pages
+(ServiceNow "user not found", Okta's factor-enrollment wall...), which fail the
+run even after a clean Entra round trip. An app not in `APPS` needs `until` /
+`--until` (and `--denied`); without one the run is an error, never "ok" (see
+`landing()` / `verdict()`),
 `identifier` (what to type in Okta's box; default the UPN), `kmsi` (answer to
 *Stay signed in?*, default yes), `browser` (reuse a launched browser; the
 caller closes it), `timeoutMs`.

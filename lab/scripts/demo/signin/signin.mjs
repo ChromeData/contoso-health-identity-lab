@@ -2,7 +2,7 @@
 // =============================================================================
 // lab/scripts/demo/signin/signin.mjs - sign a lab user in through Entra
 // -----------------------------------------------------------------------------
-//   node signin.mjs <upn> <start-url> [--headed] [--fresh] [--identifier <name>] [--until <regex>] [--no-kmsi]
+//   node signin.mjs <upn> <start-url> [--headed] [--fresh] [--identifier <name>] [--until <regex>] [--denied <regex>] [--no-kmsi]
 //
 //   import { signIn } from '<repo>/lab/scripts/demo/signin/signin.mjs';
 //   const { page, context, browser, close } = await signIn(upn, url, { headless: true });
@@ -191,43 +191,77 @@ async function step(page, upn, s) {
   return null;
 }
 
-// When is the browser "signed in"? A pure decision, so it is unit-tested
-// (tests/lib.test.mjs). An app's own sign-in or access-denied page is also
-// "off the login hosts with a steady URL", so that alone proves nothing:
-//   * with an `until` test, only `until` decides;
-//   * without one, Entra must have been visited in THIS run (the app sent
-//     the browser to Entra and Entra sent it back), no password box may be
-//     on screen (a signed-out app page), and the URL must be steady 2.5 s.
-//   * no Entra visit and no `until` = cannot tell: an error, never "ok".
-export function verdict({ onApp, untilGiven, untilOk, visitedLogin, passwordOnScreen, steadyMs }) {
+// Where the browser landed, per app. Being off the login hosts proves nothing:
+// an app's own "no account" or "access denied" page is off them too. So each
+// app the lab signs in to has a POSITIVE signal (its signed-in page) and its
+// known REFUSAL pages. Read live 2026-11-05 unless marked otherwise.
+export const APPS = [
+  { name: 'My Apps', host: /(^|\.)(myapps|myapplications)\.microsoft\.com$/i, ok: /Apps dashboard|My Apps/i },
+  { name: 'My Account', host: /(^|\.)myaccount\.microsoft\.com$/i, ok: /My Account/i },
+  { name: 'My Sign-ins', host: /(^|\.)mysignins\.microsoft\.com$/i, ok: /Security info/i },
+  { name: 'AWS access portal', host: /\.awsapps\.com$/i, ok: /AWS access portal/i, denied: /not authorized|access denied|you do not have access/i },
+  { name: 'AWS console', host: /(^|\.)console\.aws\.amazon\.com$/i, ok: /Console Home|Account ID/i },
+  // Okta: signed in = the end-user dashboard; refusals = its own factor
+  // enrollment wall and its IdP error (both seen live on the first clinic runs).
+  { name: 'Okta', host: /\.(okta|oktapreview|okta-emea)\.com$/i, url: /\/app\/UserHome|\/enduser\//i, ok: /My Apps|Dashboard/i,
+    denied: /Set up security methods|identity provider had a problem|Unable to sign in|not assigned to this application/i },
+  // ServiceNow: the SSO refusal pages name the user or the SAML step
+  // (verify: wording on the lab's dev instance).
+  { name: 'ServiceNow', host: /\.service-now\.com$/i, ok: /Service Portal|Now Platform|ServiceNow/i,
+    denied: /User:?\s*\S+\s+not (found|active|authenticated)|Ensure that the user you are logging in with is active|SAML2? (error|Error)|not authorized|Logged out/i },
+];
+// 'ok' | 'denied: <app>' | 'wait' | 'unknown'. `custom` = { url, text, denied }
+// (RegExps) for an app not in APPS, or to tighten one that is.
+export function landing(url, text, custom = {}) {
+  let h = ''; try { h = new URL(url).hostname; } catch {}
+  const app = APPS.find((a) => a.host.test(h));
+  const denied = custom.denied || (app && app.denied);
+  if (denied && denied.test(text)) return `denied: ${app ? app.name : h}`;
+  const okUrl = custom.url || (app && app.url), okText = custom.text || (app && app.ok);
+  if (!okUrl && !okText) return 'unknown';
+  return (!okUrl || okUrl.test(url)) && (!okText || okText.test(text)) ? 'ok' : 'wait';
+}
+
+// When is the browser "signed in"? A pure decision, unit-tested
+// (tests/lib.test.mjs):
+//   * a known refusal page fails at once, `until` or not;
+//   * with an `until` test, `until` decides;
+//   * a password box on the app page = signed out;
+//   * otherwise only the app's POSITIVE landing signal counts ('ok');
+//   * an app with no known signal and no `until` is an error, never "ok".
+export function verdict({ onApp, untilGiven, untilOk, land, passwordOnScreen, steadyMs }) {
   if (!onApp) return 'wait';
+  if (land && land.startsWith('denied')) return 'denied';
   if (untilGiven) return untilOk ? 'done' : 'wait';
   if (passwordOnScreen) return 'signed-out';
-  if (steadyMs < 2500) return 'wait';
-  return visitedLogin ? 'done' : 'unproven';
+  if (land === 'ok') return 'done';
+  if (land === 'unknown' && steadyMs >= 2500) return 'unknown-app';
+  return 'wait';
 }
 
 // Drive Entra until the browser is back on the app (see verdict()).
 export async function drive(page, upn, opts = {}) {
   const s = { kmsi: true, pwTries: 0, otcTries: 0, userTries: 0, ...opts };
   const deadline = Date.now() + (opts.timeoutMs || 180000);
-  let steadyUrl = '', steadySince = 0, visitedLogin = false;
+  let steadyUrl = '', steadySince = 0;
   while (Date.now() < deadline) {
     await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
-    if (LOGIN_HOST.test(host(page.url()))) visitedLogin = true;
     const did = await step(page, upn, s);
-    if (did) { visitedLogin = true; log(`${localPart(upn)}: ${did}`); steadyUrl = ''; await sleep(1500); continue; }
+    if (did) { log(`${localPart(upn)}: ${did}`); steadyUrl = ''; await sleep(1500); continue; }
     const h = host(page.url());
     const onApp = !LOGIN_HOST.test(h) && !(OKTA_HOST.test(h) && await onScreen(page, 'input[name="identifier"], input[name="username"], input[name="credentials.passcode"]'));
     if (onApp && page.url() !== steadyUrl) { steadyUrl = page.url(); steadySince = Date.now(); }
+    const text = onApp ? await pageText(page) : '';
+    const land = onApp ? landing(page.url(), text, opts.landing) : null;
     const v = verdict({
       onApp, untilGiven: !!opts.until, untilOk: onApp && opts.until ? await opts.until(page).catch(() => false) : false,
-      visitedLogin, passwordOnScreen: onApp && !opts.until ? !!(await onScreen(page, 'input[type=password]')) : false,
+      land, passwordOnScreen: onApp && !opts.until ? !!(await onScreen(page, 'input[type=password]')) : false,
       steadyMs: onApp ? Date.now() - steadySince : 0,
     });
     if (v === 'done') return;
+    if (v === 'denied') throw new Error(`the app refused the sign-in (${land}): ${text.replace(/\s+/g, ' ').slice(0, 200)}`);
     if (v === 'signed-out') throw new Error(`back on ${h} but it shows a password box: the app did not accept the sign-in`);
-    if (v === 'unproven') throw new Error(`no Entra sign-in happened and no "until" test was given: cannot tell whether ${h} is signed in (pass until / --until)`);
+    if (v === 'unknown-app') throw new Error(`${h} has no known "signed in" signal: pass until / --until (and landing.denied) for this app`);
     await sleep(700);
   }
   throw new Error(`sign-in did not finish in ${(opts.timeoutMs || 180000) / 1000}s (at ${host(page.url())})`);
@@ -236,6 +270,8 @@ export async function drive(page, upn, opts = {}) {
 // signIn(upn, url, { headless, fresh, identifier, until, kmsi, timeoutMs, browser, contextOptions })
 //   identifier : what to type on a non-Entra front door (Okta's identifier box); default the UPN
 //   until      : async (page) => boolean, the app-specific "signed in" test
+//   landing    : { url, text, denied } RegExps - the signed-in signal and refusal
+//                pages for an app not in APPS (or to tighten one that is)
 //   browser    : reuse an already-launched Playwright browser (the caller closes it)
 // Returns { browser, context, page, statePath, close }.
 export async function signIn(upn, url, opts = {}) {
@@ -269,13 +305,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(proces
   const flag = (n) => { const i = a.indexOf(n); if (i < 0) return false; a.splice(i, 1); return true; };
   const val = (n) => { const i = a.indexOf(n); if (i < 0) return undefined; const v = a[i + 1]; a.splice(i, 2); return v; };
   const headed = flag('--headed'), fresh = flag('--fresh'), noKmsi = flag('--no-kmsi');
-  const identifier = val('--identifier'), shotName = val('--shot'), untilRe = val('--until');
+  const identifier = val('--identifier'), shotName = val('--shot'), untilRe = val('--until'), deniedRe = val('--denied');
   const [upn, url] = a;
-  if (!upn || !url) { console.error('usage: node signin.mjs <upn> <start-url> [--headed] [--fresh] [--identifier <name>] [--until <regex>] [--no-kmsi] [--shot <name>]'); process.exit(2); }
+  if (!upn || !url) { console.error('usage: node signin.mjs <upn> <start-url> [--headed] [--fresh] [--identifier <name>] [--until <regex>] [--denied <regex>] [--no-kmsi] [--shot <name>]'); process.exit(2); }
   try {
     // --until <regex>: signed in only when the URL or the page text matches.
     const until = untilRe ? async (p) => new RegExp(untilRe, 'i').test(p.url()) || new RegExp(untilRe, 'i').test(await pageText(p)) : undefined;
-    const r = await signIn(upn, url, { headless: !headed, fresh, identifier, kmsi: !noKmsi, until });
+    const r = await signIn(upn, url, { headless: !headed, fresh, identifier, kmsi: !noKmsi, until, landing: deniedRe ? { denied: new RegExp(deniedRe, 'i') } : undefined });
     await sleep(2000);
     const f = await shot(r.page, shotName || `signin-ok-${localPart(upn)}`);
     console.log(JSON.stringify({ ok: true, upn, landed: r.page.url(), title: await r.page.title(), screenshot: f, storageState: r.statePath }));

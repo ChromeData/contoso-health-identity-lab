@@ -173,14 +173,24 @@ export function markTotpStep(upn, counter) {
 // if a fresh lock had replaced it in between, it is put back (link = create
 // only if the slot is still free) and nobody else's lock is lost.
 const STALE_MS = 90000;
-function recoverStaleLock(f) {
-  let seen, st;
-  try { st = fs.statSync(f); seen = fs.readFileSync(f, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return true; throw e; }
-  if (Date.now() - st.mtimeMs <= STALE_MS) return false;
+// What the lock IS is judged once, through one file descriptor: inode, mtime
+// and owner token come from the same open file, so a fresh lock that replaces
+// the stale one in between cannot be mistaken for it. After the atomic rename
+// aside, the moved file is discarded only if it is that same inode with that
+// same token; anything else is put back (link = create only if the slot is
+// free). `hooks.afterInspect` is a test seam for the race.
+export function recoverStaleLock(f, hooks = {}) {
+  let fd;
+  try { fd = fs.openSync(f, 'r'); } catch (e) { if (e.code === 'ENOENT') return true; throw e; }
+  let seen;
+  try { const st = fs.fstatSync(fd); seen = { ino: st.ino, mtimeMs: st.mtimeMs, token: fs.readFileSync(fd, 'utf8') }; } finally { fs.closeSync(fd); }
+  if (Date.now() - seen.mtimeMs <= STALE_MS) return false;
+  if (hooks.afterInspect) hooks.afterInspect();
   const aside = `${f}.${crypto.randomUUID()}`;
   try { fs.renameSync(f, aside); } catch (e) { if (e.code === 'ENOENT') return true; throw e; }
-  let moved = null; try { moved = fs.readFileSync(aside, 'utf8'); } catch {}
-  if (moved !== seen) { try { fs.linkSync(aside, f); } catch (e) { if (e.code !== 'EEXIST') throw e; } }
+  let same = false;
+  try { const st = fs.statSync(aside); same = st.ino === seen.ino && st.mtimeMs === seen.mtimeMs && fs.readFileSync(aside, 'utf8') === seen.token; } catch {}
+  if (!same) { try { fs.linkSync(aside, f); } catch (e) { if (e.code !== 'EEXIST') throw e; } }
   fs.rmSync(aside, { force: true });
   return true;
 }

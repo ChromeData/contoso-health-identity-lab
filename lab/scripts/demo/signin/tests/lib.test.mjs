@@ -199,26 +199,80 @@ test('freshTotp: a lock left by a crashed run (older than 90 s) is taken over', 
   assert.equal(code, lib.hotp(lib.base32Decode(RFC_SEED), Math.floor(1_700_000_010_000 / 30000)));
 });
 
-// ---- when is a browser "signed in"? (signin.mjs verdict) ----------------------
-const { verdict } = await import('../signin.mjs');
-const base = { onApp: true, untilGiven: false, untilOk: false, visitedLogin: true, passwordOnScreen: false, steadyMs: 3000 };
+// ---- when is a browser "signed in"? (signin.mjs landing + verdict) ----------
+const { verdict, landing } = await import('../signin.mjs');
+const base = { onApp: true, untilGiven: false, untilOk: false, land: 'ok', passwordOnScreen: false, steadyMs: 3000 };
 
-test('verdict: back from Entra on a steady app page with no password box = signed in', () => {
+test('landing: each known app has a positive signal', () => {
+  assert.equal(landing('https://myapps.microsoft.com/', 'Apps dashboard'), 'ok');
+  assert.equal(landing('https://myaccount.microsoft.com/', 'My Account Overview'), 'ok');
+  assert.equal(landing('https://d-90666212c7.awsapps.com/start/#/', 'AWS access portal Accounts'), 'ok');
+  assert.equal(landing('https://integrator-8288815.okta.com/app/UserHome', 'My Apps'), 'ok');
+  assert.equal(landing('https://integrator-8288815.okta.com/oauth2/v1/authorize/callback', 'Connecting to'), 'wait', 'Okta mid-flow is not the dashboard');
+});
+
+test('landing: an app\'s own refusal page is a failure, not a sign-in (ServiceNow user with no account; Okta factor wall)', () => {
+  assert.match(landing('https://dev459905.service-now.com/navpage.do', 'User: test-user-c@contosohealthlab.com not found'), /^denied: ServiceNow/);
+  assert.match(landing('https://dev459905.service-now.com/', 'Ensure that the user you are logging in with is active, not locked out'), /^denied/);
+  assert.match(landing('https://integrator-8288815.okta.com/oauth2/v1/authorize/callback', 'Set up security methods Okta Verify Required now'), /^denied: Okta/);
+});
+
+test('landing: an app with no known signal is "unknown"; a custom signal or refusal pattern can be given', () => {
+  assert.equal(landing('https://example.org/home', 'Welcome'), 'unknown');
+  assert.equal(landing('https://example.org/home', 'Welcome', { text: /Welcome/ }), 'ok');
+  assert.match(landing('https://example.org/home', 'Access denied', { text: /Welcome/, denied: /Access denied/ }), /^denied/);
+});
+
+test('verdict: the app\'s positive signal = signed in (also when saved cookies skipped Entra)', () => {
   assert.equal(verdict(base), 'done');
 });
-test('verdict: an app page that never went through Entra, with no until test, is NOT reported signed in', () => {
-  assert.equal(verdict({ ...base, visitedLogin: false }), 'unproven');
+test('verdict: a refusal page after the Entra round trip is "denied", never done - with or without until', () => {
+  assert.equal(verdict({ ...base, land: 'denied: ServiceNow' }), 'denied');
+  assert.equal(verdict({ ...base, land: 'denied: ServiceNow', untilGiven: true, untilOk: true }), 'denied');
+});
+test('verdict: an app with no known signal and no until is an error, not ok', () => {
+  assert.equal(verdict({ ...base, land: 'unknown' }), 'unknown-app');
+  assert.equal(verdict({ ...base, land: 'unknown', steadyMs: 1000 }), 'wait');
+});
+test('verdict: a known app not yet showing its signal = wait (times out as an error)', () => {
+  assert.equal(verdict({ ...base, land: 'wait' }), 'wait');
 });
 test('verdict: an app page showing a password box (its own sign-in page) is signed out', () => {
-  assert.equal(verdict({ ...base, passwordOnScreen: true }), 'signed-out');
+  assert.equal(verdict({ ...base, land: 'wait', passwordOnScreen: true }), 'signed-out');
 });
-test('verdict: with an until test, only until decides', () => {
+test('verdict: with an until test, until decides (after the refusal check)', () => {
   assert.equal(verdict({ ...base, untilGiven: true, untilOk: false }), 'wait');
-  assert.equal(verdict({ ...base, untilGiven: true, untilOk: true, visitedLogin: false }), 'done');
+  assert.equal(verdict({ ...base, land: 'unknown', untilGiven: true, untilOk: true }), 'done');
 });
-test('verdict: still on Entra, or the URL not yet steady = wait', () => {
+test('verdict: still on Entra = wait', () => {
   assert.equal(verdict({ ...base, onApp: false }), 'wait');
-  assert.equal(verdict({ ...base, steadyMs: 1000 }), 'wait');
+});
+
+// ---- stale-lock recovery against a lock replaced mid-inspection ----------------
+test('recoverStaleLock never removes a fresh lock that replaced the stale one, even with the same token', () => {
+  const f = path.join(home, 'session', 'browser', 'race.totp-lock');
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, 'tok'); const old = (Date.now() - 120000) / 1000; fs.utimesSync(f, old, old);
+  // Between inspection and rename, another process recovers the stale lock and
+  // takes a FRESH one (a new file) - here with the same token text, the case a
+  // content-only check would get wrong.
+  const r = lib.recoverStaleLock(f, { afterInspect: () => { fs.rmSync(f); fs.writeFileSync(f, 'tok'); } });
+  assert.equal(r, true);
+  assert.equal(fs.existsSync(f), true, 'the fresh lock is still there');
+  assert.ok(Date.now() - fs.statSync(f).mtimeMs < 60000, 'and it is the fresh one');
+  assert.deepEqual(fs.readdirSync(path.dirname(f)).filter((n) => n.startsWith('race.totp-lock.')), [], 'nothing left aside');
+  fs.rmSync(f);
+});
+
+test('recoverStaleLock removes a lock that really is stale, and leaves a fresh one alone', () => {
+  const f = path.join(home, 'session', 'browser', 'race2.totp-lock');
+  fs.writeFileSync(f, 'crashed'); const old = (Date.now() - 120000) / 1000; fs.utimesSync(f, old, old);
+  assert.equal(lib.recoverStaleLock(f), true);
+  assert.equal(fs.existsSync(f), false);
+  fs.writeFileSync(f, 'live');
+  assert.equal(lib.recoverStaleLock(f), false);
+  assert.equal(fs.readFileSync(f, 'utf8'), 'live');
+  fs.rmSync(f);
 });
 
 // ---- pages where Entra stops the sign-in (signin.mjs entraBlocker) ------------
