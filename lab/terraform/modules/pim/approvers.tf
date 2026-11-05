@@ -46,6 +46,7 @@ locals {
     tier0 = (
       length([for k, s in local.tier_group_settings : k if s.tier == 0]) > 0 ||
       (var.enable_pim_azure_resources && var.azure_pim_require_approval) ||
+      (var.enable_pim_aws_admin && var.aws_admin_require_approval) ||
       var.enable_global_admin_pim_policy
     )
     tier1 = (

@@ -45,6 +45,7 @@ incidents.
 | [0022](0022-okta-coexistence-as-code.md) | Okta coexistence (acquired clinic) built as code: Okta trusts Entra as its OIDC IdP, a routing rule with the Okta fallback kept, a separate human-applied Okta root, the client secret never in state | Federation / M&A |
 | [0023](0023-defender-for-identity-native-ad-detection.md) | Defender for Identity is the primary detector for the native AD-attack signatures; the hand-written KQL rules are the portable/offline twins plus two correlations MDI cannot make (Vault check-out, operator allowlist). Staged behind `enable_defender_for_identity` (sensor + licence are human steps) | Detection / Tier 0 |
 | [0024](0024-lab-operator-workload-identity.md) | Unattended admin work runs as the lab operator: a certificate-only Entra workload identity (key in the Mac's Keychain), which AWS trusts through Entra web-identity federation. Tier 0, one kill switch for both clouds | Identity platform / Tier 0 |
+| [0025](0025-aws-admin-just-in-time-through-entra.md) | AWS administration is a 2-hour PIM-for-Groups activation in Entra (PIM-AWS-Lab-Admins -> SCIM -> IAM Identity Center permission set LabAdministrator), not the root user; the operator is denied IAM, Identity Center and account-creating Organizations writes, so it cannot mint another admin path | Identity platform / Tier 0 |
 
 ## Format
 
