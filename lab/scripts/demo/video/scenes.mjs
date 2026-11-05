@@ -109,7 +109,7 @@ export function scenes(ids) {
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:directory').catch(() => {}); } },
     { say: "Seven, Entra to the apps a job needs. A nurse gets nurse apps on day one. Extras need a manager's OK, and they expire. Why: no waiting on day one, and no access piling up.", audio: `${OUT}/clips/km/02-map-3.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:joiner').catch(() => {}); } },
-    { say: "Eight, Entra to outside systems. ServiceNow is the IT help desk. AWS is Amazon's cloud, where hospitals run their own apps. Okta is the login of a clinic the hospital bought. AWS and Okta trust Entra; ServiceNow is wired, with its sign-in switched off for now. Why: one switch turns someone off in every app that trusts Entra.", audio: `${OUT}/clips/km/02-map-4.mp3`,
+    { say: "Eight, Entra to outside systems. ServiceNow is the IT help desk. AWS is Amazon's cloud, where hospitals run their own apps. Okta is the login of a clinic the hospital bought. AWS and Okta trust Entra. ServiceNow's sign-in with Entra is switched on, and its staff accounts come next. Why: one switch turns someone off in every app that trusts Entra.", audio: `${OUT}/clips/km/02-map-4.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:apps').catch(() => {}); } },
     { say: "Nine, sign-in rules. A password isn't enough: everyone needs a second check. The phishing-proof rule for admins is only watching for now, until their security keys are issued. Why: a stolen password gets nobody in.", audio: `${OUT}/clips/km/02-map-5.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:signin').catch(() => {}); } },
