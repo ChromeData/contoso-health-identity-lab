@@ -3,24 +3,24 @@
   "source": "Everything starts with HR, the official list of who works here. In the lab a spreadsheet plays HR. When HR adds, moves or removes a person, the accounts follow. Nobody creates an account by hand. Why this way: if access came from anywhere else, HR and IT would drift apart and leavers would keep access.",
   "directory": "Two directories kept in step. Active Directory on the Windows server is what the hospital's PCs and older systems check logins against. Entra is the cloud copy every modern app checks. Cloud Sync copies accounts up from the server to the cloud, so fixing a person once fixes them everywhere. Why two: the old on-site directory cannot be switched off while PCs and legacy systems need it, and the cloud one is what modern apps and sign-in rules need.",
   "joiner": "What a new hire gets on day one, and how extras are requested. Standard access comes from the job: a nurse gets nurse systems automatically. Anything extra is requested, approved by a manager, and expires. Some combinations are blocked because one person holding both would be a fraud risk. Why: day-one access by job removes the ticket queue, and expiring extras stop access piling up over the years.",
-  "apps": "The places staff actually go after they sign in. AWS: Amazon's cloud, where hospitals run their own apps. ServiceNow: the help desk where staff raise IT tickets. Okta: a partner clinic's own login system. Each one trusts the hospital login instead of keeping its own passwords, and for AWS the account is created and removed automatically from HR. Why one login: one place to turn a person off, one set of sign-in rules, no forgotten passwords in each app.",
+  "apps": "The places staff actually go after they sign in. AWS: Amazon's cloud, where hospitals run their own apps. ServiceNow: the help desk where staff raise IT tickets. Okta: a partner clinic's own login system. AWS and Okta trust the hospital login instead of keeping their own passwords; ServiceNow's is wired and switched off for now. For AWS the account is created and switched off automatically from HR. Why one login: one place to turn a person off, one set of sign-in rules, no forgotten passwords in each app.",
   "signin": "The checks at the door, every time someone signs in. Where you are, what device, how risky this looks, and whether you proved it is you with more than a password. New rules start in report-only mode (it watches and logs, blocks nothing) so a mistake cannot lock a nurse out mid-shift. Why watch-only first: a bad rule in a hospital locks out clinicians mid-shift, so rules prove themselves before they enforce.",
-  "privileged": "Nobody keeps admin power all day. Admins ask for it, say why, get it for a few hours, and it switches off again. Shared passwords for servers live in a vault that rotates them and records who used them. Why: a stolen admin account that holds power all day is the worst case. Power that switches off limits the damage to hours.",
-  "detect": "The alarm system. Sign-in and change records flow into one place, rules written as code spot trouble such as an admin sign-in from a new country, and a person approves any lockout before it happens. Why a human approves lockouts: an automatic lockout of the wrong clinician is itself a patient-safety incident.",
-  "leaver": "When someone leaves, HR flips one field and everything closes: account off, sessions cut, app access gone, each step timed. Robot accounts the person owned are handed to someone else so nothing is orphaned. Why timed: the gap between someone leaving and losing access is the number an auditor asks for.",
+  "privileged": "No admin keeps power day to day. Admins ask for it, say why, get it for a few hours, and it switches off again. The exceptions are the build account, the Cloud Sync service account and two locked emergency accounts. Shared passwords for servers live in a vault (a local stand-in for CyberArk) that rotates them and records who used them. Why: a stolen admin account that holds power all day is the worst case. Power that switches off limits the damage to hours.",
+  "detect": "The alarm system. Sign-in and change records flow into one place, and rules written as code spot trouble such as a sign-in from a blocked country. A lockout playbook that asks a person first is built, not switched on yet. Why a human approves lockouts: an automatic lockout of the wrong clinician is itself a patient-safety incident.",
+  "leaver": "When someone leaves, HR flips one field and everything closes: account off, sessions cut, app access gone, each step timed. Robot accounts the person owned are meant to be handed to a named successor; today the inventory lists the ones with no owner. Why timed: the gap between someone leaving and losing access is the number an auditor asks for.",
   "proof": "Showing an auditor it works, on demand. Regular reviews of who has what, an evidence binder where every page is fingerprinted and stored where nobody can edit it, and a nightly check that nothing has drifted from the approved setup. Why: a control nobody can prove is a control nobody can trust. Evidence is produced by the system, not assembled by hand before an audit."
  },
  "nodes": {
   "SSO": [
-   "AWS's own login door, set to trust the hospital login. Staff sign in with their hospital account and have no separate AWS password. SCIM is the part that creates her AWS account when HR hires her and removes it when HR says she left.",
+   "AWS's own login door, set to trust the hospital login. Staff sign in with their hospital account and have no separate AWS password. SCIM is the part that creates her AWS account when HR hires her and switches it off when HR says she left.",
    "A second building that accepts our staff badge."
   ],
   "SNOW": [
-   "The IT help desk. Staff raise tickets here and IT tracks changes here. It is set to accept the hospital login, so there is no separate ServiceNow password. The free developer copy stands in for the real one.",
+   "The IT help desk, a free developer copy. Its sign-in with the hospital login is built on both sides and switched off until staff accounts exist there.",
    "The ticket desk."
   ],
   "OKTA": [
-   "A partner clinic the hospital bought, which already has its own login system. Okta is set to trust Entra, so the clinic's staff keep signing in through their own door but land under the hospital's rules.",
+   "A partner clinic the hospital bought, which already has its own login system. Okta is set to trust Entra, so the clinic's staff keep signing in through their own door but land under the hospital's rules. Set up on both sides; no clinic user has signed in through it yet.",
    "The acquired building's reception, now checking our badges."
   ],
   "HR": [
@@ -40,7 +40,7 @@
    "An ID card for the server."
   ],
   "SYNC": [
-   "Copies accounts from the on-site directory up to Entra every few minutes. The most powerful admin accounts are kept out of the copy on purpose.",
+   "Copies accounts from the on-site directory up to Entra on a schedule. The most powerful admin accounts are kept out of the copy on purpose.",
    "A photocopier: fix the original."
   ],
   "ENTRA": [
@@ -48,7 +48,7 @@
    "The front desk and badge office."
   ],
   "CABASE": [
-   "The core sign-in rules: everyone proves it is them with more than a password, admins must use a phishing-proof method, and old insecure sign-in protocols are blocked.",
+   "The core sign-in rules: everyone proves it is them with more than a password, and old insecure sign-in methods are blocked. The phishing-proof rule for admins is only watching for now, until their security keys are issued.",
    "The guard at every door."
   ],
   "PIM": [
@@ -56,7 +56,7 @@
    "A temporary badge upgrade."
   ],
   "KV": [
-   "Azure's locked box for the few secrets the automation needs, reachable only from inside the lab network.",
+   "Azure's locked box for the few secrets the automation needs, reached over a private link inside the lab network plus one allow-listed admin address.",
    "A deposit box off a private corridor."
   ],
   "LA": [
@@ -68,15 +68,15 @@
    "Collecting every badge at the exit."
   ],
   "NHI": [
-   "Robot accounts: the identities apps use to talk to each other. The rule is two human owners each and no stored passwords. The inventory found four without an owner, which is the list being worked.",
+   "Robot accounts: the identities apps use to talk to each other. The rule is two human owners each and no stored passwords. Today none has two owners and most have none; that is the list being worked.",
    "The machine badge register."
   ],
   "EVID": [
-   "One command collects the proof: exports, screenshots and logs, each fingerprinted so tampering would show, filed against the SOX and HIPAA controls they satisfy.",
+   "One command collects the proof: exports and logs, each fingerprinted so tampering would show, filed against the SOX and HIPAA controls they satisfy.",
    "The audit binder, every page fingerprinted."
   ],
   "WORM": [
-   "Storage where files can be added but never changed or deleted, so evidence cannot be tampered with.",
+   "Storage where files can be added but never changed or deleted, kept for six years. In the lab the lock stays in its trial setting so the lab can be torn down; production locks it for good.",
    "A sealed archive."
   ],
   "DRIFT": [
@@ -84,7 +84,7 @@
    "A nightly stock-take of every door and lock."
   ],
   "LCW": [
-   "Automatic first-day and last-day tasks. On day one the manager gets a one-time pass to hand the new hire. On the last day the account is closed out.",
+   "First-day and last-day checklists, built in the tenant; the first one runs on a hire day. On day one the manager gets a one-time pass to hand the new hire. On the last day the account is closed out.",
    "A first- and last-day checklist that runs itself."
   ],
   "DYNGRP": [
@@ -96,11 +96,11 @@
    "The job's standard doors."
   ],
   "AP": [
-   "Extras beyond the job. Someone requests, a manager approves, it expires in six months. Guests from a partner tenant come in the same way.",
+   "Extras beyond the job. Someone requests, a manager approves, it expires in six months.",
    "Extra doors someone signs for."
   ],
   "SOD": [
-   "Combinations one person must never hold, nine pairs in the lab. Refused at request time, or reported if they slip through.",
+   "Combinations one person must never hold, written as nine rules. One is enforced in the tenant today: nursing and pharmacy dispensing can't be held together. The rest wait for bundles not built yet.",
    "Two bundles nobody may hold together."
   ],
   "INTUNE": [
@@ -112,11 +112,11 @@
    "The guard's alert list."
   ],
   "CAPR": [
-   "Passkeys instead of passwords, in a pilot. Adding a new sign-in method needs a one-time pass or a phishing-proof method.",
+   "Passkeys are switched on, with a stricter kind for admins; none registered yet. Adding a new sign-in method needs a one-time pass or a phishing-proof method.",
    "A badge only the real door accepts."
   ],
   "CASESS": [
-   "Admins must sign in again every four hours. The most powerful admins need a step-up. A shared-workstation rule is written but matches no device yet.",
+   "Admins sign in again every four hours on admin portals. A step-up for the most powerful admins is only watching for now. A shared-workstation rule is built, not switched on.",
    "A fresh check at the secure wing."
   ],
   "BG": [
@@ -124,7 +124,7 @@
    "The fire axe behind glass."
   ],
   "HDAU": [
-   "Help-desk staff can reset standard staff only. Executives and admins sit outside their reach.",
+   "Help-desk staff can reset only staff accounts that came from HR, never admin accounts.",
    "The help desk's floor pass."
   ],
   "VAULT": [
@@ -152,11 +152,11 @@
    "A ten-minute visitor pass."
   ],
   "PB": [
-   "Every alert is pushed to a Teams channel and opened as a ServiceNow ticket automatically.",
+   "Built as code, not switched on yet: it would push each alert to a Teams channel and open a ServiceNow ticket.",
    "The phone tree."
   ],
   "CONTAIN": [
-   "A person approves in Teams. Then sessions are cut and the account disabled or flagged.",
+   "Built as code, not switched on yet: a person approves in Teams, then sessions are cut and the account disabled or flagged.",
    "The supervisor's yes."
   ],
   "FEED": [
@@ -168,7 +168,7 @@
    "A second security desk."
   ],
   "REVIEW": [
-   "Managers confirm who still needs what. Riskier access is reviewed more often. Core clinical access is never removed just because nobody answered.",
+   "Regular checks of who still needs what. Admin access is reviewed every quarter in the tenant today; reviews of everyday clinical access are built, not switched on.",
    "The badge audit."
   ],
   "MID": [
@@ -176,7 +176,7 @@
    "The badge audit, beyond Entra."
   ],
   "KPI": [
-   "Scorecards and security scans taken before and after the build, so improvement is measured, not claimed.",
+   "Scorecards taken before and after the build, so improvement is measured, not claimed. A security scan was taken before; the after-scan is still to run.",
    "A before-and-after check-up."
   ],
   "OPMODEL": [
@@ -228,5 +228,112 @@
   "INTUNE": "Healthy-device rule",
   "HR": "HR feed (spreadsheet)",
   "SYNC": "Cloud Sync (AD to Entra)"
+ },
+ "status": {
+  "SSO": "RAN · tenant",
+  "OKTA": "RAN · tenant",
+  "CAPR": "RAN · tenant",
+  "INTUNE": "RAN · tenant",
+  "REVIEW": "RAN · tenant",
+  "DRIFT": "RAN · tenant",
+  "LCW": "BUILT"
+ },
+ "fields": {
+  "OKTA": {
+   "going.days.0.ids": [
+    "E58"
+   ]
+  },
+  "K8S": {
+   "going.after": "RAN · harness (stays; CI green 2026-11-05)",
+   "proof": [
+    {
+     "label": "Kubernetes pipeline: 12/12 stages, 64/64",
+     "path": "lab/evidence/k8s/20261020T202112Z/",
+     "url": "https://github.com/ChromeData/contoso-health-identity-lab/tree/main/lab/evidence/k8s/20261020T202112Z",
+     "pub": true
+    },
+    {
+     "label": "GitHub runner, 2026-11-05: 12/12 stages, 64/64",
+     "path": "Actions run 41955103643",
+     "url": "https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/41955103643",
+     "pub": true
+    }
+   ]
+  },
+  "LA": {
+   "proof.0": {
+    "label": "All 22 rules on a local KQL engine: 277 cases",
+    "path": "lab/evidence/kusto/20261031T060102Z/",
+    "url": "https://github.com/ChromeData/contoso-health-identity-lab/tree/main/lab/evidence/kusto/20261031T060102Z",
+    "pub": true
+   }
+  },
+  "DRIFT": {
+   "going.days.0.ids": [],
+   "proof": [
+    {
+     "label": "Run against the live tenant, 2026-11-05: clean",
+     "path": "Actions run 41957460762",
+     "url": "https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/41957460762",
+     "pub": true
+    },
+    {
+     "label": "A real catch: issue #112, closed by #113",
+     "path": "Issue #112",
+     "url": "https://github.com/ChromeData/contoso-health-identity-lab/issues/112",
+     "pub": true
+    }
+   ]
+  },
+  "REVIEW": {
+   "going.days.0.ids": [
+    "E53"
+   ]
+  },
+  "HDAU": {
+   "where.0.label": "VIPs in a restricted unit (built, not switched on)"
+  },
+  "AP": {
+   "where.2.label": "Guests from a partner tenant (built, not switched on)"
+  },
+  "SOD": {
+   "where.2.label": "Reported after the fact (built, not run in the tenant yet)"
+  },
+  "CASESS": {
+   "where.1.label": "Token-protection pilot (built, not switched on)",
+   "going.after": "RAN · tenant (shared-workstation rule: built, not switched on)"
+  },
+  "KV": {
+   "where.0.label": "Key Vault with a private endpoint (Terraform)"
+  }
+ },
+ "stationFields": {
+  "directory": {
+   "goal": "AD is the master, Entra is the hub",
+   "sources.1.why": "How Cloud Sync copies accounts from AD to Entra."
+  }
+ },
+ "delivery": {
+  "where.3": {
+   "label": "The approve/deny gate",
+   "path": ".github/scripts/apply-approval-gate.sh",
+   "url": "https://github.com/ChromeData/contoso-health-identity-lab/blob/main/.github/scripts/apply-approval-gate.sh",
+   "pub": true
+  },
+  "proof": [
+   {
+    "label": "Approved at the gate, then applied: main, 2026-11-05",
+    "path": "Actions run 41994457068",
+    "url": "https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/41994457068",
+    "pub": true
+   },
+   {
+    "label": "The checks on one change (pull request #117), 2026-11-05",
+    "path": "Actions run 41993515943",
+    "url": "https://github.com/ChromeData/contoso-health-identity-lab/actions/runs/41993515943",
+    "pub": true
+   }
+  ]
  }
 }

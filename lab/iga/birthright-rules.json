@@ -1,7 +1,7 @@
 {
   "$comment": [
     "Birthright (ADR 0012 tier T3): HR attributes decide who holds core access, through ONE Entra ID Governance automatic assignment policy per access package.",
-    "Applied by lab/scripts/powershell/post-apply/Set-AutoAssignmentPolicies.ps1 (dry run first: -RenderOnly needs no tenant). Nothing here has run against a tenant.",
+    "Applied by lab/scripts/powershell/post-apply/Set-AutoAssignmentPolicies.ps1 (dry run first: -RenderOnly needs no tenant). The Nursing and ICU policies have been live in the lab tenant since 2026-10-27; the other job profiles wait for packages not built yet.",
     "Every (department, jobTitle) pair in lab/scripts/mock-hr/hr_feed.csv has a jobProfile below - tests/Set-AutoAssignmentPolicies.Tests.ps1 fails if a persona is added to the feed without one.",
     "Rules: requestable extras stay request-based (approval + expiry) and live in their OWN package (e.g. 'ICU - Float Access'), never as a second policy on a birthright package; privileged access is NEVER birthright (PIM eligibility only); rules never use memberOf (quarantined from 2026-11-03, Microsoft Learn)."
   ],

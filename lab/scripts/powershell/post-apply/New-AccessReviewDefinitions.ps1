@@ -49,7 +49,8 @@
       * lab/evidence/out/access-reviews/definitions-<yyyyMMdd>.json (gitignored):
         the full record including definition ids, for the WORM evidence store.
 
-    TENANT-TIME. Nothing here has run against a tenant. verify: a
+    TENANT-TIME. Ran against the lab tenant on 2026-10-28 for the privileged
+    tier only (capture-log E53); the other tiers have not run. verify: a
     Graph-created review of a PIM-managed group includes ELIGIBLE members
     (Learn documents it for the portal flow; still labelled preview), and the
     licence (Entra ID Governance) - modules/entitlement/README.md.
