@@ -37,24 +37,34 @@
                                     confirmCompromised (user risk -> High, so
                                     CA006 applies at the next sign-in; Entra
                                     ID P2 - without it the call answers 403)
-      Directory role (OPT-IN, -GrantDisableRole): Graph treats accountEnabled
-        as a SENSITIVE property - an app-only caller also needs a directory
-        role that may act on the target (Graph "Who can perform sensitive
-        actions"). Authentication Administrator covers users with no admin
-        role; it is privileged itself, so it is off by default and can be
-        scoped to an administrative unit (-DirectoryRoleScope). Admins are
-        never in scope: containing an ADMIN needs Privileged Authentication
-        Administrator, which would make this Logic App Tier 0 - admin
-        containment stays a human action. Without the role the disable step
-        returns 403, the playbook says so in the incident, sessions are still
-        revoked. Assigning it creates a standing role assignment outside PIM:
+      Directory role (OPT-IN, -GrantDisableRole) - NOT NEEDED, keep it off:
+        the design assumed Graph's sensitive-action rule makes an app-only
+        disable need a directory role. RAN - tenant 2026-11-05 (capture-log
+        E41): with only the app roles above, PATCH accountEnabled=false on a
+        non-admin cloud-only user answered 204. Authentication Administrator
+        would add nothing for those targets and a lot of reach (method resets
+        and Temporary Access Passes for every non-admin user, R16), so it
+        stays off. Admins are never in scope: containing an ADMIN needs
+        Privileged Authentication Administrator, which would make this Logic
+        App Tier 0 - admin containment stays a human action. (Not tried live:
+        Graph's answer for an admin target, by design.) If the switch is ever
+        used, it creates a standing role assignment outside PIM:
         role-assigned-outside-pim.kql WILL alert once - expected, record it.
       Azure RBAC:
         Microsoft Sentinel Responder (workspace)  incident comments + entities
         Azure Security Insights app -> Microsoft Sentinel Automation
           Contributor (resource group), so automation rules may run it.
-    verify: whether revokeSignInSessions app-only also needs a directory role
-    for some targets (the Graph page lists none) - check the first live run.
+    revokeSignInSessions app-only needed no directory role either (200 on
+    the 2026-11-05 drill; Graph v1.0 answers 200 with value true).
+
+    Teams: the approval card is posted by the Teams connector (OAuth API
+    connection teams-<playbook>, action PostCardAndWaitForResponse as the
+    Flow bot) to the SOC team's Identity-SecOps channel. The SOC team is
+    owned by the cloud-only automation account svc-soc-automation, and the
+    connection is authorized once AS THAT ACCOUNT
+    (authorize-teams-connection.mjs) - never as a person, so no one's
+    leaving or password reset silently breaks containment. Re-deploying keeps
+    the authorization (no parameter values on the connection).
 
     Secrets: ServiceNow integration password from Key Vault
     (servicenow-integration-password), passed as an ARM securestring through a
@@ -98,7 +108,8 @@
 
 .PARAMETER GrantDisableRole
     Also assign the Authentication Administrator directory role to the
-    playbook identity (see LEAST PRIVILEGE). Off by default.
+    playbook identity (see LEAST PRIVILEGE). Off by default and not needed:
+    the disable of a non-admin cloud-only user works without it (E41).
 
 .PARAMETER DirectoryRoleScope
     Scope for -GrantDisableRole: '/' (tenant) or '/administrativeUnits/<id>'.
@@ -293,16 +304,18 @@ if ($GrantDisableRole) {
     }
 }
 else {
-    Write-Host '  Disable step will answer 403 until a directory role is assigned (-GrantDisableRole). Revoke still works.' -ForegroundColor Yellow
+    Write-Host '  No directory role (the default): the disable works for non-admin cloud-only users without one (E41, 2026-11-05).' -ForegroundColor DarkGray
 }
 
 Write-Host "`nPlaybook deployed: $playbookId" -ForegroundColor Green
 Write-Host @"
 Human steps left (tenant time):
-  1. Authorize the Teams connection once: portal > Logic apps > $PlaybookName > API connections >
-     $($out.teamsConnectionName.value) > Edit API connection > Authorize (sign in as the account the cards should come from).
+  1. Authorize the Teams connection once, as svc-soc-automation (the SOC team owner, never a person):
+     node lab/scripts/monitoring/authorize-teams-connection.mjs $($out.teamsConnectionName.value)
+     (or portal > API connections > $($out.teamsConnectionName.value) > Edit API connection > Authorize, signed in as that account).
   2. Terraform: containment_playbook_id = "$playbookId" and enable_itdr_containment = true
      (needs enable_sentinel + enable_itdr_detections), then apply.
-  3. Drill: run the playbook manually from a test High incident and capture the card, the incident comment and the
-     ServiceNow work note as evidence.
+  3. Drill: run the playbook from a test High incident (Sentinel: Run playbook) and answer the card as a lab test user:
+     node lab/scripts/monitoring/answer-teams-card.mjs --as <test upn> --incident <n> --choice reject|contain
+     Capture the card, the incident comment and the ServiceNow work note as evidence.
 "@ -ForegroundColor Cyan

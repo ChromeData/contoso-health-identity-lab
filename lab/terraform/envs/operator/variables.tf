@@ -71,6 +71,11 @@ variable "operator_graph_roles" {
                                           staff sign-in tests
       Team.Create, TeamMember.ReadWrite.All  the SOC team the alert and
                                           containment playbooks post to
+      DelegatedPermissionGrant.ReadWrite.All  admin consent for the lab's own
+                                          apps' sign-in scopes (okta-clinic-idp:
+                                          User.Read openid profile email), the
+                                          documented post-apply step a Global
+                                          Admin used to click
     Changed 2026-11-05 for AWS admin without root (ADR 0025):
       PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup  replaces the Read
                                           role: make adm-labops ELIGIBLE (never
@@ -110,6 +115,7 @@ variable "operator_graph_roles" {
     "GroupMember.ReadWrite.All",
     "Team.Create",
     "TeamMember.ReadWrite.All",
+    "DelegatedPermissionGrant.ReadWrite.All",
   ]
 }
 

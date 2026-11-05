@@ -159,8 +159,12 @@ enable_agent_identity = false
 # Containment (approval-gated revoke + confirm compromised + disable) needs
 # Sentinel and the deployed playbook (TF_CONTAINMENT_PLAYBOOK_ID);
 # containment_on_alert_added adds the Defender-portal "alert added" trigger.
+# ON since 2026-11-05 (E40/E41): pb-identity-contain is deployed, its Teams
+# connection is authorized as svc-soc-automation, and the drill ran in the
+# tenant (lab/evidence/itdr/20261105T102000Z). The rule only ASKS: every High
+# ITDR incident posts an approval card; no answer in 4 h means no action.
 enable_itdr_detections     = true
-enable_itdr_containment    = false
+enable_itdr_containment    = true
 containment_on_alert_added = false
 
 # Second-wave ITDR rules (device code, risky security-info registration, DC01
