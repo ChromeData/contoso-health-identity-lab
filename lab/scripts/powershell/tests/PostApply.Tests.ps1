@@ -312,6 +312,7 @@ Describe 'Invoke-PostApply.ps1 - plan' {
         [array]::IndexOf($ids, 'admin-accounts') | Should -BeLessThan ([array]::IndexOf($ids, 'pim-eligibility')) -Because 'eligibility goes to adm- accounts, which must exist first'
         ($plan | Where-Object Id -eq 'auth-methods').Params['BuildAccountUpn'] | Should -Be 'admin@contosohealthlab.onmicrosoft.com' -Because 'the passkey script FAILs while no target covers the build account'
         ($plan | Where-Object Id -eq 'admin-accounts').Params['BuildAccountUpn'] | Should -Be 'admin@contosohealthlab.onmicrosoft.com'
+        ($plan | Where-Object Id -eq 'lifecycle-workflows').Params['EnableJoinerSchedule'] | Should -BeTrue -Because 'the joiner schedule is on in the tenant (E91); without the switch the step reports it as drift'
         # CA023 runs through the same script; the binding is manual and waits for an ENFORCED CA023.
         ($plan | Where-Object Id -eq 'protected-actions').Script | Should -Be 'post-apply/Set-AuthContextPolicies.ps1'
         (Split-Path -Leaf ($plan | Where-Object Id -eq 'protected-actions').Params['RequestsPath']) | Should -Be 'protected_actions_auth_context_requests.json'

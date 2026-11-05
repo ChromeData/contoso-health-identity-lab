@@ -1,6 +1,6 @@
 # ADR 0025: AWS administration is just-in-time through Entra PIM, not the root user
 
-- **Status:** BUILT (2026-11-05). Entra side: `modules/pim/aws.tf`, `modules/apps` (second principal), `envs/dev` flag `enable_pim_aws_admin`. AWS side: `lab/terraform/aws/lab-admin.tf` (permission set) and operator guardrails v2 in `entra-operator.tf`. The live run is recorded in `lab/evidence/capture-log.csv` once it has happened; until then nothing here is RAN · tenant.
+- **Status:** RAN · tenant (2026-11-05). The Entra side was applied by CI (#132); `adm-labops` was created, enrolled and made eligible; the operator applied `LabAdministrator` once (targeted, before v2); then `adm-labops` activated `PIM-AWS-Lab-Admins` in the PIM portal (10:44Z, 2 h, MFA + reason), SCIM put it in the AWS group, `aws sso login` gave a LabAdministrator session in 182002546409, and with that session guardrails v2 were applied (10:57:02Z, CloudTrail `PutRolePolicy` by `AWSReservedSSO_LabAdministrator_.../adm-labops@...`) and `idlab-admin` was removed. The operator now gets "explicit deny" on Identity Center, identity store, IAM and account-creating writes. Capture log E95-E99.
 - **Date:** 2026-11-05
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** 2027-02-05, or earlier on any revisit trigger
@@ -132,10 +132,19 @@ the PIM audit log. `aws_admin_require_approval = true` routes approval to
   0024): whoever holds the unlocked Mac holds both. TOTP is not
   phishing-resistant, which is why the account is kept out of CA002's scope
   (it would lock it out). Revisit trigger below.
+- **An AWS-provisioned admin account needs a name.** AWS's SCIM endpoint
+  refuses a user without `name` ("name: The attribute name is required",
+  provisioning log 2026-11-05T10:45:44Z): the PIM-triggered provisioning of
+  `adm-labops` failed until it was given a given name and surname. An
+  `adm-first.last` account from `New-AdminAccounts.ps1` has neither, so it
+  needs both before it is made eligible here.
 - **AWS admin can outlive the activation.** Learn documents the fast SCIM
-  path for activation; removal at expiry is expected on the next 40-minute
-  cycle (verify:), and an AWS session already issued lasts its hour. Worst
-  case about 1 h 40 min past the activation's end.
+  path for activation; removal waits for the next 40-minute cycle, and an
+  AWS session already issued lasts its hour. Worst case about 1 h 40 min
+  past the activation's end. Measured 2026-11-05 (E99): ended at 11:01:07Z,
+  out of the AWS group and the AWS user disabled by 11:14:21Z; new
+  LabAdministrator credentials were refused from then on, while the
+  credentials already issued kept working until they were thrown away.
 - **Entra Tier 0 is AWS admin.** Anyone who can make a user eligible and
   activate (Privileged Role Administrators, Global Administrators, the
   operator through its Graph roles) can reach AWS admin. That path is

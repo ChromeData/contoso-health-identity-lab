@@ -14,17 +14,40 @@
 # same web-identity federation as the GitHub role in github-oidc.tf.
 #
 # WHAT THE ROLE MAY DO: AdministratorAccess in this one account - the lab
-# account the provider's allowed_account_ids pins - EXCEPT any change to IAM.
-# An explicit Deny keeps that true even for an admin:
-#   * no IAM writes at all (Create*/Put*/Attach*/Update*/... and PassRole):
-#     no users or access keys, no second role it could assume or hand to a
-#     service, no edit to its own trust or to the Entra provider. Without
-#     this, AdministratorAccess could create a new admin role, assume it and
-#     shed these Denies - access that would outlive the Entra kill switch.
-#     IAM changes stay human-applied, like the GitHub role in github-oidc.tf.
-#   * no IAM Roles Anywhere trust anchors or profiles (another way in
-#     without Entra)
-#   * cannot close the account or leave / delete the organization
+# account the provider's allowed_account_ids pins - EXCEPT anything that
+# changes WHO can administer AWS. An explicit Deny keeps that true even for
+# an admin. Guardrails v2 (ADR 0025) - every statement is account-wide,
+# because a Deny scoped to the operator's own role is bypassed by making
+# another principal:
+#   * NoIamChanges: every IAM write verb, PassRole included: no users or
+#     access keys, no second role it could assume or hand to a service, no
+#     edit to its own trust or to the Entra provider. Without this,
+#     AdministratorAccess could create a new admin role, assume it and shed
+#     these Denies - access that would outlive the Entra kill switch.
+#   * NoIdentityCenterChanges (new in v2): every IAM Identity Center
+#     (sso:), identity store (identitystore:) and Identity Center directory
+#     (sso-directory:) write. v1 left these open, which was a second admin
+#     path that never touches IAM: create a permission set with
+#     AdministratorAccess, a local Identity Center user (or a SCIM bearer
+#     token, or a new identity source) and assign it. Reads stay allowed
+#     (Describe/Get/List/Search), so the operator can still report on them.
+#   * NoNewAccountsOrDelegation (new in v2): the Organizations writes that
+#     would put admin somewhere these Denies do not reach - a new member
+#     account (it comes with OrganizationAccountAccessRole), an invitation,
+#     a delegated administrator, a service-access or policy change - plus
+#     sts:AssumeRoot (centralized root access) and the account's primary
+#     email / alternate contacts (the root-recovery and security-alert
+#     paths).
+#   * NoOtherWayIn: IAM Roles Anywhere trust anchors, profiles, CRLs and
+#     attribute mappings (a certificate way in without Entra).
+#   * CannotCloseOrDetachTheAccount.
+# Action names checked 2026-11-05 against the AWS policy generator's
+# service map (awspolicygen.s3.amazonaws.com/js/policies.js) and the
+# Service Authorization Reference.
+#
+# WHO CHANGES IAM AND IDENTITY CENTER NOW: a person who activated
+# PIM-AWS-Lab-Admins in Entra (lab-admin.tf, ADR 0025) - never root, never
+# this role.
 #
 # STAGED + HUMAN-APPLIED: enable_entra_operator defaults to false; turned on
 # with a targeted apply from the admin's laptop, like the rest of this root.
@@ -65,20 +88,61 @@ locals {
     Statement = [
       {
         # Every IAM write. iam:Get*/List*/Generate*/Simulate* stay allowed.
+        # v2 adds Accept/Associate/Disable/Reject/Send (delegation requests,
+        # root-credential and outbound-federation switches).
         Sid    = "NoIamChanges"
         Effect = "Deny"
         Action = [
           "iam:Create*", "iam:Delete*", "iam:Put*", "iam:Attach*", "iam:Detach*",
           "iam:Update*", "iam:Add*", "iam:Remove*", "iam:Upload*", "iam:Tag*",
-          "iam:Untag*", "iam:Set*", "iam:Enable*", "iam:Deactivate*", "iam:Resync*",
-          "iam:Change*", "iam:Reset*", "iam:PassRole",
+          "iam:Untag*", "iam:Set*", "iam:Enable*", "iam:Disable*", "iam:Deactivate*",
+          "iam:Resync*", "iam:Change*", "iam:Reset*", "iam:Accept*", "iam:Associate*",
+          "iam:Reject*", "iam:Send*", "iam:PassRole",
         ]
         Resource = "*"
       },
       {
-        Sid      = "NoOtherWayIn"
-        Effect   = "Deny"
-        Action   = ["rolesanywhere:Create*", "rolesanywhere:Update*", "rolesanywhere:Enable*", "rolesanywhere:Put*"]
+        # Every write verb of the three Identity Center prefixes. Reads
+        # (Describe*/Get*/List*/Search*/IsMemberIn*) stay allowed.
+        Sid    = "NoIdentityCenterChanges"
+        Effect = "Deny"
+        Action = [
+          "sso:Create*", "sso:Put*", "sso:Attach*", "sso:Detach*", "sso:Delete*",
+          "sso:Update*", "sso:Provision*", "sso:Associate*", "sso:Disassociate*",
+          "sso:Import*", "sso:Start*", "sso:Add*", "sso:Remove*", "sso:Tag*",
+          "sso:Untag*",
+          "identitystore:Create*", "identitystore:Update*", "identitystore:Delete*",
+          "identitystore:Add*", "identitystore:Remove*", "identitystore:Reserve*",
+          "sso-directory:Create*", "sso-directory:Update*", "sso-directory:Delete*",
+          "sso-directory:Add*", "sso-directory:Remove*", "sso-directory:Enable*",
+          "sso-directory:Disable*", "sso-directory:Import*", "sso-directory:Start*",
+          "sso-directory:Complete*", "sso-directory:Verify*",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "NoNewAccountsOrDelegation"
+        Effect = "Deny"
+        Action = [
+          "organizations:Create*", "organizations:Invite*", "organizations:Accept*",
+          "organizations:Register*", "organizations:Deregister*", "organizations:Enable*",
+          "organizations:Disable*", "organizations:Attach*", "organizations:Detach*",
+          "organizations:Update*", "organizations:Delete*", "organizations:Move*",
+          "organizations:Put*", "organizations:Remove*",
+          "sts:AssumeRoot",
+          "account:StartPrimaryEmailUpdate", "account:AcceptPrimaryEmailUpdate",
+          "account:PutAlternateContact", "account:DeleteAlternateContact",
+          "account:PutContactInformation",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "NoOtherWayIn"
+        Effect = "Deny"
+        Action = [
+          "rolesanywhere:Create*", "rolesanywhere:Update*", "rolesanywhere:Enable*",
+          "rolesanywhere:Put*", "rolesanywhere:Import*",
+        ]
         Resource = "*"
       },
       {

@@ -32,7 +32,7 @@
 // methods" API reference, v1.0):
 //   GET/DELETE /users/{id}/authentication/softwareOathMethods[/{id}]
 //   GET/POST/DELETE /users/{id}/authentication/temporaryAccessPassMethods
-//     (UserAuthenticationMethod.ReadWrite.All; verified live 2026-11-05, E71)
+//     (UserAuthenticationMethod.ReadWrite.All; verified live 2026-11-05, E100)
 //   PATCH /users/{id} passwordProfile - only for a user with no Keychain
 //     password. NOT exercised live (the test users have Keychain passwords);
 //     if the operator may not reset that user's password, Graph answers 403

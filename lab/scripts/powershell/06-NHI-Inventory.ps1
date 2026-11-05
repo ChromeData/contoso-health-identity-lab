@@ -19,7 +19,8 @@
     (post-apply/Set-AppGovernancePolicy.ps1) and the consent policy
     (post-apply/Set-ConsentPolicy.ps1).
 
-    STATUS: written and tested OFFLINE only; it has not run against a tenant.
+    STATUS: RAN - tenant (2026-11-05, as the lab operator, app-only:
+    lab/evidence/nhi/, capture-log E70). Tested offline as well:
     -Offline runs the same classification code against a built-in mock tenant
     that models the lab's real NHIs (the two pipeline identities,
     midpoint-reader, the Key Vault UAMI, DC01's managed identity) plus seeded
@@ -152,6 +153,25 @@
     Exit 2 when any finding is at or above this severity (for a scheduled job
     or CI gate). Default None: findings are reported, not fatal.
 
+.PARAMETER PublicSummaryDirectory
+    Also write a PUBLIC, counts-only record of a tenant run to
+    <dir>/<UTC>/nhi-summary.json with a SHA256SUMS file (sha256sum format,
+    the lab/evidence convention): totals by kind, severity, OWASP NHI id and
+    finding id, the KPI counts, each data source's status, and the SHA-256 of
+    every private output file, so the private copy can be matched to it
+    later. No display name, app id, object id, owner, UPN or tenant id: the
+    write is refused if the record contains a GUID, an '@' or the tenant id.
+    Refused with -Offline (mock data never sits next to tenant evidence).
+    Normally lab/evidence/nhi. Default '' = not written.
+
+.PARAMETER UseAzureCliToken
+    App-only sign-in: take a Microsoft Graph token from the Azure CLI session
+    (`az account get-access-token --resource-type ms-graph`) and connect
+    with it, always that identity, never a leftover context. For the lab
+    operator: `lab/scripts/operator/op pwsh ./<this script> -UseAzureCliToken`
+    (its own az profile, certificate sign-in). The token stays in this
+    process: never in argv, a file or the output (masked in GitHub Actions).
+
 .EXAMPLE
     ./06-NHI-Inventory.ps1 -Offline
     # Mock tenant, no connection: shows every finding type and the OWASP mapping.
@@ -258,7 +278,16 @@ param(
     [string]$FailOnSeverity = 'None',
 
     [Parameter()]
-    [string]$SecretsRegisterPath = ''
+    [string]$SecretsRegisterPath = '',
+
+    # App-only sign-in from the Azure CLI session (the lab operator via
+    # lab/scripts/operator/op, or azure/login over OIDC).
+    [Parameter()]
+    [switch]$UseAzureCliToken,
+
+    # Public, counts-only copy of the run (lab/evidence/nhi/<UTC>/). '' = not written.
+    [Parameter()]
+    [string]$PublicSummaryDirectory = ''
 )
 
 # Operator console output. Write-Host on purpose (colour, -NoNewline); every
@@ -270,12 +299,58 @@ function Write-Console {
     Write-Host @args
 }
 
+function Connect-GraphFromAzureCli {
+    # App-only: the Azure CLI is already signed in as an app (azure/login over
+    # GitHub OIDC, or the lab operator's certificate through
+    # lab/scripts/operator/op). The token never leaves this process: masked in
+    # Actions, handed to Connect-MgGraph as a SecureString, then dropped. Same
+    # as mock-hr/Invoke-InboundProvisioning.ps1, through Write-Console for the
+    # analyzer; every lab/scripts/powershell copy is identical (parity test in
+    # tests/EvidencePackPipeline.Tests.ps1).
+    $global:LASTEXITCODE = 0
+    $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {
+        throw 'No Microsoft Graph token from the Azure CLI. Sign it in first (azure/login with OIDC in GitHub Actions, or az login locally).'
+    }
+    $token = ([string]$token).Trim()
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Console "::add-mask::$token" }
+    # NetworkCredential.SecurePassword: the same SecureString as
+    # ConvertTo-SecureString -AsPlainText, without the analyzer error rule.
+    Connect-MgGraph -AccessToken ([System.Net.NetworkCredential]::new('', $token).SecurePassword) -NoWelcome | Out-Null
+    Remove-Variable -Name token
+}
+
+function Get-MissingGraphScope {
+    # Required Graph permissions the current context does not cover, for the
+    # "does not list" warning. An app-only identity (-UseAzureCliToken, e.g.
+    # the lab operator) often holds the ReadWrite role, not the Read one a
+    # delegated admin consents to. Microsoft Learn's permission tables list
+    # X.ReadWrite.Y as a higher-privileged permission wherever X.Read.Y is the
+    # least privileged one, and Directory.Read.All for the user, group,
+    # membership and application reads (checked 2026-11-05 on "List
+    # applications" and "List group transitive members"). Empty -Have
+    # (unknown context) = no warning. Identical in 06-NHI-Inventory.ps1,
+    # 08-Measure-KPIs.ps1 and 09-SoD-Report.ps1 (parity test in
+    # tests/EvidencePackPipeline.Tests.ps1).
+    param([AllowEmptyCollection()][string[]]$Have = @(), [Parameter(Mandatory)][string[]]$Required)
+    if (-not @($Have | Where-Object { $_ })) { return @() }
+    $directoryCovers = @('User.Read.All', 'Group.Read.All', 'GroupMember.Read.All', 'Application.Read.All')
+    $hasDirectory = ('Directory.Read.All' -in $Have) -or ('Directory.ReadWrite.All' -in $Have)
+    return @($Required | Where-Object {
+            ($_ -notin $Have) -and (($_ -replace '\.Read\.', '.ReadWrite.') -notin $Have) -and
+            -not ($hasDirectory -and $_ -in $directoryCovers)
+        })
+}
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # ===========================================================================
 # 0. CONSTANTS, TAXONOMY AND HELPERS
 # ===========================================================================
+# Fail closed: a mock run must never look like it signed in to a tenant.
+if ($Offline -and $UseAzureCliToken) { throw '-Offline and -UseAzureCliToken exclude each other: -Offline never contacts a tenant.' }
+if ($Offline -and $PublicSummaryDirectory) { throw '-PublicSummaryDirectory is for tenant runs only: mock data never sits next to tenant evidence.' }
 $Now = (Get-Date).ToUniversalTime()
 $Source = if ($Offline) { 'offline-mock' } else { 'tenant' }
 if (-not $OutputDirectory) {
@@ -597,9 +672,17 @@ function Get-OnlineTenant {
     param()
     $graph = 'https://graph.microsoft.com'
     $requiredScopes = @('Application.Read.All', 'Directory.Read.All', 'RoleManagement.Read.Directory', 'AuditLog.Read.All')
+    if ($UseAzureCliToken) {
+        # App-only: always this identity, never a leftover context.
+        Write-Host 'Signing in to Microsoft Graph app-only (token from the Azure CLI session)...' -ForegroundColor Yellow
+        Connect-GraphFromAzureCli
+    }
     $ctx = $null; try { $ctx = Get-MgContext } catch { $ctx = $null }
-    if (-not $ctx) { Write-Host 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes; $ctx = Get-MgContext }
-    $missingScopes = @($requiredScopes | Where-Object { $ctx.Scopes -and $_ -notin $ctx.Scopes })
+    if (-not $ctx) {
+        if ($UseAzureCliToken) { throw 'No Microsoft Graph context after the app-only sign-in.' }
+        Write-Host 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes; $ctx = Get-MgContext
+    }
+    $missingScopes = @(Get-MissingGraphScope -Have @($ctx.Scopes) -Required $requiredScopes)
     if ($missingScopes) { Write-Warning "Current Graph context does not list: $($missingScopes -join ', '). Reads needing them fail and are recorded as FAILED sources (Disconnect-MgGraph, then re-run to reconnect with all scopes)." }
 
     $t = @{ TenantId = [string]$ctx.TenantId; Fics = @{}; GraphAppRoles = @{}; GraphAssignments = $null; PrivilegedRoles = $null
@@ -1205,6 +1288,54 @@ if ($PSCmdlet.ShouldProcess($OutputDirectory, 'write nhi_inventory.csv, nhi_cred
 }
 
 $failedSources = @($dataSources | Where-Object { $_.Status -like 'FAILED*' })
+# Public, counts-only record (-PublicSummaryDirectory). WHY a separate file:
+# the CSV/JSON above name every app, owner and object id, so they stay in the
+# gitignored lab/evidence/out; this one carries only numbers and the private
+# files' hashes, the same split as 08-Measure-KPIs.ps1 (snapshot vs detail)
+# and 09-SoD-Report.ps1 (pseudonyms vs sod-detail.json).
+if ($PublicSummaryDirectory -and $PSCmdlet.ShouldProcess($PublicSummaryDirectory, 'write the public counts-only NHI summary (+ SHA256SUMS)')) {
+    $privateHashes = [ordered]@{}
+    # Only the files THIS run wrote: nhi_secrets.csv exists only when the
+    # register was read; a copy left by an earlier run must never be tied to
+    # these counts.
+    $written = @('nhi_inventory.json', 'nhi_inventory.csv', 'nhi_credentials.csv', 'nhi_findings.csv') + @(if ($SecretsRegisterPath) { 'nhi_secrets.csv' })
+    foreach ($n in $written) {
+        $p = Join-Path $OutputDirectory $n
+        if (Test-Path -LiteralPath $p) { $privateHashes[$n] = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant() }
+    }
+    $byFinding = [ordered]@{}
+    foreach ($g in ($findingRows | Group-Object FindingId, Severity | Sort-Object Name)) { $byFinding[$g.Name -replace ', ', ' / '] = $g.Count }
+    $public = [ordered]@{
+        schema          = 'contoso-nhi-summary/1'
+        generatedAtUtc  = $Now.ToString('o')
+        generator       = 'lab/scripts/powershell/06-NHI-Inventory.ps1'
+        source          = $Source
+        # false = a data source FAILED: the counts are a floor, not clean.
+        complete        = ($failedSources.Count -eq 0)
+        parameters      = $result.Parameters
+        dataSources     = @($dataSources | ForEach-Object { [ordered]@{ name = $_.Name; status = $_.Status } })
+        summary         = $summary
+        findingsById    = $byFinding
+        owaspCoverage   = @($owaspCoverage | ForEach-Object { [ordered]@{ owasp = $_.Owasp; title = $_.Title; findings = $_.Findings; coveredHere = $_.CoveredHere } })
+        privateFiles    = $privateHashes
+        note            = 'Counts only. The named rows are in the gitignored lab/evidence/out (nhi_*.csv / nhi_inventory.json); privateFiles holds their SHA-256.'
+    }
+    $text = $public | ConvertTo-Json -Depth 8
+    # Fail closed: any identifier-shaped string stops the write. The private
+    # file hashes are 64 hex characters, not GUID-shaped, so they pass.
+    $unsafe = @()
+    if ($text -match '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}') { $unsafe += 'a GUID' }
+    if ($text -match '@') { $unsafe += "an '@'" }
+    if ($tenantId -and $text.Contains([string]$tenantId)) { $unsafe += 'the tenant id' }
+    if ($unsafe.Count) { throw "Public NHI summary would contain $($unsafe -join ', '); nothing public written." }
+    $pubDir = Join-Path ([System.IO.Path]::GetFullPath($PublicSummaryDirectory)) $Now.ToString('yyyyMMddTHHmmssZ')
+    New-Item -ItemType Directory -Path $pubDir -Force | Out-Null
+    $pubFile = Join-Path $pubDir 'nhi-summary.json'
+    $text | Set-Content -LiteralPath $pubFile -Encoding utf8NoBOM
+    "$((Get-FileHash -LiteralPath $pubFile -Algorithm SHA256).Hash.ToLowerInvariant())  nhi-summary.json" | Set-Content -LiteralPath (Join-Path $pubDir 'SHA256SUMS') -Encoding utf8NoBOM
+    Write-Console "Public counts-only summary: $pubFile" -ForegroundColor Cyan
+}
+
 if ($failedSources.Count) {
     Write-Console "`n$($failedSources.Count) data source(s) FAILED: $(@($failedSources.Name) -join ', ') -- the inventory is INCOMPLETE, not clean." -ForegroundColor Red
     $result

@@ -118,6 +118,43 @@ Describe '06-NHI-Inventory.ps1 online path (mocked Graph)' {
         @($r.DataSources | Where-Object { $_.Name -eq 'oauth2PermissionGrants' -and $_.Status -like 'FAILED*' }).Count | Should -Be 1
     }
 
+    It '-PublicSummaryDirectory writes a counts-only record with SHA256SUMS: no name, id, owner or tenant id' {
+        Set-NhiTenantMocks
+        $out = Join-Path $TestDrive 'nhi-pub-private'; $pub = Join-Path $TestDrive 'nhi-pub'
+        $r = & $script:Nhi -OutputDirectory $out -PublicSummaryDirectory $pub -SkipSignInActivity -WarningAction SilentlyContinue
+        $LASTEXITCODE | Should -Be 0
+        $dir = @(Get-ChildItem -LiteralPath $pub -Directory)
+        $dir.Count | Should -Be 1
+        $dir[0].Name | Should -Match '^\d{8}T\d{6}Z$'
+        $text = Get-Content -LiteralPath (Join-Path $dir[0].FullName 'nhi-summary.json') -Raw
+        foreach ($bad in 'orphan-app', 'owned-app', 'owner1', 'contoso.test', 'app-1', 'sp-2', 'aid-1', $script:TenantId) { $text | Should -Not -Match ([regex]::Escape($bad)) }
+        $j = $text | ConvertFrom-Json
+        $j.source | Should -Be 'tenant'
+        $j.complete | Should -BeTrue
+        $j.summary.kpi.expiredOrOrphanedNhi | Should -Be $r.Summary.kpi.expiredOrOrphanedNhi
+        @($j.findingsById.PSObject.Properties.Name | Where-Object { $_ -like 'OWNER-NONE / *' }).Count | Should -Be 1
+        ($j.findingsById.PSObject.Properties | Measure-Object -Property Value -Sum).Sum | Should -Be @($r.Findings).Count
+        $j.privateFiles.'nhi_inventory.json' | Should -Be (Get-FileHash (Join-Path $out 'nhi_inventory.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+        $sums = Get-Content -LiteralPath (Join-Path $dir[0].FullName 'SHA256SUMS')
+        $sums | Should -Be "$((Get-FileHash (Join-Path $dir[0].FullName 'nhi-summary.json') -Algorithm SHA256).Hash.ToLowerInvariant())  nhi-summary.json"
+    }
+
+    It '-PublicSummaryDirectory hashes only the files this run wrote (no stale nhi_secrets.csv)' {
+        Set-NhiTenantMocks
+        $out = Join-Path $TestDrive 'nhi-pub-stale'; $pub = Join-Path $TestDrive 'nhi-pub-stale-public'
+        New-Item -ItemType Directory -Path $out -Force | Out-Null
+        'old,rows' | Set-Content -LiteralPath (Join-Path $out 'nhi_secrets.csv')   # left by an earlier run with the register
+        $null = & $script:Nhi -OutputDirectory $out -PublicSummaryDirectory $pub -SkipSignInActivity -WarningAction SilentlyContinue
+        $j = Get-Content -LiteralPath (Get-ChildItem -LiteralPath $pub -Recurse -Filter 'nhi-summary.json').FullName -Raw | ConvertFrom-Json
+        @($j.privateFiles.PSObject.Properties.Name) | Should -Not -Contain 'nhi_secrets.csv'
+        @($j.privateFiles.PSObject.Properties.Name) | Should -Contain 'nhi_inventory.json'
+    }
+
+    It '-PublicSummaryDirectory is refused with -Offline (mock data never sits next to tenant evidence)' {
+        { & $script:Nhi -Offline -PublicSummaryDirectory (Join-Path $TestDrive 'nhi-pub-offline') } | Should -Throw '*tenant runs only*'
+        Test-Path (Join-Path $TestDrive 'nhi-pub-offline') | Should -BeFalse
+    }
+
     It 'makes no "all owners disabled" verdict when owner state cannot be read' {
         Set-NhiTenantMocks -OwnerStateFails
         $r = & $script:Nhi -OutputDirectory (Join-Path $TestDrive 'nhi-ownerstate') -SkipSignInActivity -WarningAction SilentlyContinue
@@ -136,7 +173,11 @@ Describe '06-NHI-Inventory.ps1 -SecretsRegisterPath (non-Entra long-lived secret
         $r = Get-Content -LiteralPath $script:Register -Raw | ConvertFrom-Json -AsHashtable
         $out = Test-SecretsRegister -Register $r -Now ([datetime]'2026-10-20')
         $names = @($out.Rows.Name)
-        foreach ($n in 'aws-scim-token', 'servicenow-provisioning-password', 'okta-clinic-idp-client-secret', 'midpoint-reader-client-secret', 'servicenow-integration-password', 'teams-webhook-url', 'splunk-hec-token', 'vault-unseal-keys-and-root-token') { $names | Should -Contain $n }
+        foreach ($n in 'aws-scim-token', 'servicenow-provisioning-password', 'okta-clinic-idp-client-secret', 'midpoint-reader-client-secret', 'servicenow-integration-password', 'svc-soc-automation-signin', 'splunk-hec-token', 'vault-unseal-keys-and-root-token') { $names | Should -Contain $n }
+        # The Teams Workflows webhook URL (a bearer credential) was never created: the notify
+        # playbook posts through the Teams connector since 2026-11-05, so the register drops it.
+        $names | Should -Not -Contain 'teams-webhook-url'
+        @($out.Rows | Where-Object Name -EQ 'servicenow-integration-password')[0].Status | Should -Be 'present'
         foreach ($row in $out.Rows) { $row.Owner | Should -Not -BeNullOrEmpty -Because "$($row.Name) needs an owner role" }
         # No value can hide in the register: no field looks like a token, key or password.
         (Get-Content -LiteralPath $script:Register -Raw) | Should -Not -Match '(hvs\.|-----BEGIN|AKIA[0-9A-Z]{16}|xox[bp]-|https://[^ "]*webhook[^ "]*/[A-Za-z0-9]{20,})'

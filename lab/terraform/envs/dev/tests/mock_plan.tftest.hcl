@@ -103,6 +103,14 @@ run "plan_lab_tfvars" {
     condition     = length(output.itdr_sentinel_only_rule_keys) > 0
     error_message = "ITDR v2 (enable_itdr_detections_v2): the Sentinel-only second-wave rules and the operator_ips watchlist render with lab.tfvars"
   }
+  # Day 13 (E40/E41): containment on. Its automation rule appears once
+  # TF_CONTAINMENT_PLAYBOOK_ID is set (plan_lab_itdr_hold_back plans it with
+  # this hold-back list); the "alert added" trigger stays off until E18/E41
+  # show Defender correlating ITDR alerts into older incidents.
+  assert {
+    condition     = var.enable_itdr_containment && !var.containment_on_alert_added
+    error_message = "Day 13: lab.tfvars turns ITDR containment on (approval-gated, E40/E41); containment_on_alert_added stays off"
+  }
   assert {
     condition     = output.evidence_storage_account_name != null && output.agent_runtime_uami_principal_id == null
     error_message = "P2: the evidence store exists (enable_evidence_store); the agent runtime identity must not while enable_agent_identity = false"
@@ -114,8 +122,8 @@ run "plan_lab_tfvars" {
     error_message = "Day 1 + apps: CA001-CA010 and CA020 exist (enable_premium + the CA flags); enable_sso_apps plans the AWS IAM Identity Center and Clinical Portal apps; the PAM app (enable_pam_oidc_app) is still off"
   }
   assert {
-    condition     = nonsensitive(output.apps_nhi_inventory).servicenow_provisioning != null && output.servicenow_provisioning_job_enabled == false
-    error_message = "lab.tfvars: enable_servicenow_provisioning plans the ServiceNow provisioning app with its job STOPPED (servicenow_provisioning_job_enabled = false until Test Connection + one on-demand)"
+    condition     = nonsensitive(output.apps_nhi_inventory).servicenow_provisioning != null && output.servicenow_provisioning_job_enabled == true
+    error_message = "lab.tfvars: enable_servicenow_provisioning plans the ServiceNow provisioning app and servicenow_provisioning_job_enabled starts its cycle (started after Test Connection + on-demand + sign-in, capture-log E82/E83)"
   }
   assert {
     condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003", "CA004", "CA020", "CA010", "CA001", "CA009", "CA006", "CA007", "CA005"], k) ? "enabled" : "enabledForReportingButNotEnforced")])
@@ -188,6 +196,7 @@ run "plan_lab_itdr_hold_back" {
 run "plan_lab_itdr_hold_back_la_alerts" {
   command = plan
   variables {
+    enable_itdr_containment   = false # pinned: lab.tfvars turns containment on (Day 13); the post-trial Log Analytics path has none (automation rules are Sentinel-only)
     enable_sentinel           = false # pinned: lab.tfvars turns Sentinel on from Day 2; this run is the post-trial Log Analytics path
     onmicrosoft_domain        = "contosohealthlab.onmicrosoft.com"
     pim_approver_object_ids   = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
@@ -472,6 +481,7 @@ run "plan_all_flags_on_sentinel" {
 run "plan_all_flags_on_la_alerts" {
   command = plan
   variables {
+    enable_itdr_containment              = false # pinned: lab.tfvars turns containment on (Day 13); Sentinel-only, so off on this path
     enable_premium                       = true
     enable_governance                    = true
     enable_access_reviews                = true # the all-three shorthand
@@ -749,6 +759,7 @@ run "flags_without_premium_warn" {
   command = plan
 
   variables {
+    enable_itdr_containment             = false # pinned: lab.tfvars turns containment on (Day 13); it needs enable_itdr_detections, off in this run
     enable_intune_vm                    = false # lab.tfvars turns it on; this run has no premium licence
     enable_itdr_detections_v2           = false # lab.tfvars turns it on; this run keeps the ITDR telemetry off
     enable_premium                      = false

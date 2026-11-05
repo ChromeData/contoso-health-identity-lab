@@ -351,7 +351,11 @@ function Get-PostApplyPlan {
     $govReason = if ($gov) { 'governance' } else { 'enable_governance is off' }
     $steps.Add((ConvertTo-PlanStep -Id 'auto-assignment' -Name 'Birthright automatic assignment policies (lab/iga/birthright-rules.json)' -Applies $gov -Reason $govReason -Script 'post-apply/Set-AutoAssignmentPolicies.ps1' -Params $whatIf.Clone()))
     $steps.Add((ConvertTo-PlanStep -Id 'sod' -Name 'Access-package separation of duties (lab/iga/sod-rules.json)' -Applies $gov -Reason $govReason -Script 'post-apply/Set-IncompatibleAccessPackages.ps1' -Params $whatIf.Clone()))
-    $steps.Add((ConvertTo-PlanStep -Id 'lifecycle-workflows' -Name 'Joiner + leaver Lifecycle Workflows' -Applies $gov -Reason $govReason -Script 'post-apply/New-LifecycleWorkflows.ps1' -Params $whatIf.Clone()))
+    # The joiner's schedule is ON in the lab since 2026-11-05 (hire dates
+    # flow through Cloud Sync; capture E91), so the desired state says so:
+    # without the switch this step would report the live schedule as drift.
+    $lcw = $whatIf.Clone(); $lcw['EnableJoinerSchedule'] = $true
+    $steps.Add((ConvertTo-PlanStep -Id 'lifecycle-workflows' -Name 'Joiner + leaver Lifecycle Workflows' -Applies $gov -Reason $govReason -Script 'post-apply/New-LifecycleWorkflows.ps1' -Params $lcw))
 
     # 8. Global Administrator's own PIM policy (+ named, expiring eligibility).
     $gaPolicy = Get-TfValue -Outputs $Outputs -Name 'directory_role_pim_policies'

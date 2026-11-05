@@ -18,10 +18,15 @@ every record folder. They are not all the same kind of evidence:
   row in each of its records, `pam-run-all` (the PAM runner's default suites
   on local Docker), is **RAN · harness**.
 
-**RAN · tenant: none.** No Microsoft tenant exists yet, so nothing here is
-evidence of Entra, Azure or Sentinel behaviour. The Kusto record shows how
-the KQL engine evaluates the rules, not how Sentinel schedules them or what
-a tenant's logs contain.
+**RAN · tenant** records sit next to them since the tenant run (from
+2026-10-27): `kpis/` (KPI snapshots and one-pagers), `assessments/` (the
+Zero Trust Assessment "before"), `access-reviews/`, `config-snapshots/`,
+`nhi/` (robot-account inventory, counts only) and `sod/` (blocked
+combinations, pseudonymised). Each is listed in
+[`capture-log.csv`](capture-log.csv) with its E-row; the tenant captures
+that name people stay in the private WORM store. The harness records above
+are still harness evidence: the Kusto record shows how the KQL engine
+evaluates the rules, not how Sentinel schedules them.
 
 Status words are the ones the repository uses everywhere: RAN · tenant,
 RAN · harness, BUILT, DESIGNED (see the [README](../../README.md)).
@@ -45,9 +50,24 @@ started at 00:12 UTC. Each folder name is the run's UTC start time.
 | [`offline-tests/20261020T230108Z/`](offline-tests/20261020T230108Z/) | The same checks one run earlier (PAM run `20261020T230641Z`), before the Checkov inline skips, the NTDS disk fix and the wording fixes in this pass | All 18 suite rows PASS: `terraform test` 325 passed; Checkov 8 failed, all the then-documented baseline (0 new); lab Pester 917 on both versions, ITDR 284; PSScriptAnalyzer 0 errors; shellcheck 0 findings on 41 scripts; PAM 8/8 suites, 610 passed, 0 failed, 1 skipped | As above. Its `results.json` labels the whole run RAN · harness: only its `pam-run-all` row is. Edited once after the run, for publication (each file's hash from before path normalisation, the build source's commit id and eight random 32-hex temp names were removed or normalised), then re-sealed; its README lists the edits. No count or verdict changed |
 | [`kusto/20261021T001217Z/`](kusto/20261021T001217Z/) | The 22 `lab/kql` detections on a real KQL engine: the Azure Data Explorer Kusto emulator (`lab/monitoring/kusto-harness/run.sh --accept-eula`, run by the operator after accepting Microsoft's emulator licence), a local amd64 container under Rosetta with the image pinned by digest. One database with the 7 tables the rules read (Learn's column types, only the columns the rules use) and 2 watchlist store tables. Each of 223 cases clears the tables, ingests its own synthetic rows, runs the rule as `modules/monitoring` renders it and checks the rows; plus 13 engine-semantics probes. Files: `results.json`, `run.log`, `setup.kql`, 31 rendered queries, `guids.txt` (none) and `SHA256SUMS` over all 35 | **PASS**: rules 22/22 passed, 0 not run; cases PASS 223 (131 positive, 92 negative), FAIL 0, ERROR 0, XFAIL 0, XPASS 0. The three CODE NEEDED fixes passed their cases. **Imports skipped 12**: rows of the offline KqlLite fixture file that are not whole raw table rows (8 stage-level rows, 4 with derived-`let` `joinRows`), so they were never sent to the engine and are not among the 223; each is listed with its reason in `skippedImports`, and hand-written raw-event cases cover the same situations. One probe (`negative-array-index`) did not answer: its own query has a syntax error. The sha256 of every rule and case file it ran is in `results.json` `inputs` | Anything in Sentinel or Log Analytics: the emulator is **not a Log Analytics workspace, not Sentinel and not a tenant**. No analytics rule was scheduled, so no query period, lookback, entity mapping, grouping, suppression or incident was tested. No real sign-in, audit or Windows event was read: every row is synthetic. The Sentinel-only function the rules call, `_GetWatchlist`, is shimmed (3 variants, in `shims.kql` and `results.json` `shims`), and Sentinel's rejection of a rule over a table that has never received data is not emulated. The SPL twins did not run. Under the emulator's licence the record holds no timings, so it says nothing about query performance |
 | [`k8s/20261020T202112Z/`](k8s/20261020T202112Z/) | One full run of `lab/k8s/ci/pipeline.sh` on a throwaway kind cluster (its own [README](k8s/20261020T202112Z/README.md) has the stage table) | Exit 0: 12/12 stages, teardown PASS, end-to-end 64/64 | AKS or Entra Workload ID (that mapping is BUILT, never applied), and the GitHub Actions job (never run). Local paths in the logs were normalized before publishing. After the run, each file's hash from before that normalisation and the build source's commit id were removed for publication and the folder re-sealed; its README lists the edit. No result or log line changed |
+| [`aws-admin/20261105T1057Z/`](aws-admin/20261105T1057Z/) | **RAN · tenant** (2026-11-05, capture log E95-E99): AWS administration without root (ADR 0025). Non-secret read-backs: `adm-labops` (sponsor, methods, no licence), `PIM-AWS-Lab-Admins` and its PIM policy, the eligibility, the PIM audit (activation 10:44Z, end 11:01Z), the SCIM provisioning log, the AWS permission sets and assignments, CloudTrail writes (guardrails v2 `PutRolePolicy` and the `idlab-admin` removal by `.../adm-labops@...`; the operator's AccessDenied attempts) and the operator's `simulate-principal-policy` results | 20 admin-path writes explicitDeny for the operator, reads allowed; AWS admin reached only through a 2-hour PIM activation | That root is protected (no MFA device yet; owner step); anything about sessions other than the one recorded |
 
 [`drills/`](drills/README.md) is the break-glass drill log. It is an empty
 template: no drill has been run, because no tenant exists.
+
+## Tenant reports (`kpis/`, `nhi/`, `sod/`)
+
+Run read-only against the tenant, app-only as the lab operator
+(`lab/scripts/operator/op pwsh <script> -UseAzureCliToken`), each with a
+hash file beside it:
+
+| Folder | Script | What is public | Re-check |
+|---|---|---|---|
+| `kpis/<UTC>.json` (+ `-onepager.md`) | `08-Measure-KPIs.ps1`, `New-KpiOnePager.ps1` | KPI values and counts; per-object detail stays in `out/kpis/` | `shasum -a 256 -c <UTC>.json.sha256` |
+| `nhi/<UTC>/nhi-summary.json` | `06-NHI-Inventory.ps1 -PublicSummaryDirectory` | counts by kind, severity, OWASP NHI id and finding id; the SHA-256 of each private `out/nhi_*` file | `shasum -a 256 -c SHA256SUMS` |
+| `sod/<UTC>/` | `09-SoD-Report.ps1` | rule status and violations under pseudonyms (`U-` + hash prefix) | `shasum -a 256 -c manifest.sha256` |
+
+The 2026-11-05 runs are capture-log E70 (NHI), E71 (SoD) and E72 (KPIs); the first evidence pack with all 7 records is E74.
 
 ## Re-checking a record
 
@@ -136,7 +156,9 @@ reviewed first export is also committed as the baseline in
 are run artifacts (30 days), not commits: a snapshot lands here only when a
 person reviews it, normally in the same PR that updates the baseline.
 
-**Empty until the tenant run.** A fixture replay (`-Offline`) is refused in
+Two reviewed exports are here (2026-10-29, the first baseline, and
+2026-11-05, the baseline refresh after Microsoft's schema change, #113). A
+fixture replay (`-Offline`) is refused in
 this folder and goes to `out/config-snapshots/`; a snapshot without
 `-Public` (object ids) is refused here too.
 
@@ -238,10 +260,8 @@ principals on the role rows: a 403 shows as a failed record in the manifest.
 - Sentinel evidence for the detections: a rule deployed to a workspace,
   scheduled, and firing an incident on real tenant data. The Kusto record
   above stops at the engine.
-- Tenant evidence (`kpis/`, `assessments/`, `sod/`, drill rows): written
-  during the tenant run, as planned in
-  [`../docs/evidence-capture-plan.md`](../docs/evidence-capture-plan.md).
-- `config-snapshots/` (above) and the baseline it feeds: no tenant has
-  been exported.
+- Drill rows (`drills/`) and a Zero Trust Assessment "after" (the
+  assessment needs an interactive admin sign-in; see
+  [`../docs/evidence-capture-plan.md`](../docs/evidence-capture-plan.md) E55).
 - `out/` is gitignored. Anything with identity detail (names, UPNs, object
   ids, raw tenant exports) goes there and never into a record.

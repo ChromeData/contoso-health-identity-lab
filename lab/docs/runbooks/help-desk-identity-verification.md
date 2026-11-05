@@ -78,6 +78,19 @@ ADR's revisit trigger.
   management, Lifecycle Workflows and access reviews, so VIP leavers and
   reviews become manual (Microsoft Learn, restricted management
   administrative units, checked 2026-10-20).
+  - **In the lab (RAN · tenant, 2026-11-05, capture E16c):** `RMAU-VIP`
+    holds Helen Carter (Chief Nursing Officer) and Joan Ferris (IT
+    Director). Only `PIM-Tier0-Privileged-Auth-Admins` holds Helpdesk and
+    Authentication Administrator at its scope, so resetting a VIP is a
+    Tier-0 activation with someone else's approval, a ticket and a time
+    limit - never the service desk. The service desk's own AU,
+    `AU-Workforce-Standard`, excludes both by HR employee id
+    (`helpdesk_au_excluded_employee_ids`), so they are not on its member
+    list either. Nobody is eligible for that Tier-0 group yet: until
+    someone is, a VIP reset means a Global or Privileged Role
+    Administrator granting that eligibility first (an audited change).
+    Cloud Sync still updates RMAU members (on-demand provisioning of
+    Helen, 2026-11-05: "updated in Microsoft Entra ID").
 - **The help desk never:**
   - adds a phone method on the caller's word
   - issues a multi-use TAP
@@ -136,11 +149,16 @@ Fill these in after running.
 
 ## Not built
 
-- **Code only:** the AU scoping. The provider can't create dynamic AU
-  membership, so filling `AU-Workforce-Standard` is a tenant-time Graph step
-  (`modules/pim/helpdesk.tf`). The restricted management administrative
-  unit for VIPs is a Graph call too, because the provider can't set that
-  property: `post-apply/New-RestrictedAdminUnit.ps1`, never run.
+- **Tenant-time steps, both RAN · tenant (2026-11-05, E16c):** the
+  provider can't create dynamic AU membership, so the
+  `AU-Workforce-Standard` rule is a Graph PATCH of the body
+  `modules/pim` renders (`pim_workforce_au_membership_body`, now with the
+  VIP exclusion). The restricted management administrative unit for VIPs
+  is a Graph call too, because the provider can't set that property:
+  `post-apply/New-RestrictedAdminUnit.ps1 -UseAzureCliToken
+  -ResponderGroupName PIM-Tier0-Privileged-Auth-Admins`, run as the lab
+  operator. Not yet exercised: a real reset attempt by `adm-raj.patel`
+  against a VIP (expected: refused).
 - **Applied, report-only:** CA002 now lists Microsoft's template admin
   roles plus the lab's tier extras (Authentication Administrator and
   Privileged Authentication Administrator included), and can also target

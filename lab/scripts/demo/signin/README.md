@@ -1,6 +1,6 @@
 # Staff sign-in toolkit — `enroll.mjs`, `signin.mjs`
 
-**Status: RAN · tenant** (2026-11-05, capture-log E71): `test-user-a` and
+**Status: RAN · tenant** (2026-11-05, capture-log E100): `test-user-a` and
 `test-user-b` were enrolled and then signed in headless with password +
 authenticator code through Entra (My Apps, My Account).
 
@@ -77,7 +77,7 @@ caller closes it), `timeoutMs`.
   still signs in), no `-pending` item is left and the pass is deleted. To
   replace a seed the Keychain has lost, an operator removes the old method
   first (`DELETE .../softwareOathMethods/<id>`, see *Undo*) and runs
-  `enroll.mjs` without `--force`: a first-time enrollment works (E71's runs).
+  `enroll.mjs` without `--force`: a first-time enrollment works (E100's runs).
 - The Okta and AWS demo runs need the user to have a first and last name in
   Entra: both AWS IAM Identity Center (SCIM) and Okta (JIT) refuse to create a
   user without them.

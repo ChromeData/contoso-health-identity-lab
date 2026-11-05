@@ -85,3 +85,25 @@ output "entra_operator_role_arn" {
   description = "Role the lab operator assumes with its Entra token (lab/scripts/operator)."
   value       = one(aws_iam_role.entra_operator[*].arn)
 }
+
+# ---- AWS admin without root (null unless enable_lab_admin_jit) ----------------
+
+output "lab_admin_permission_set_arn" {
+  description = "ARN of the LabAdministrator permission set (ADR 0025)."
+  value       = one(aws_ssoadmin_permission_set.lab_admin[*].arn)
+}
+
+output "lab_admin_group_id" {
+  description = "Identity Store id of PIM-AWS-Lab-Admins as SCIM created it (the only principal holding LabAdministrator)."
+  value       = one(data.aws_identitystore_group.lab_admins[*].group_id)
+}
+
+output "lab_admin_group_external_ids" {
+  description = "External ids SCIM stamped on the PIM admin group (expected: the Entra object id of PIM-AWS-Lab-Admins)."
+  value       = var.enable_lab_admin_jit ? [for e in data.aws_identitystore_group.lab_admins[0].external_ids : e.id] : []
+}
+
+output "lab_admin_account_assignment_id" {
+  description = "Composite id of the LabAdministrator assignment (principal, type, account, permission set, instance)."
+  value       = one(aws_ssoadmin_account_assignment.lab_admins[*].id)
+}

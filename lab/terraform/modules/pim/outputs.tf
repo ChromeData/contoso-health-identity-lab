@@ -95,7 +95,7 @@ output "workforce_au_membership_body" {
   description = "TENANT-TIME Graph body that turns AU-Workforce-Standard into a dynamic AU: PATCH https://graph.microsoft.com/v1.0/directory/administrativeUnits/<workforce_au_object_id> (AdministrativeUnit.ReadWrite.All). null when the AU is off."
   value = local.workforce_au_enabled ? jsonencode({
     membershipType                = "Dynamic"
-    membershipRule                = var.workforce_au_membership_rule
+    membershipRule                = local.workforce_au_membership_rule
     membershipRuleProcessingState = "On"
   }) : null
 }

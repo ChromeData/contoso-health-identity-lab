@@ -274,11 +274,16 @@ change to the IdP record, re-pair its authenticator if the seed is exposed.
 
 ## ServiceNow provisioning
 
-**BUILT** (`enable_servicenow_provisioning`,
+**RAN · tenant, 2026-11-05** (`enable_servicenow_provisioning`,
 [`servicenow_provisioning.tf`](servicenow_provisioning.tf), 10 of the 23
-mocked runs in `tests/servicenow.tftest.hcl`). Entra creates the ServiceNow
-account, keeps it in step, and switches it off (`active = false`) when the
-person leaves the group.
+mocked runs in `tests/servicenow.tftest.hcl`; capture-log E82, E83). Entra
+creates the ServiceNow account, keeps it in step, and switches it off
+(`active = false`, `locked_out = true`) when the person is disabled in Entra
+or leaves the group (both seen live). Seen live: provision-on-demand created `test-user-a` (user_name =
+her UPN, created by `svc-entra-provisioning`); she then signed in from the My
+Apps tile through Entra and landed in that account; a non-member was refused
+by Entra (AADSTS50105); a member disabled in Entra, and another removed from
+the group, were each switched off in ServiceNow on the next on-demand run.
 
 **Read live, not guessed** (2026-11-05, on a throwaway instance of the
 template, deleted and purged afterwards):
@@ -334,18 +339,24 @@ the credential's creating run is local. After the PR merges:
    export TF_VAR_require_scim_credentials=true
    apply_id="$(terraform -chdir=../bootstrap output -raw github_oidc_apply_client_id)" && [ -n "$apply_id" ] \
      || { echo "no APPLY client id: init envs/bootstrap first" >&2; return 1 2>/dev/null || exit 1; }
-   # a) everything except the reply URL: app, SP, owner, assignment, stopped job, credential
-   terraform apply -var-file=lab.tfvars -var="apply_client_id=$apply_id" \
+   # a) everything except the reply URL: app, SP, owner, assignment, job, credential.
+   #    The job stays STOPPED here whatever lab.tfvars says (it says "started"
+   #    since E83): Test Connection and on-demand come first (step 3).
+   terraform apply -var-file=lab.tfvars -var="apply_client_id=$apply_id" -var=servicenow_provisioning_job_enabled=false \
      -target='module.apps[0].azuread_synchronization_secret.servicenow[0]' \
      -target='module.apps[0].azuread_app_role_assignment.servicenow_provisioning_users[0]' \
      -target='module.apps[0].azuread_application_owner.servicenow_provisioning[0]'
-   # b) adopt the template's Web redirect set
-   import_id="$(terraform output -raw servicenow_provisioning_reply_url_import_id)" && [ -n "$import_id" ] \
+   # b) adopt the template's Web redirect set. A targeted apply does not write
+   #    new root outputs yet, so the id comes from state (the output
+   #    servicenow_provisioning_reply_url_import_id holds the same value after
+   #    the next full apply).
+   import_id="$(terraform state show -no-color 'module.apps[0].azuread_application_from_template.servicenow_provisioning[0]' \
+     | awk -F'"' '/^ *application_id *=/{print $2 "/redirectUris/Web"}')" && [ -n "$import_id" ] \
      || { echo "no import id: step a did not create the app" >&2; return 1 2>/dev/null || exit 1; }
-   terraform import -var-file=lab.tfvars -var="apply_client_id=$apply_id" \
+   terraform import -var-file=lab.tfvars -var="apply_client_id=$apply_id" -var=servicenow_provisioning_job_enabled=false \
      'module.apps[0].azuread_application_redirect_uris.servicenow_provisioning[0]' "$import_id"
    # c) replace the wildcard with the instance's one URL (an in-place update)
-   terraform apply -var-file=lab.tfvars -var="apply_client_id=$apply_id" \
+   terraform apply -var-file=lab.tfvars -var="apply_client_id=$apply_id" -var=servicenow_provisioning_job_enabled=false \
      -target='module.apps[0].azuread_application_redirect_uris.servicenow_provisioning[0]'
    unset TF_VAR_servicenow_provisioning_credentials
    ```
@@ -353,12 +364,21 @@ the credential's creating run is local. After the PR merges:
    service principal, owner, assignment, job, credential) and step c's only
    the reply-URL update (1 to change).
 2. Then approve the CI apply. One that ran before step 1 failed its plan on
-   the credential postcondition and changed nothing: re-run it.
+   the credential postcondition and changed nothing: re-run it. On a rebuild
+   (job already `true` in `lab.tfvars`), that CI apply starts the job, so do
+   step 3 before approving it.
 3. Test Connection (`validateCredentials`), then provision on demand one
    member of `App-ServiceNow-Users` and read the ServiceNow `sys_user` back.
    Read the job schema back too: `user_name` ← `userPrincipalName` matching.
 4. A separate PR sets `servicenow_provisioning_job_enabled = true` (the
-   ~40-minute cycle), as `aws_scim_job_enabled` did for AWS.
+   ~40-minute cycle), as `aws_scim_job_enabled` did for AWS (done after E82
+   and E83).
+
+**First-run notes (2026-11-05).** The provision-on-demand for a member is
+skipped as *NotEffectivelyEntitled* when that person is not (or no longer) in
+`App-ServiceNow-Users`: check membership before reading anything else into
+it. The CI apply after the seeding showed no change to any provisioning
+object.
 
 The APPLY identity owns the provisioning app's registration through
 `azuread_application_owner`: an app-only instantiate records no owner (seen
@@ -455,7 +475,8 @@ strength, so a PSM session always starts with phishing-resistant MFA.
 - [ ] Leaver: Dana is out of the App group, deprovisioned on demand, and gone from the AWS portal.
 - [ ] OIDC: the token shows `roles`, `groups` (app groups only) and `acct`.
 - [ ] ServiceNow: the identifier URI is accepted (the SP is already in SAML mode; identifier-URI policy); the instantiated roles include `User`; NameID value and format as ServiceNow receives them; a non-member is refused at the tile.
-- [ ] ServiceNow provisioning: the seeding plan shows only the provisioning objects; Test Connection passes; the job schema keeps `user_name` ← `userPrincipalName` as the matching rule; provision on demand of a member creates a `sys_user` whose `user_name` = UPN, and that person's Entra sign-in lands in it; a member removed from the group is set `active = false` on the next on-demand run or cycle; a second CI plan shows **No changes**.
+- [x] ServiceNow provisioning (2026-11-05, E82/E83): the seeding plan shows only the provisioning objects; Test Connection passes; the job schema keeps `user_name` ← `userPrincipalName` as the matching rule; provision on demand of a member creates a `sys_user` whose `user_name` = UPN, and that person's Entra sign-in lands in it; a member **disabled in Entra**, and a member **removed from App-ServiceNow-Users**, are each set `active = false` on the next on-demand run; the CI apply after the seeding changed **no provisioning object** (its plan had other slices' changes, so it was not "No changes").
+- [ ] ServiceNow provisioning, still open: after `servicenow_provisioning_job_enabled`, a full cycle provisions the other members without errors.
 - [ ] okta-clinic-idp: admin consent on the four delegated Graph scopes is accepted and no clinic user sees a consent prompt; `Add-MgApplicationPassword` with `Application.ReadWrite.OwnedBy` is enough for an owner (else record the fallback); a non-member of App-Okta-Federation-Users is refused by Entra before Okta sees them (record the AADSTS code); the Entra sign-in log row for `okta-clinic-idp` shows the CA result; the redirect URI equals the Okta root's `okta_callback_uri`.
 
 ---

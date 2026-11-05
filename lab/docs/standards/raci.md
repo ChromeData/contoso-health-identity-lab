@@ -51,10 +51,10 @@ I = Informed.
 - **Containment.** The notify playbook sends a Teams card and opens a
   ServiceNow ticket for every incident. For High ITDR incidents a second
   playbook asks the containment approver group in Teams, then revokes
-  sessions, marks the user confirmed compromised and, with an opt-in role,
-  disables a cloud-only account. AD accounts are disabled with
-  `Invoke-AdContainment.ps1`. The SOC stays Responsible; nothing acts without
-  a human answer. Built and tested offline, never run in a tenant.
+  sessions, marks the user confirmed compromised and disables a cloud-only
+  account. AD accounts are disabled with `Invoke-AdContainment.ps1`. The SOC
+  stays Responsible; nothing acts without a human answer. Both playbooks
+  RAN · tenant on 2026-11-05 (capture-log E40a, E41); the AD path has not run.
 - **Escalation for clinical lock-out.** The service desk issues a TAP after
   verifying identity, and Clinical Operations is informed. The procedure is
   level V2-C in
