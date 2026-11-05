@@ -1,0 +1,14 @@
+{
+  "generatedUtc": "2026-11-05T14:19:32.7696860Z",
+  "source": "tenant",
+  "definitions": [
+    {
+      "key": "inactive:App-Okta-Federation-Users",
+      "displayName": "Inactive users review: App-Okta-Federation-Users",
+      "status": "NotStarted",
+      "createdDate": "",
+      "action": "created",
+      "drift": false
+    }
+  ]
+}
