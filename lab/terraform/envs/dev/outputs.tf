@@ -121,6 +121,21 @@ output "aws_admin_activation_policy" {
   value       = one(module.pim[*].aws_admin_activation_policy)
 }
 
+output "pim_demo_readers_group_object_id" {
+  description = "PIM-Demo-Readers - eligible-only read-only presenter group (Global Reader + Security Reader); null while enable_pim_demo_readers is off. envs/bootstrap pim_demo_readers_group_object_id takes it for the subscription-scope Azure read roles."
+  value       = one(module.pim[*].demo_readers_group_object_id)
+}
+
+output "pim_demo_readers_group_mail_nickname" {
+  description = "mail_nickname of PIM-Demo-Readers (-GroupMailNickname for post-apply/Set-PimGroupEligibility.ps1; Invoke-PostApply.ps1 -PimEligibility accepts it); null while off."
+  value       = one(module.pim[*].demo_readers_group_mail_nickname)
+}
+
+output "pim_demo_readers_activation_policy" {
+  description = "Evidence summary of the PIM-Demo-Readers activation policy (null while off)."
+  value       = one(module.pim[*].demo_readers_activation_policy)
+}
+
 output "azure_pim_group_object_id" {
   description = "PIM-Azure-RG-Contributors - eligible for Contributor on the lab RG (add members post-apply); null while off."
   value       = one(module.pim[*].azure_pim_group_object_id)

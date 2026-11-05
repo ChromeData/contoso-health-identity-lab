@@ -17,7 +17,8 @@
 #
 #   privileged:<group>   every group in output privileged_review_targets
 #                        (Privileged-IAM-Admins, each tier group, the Azure
-#                        PIM group) plus PIM-AWS-Lab-Admins (aws.tf).
+#                        PIM group) plus PIM-AWS-Lab-Admins (aws.tf) and
+#                        PIM-Demo-Readers (demo-readers.tf).
 #                        Scope "/groups/<id>/transitiveMembers".
 #                        Learn (create-access-review-pim-for-groups): for a
 #                        PIM-managed group "the users under review ...
@@ -85,10 +86,11 @@ locals {
     queryType = "MicrosoftGraph"
   }]
 
-  # The AWS admin group is reviewed like every PIM-governed group, but is
-  # not a CA002 / CA020 target (aws.tf header), hence the merge here and not
-  # in privileged_review_targets.
-  review_targets = merge(local.privileged_review_targets, local.aws_admin_review_target)
+  # The AWS admin group and the read-only presenter group are reviewed like
+  # every PIM-governed group, but are not CA002 / CA020 targets (aws.tf and
+  # demo-readers.tf headers), hence the merge here and not in
+  # privileged_review_targets.
+  review_targets = merge(local.privileged_review_targets, local.aws_admin_review_target, local.demo_readers_review_target)
 
   group_review_bodies = {
     for name, group_id in local.review_targets :

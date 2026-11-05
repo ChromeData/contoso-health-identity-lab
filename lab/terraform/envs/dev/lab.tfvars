@@ -62,6 +62,14 @@ enable_global_admin_pim_policy = true
 # where lab/terraform/aws gives them the LabAdministrator permission set.
 enable_pim_aws_admin = true
 
+# Read-only presenter access: PIM-Demo-Readers actively holds Global Reader +
+# Security Reader; its membership is eligible-only (8-hour MFA + justification
+# activation, NO approval, every activation mailed to the security mailbox,
+# eligibility 365 days). Reviewed quarterly, kept out of the CA002 / CA020
+# scope. Azure Reader / Microsoft Sentinel Reader / Log Analytics Reader come
+# from envs/bootstrap (human-applied). Eligibility: adm-presenter, post-apply.
+enable_pim_demo_readers = true
+
 # VIPs in the restricted management AU RMAU-VIP (post-apply/
 # New-RestrictedAdminUnit.ps1), kept out of the help desk's AU by HR
 # employee id: 300001 Helen Carter (Chief Nursing Officer), 400100 Joan

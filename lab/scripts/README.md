@@ -47,7 +47,8 @@ to `hr_feed.csv`; the scripts wait for the synced value and do the rest.
 #    7 checks, [7/7] = admin passkey coverage).
 ./powershell/01-Verify-Baseline.ps1 -OnMicrosoftDomain '<tenant>.onmicrosoft.com'
 #    Separate cloud-only admin accounts (Invoke-PostApply step 1b): one adm-
-#    account per IT persona in lab/iga/admin-accounts.json -> Admin-Accounts
+#    account per IT persona in lab/iga/admin-accounts.json, plus the
+#    sponsored read-only presenter (adm-presenter) -> Admin-Accounts
 #    (standing, role-assignable, no role: the admin passkey target). The
 #    authentication methods policy adds the build account to that target.
 ./powershell/post-apply/New-AdminAccounts.ps1 -WhatIf

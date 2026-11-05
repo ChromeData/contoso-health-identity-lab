@@ -14,6 +14,11 @@
 #   * AWS admin (aws.tf): a role-assignable PIM group, eligible-only, 2-hour
 #     MFA + justification activation, every activation mailed, reviewed
 #     quarterly but outside the CA002 / CA020 scope;
+#   * read-only presenter (demo-readers.tf): a role-assignable PIM group that
+#     actively holds exactly Global Reader + Security Reader, eligible-only,
+#     8-hour MFA + justification activation with NO approval, every
+#     activation mailed, reviewed quarterly but outside the CA002 / CA020
+#     scope and CA020's role list, tier map unchanged;
 #   * every feature defaults OFF.
 #
 # Mocked ids are GUID-shaped because the providers still validate arguments
@@ -75,6 +80,10 @@ run "defaults_only_the_original_binding" {
   assert {
     condition     = length(azuread_group.aws_admin) == 0 && length(azuread_group_role_management_policy.aws_admin_member) == 0 && output.aws_admin_group_object_id == null
     error_message = "No AWS admin PIM group may exist while enable_pim_aws_admin = false."
+  }
+  assert {
+    condition     = length(azuread_group.demo_readers) == 0 && length(azuread_directory_role_assignment.demo_readers) == 0 && length(azuread_group_role_management_policy.demo_readers_member) == 0 && output.demo_readers_group_object_id == null && output.demo_readers_activation_policy == null
+    error_message = "No read-only presenter PIM group (nor its role bindings or policy) may exist while enable_pim_demo_readers = false."
   }
   assert {
     condition     = keys(output.privileged_review_targets) == ["Privileged-IAM-Admins"]
@@ -1044,4 +1053,162 @@ run "aws_admin_eligibility_capped_at_180_days" {
   }
 
   expect_failures = [var.aws_admin_eligible_assignment_duration]
+}
+
+# =============================================================================
+# Read-only presenter access through PIM for Groups (demo-readers.tf)
+# =============================================================================
+
+run "demo_readers_group" {
+  command = apply
+
+  variables {
+    enable_pim_demo_readers = true
+    pim_alert_mailbox       = "security@contosohealthlab.onmicrosoft.com"
+  }
+
+  assert {
+    condition = (
+      azuread_group.demo_readers[0].display_name == "PIM-Demo-Readers" &&
+      azuread_group.demo_readers[0].mail_nickname == "pim-demo-readers" &&
+      azuread_group.demo_readers[0].assignable_to_role &&
+      azuread_group.demo_readers[0].security_enabled &&
+      !azuread_group.demo_readers[0].mail_enabled
+    )
+    error_message = "PIM-Demo-Readers: role-assignable security group (only Privileged Role / Privileged Authentication Administrators can touch who is in it or their credentials), no mailbox."
+  }
+  assert {
+    condition = (
+      length(azuread_directory_role_assignment.demo_readers) == 2 &&
+      azuread_directory_role_assignment.demo_readers["global_reader"].role_id == "f2ef992c-3afb-46b9-b7cf-a126ee74c451" &&
+      azuread_directory_role_assignment.demo_readers["security_reader"].role_id == "5d6b6bb7-de71-4623-b4af-96380a352509" &&
+      alltrue([for a in values(azuread_directory_role_assignment.demo_readers) : a.directory_scope_id == "/" && a.principal_object_id == azuread_group.demo_readers[0].object_id])
+    )
+    error_message = "The group must ACTIVELY hold exactly Global Reader + Security Reader, tenant-wide - nothing that can write."
+  }
+  assert {
+    condition = (
+      azuread_group_role_management_policy.demo_readers_member[0].group_id == azuread_group.demo_readers[0].object_id &&
+      azuread_group_role_management_policy.demo_readers_member[0].role_id == "member" &&
+      azuread_group_role_management_policy.demo_readers_member[0].activation_rules[0].maximum_duration == "PT8H" &&
+      azuread_group_role_management_policy.demo_readers_member[0].activation_rules[0].require_multifactor_authentication &&
+      azuread_group_role_management_policy.demo_readers_member[0].activation_rules[0].require_justification
+    )
+    error_message = "Activation of MEMBERSHIP: at most 8 hours (PT8H), MFA, justification."
+  }
+  assert {
+    condition = (
+      azuread_group_role_management_policy.demo_readers_member[0].activation_rules[0].require_approval == false &&
+      length(azuread_group_role_management_policy.demo_readers_member[0].activation_rules[0].approval_stage) == 0 &&
+      !contains(keys(azuread_group.pim_approvers), "tier0")
+    )
+    error_message = "No approval: the presenter activates alone (no approval stage, and no Tier-0 approver group is created for it)."
+  }
+  assert {
+    condition = (
+      azuread_group_role_management_policy.demo_readers_member[0].eligible_assignment_rules[0].expiration_required &&
+      azuread_group_role_management_policy.demo_readers_member[0].eligible_assignment_rules[0].expire_after == "P365D" &&
+      azuread_group_role_management_policy.demo_readers_member[0].active_assignment_rules[0].expiration_required &&
+      azuread_group_role_management_policy.demo_readers_member[0].active_assignment_rules[0].expire_after == "P15D" &&
+      azuread_group_role_management_policy.demo_readers_member[0].active_assignment_rules[0].require_justification &&
+      azuread_group_role_management_policy.demo_readers_member[0].active_assignment_rules[0].require_multifactor_authentication
+    )
+    error_message = "Eligibility expires at the Tier-1 duration (P365D, what Set-PimGroupEligibility.ps1 requests); a direct ACTIVE member expires too and needs justification + MFA."
+  }
+  assert {
+    condition = (
+      length(azuread_group_role_management_policy.demo_readers_member[0].notification_rules[0].eligible_activations) == 1 &&
+      contains(azuread_group_role_management_policy.demo_readers_member[0].notification_rules[0].eligible_activations[0].admin_notifications[0].additional_recipients, "security@contosohealthlab.onmicrosoft.com") &&
+      contains(azuread_group_role_management_policy.demo_readers_member[0].notification_rules[0].eligible_assignments[0].admin_notifications[0].additional_recipients, "security@contosohealthlab.onmicrosoft.com") &&
+      contains(azuread_group_role_management_policy.demo_readers_member[0].notification_rules[0].active_assignments[0].admin_notifications[0].additional_recipients, "security@contosohealthlab.onmicrosoft.com")
+    )
+    error_message = "With approval off, EVERY activation (and every eligibility / direct active change) is mailed to the security mailbox."
+  }
+  assert {
+    condition     = keys(output.privileged_review_targets) == ["Privileged-IAM-Admins"]
+    error_message = "PIM-Demo-Readers must stay out of privileged_review_targets: that output is the CA002 / CA020 group scope, changed only on purpose."
+  }
+  assert {
+    condition = (
+      !contains(output.privileged_role_template_ids["tier0"], "f2ef992c-3afb-46b9-b7cf-a126ee74c451") &&
+      !contains(output.privileged_role_template_ids["tier1"], "f2ef992c-3afb-46b9-b7cf-a126ee74c451") &&
+      !contains(output.privileged_role_template_ids["tier0"], "5d6b6bb7-de71-4623-b4af-96380a352509") &&
+      !contains(output.privileged_role_template_ids["tier1"], "5d6b6bb7-de71-4623-b4af-96380a352509")
+    )
+    error_message = "The reader roles must stay out of privileged_role_template_ids (envs/dev builds CA020's role list from it)."
+  }
+  assert {
+    condition     = jsondecode(output.pim_eligible_review_bodies["privileged:PIM-Demo-Readers"]).scope.query == "/groups/${azuread_group.demo_readers[0].object_id}/transitiveMembers"
+    error_message = "PIM-Demo-Readers must be in the quarterly privileged review (eligible + active members)."
+  }
+  assert {
+    condition = (
+      output.demo_readers_group_mail_nickname == "pim-demo-readers" &&
+      output.demo_readers_group_object_id == azuread_group.demo_readers[0].object_id &&
+      output.demo_readers_activation_policy.maximum_duration == "PT8H" &&
+      output.demo_readers_activation_policy.approval == false &&
+      output.demo_readers_activation_policy.in_ca_admin_scope == false &&
+      output.demo_readers_activation_policy.activation_mail
+    )
+    error_message = "Outputs: the object id for envs/bootstrap, the mail nickname for Set-PimGroupEligibility.ps1 and the evidence summary."
+  }
+}
+
+# With the tier map on as well: still 16 tier groups and the same CA scope.
+run "demo_readers_leave_the_tier_map_alone" {
+  command = apply
+
+  variables {
+    enable_pim_tiers          = true
+    enable_pim_demo_readers   = true
+    tier0_approver_object_ids = ["cccccccc-cccc-cccc-cccc-cccccccccccc", "dddddddd-dddd-dddd-dddd-dddddddddddd"]
+    pim_alert_mailbox         = "security@contosohealthlab.onmicrosoft.com"
+  }
+
+  assert {
+    condition     = length(azuread_group.pim_tier) == 16 && length(output.tier_group_mail_nicknames) == 16 && !contains(keys(output.tier_group_mail_nicknames), "PIM-Demo-Readers")
+    error_message = "PIM-Demo-Readers is not a tier group: the tier map stays 8 Tier-0 + 8 Tier-1."
+  }
+  assert {
+    condition     = length(output.privileged_review_targets) == 17 && !contains(keys(output.privileged_review_targets), "PIM-Demo-Readers")
+    error_message = "The CA002 / CA020 group scope stays Privileged-IAM-Admins + the 16 tier groups."
+  }
+  assert {
+    condition     = length(output.pim_eligible_review_bodies) == 18 && contains(keys(output.pim_eligible_review_bodies), "privileged:PIM-Demo-Readers")
+    error_message = "One quarterly review per PIM-governed group: IAM + 16 tiers + PIM-Demo-Readers."
+  }
+}
+
+run "demo_readers_without_mailbox_warns" {
+  command = plan
+
+  variables {
+    enable_pim_demo_readers = true
+  }
+
+  expect_failures = [check.demo_readers_activations_are_seen]
+}
+
+run "demo_readers_activation_capped_at_8h" {
+  command = plan
+
+  variables {
+    enable_pim_demo_readers              = true
+    demo_readers_activation_max_duration = "PT9H"
+    pim_alert_mailbox                    = "security@contosohealthlab.onmicrosoft.com"
+  }
+
+  expect_failures = [var.demo_readers_activation_max_duration]
+}
+
+run "demo_readers_never_longer_than_the_tier1_cap" {
+  command = plan
+
+  variables {
+    enable_pim_demo_readers       = true
+    tier1_activation_max_duration = "PT4H"
+    pim_alert_mailbox             = "security@contosohealthlab.onmicrosoft.com"
+  }
+
+  expect_failures = [azuread_group_role_management_policy.demo_readers_member]
 }

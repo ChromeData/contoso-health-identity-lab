@@ -61,7 +61,7 @@ locals {
   # below the tier cap.
   duration_minutes = {
     for d in distinct(concat(
-      [var.tier0_activation_max_duration, var.tier1_activation_max_duration, var.global_admin_activation_max_duration],
+      [var.tier0_activation_max_duration, var.tier1_activation_max_duration, var.global_admin_activation_max_duration, var.demo_readers_activation_max_duration],
       [for g in values(var.pim_tier_groups) : coalesce(g.activation_max_duration, var.tier1_activation_max_duration)],
       )) : d => d == "P1D" ? 1440 : (
       tonumber(try(regex("([0-9]+)H", d)[0], "0")) * 60 + tonumber(try(regex("([0-9]+)M", d)[0], "0"))

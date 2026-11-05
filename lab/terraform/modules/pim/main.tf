@@ -41,6 +41,9 @@
 #   azure.tf            PIM for Azure RESOURCES (var.enable_pim_azure_resources)
 #   aws.tf              PIM-AWS-Lab-Admins: AWS admin as a PIM-for-Groups
 #                       activation (var.enable_pim_aws_admin, ADR 0025)
+#   demo-readers.tf     PIM-Demo-Readers: read-only presenter access (Global
+#                       Reader + Security Reader) as a PIM-for-Groups
+#                       activation (var.enable_pim_demo_readers)
 # =============================================================================
 
 # -----------------------------------------------------------------------------

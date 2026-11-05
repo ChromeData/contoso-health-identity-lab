@@ -11,6 +11,9 @@
 #   * Their Azure RBAC: what each may do to the subscription and to state
 #   * The tenant's Entra diagnostic setting (modules/entra-diagnostics): no
 #     envs/dev PR can edit or remove the log export
+#   * Azure role grants the APPLY identity may not make (delegable_role_ids
+#     below): EVIDENCE's create-only container grant and, opt-in, the
+#     read-only Azure roles of PIM-Demo-Readers
 #
 # Why a separate root: the identities CI runs as must not be managed BY that
 # CI. If envs/dev owned them, a PR could widen the APPLY identity's Graph
@@ -319,4 +322,82 @@ resource "azurerm_role_assignment" "evidence_writer" {
   condition_version    = "2.0"
   condition            = local.evidence_create_only_condition
   description          = "EVIDENCE (evidence-pack.yml): create new blobs in the WORM evidence container and read them back; never overwrite, delete or re-tier one."
+}
+
+# -----------------------------------------------------------------------------
+# PIM-Demo-Readers (envs/dev enable_pim_demo_readers, modules/pim
+# demo-readers.tf): the read-only presenter group's AZURE half. The group
+# actively holds these three roles on the lab subscription; its members are
+# only ELIGIBLE for the group (PIM for Groups, MFA + justification, 8 hours),
+# so at rest nobody holds them. One activation gives the Entra read roles
+# (Global Reader, Security Reader) and these together.
+#
+# WHY HERE, NOT envs/dev: creating a role assignment needs
+# Microsoft.Authorization/roleAssignments/write for THAT role. The APPLY
+# identity's Role Based Access Control Administrator grant is ABAC-limited
+# to delegable_role_ids (two Key Vault data roles + VM Administrator Login),
+# so an envs/dev apply of these assignments is refused - and adding Reader /
+# Log Analytics Reader to that list would let any merged PR hand read access
+# to every log and resource in the subscription to any principal. Same reason
+# EVIDENCE's grant above is human-applied.
+#
+# Role definition ids, verified on Microsoft Learn "Azure built-in roles"
+# (https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles,
+# updated 2026-09-11, read 2026-11-05). Pinned by id, not by name, so a
+# custom role that copies a built-in name can never be picked up:
+#   acdd72a7-3385-48ef-bd42-f606fba81ae7  Reader ("View all resources, but
+#       does not allow you to make any changes"; no listKeys, no secrets)
+#   8d289c81-5878-46d4-8554-54e1e3d8b5cb  Microsoft Sentinel Reader
+#   73c42c96-874c-492b-b04d-ab87d138a893  Log Analytics Reader ("view and
+#       search all monitoring data", i.e. every table in every workspace in
+#       scope, sign-in logs included)
+# A group as an Azure RBAC principal, with PIM for Groups deciding who is in
+# it: Learn, "Privileged Identity Management (PIM) for Groups" - groups
+# govern "Microsoft Entra roles, Azure roles, ..."
+# (https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/concept-pim-for-groups).
+# verify: on the first activation how soon the Azure portal honours the new
+# membership (the group claim is in the ARM token: sign out and back in).
+#
+# Subscription scope on purpose: the demo opens Sentinel, Log Analytics and
+# the resource views of the whole lab. Nothing here can write. What it CAN
+# read, said plainly: every Log Analytics table (sign-in and audit logs,
+# VaultCheckout_CL), Sentinel incidents and watchlists, resource settings
+# and Logic App run history - not Key Vault secrets, storage keys or blob
+# data (no data-plane role, no listKeys).
+# -----------------------------------------------------------------------------
+locals {
+  pim_demo_readers_azure_roles = {
+    reader               = "acdd72a7-3385-48ef-bd42-f606fba81ae7"
+    sentinel_reader      = "8d289c81-5878-46d4-8554-54e1e3d8b5cb"
+    log_analytics_reader = "73c42c96-874c-492b-b04d-ab87d138a893"
+  }
+}
+
+# Fail closed on a wrong id: the principal must BE the role-assignable PIM
+# group envs/dev created (a user id, or an ordinary group whose membership a
+# Groups Administrator could edit, would hand out standing read access).
+data "azuread_group" "pim_demo_readers" {
+  count     = var.enable_pim_demo_readers_azure_rbac ? 1 : 0
+  object_id = var.pim_demo_readers_group_object_id
+
+  lifecycle {
+    precondition {
+      condition     = var.pim_demo_readers_group_object_id != ""
+      error_message = "enable_pim_demo_readers_azure_rbac needs pim_demo_readers_group_object_id: terraform -chdir=../dev output -raw pim_demo_readers_group_object_id (after the envs/dev apply that creates PIM-Demo-Readers)."
+    }
+    postcondition {
+      condition     = self.assignable_to_role && self.display_name == "PIM-Demo-Readers"
+      error_message = "pim_demo_readers_group_object_id must be the role-assignable PIM-Demo-Readers group (envs/dev output pim_demo_readers_group_object_id), not another group or a person."
+    }
+  }
+}
+
+resource "azurerm_role_assignment" "pim_demo_readers" {
+  for_each = var.enable_pim_demo_readers_azure_rbac ? local.pim_demo_readers_azure_roles : {}
+
+  scope              = data.azurerm_subscription.current.id
+  role_definition_id = "${data.azurerm_subscription.current.id}/providers/Microsoft.Authorization/roleDefinitions/${each.value}"
+  principal_id       = data.azuread_group.pim_demo_readers[0].object_id
+  principal_type     = "Group"
+  description        = "PIM-Demo-Readers (read-only presenter, eligible-only membership through PIM for Groups). envs/bootstrap, human-applied."
 }

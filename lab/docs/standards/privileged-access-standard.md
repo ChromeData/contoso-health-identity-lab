@@ -24,8 +24,11 @@ The tiers follow Microsoft's Enterprise Access Model.
 
 **Privileged roles outside the map are not assigned.** Roles Microsoft
 labels privileged that aren't in `pim_tier_groups` (for example Password,
-Identity Governance, Lifecycle Workflows, Domain Name and External Identity
-Provider Administrator) are held by nobody. Needing one means adding it to
+Domain Name and External Identity Provider Administrator) are held by
+nobody. One exception, read-only: `PIM-Demo-Readers`
+(`modules/pim/demo-readers.tf`) holds Global Reader and Security Reader for
+the demo presenter, eligible-only, outside the tier map and outside CA002 /
+CA020. Needing one means adding it to
 the map in a PR, with a tier. An active assignment of any role outside PIM
 alerts (`role-assigned-outside-pim.kql`, High), and CA002 already targets
 these roles. A new PIM *eligibility* on an unmapped role has no rule yet.
@@ -42,8 +45,9 @@ these roles. A new PIM *eligibility* on an unmapped role has no rule yet.
 - **Zero standing privilege.** The only standing privileged role assignments are
   the two break-glass accounts (through `Break-Glass-Admins`) and the role
   bindings held by PIM-governed groups that have no standing members
-  (`Privileged-IAM-Admins` → User Administrator, and the tier groups in
-  `modules/pim/tiers.tf`). `05-Reports.ps1` reports every other standing
+  (`Privileged-IAM-Admins` → User Administrator, the tier groups in
+  `modules/pim/tiers.tf`, and `PIM-Demo-Readers` → Global Reader + Security
+  Reader in `modules/pim/demo-readers.tf`). `05-Reports.ps1` reports every other standing
   assignment as a finding; `role-assigned-outside-pim.kql` and
   `pim-group-member-added-outside-pim.kql` alert when one is created; and
   `Find-ShadowAdmins.ps1` reports who could give themselves a role in one
@@ -59,7 +63,7 @@ these roles. A new PIM *eligibility* on an unmapped role has no rule yet.
 | Max activation | Tier 0: **4 h**, and **2 h** for the two roles that can take over any account in one step (Global Administrator, Privileged Authentication Administrator). Tier 1: **8 h**, one shift | `PT4H` (`Privileged-IAM-Admins`, Tier-0 tier groups); `PT2H` (Global Administrator, Privileged Authentication Administrator); `PT8H` (Tier-1 tier groups) |
 | MFA on activation | Required, phishing-resistant | `require_mfa_on_activation = true`, plus CA002 auth strength. Tier 0 can require auth context c1 instead (`tier0_activation_auth_context_id`), which CA021 meets only with the admin strength and a fresh sign-in |
 | Justification | Required, with a ticket reference for Tier 0 | `require_justification = true`; Tier 0 also requires ticket information (`tier0_require_ticket_info`) |
-| Approval | Tier 0: required. Tier 1: required for User Administrator and for roles that can read secrets or other people's content in bulk (Intune, Exchange, SharePoint); not required for the other Tier-1 roles. Approver is a **group**, never the requester | Required on `Privileged-IAM-Admins`, every Tier-0 group, Global Administrator, the Intune group and the IGA group (`PIM-Tier1-IGA-Admins`). **Not yet on the Exchange and SharePoint groups** (exception E10). Approvers are role-assignable groups, `PIM-Approvers-Tier0` and `-Tier1` (`approvers.tf`) |
+| Approval | Tier 0: required. Tier 1: required for User Administrator and for roles that can read secrets or other people's content in bulk (Intune, Exchange, SharePoint); not required for the other Tier-1 roles. Approver is a **group**, never the requester | Required on `Privileged-IAM-Admins`, every Tier-0 group, Global Administrator, the Intune group and the IGA group (`PIM-Tier1-IGA-Admins`). **Not yet on the Exchange and SharePoint groups** (exception E10). **Not on `PIM-Demo-Readers`** either, although Global Reader and Security Reader can read BitLocker recovery keys: a read-only presenter activates alone, on camera; compensated by MFA + reason, 8 h, a mail on every activation and the quarterly review (`demo-readers.tf` header). Approvers are role-assignable groups, `PIM-Approvers-Tier0` and `-Tier1` (`approvers.tf`) |
 | Active assignment max | 15 days, for exceptions only | `P15D` |
 | Eligible assignment expiry | **≤ 365 days**, renewed through a privileged access review | Tier 0 `P180D` (Global Administrator too), Tier 1 and `Privileged-IAM-Admins` `P365D`. The one permanent eligibility is a group's, not a person's: the group eligible for Contributor on the lab resource group (`azure.tf`), whose members are reviewed quarterly. The privileged access review is rendered (`modules/entitlement/reviews.tf`), off by default |
 | Notification | Every activation is alerted to the SOC | `lab/kql/pim-activation.kql`; `pim-activation-without-auth-context.kql` (a Tier-0 activation without the step-up; preview, behind `enable_itdr_detections_v2`). PIM's own admin notifications go to `pim_alert_mailbox` when it is set |

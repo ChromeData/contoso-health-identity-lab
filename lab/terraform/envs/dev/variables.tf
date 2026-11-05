@@ -646,6 +646,12 @@ variable "enable_pim_aws_admin" {
   default     = false
 }
 
+variable "enable_pim_demo_readers" {
+  type        = bool
+  description = "Read-only presenter access (modules/pim demo-readers.tf): create PIM-Demo-Readers, a role-assignable group that actively holds Global Reader + Security Reader tenant-wide; membership eligible-only (MFA + justification, 8-hour cap, NO approval, every activation mailed to pim_alert_mailbox, eligibility expires after 365 days). Reviewed quarterly and watched by the ITDR group rule, NOT in the CA002 / CA020 scope. Its Azure Reader / Microsoft Sentinel Reader / Log Analytics Reader on the subscription are granted by envs/bootstrap (enable_pim_demo_readers_azure_rbac, human-applied) from output pim_demo_readers_group_object_id. Needs enable_premium; eligibility (adm-presenter) is a post-apply step."
+  default     = false
+}
+
 variable "enable_b2b_governance" {
   type        = bool
   description = "Create the Affiliated Partners catalog + Affiliated Physicians guest package (connected-org requestors, sponsor approval, 90-day expiry, monthly sponsor review). Needs enable_premium + enable_governance; post-apply/New-B2BConnectedOrganization.ps1 creates the connected organization."

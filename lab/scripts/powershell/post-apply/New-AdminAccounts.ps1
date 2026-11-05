@@ -9,22 +9,35 @@
     adm-first.last@<tenant>.onmicrosoft.com, never from the HR-synced
     workforce account. This script is the only place those accounts are made.
 
-    PER REGISTER ROW
-      1. The owner's WORKFORCE account must exist, be enabled and match the
-         row's ownerEmployeeId (HR provisioned it). A missing, disabled or
-         ambiguous owner is a FAIL for that row: an admin account nobody owns
-         is an orphan from day one.
+    PER REGISTER ROW (a row names EITHER an HR owner OR a sponsor)
+      1. Owner row (ownerEmployeeId): the owner's WORKFORCE account must
+         exist, be enabled and match the row's ownerEmployeeId (HR
+         provisioned it). A missing, disabled or ambiguous owner is a FAIL
+         for that row: an admin account nobody owns is an orphan from day one.
+         Sponsor row (sponsorUpn, for an account no HR record owns - the demo
+         presenter): the sponsor must exist exactly once, be enabled and be a
+         Member (not a guest); otherwise FAIL, not created. Such a row is a
+         function account (adm-<word>, no first.last), carries its own
+         displayName and may only be eligible for read-only groups
+         (pim-demo-readers): with no HR record, no leaver event ever ends it,
+         so it never gets write power.
       2. adm-<first.last>@<OnMicrosoftDomain>:
            missing   -> created cloud-only: accountEnabled, displayName
-                        "ADM <owner>", employeeType "Admin account", a random
+                        "ADM <owner>" (sponsor row: the register's
+                        displayName), employeeType "Admin account", a random
                         64-character password that is generated in memory and
                         DISCARDED (nobody knows it; first sign-in is a one-time
                         Temporary Access Pass, then an issued passkey), no
                         usageLocation, no licence, no mailbox.
            exists    -> refused if it is synced from AD (an admin account must
-                        be cloud-only); WARN if it holds a licence.
-      3. Manager = the owner's workforce account (the leaver process and the
-         privileged review see who the admin account belongs to).
+                        be cloud-only); WARN if it holds a licence, or (sponsor
+                        row) if its displayName differs from the register -
+                        an existing account is never renamed here.
+      3. Owner row: manager = the owner's workforce account (the leaver
+         process and the privileged review see who the admin account belongs
+         to). Sponsor row: no manager; the sponsor is added to the account's
+         sponsors relationship (POST /users/{id}/sponsors/$ref) unless it is
+         already there. A failed sponsors READ is a FAIL, never "not set yet".
       4. Member of Admin-Accounts (modules/groups; role-assignable, standing,
          holds no role): the admin passkey profile and registration campaign
          target in Set-AuthenticationMethodsPolicy.ps1. A PIM group cannot be
@@ -81,6 +94,17 @@
       v1.0) and a password the caller immediately forgets with
       forceChangePasswordNextSignIn = true (the TAP sign-in then registers the
       passkey; the password is never used).
+    Sponsors (Learn, read 2026-11-05):
+      https://learn.microsoft.com/en-us/graph/api/user-post-sponsors
+        POST /users/{id}/sponsors/$ref, body {"@odata.id":
+        "https://graph.microsoft.com/v1.0/users/{sponsor id}"}, 204 No
+        Content; least privileged User.ReadWrite.All (delegated: User
+        Administrator or Directory Writers).
+      https://learn.microsoft.com/en-us/graph/api/user-list-sponsors
+        GET /users/{id}/sponsors ($select supported); User.Read.All.
+      Learn describes sponsors for guests; the relationship is on every user
+      (adm-labops already carries one, capture E95). verify: the first
+      sponsor row run reads the sponsor back.
     verify: POST /groups/{id}/members/$ref on a role-assignable group needs
       RoleManagement.ReadWrite.Directory in addition to GroupMember.ReadWrite.All
       (Learn: role-assignable group membership), and a Privileged Role
@@ -136,19 +160,37 @@ $graph = 'https://graph.microsoft.com/v1.0'
 function Test-AdminAccountRegister {
     # Every reason the register must not be applied. Empty = safe.
     param([Parameter(Mandatory)]$Register)
+    # Read-only PIM groups a sponsor row (no HR owner) may be eligible for.
+    $readOnlyGroups = @('pim-demo-readers')
     $errs = [System.Collections.Generic.List[string]]::new()
     $rows = @($(if ($Register -is [System.Collections.IDictionary] -and $Register.Contains('accounts')) { $Register['accounts'] }) | Where-Object { $_ })
     if ($rows.Count -eq 0) { $errs.Add('accounts is empty or missing.'); return $errs.ToArray() }
     $seen = @{}; $owners = @{}
     foreach ($r in $rows) {
-        $a = [string]$r['adminAccount']; $o = [string]$r['ownerEmployeeId']
-        if ($a -notmatch '^adm-[a-z]+(-[a-z]+)*(\.[a-z]+(-[a-z]+)*)+$') { $errs.Add("adminAccount '$a' must be adm-first.last (lower case).") }
+        $a = [string]$r['adminAccount']; $o = [string]$r['ownerEmployeeId']; $sp = [string]$r['sponsorUpn']
+        $sponsored = $sp -ne ''
         if ($a -match '(?i)^bg-admin|break-?glass') { $errs.Add("adminAccount '$a' looks like a break-glass account; those are Terraform-owned (modules/groups).") }
         if ($seen.ContainsKey($a)) { $errs.Add("adminAccount '$a' is listed twice.") } else { $seen[$a] = 1 }
-        if ($o -notmatch '^\d+$') { $errs.Add("adminAccount '$a': ownerEmployeeId '$o' must be the HR employeeId.") }
-        elseif ($owners.ContainsKey($o)) { $errs.Add("ownerEmployeeId '$o' owns more than one admin account (one per person).") } else { $owners[$o] = 1 }
+        if ($sponsored -and $o -ne '') { $errs.Add("adminAccount '$a' names both an HR owner (ownerEmployeeId) and a sponsor (sponsorUpn): one or the other.") }
+        elseif ($sponsored) {
+            # No HR owner: a function account, never shaped like a person's.
+            if ($a -cnotmatch '^adm-[a-z]+(-[a-z]+)*$') { $errs.Add("adminAccount '$a': a sponsored account (no HR owner) must be adm-<function> (lower case, no first.last - that shape is reserved for a person HR owns).") }
+            if ($sp -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { $errs.Add("adminAccount '$a': sponsorUpn '$sp' must be a user principal name.") }
+            elseif ($sp -match '(?i)^(adm-|bg-admin)') { $errs.Add("adminAccount '$a': sponsorUpn '$sp' is an admin or break-glass account; the sponsor is the person who answers for it.") }
+            if ([string]::IsNullOrWhiteSpace([string]$r['displayName']) -or [string]$r['displayName'] -notmatch '^[\x20-\x7E]{1,64}$') { $errs.Add("adminAccount '$a': a sponsored account needs a displayName (printable ASCII, at most 64 characters): there is no owner to name it after.") }
+            if ($r['globalAdminEligible'] -eq $true) { $errs.Add("adminAccount '$a': a sponsored account (no HR owner, no leaver event) is never Global Administrator eligible.") }
+            foreach ($g in @($r['eligibleFor'] | Where-Object { $_ })) {
+                if ([string]$g -notin $readOnlyGroups) { $errs.Add("adminAccount '$a': a sponsored account may only be eligible for read-only groups ($($readOnlyGroups -join ', ')), not '$g'.") }
+            }
+        }
+        else {
+            if ($a -notmatch '^adm-[a-z]+(-[a-z]+)*(\.[a-z]+(-[a-z]+)*)+$') { $errs.Add("adminAccount '$a' must be adm-first.last (lower case).") }
+            if ($o -notmatch '^\d+$') { $errs.Add("adminAccount '$a': ownerEmployeeId '$o' must be the HR employeeId (or name a sponsorUpn for an account no HR record owns).") }
+            elseif ($owners.ContainsKey($o)) { $errs.Add("ownerEmployeeId '$o' owns more than one admin account (one per person).") } else { $owners[$o] = 1 }
+            if ($r.Contains('displayName')) { $errs.Add("adminAccount '$a': displayName is only for sponsored rows; an owned account is named 'ADM <owner>'.") }
+        }
         foreach ($g in @($r['eligibleFor'] | Where-Object { $_ })) {
-            if ([string]$g -notmatch '^(pim-tier[01]-[a-z0-9-]+|privileged-iam-admins)$') { $errs.Add("adminAccount '$a': eligibleFor '$g' is not a PIM-for-Groups group (pim-tier0-*, pim-tier1-*, privileged-iam-admins).") }
+            if ([string]$g -notmatch '^(pim-tier[01]-[a-z0-9-]+|privileged-iam-admins|pim-demo-readers)$') { $errs.Add("adminAccount '$a': eligibleFor '$g' is not a PIM-for-Groups group (pim-tier0-*, pim-tier1-*, privileged-iam-admins, pim-demo-readers).") }
         }
     }
     return $errs.ToArray()
@@ -174,10 +216,12 @@ function Get-UnknownPassword {
 
 function ConvertTo-AdminUserBody {
     # POST /users body for one admin account (the password is passed in, not made here).
-    param([Parameter(Mandatory)][string]$Upn, [Parameter(Mandatory)][string]$OwnerDisplayName, [Parameter(Mandatory)][string]$InitialSecret)
+    # Owner row: "ADM <owner>". Sponsor row: the register's displayName.
+    param([Parameter(Mandatory)][string]$Upn, [string]$OwnerDisplayName = '', [string]$DisplayName = '', [Parameter(Mandatory)][string]$InitialSecret)
+    if ($DisplayName -eq '' -and $OwnerDisplayName -eq '') { throw "ConvertTo-AdminUserBody: $Upn needs an owner display name or its own displayName." }
     return [ordered]@{
         accountEnabled    = $true
-        displayName       = "ADM $OwnerDisplayName"
+        displayName       = $(if ($DisplayName -ne '') { $DisplayName } else { "ADM $OwnerDisplayName" })
         mailNickname      = ($Upn -split '@')[0]
         userPrincipalName = $Upn
         employeeType      = 'Admin account'
@@ -198,7 +242,8 @@ if ($problems.Count) {
 $rows = @($register['accounts'] | Where-Object { $_ })
 Write-Console "Admin accounts ($($rows.Count)) -> Admin-Accounts ($GroupMailNickname)" -ForegroundColor Cyan
 foreach ($r in $rows) {
-    Write-Console ("  {0,-40} owner {1} ({2}); intended eligibility: {3}{4}" -f (Get-AdminAccountUpn $r['adminAccount'] $OnMicrosoftDomain), $r['owner'], $r['ownerEmployeeId'],
+    $who = if ([string]$r['sponsorUpn'] -ne '') { "sponsor $($r['sponsorUpn']) (no HR owner)" } else { "owner $($r['owner']) ($($r['ownerEmployeeId']))" }
+    Write-Console ("  {0,-40} {1}; intended eligibility: {2}{3}" -f (Get-AdminAccountUpn $r['adminAccount'] $OnMicrosoftDomain), $who,
         $(if (@($r['eligibleFor']).Count) { @($r['eligibleFor']) -join ', ' } else { 'none' }), $(if ($r['globalAdminEligible'] -eq $true) { ' + Global Administrator' } else { '' })) -ForegroundColor DarkGray
 }
 if ($BuildAccountUpn) { Write-Console "  build account $BuildAccountUpn -> Admin-Accounts only" -ForegroundColor DarkGray }
@@ -231,7 +276,7 @@ function Find-User {
     # One user by UPN, or $null when it does not exist (any other error throws).
     param([Parameter(Mandatory)][string]$Upn)
     $f = [uri]::EscapeDataString("userPrincipalName eq '$($Upn.Replace("'", "''"))'")
-    return @(Get-GraphCollection -Uri "$graph/users?`$filter=$f&`$select=id,userPrincipalName,accountEnabled,onPremisesSyncEnabled,assignedLicenses") | Select-Object -First 1
+    return @(Get-GraphCollection -Uri "$graph/users?`$filter=$f&`$select=id,displayName,userPrincipalName,userType,accountEnabled,onPremisesSyncEnabled,assignedLicenses") | Select-Object -First 1
 }
 
 $results = [System.Collections.Generic.List[object]]::new()
@@ -264,29 +309,56 @@ Write-Console "`nApplying" -ForegroundColor Cyan
 foreach ($r in $rows) {
     $upn = Get-AdminAccountUpn $r['adminAccount'] $OnMicrosoftDomain
     try {
-        # 1. Owner: the HR-provisioned workforce account.
-        $of = [uri]::EscapeDataString("employeeId eq '$([string]$r['ownerEmployeeId'])'")
-        $owners = @(Get-GraphCollection -Uri "$graph/users?`$filter=$of&`$select=id,displayName,userPrincipalName,accountEnabled")
-        if ($owners.Count -ne 1) { Add-Result $upn 'FAIL' "owner employeeId $($r['ownerEmployeeId']) matches $($owners.Count) user(s) - HR must provision the person first (one match). Not created."; continue }
-        $owner = $owners[0]
-        if ($owner['accountEnabled'] -eq $false) { Add-Result $upn 'FAIL' "owner $($owner['userPrincipalName']) is disabled (leaver?) - an admin account must not outlive its owner. Not created; disable the admin account if it exists."; continue }
+        $sponsorUpn = [string]$r['sponsorUpn']
+        if ($sponsorUpn -ne '') {
+            # 1. Sponsor row: the person who answers for an account no HR record owns.
+            $owner = Find-User -Upn $sponsorUpn
+            if (-not $owner) { Add-Result $upn 'FAIL' "sponsor $sponsorUpn not found - an admin account needs someone who answers for it. Not created."; continue }
+            if ($owner['accountEnabled'] -eq $false) { Add-Result $upn 'FAIL' "sponsor $sponsorUpn is disabled - an admin account must not outlive its sponsor. Not created; disable the admin account if it exists."; continue }
+            if ([string]$owner['userType'] -ne 'Member') { Add-Result $upn 'FAIL' "sponsor $sponsorUpn is not a Member user (userType '$($owner['userType'])') - a guest cannot answer for an admin account. Not created."; continue }
+            $label = [string]$r['displayName']
+        }
+        else {
+            # 1. Owner row: the HR-provisioned workforce account.
+            $of = [uri]::EscapeDataString("employeeId eq '$([string]$r['ownerEmployeeId'])'")
+            $owners = @(Get-GraphCollection -Uri "$graph/users?`$filter=$of&`$select=id,displayName,userPrincipalName,accountEnabled")
+            if ($owners.Count -ne 1) { Add-Result $upn 'FAIL' "owner employeeId $($r['ownerEmployeeId']) matches $($owners.Count) user(s) - HR must provision the person first (one match). Not created."; continue }
+            $owner = $owners[0]
+            if ($owner['accountEnabled'] -eq $false) { Add-Result $upn 'FAIL' "owner $($owner['userPrincipalName']) is disabled (leaver?) - an admin account must not outlive its owner. Not created; disable the admin account if it exists."; continue }
+            $label = [string]$owner['displayName']
+        }
 
-        # 2. The admin account itself.
+        # 2. The admin account itself (it may already exist: created earlier,
+        #    or by another operator run - never renamed or recreated here).
         $adm = Find-User -Upn $upn
         if ($adm) {
             if ($adm['onPremisesSyncEnabled'] -eq $true) { Add-Result $upn 'FAIL' 'exists but is SYNCED from AD: an admin account must be cloud-only (a compromised AD would own it). Not touched.'; continue }
             if (@($adm['assignedLicenses'] | Where-Object { $_ }).Count) { Add-Result $upn 'WARN' 'holds a licence: an admin account has no mailbox or apps - remove it' }
+            if ($sponsorUpn -ne '' -and $adm.Contains('displayName') -and [string]$adm['displayName'] -ne $label) { Add-Result $upn 'WARN' "display name is '$($adm['displayName'])', the register says '$label' (not changed here)" }
             Add-Result $upn 'PASS' 'exists, cloud-only'
         }
-        elseif ($PSCmdlet.ShouldProcess($upn, "create cloud-only admin account for $($owner['displayName']) (no known password)")) {
+        elseif ($PSCmdlet.ShouldProcess($upn, "create cloud-only admin account '$label' (no known password)")) {
             # The password exists only inside this call: never printed, logged or returned.
-            $adm = Invoke-Graph -Method POST -Uri "$graph/users" -Body (ConvertTo-AdminUserBody -Upn $upn -OwnerDisplayName ([string]$owner['displayName']) -InitialSecret (Get-UnknownPassword))
+            $userBody = if ($sponsorUpn -ne '') { ConvertTo-AdminUserBody -Upn $upn -DisplayName $label -InitialSecret (Get-UnknownPassword) } else { ConvertTo-AdminUserBody -Upn $upn -OwnerDisplayName $label -InitialSecret (Get-UnknownPassword) }
+            $adm = Invoke-Graph -Method POST -Uri "$graph/users" -Body $userBody
+            $userBody = $null
             Add-Result $upn 'PASS' 'created cloud-only (no licence, no known password; issue a one-time TAP in person to register an issued passkey)'
         }
         else { Add-Result $upn 'INFO' 'would create (cloud-only, no licence, no known password)'; continue }
 
-        # 3. Manager = owner's workforce account.
-        if ($PSCmdlet.ShouldProcess($upn, "set manager $($owner['userPrincipalName'])")) {
+        if ($sponsorUpn -ne '') {
+            # 3. Sponsor row: sponsors relationship, not a manager. A failed
+            #    read throws (caught below as FAIL): never "not set yet".
+            $sponsorIds = @(Get-GraphCollection -Uri "$graph/users/$($adm['id'])/sponsors?`$select=id" | ForEach-Object { [string]$_['id'] })
+            if ([string]$owner['id'] -in $sponsorIds) { Add-Result $upn 'PASS' "sponsor $sponsorUpn already set" }
+            elseif ($PSCmdlet.ShouldProcess($upn, "add sponsor $sponsorUpn")) {
+                Invoke-Graph -Method POST -Uri "$graph/users/$($adm['id'])/sponsors/`$ref" -Body @{ '@odata.id' = "$graph/users/$($owner['id'])" } | Out-Null
+                Add-Result $upn 'PASS' "sponsor $sponsorUpn added"
+            }
+            else { Add-Result $upn 'INFO' "would add sponsor $sponsorUpn" }
+        }
+        # 3. Owner row: manager = owner's workforce account.
+        elseif ($PSCmdlet.ShouldProcess($upn, "set manager $($owner['userPrincipalName'])")) {
             Invoke-Graph -Method PUT -Uri "$graph/users/$($adm['id'])/manager/`$ref" -Body @{ '@odata.id' = "$graph/users/$($owner['id'])" } | Out-Null
         }
         # 4. Standing admin passkey target.

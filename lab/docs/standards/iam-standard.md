@@ -38,7 +38,7 @@ Rules:
 | Object | Convention | Lab example |
 |---|---|---|
 | Workforce UPN | `first.last@<verified domain>`, with a numeric suffix on collision | `dana.okafor@<domain>` |
-| Admin account | `adm-first.last@<tenant>.onmicrosoft.com`, cloud-only | BUILT, not run: `lab/iga/admin-accounts.json` + `post-apply/New-AdminAccounts.ps1` (`Invoke-PostApply` step 1b) create `adm-` accounts for the IT personas (Ava Lin, Raj Patel, Mei Tanaka; Joan Ferris is the IT Director) in the standing, role-assignable `Admin-Accounts` group (no role) |
+| Admin account | `adm-first.last@<tenant>.onmicrosoft.com`, cloud-only | BUILT, not run: `lab/iga/admin-accounts.json` + `post-apply/New-AdminAccounts.ps1` (`Invoke-PostApply` step 1b) create `adm-` accounts for the IT personas (Ava Lin, Raj Patel, Mei Tanaka; Joan Ferris is the IT Director) and `adm-presenter`, the read-only demo presenter with no HR owner (sponsored by the lab owner), in the standing, role-assignable `Admin-Accounts` group (no role) |
 | Break-glass | `bg-admin-NN@<tenant>.onmicrosoft.com` | `bg-admin-01`, `bg-admin-02` |
 | AD Tier-0 admin | `tier0-admin-NN` | `lab/scripts/dc/02-Configure-Domain.ps1` |
 | AD service account | `svc-<function>` | `svc-backup`, `svc-vault-rotator` |

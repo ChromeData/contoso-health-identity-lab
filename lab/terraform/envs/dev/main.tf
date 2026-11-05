@@ -66,6 +66,10 @@
 #                                          for post-apply/Set-DirectoryRolePimPolicies.ps1.
 #   enable_pim_azure_resources          -> Azure PIM: eligible Contributor on the
 #                                          RG (premium; HUMAN Owner applies).
+#   enable_pim_demo_readers             -> PIM-Demo-Readers: read-only presenter
+#                                          access (Global Reader + Security
+#                                          Reader), eligible-only, no approval;
+#                                          Azure read roles via envs/bootstrap.
 #   enable_b2b_governance               -> guest catalog + Affiliated Physicians
 #                                          package (governance).
 #   enable_access_reviews_privileged    -> + privileged (PIM-eligible, incl. GA
@@ -223,8 +227,8 @@ check "pim_aws_admin_requires_sso_apps" {
 
 check "pim_extensions_require_premium" {
   assert {
-    condition     = !(var.enable_pim_tiers || var.enable_pim_azure_resources || var.enable_helpdesk_au_scoping || var.enable_global_admin_pim_policy) || var.enable_premium
-    error_message = "enable_pim_tiers / enable_pim_azure_resources / enable_helpdesk_au_scoping / enable_global_admin_pim_policy have no effect unless enable_premium = true (modules/pim is premium-tier)."
+    condition     = !(var.enable_pim_tiers || var.enable_pim_azure_resources || var.enable_helpdesk_au_scoping || var.enable_global_admin_pim_policy || var.enable_pim_demo_readers) || var.enable_premium
+    error_message = "enable_pim_tiers / enable_pim_azure_resources / enable_helpdesk_au_scoping / enable_global_admin_pim_policy / enable_pim_demo_readers have no effect unless enable_premium = true (modules/pim is premium-tier)."
   }
 }
 
@@ -450,6 +454,13 @@ module "pim" {
   # assigned to the AWS app in module.apps below; it stays out of the CA002 /
   # CA020 scope (privileged_review_targets) on purpose.
   enable_pim_aws_admin = var.enable_pim_aws_admin
+
+  # Read-only presenter access (modules/pim demo-readers.tf): PIM-Demo-Readers
+  # actively holds Global Reader + Security Reader, membership eligible-only.
+  # Like PIM-AWS-Lab-Admins it is reviewed quarterly but stays out of the
+  # CA002 / CA020 scope. Its Azure read roles are granted in envs/bootstrap
+  # (output pim_demo_readers_group_object_id), not here: APPLY may not.
+  enable_pim_demo_readers = var.enable_pim_demo_readers
 }
 
 # -----------------------------------------------------------------------------
@@ -614,6 +625,10 @@ locals {
     # MFA + reason activation into AWS admin. Watched here, but deliberately
     # NOT in the CA002/CA020 scope (privileged_review_targets).
     var.enable_pim_aws_admin ? [module.pim[0].aws_admin_group_object_id] : [],
+    # PIM-Demo-Readers: members arrive only by PIM activation, so a direct
+    # add is standing Global Reader + Security Reader (BitLocker key read
+    # included) without the MFA + reason activation. Watched, not in CA scope.
+    var.enable_pim_demo_readers ? [module.pim[0].demo_readers_group_object_id] : [],
     values(module.pim[0].approver_group_object_ids),
   ) : []
 

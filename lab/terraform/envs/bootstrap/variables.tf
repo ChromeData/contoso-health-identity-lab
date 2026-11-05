@@ -182,3 +182,27 @@ variable "hr_provisioning_owner_object_ids" {
   description = "Entra USER object ids added as owners of the HR provisioning app's registration (modules/pipeline-identity; ADR 0018: two people, never the access governance lead - SOD-08). The CI identities themselves never get an Entra owner. Who and why: lab/iga/nhi-owners.json. Not sensitive: this root is applied locally and never planned in a pull request."
   default     = []
 }
+
+variable "enable_pim_demo_readers_azure_rbac" {
+  type        = bool
+  description = <<-EOT
+    Grant PIM-Demo-Readers (envs/dev enable_pim_demo_readers) Reader,
+    Microsoft Sentinel Reader and Log Analytics Reader on this subscription.
+    Its members are eligible-only (PIM for Groups), so nobody holds the roles
+    at rest. Here, not in envs/dev, because the APPLY identity may only hand
+    out delegable_role_ids (main.tf). Needs pim_demo_readers_group_object_id.
+    Off by default.
+  EOT
+  default     = false
+}
+
+variable "pim_demo_readers_group_object_id" {
+  type        = string
+  description = "Object id of PIM-Demo-Readers: terraform -chdir=../dev output -raw pim_demo_readers_group_object_id. Required with enable_pim_demo_readers_azure_rbac. Must be the role-assignable PIM group, never a person."
+  default     = ""
+
+  validation {
+    condition     = var.pim_demo_readers_group_object_id == "" || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.pim_demo_readers_group_object_id))
+    error_message = "pim_demo_readers_group_object_id must be empty or a lowercase group object id (GUID)."
+  }
+}
