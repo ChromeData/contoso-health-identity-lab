@@ -1,0 +1,306 @@
+# =============================================================================
+# hr-feed.yml  —  Contoso Health Identity Platform (lab/)
+# -----------------------------------------------------------------------------
+# HR changes through GitHub. A commit to the `hr-feed` branch that changes
+# lab/scripts/mock-hr/hr_feed.csv sends ONLY the rows it changed to Entra's
+# API-driven inbound provisioning app (Microsoft's front door for HR data),
+# which writes them into Active Directory on DC01 through the provisioning
+# agent. Cloud Sync then copies AD up to Entra ID; AWS follows by SCIM.
+# The job summary tells that story in plain English, one line per person
+# (hired / left / moved, and what Microsoft did), with the technical details
+# folded underneath. Names, job titles and departments only: never an
+# employee id, UPN, manager, date or token.
+#
+# IDENTITY: HR-SYNC (modules/pipeline-identity, envs/bootstrap enable_hr_sync)
+# over GitHub OIDC: NO stored secret. Its federated credential trusts only
+# repo:OWNER@ID/REPO@ID:ref:refs/heads/hr-feed, so it signs in on that branch
+# and nowhere else. Graph roles: SynchronizationData-User.Upload(.OwnedBy) to
+# send, AuditLog.Read.All to read the provisioning log back. No Azure
+# subscription role at all (allow-no-subscriptions). The Graph token comes
+# from `az account get-access-token`, is masked, and lives only in the memory
+# of the step that uses it.
+#
+# WHICH ROWS: hr_feed.csv at this commit vs. the commit of the last
+# SUCCESSFUL hr-feed push run: everything since then is unsent, so a push
+# whose run failed, or was superseded in the concurrency queue, is sent by
+# the next push, never skipped. Before the first successful send, a known
+# starting point: the repo variable HR_FEED_BASE_SHA when set, else where
+# hr-feed left main. Never "the commit before this push": if the first push
+# failed, its change sits in that commit and would be skipped for good. A
+# push that cannot read its run history stops before sending anything.
+# Deleting a row sends nothing (HR marks leavers, it never deletes them).
+# workflow_dispatch: the employee ids given, or every row as a dry run.
+#
+# SAFETY: Invoke-InboundProvisioning.ps1's mass-change guard runs on the
+# changed rows only: a push that would switch off more than 10 people, or
+# change more than 10 people's department / job title (against the previous
+# version of the file), stops before anything is sent.
+#
+# ONE-TIME SETUP: lab/scripts/mock-hr/README.md, "HR changes through GitHub
+# Actions" (bootstrap apply with enable_hr_sync, the SP-owner command, repo
+# variables HR_SYNC_CLIENT_ID / HR_PROV_SP_ID / HR_PROV_JOB_ID / HR_UPN_DOMAIN,
+# a ruleset on the hr-feed branch). Until then a push stops with a summary
+# that names what is missing; a dry run needs none of it.
+#
+# Supply chain: actions pinned to full commit SHAs (the same pins as the
+# other workflows); Microsoft.Graph.Authentication pinned to lab-tests.yml's
+# version.
+# =============================================================================
+
+name: hr-feed
+
+on:
+  push:
+    branches: [hr-feed]
+    paths:
+      - "lab/scripts/mock-hr/hr_feed.csv"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: show what would be sent and send nothing (no sign-in needed)"
+        type: boolean
+        default: true
+      employee_ids:
+        description: "Employee ids to send, comma separated. Empty = every row (dry run only)."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# One HR send at a time, in order; a running send is never cancelled.
+concurrency:
+  group: hr-feed
+  cancel-in-progress: false
+
+jobs:
+  send:
+    name: Send the HR change to Microsoft
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      id-token: write   # GitHub OIDC token for the HR-SYNC sign-in (no secret)
+      contents: read    # checkout + history for the diff
+      actions: read     # find the last successful hr-feed run (the diff base)
+    env:
+      CSV: lab/scripts/mock-hr/hr_feed.csv
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+    steps:
+      - name: Get the HR file and its history
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read the HR change (who was hired, who left, who moved)
+        id: change
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          EMPLOYEE_IDS: ${{ inputs.employee_ids }}
+          HR_FEED_BASE_SHA: ${{ vars.HR_FEED_BASE_SHA }}
+          REPO: ${{ github.repository }}
+          HR_SYNC_CLIENT_ID: ${{ vars.HR_SYNC_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          HR_PROV_SP_ID: ${{ vars.HR_PROV_SP_ID }}
+          HR_PROV_JOB_ID: ${{ vars.HR_PROV_JOB_ID }}
+          HR_UPN_DOMAIN: ${{ vars.HR_UPN_DOMAIN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP 'hr-feed'
+          New-Item -ItemType Directory -Path $work -Force | Out-Null
+          $dry = $env:DRY_RUN -eq 'true'
+          $branch = $env:GITHUB_REF -replace '^refs/heads/', ''
+          if (-not $dry -and $env:GITHUB_REF -ne 'refs/heads/hr-feed') {
+            Write-Output "::error::A real send runs only on the hr-feed branch (HR-SYNC trusts no other). Run it there, or tick 'dry run'."
+            exit 1
+          }
+          function Test-Ancestor([string]$Old, [string]$New) {
+            git merge-base --is-ancestor $Old $New 2>$null
+            return ($LASTEXITCODE -eq 0)
+          }
+          function Test-Commit([string]$Sha) {
+            # A commit in this checkout (fetch-depth 0: all history) that HEAD descends from.
+            if (-not $Sha -or $Sha -match '^0+$') { return $false }
+            git cat-file -e "$Sha^{commit}" 2>$null
+            if ($LASTEXITCODE -ne 0) { return $false }
+            return (Test-Ancestor $Sha HEAD)
+          }
+          # The diff base: everything after it has not been sent yet.
+          #  1. The last SUCCESSFUL hr-feed push run's commit. A failed or
+          #     superseded run sent nothing that counts, so its change is
+          #     still after this base and goes out with this push.
+          #  2. No successful send yet: a KNOWN starting point, never the
+          #     commit before this push (if the first push failed, its change
+          #     sits in that commit and is skipped for good once this run
+          #     succeeds). HR_FEED_BASE_SHA when set (an admin's explicit
+          #     choice, e.g. if main ever merges hr-feed and moves the
+          #     merge-base), else where hr-feed left main: every HR change
+          #     made on the branch goes out. Re-sending a row Microsoft
+          #     already has is harmless (it matches on the employee id and
+          #     updates in place); skipping one is not.
+          #  3. A push that cannot read the run history stops: a guess could
+          #     skip someone. So does a re-run of a push OLDER than the last
+          #     successful send: its file would undo the later change (a
+          #     re-run hire after the leaver went out switches them back on).
+          # workflow_dispatch sends the ids it is given, not a diff: the base
+          # only labels them (hired / moved) and feeds the guard, so it takes
+          # 1, else where hr-feed left main, and never stops here.
+          $base = ''; $why = ''
+          $last = gh api "repos/$env:REPO/actions/workflows/hr-feed.yml/runs?branch=hr-feed&event=push&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty'
+          $lookupOk = $LASTEXITCODE -eq 0
+          $last = if ($lookupOk) { "$last".Trim() } else { '' }
+          $mb = git merge-base origin/main HEAD 2>$null
+          $mb = if ($LASTEXITCODE -eq 0) { "$mb".Trim() } else { '' }
+          if ($last -and (Test-Commit $last)) { $base = $last; $why = 'the last successful HR send' }
+          elseif ($env:EVENT -ne 'push') { if ($mb) { $base = $mb; $why = 'where hr-feed left main' } }
+          elseif (-not $lookupOk) {
+            Write-Output "::error::GitHub's run history for this workflow could not be read (the gh error is above), so this run cannot tell which HR changes were already sent. Nothing was sent. Re-run the job: it sends everything since the last successful send."
+            exit 1
+          }
+          elseif ($last -and (Test-Ancestor HEAD $last)) {
+            Write-Output "::error::This commit is older than the last successful HR send ($($last.Substring(0, 7))). Sending its HR file now would undo the later change. Nothing was sent: the later run already sent everything up to its commit."
+            exit 1
+          }
+          else {
+            if ($last) { Write-Output "::warning::The last successful HR send ($($last.Substring(0, [Math]::Min(7, $last.Length)))) is not in this branch's history (was hr-feed rewritten?). Comparing with the branch's starting point instead: some rows may be sent again (harmless), none are skipped." }
+            if ($env:HR_FEED_BASE_SHA) {
+              if (-not (Test-Commit $env:HR_FEED_BASE_SHA)) {
+                Write-Output "::error::The repository variable HR_FEED_BASE_SHA ($env:HR_FEED_BASE_SHA) is not a commit in this branch's history. Set it to the commit whose HR file Microsoft already has, or delete it to start from where hr-feed left main. Nothing was sent."
+                exit 1
+              }
+              $base = "$(git rev-parse "$($env:HR_FEED_BASE_SHA)^{commit}")".Trim(); $why = 'HR_FEED_BASE_SHA, the starting point set for hr-feed'
+            }
+            elseif ($mb) { $base = $mb; $why = 'where hr-feed left main, no successful send yet' }
+            else {
+              Write-Output "::error::No successful HR send yet, and no starting point: this branch shares no history with main. Set the repository variable HR_FEED_BASE_SHA to the commit whose HR file Microsoft already has. Nothing was sent."
+              exit 1
+            }
+          }
+          $prev = Join-Path $work 'previous.csv'
+          if ($base) {
+            git cat-file -e "${base}:$($env:CSV)" 2>$null
+            if ($LASTEXITCODE -eq 0) { git show "${base}:$($env:CSV)" | Set-Content -LiteralPath $prev -Encoding utf8NoBOM }
+          }
+          $p = @{ CsvPath = $env:CSV; OutputPath = (Join-Path $work 'changes.json'); BaselineStatePath = (Join-Path $work 'baseline.json') }
+          if (Test-Path -LiteralPath $prev) { $p.PreviousCsvPath = $prev }
+          $head = (git rev-parse --short HEAD).Trim()
+          if ($env:EVENT -eq 'workflow_dispatch') {
+            $ids = @("$env:EMPLOYEE_IDS" -split '[,\s]+' | Where-Object { $_ })
+            if ($ids) { $p.EmployeeId = $ids; $trigger = "manual run on ``$branch`` ($head), $($ids.Count) chosen row(s)$(if ($dry) { ', dry run' })" }
+            elseif ($dry) { $p.Remove('PreviousCsvPath'); $trigger = "manual dry run on ``$branch`` ($head), every row" }
+            else {
+              Write-Output "::error::Name the employee ids to send, or tick 'dry run' to preview the whole file."
+              exit 1
+            }
+          }
+          else {
+            $trigger = "push to ``hr-feed``, comparing $(if ($base) { "$($base.Substring(0, 7)) ($why)" } else { 'nothing (no earlier version)' }) with $head"
+          }
+          $changes = @(./lab/scripts/mock-hr/Get-HrFeedChange.ps1 @p)
+          foreach ($c in $changes) {
+            $label = switch ($c.kind) { 'hired' { 'Hired' } 'left' { 'Left' } 'rehired' { 'Back' } 'moved' { 'Moved' } 'removed' { 'Removed from the HR file (not sent)' } default { 'Updated' } }
+            Write-Output "$($label): $($c.givenName) $($c.surname), $($c.jobTitle) ($($c.dept))"
+          }
+          $send = @($changes | Where-Object { $_.send } | ForEach-Object { $_.employeeId })
+          if (-not $changes) { Write-Output 'No worker changed in the HR file: nothing to send.' }
+          "send_ids=$($send -join ',')" >> $env:GITHUB_OUTPUT
+          "send_count=$($send.Count)" >> $env:GITHUB_OUTPUT
+          "trigger=$trigger" >> $env:GITHUB_OUTPUT
+          # A real send needs the one-time setup: say which piece is missing.
+          if ($send -and -not $dry) {
+            $missing = @('HR_SYNC_CLIENT_ID', 'AZURE_TENANT_ID', 'HR_PROV_SP_ID', 'HR_PROV_JOB_ID', 'HR_UPN_DOMAIN' | Where-Object { -not [Environment]::GetEnvironmentVariable($_) })
+            if ($missing) {
+              "missing_setup=$($missing -join ', ')" >> $env:GITHUB_OUTPUT
+              Write-Output "::error::One-time setup not finished: set the repository variable(s) $($missing -join ', ') (lab/scripts/mock-hr/README.md)."
+              exit 1
+            }
+          }
+          exit 0
+
+      - name: Sign in to Microsoft as HR-SYNC (GitHub OIDC, no password)
+        id: login
+        if: ${{ steps.change.outputs.send_count != '0' && env.DRY_RUN != 'true' }}
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ vars.HR_SYNC_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Install the pinned Microsoft Graph module
+        if: ${{ steps.change.outputs.send_count != '0' }}
+        shell: pwsh
+        run: |
+          # PSGallery is sometimes slow to answer on a fresh runner: retry (as lab-tests.yml does).
+          for ($i = 1; $i -le 4; $i++) {
+            try {
+              if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default -ErrorAction Stop }
+              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
+              Install-Module Microsoft.Graph.Authentication -RequiredVersion 2.41.2 -Scope CurrentUser -Force -ErrorAction Stop
+              break
+            } catch {
+              if ($i -eq 4) { throw }
+              Write-Warning "Install-Module failed (attempt $i): $($_.Exception.Message); retrying"
+              Start-Sleep -Seconds (10 * $i)
+            }
+          }
+
+      - name: Send the change to Microsoft's HR front door (SCIM bulkUpload)
+        id: send
+        if: ${{ steps.change.outputs.send_count != '0' }}
+        shell: pwsh
+        env:
+          SEND_IDS: ${{ steps.change.outputs.send_ids }}
+          HR_PROV_SP_ID: ${{ vars.HR_PROV_SP_ID }}
+          HR_PROV_JOB_ID: ${{ vars.HR_PROV_JOB_ID }}
+          HR_UPN_DOMAIN: ${{ vars.HR_UPN_DOMAIN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP 'hr-feed'
+          # -HidePayload: the log shows one line per batch, not the SCIM JSON
+          # (user names, employee and manager ids, hire dates).
+          $p = @{
+            CsvPath     = $env:CSV
+            EmployeeId  = @($env:SEND_IDS -split ',' | Where-Object { $_ })
+            StatePath   = (Join-Path $work 'baseline.json')
+            ResultPath  = (Join-Path $work 'sent.json')
+            HidePayload = $true
+          }
+          if ($env:HR_PROV_SP_ID) { $p.ServicePrincipalId = $env:HR_PROV_SP_ID }
+          if ($env:HR_PROV_JOB_ID) { $p.JobId = $env:HR_PROV_JOB_ID }
+          if ($env:HR_UPN_DOMAIN) { $p.UpnDomain = $env:HR_UPN_DOMAIN }
+          $global:LASTEXITCODE = 0
+          if ($env:DRY_RUN -eq 'true') { ./lab/scripts/mock-hr/Invoke-InboundProvisioning.ps1 @p -WhatIf }
+          else { ./lab/scripts/mock-hr/Invoke-InboundProvisioning.ps1 @p -UseAzureCliToken -Confirm:$false }
+          exit $LASTEXITCODE
+
+      - name: Wait for Microsoft to confirm, then tell the story
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        env:
+          SIGN_IN: ${{ steps.login.outcome }}
+          TRIGGER: ${{ steps.change.outputs.trigger }}
+          MISSING: ${{ steps.change.outputs.missing_setup }}
+          WAIT_SECONDS: ${{ vars.HR_FEED_WAIT_SECONDS || '180' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP 'hr-feed'
+          $sent = Join-Path $work 'sent.json'
+          # Only after a real send: read the provisioning log as HR-SYNC. The
+          # token is masked and lives in this step's memory only.
+          if ((Test-Path -LiteralPath $sent) -and ((Get-Content -LiteralPath $sent -Raw | ConvertFrom-Json).outcome -in 'sent', 'partial')) {
+            try {
+              $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv
+              if ($LASTEXITCODE -eq 0 -and $token) {
+                Write-Output "::add-mask::$token"
+                Connect-MgGraph -AccessToken (ConvertTo-SecureString -String $token -AsPlainText -Force) -NoWelcome | Out-Null
+              }
+            }
+            catch { Write-Warning "No Microsoft Graph sign-in for the provisioning log: $($_.Exception.Message)" }
+            finally { Remove-Variable -Name token -ErrorAction SilentlyContinue }
+          }
+          $global:LASTEXITCODE = 0
+          ./lab/scripts/mock-hr/Write-HrFeedSummary.ps1 -ChangesPath (Join-Path $work 'changes.json') -ResultPath $sent `
+            -WaitSeconds ([int]$env:WAIT_SECONDS) -SignInOutcome "$env:SIGN_IN" -TriggerText "$env:TRIGGER" -MissingSetup "$env:MISSING" | Out-Null
+          exit $LASTEXITCODE

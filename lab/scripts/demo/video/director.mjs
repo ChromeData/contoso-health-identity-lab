@@ -58,10 +58,10 @@ function injectSheet(s) {
   for (const st of d.stations) if (ovr.stations[st.id]) st.purpose = ovr.stations[st.id];
   for (const n of d.nodes) { if (ovr.nodes[n.id]) { n.definition = ovr.nodes[n.id][0]; n.analogy = ovr.nodes[n.id][1]; } if (ovr.names[n.id]) n.name = ovr.names[n.id]; }
   s = s.replace(re, (_, a, __, c) => a + JSON.stringify(d).replace(/</g, '\\u003c') + c);
-  // numbering 7..16 on pills and chips, and a handle for sheet-numbers.js (safe to run twice)
-  s = s.replace('pillShape(pin, s.title, s.pillW, PILL_H);', 'pillShape(pin, (s.i + 7) + " · " + s.title, s.pillW + 46, PILL_H);');
-  s = s.replace('data-go="station:${esc(s.id)}">${esc(s.title)}</button>`))', 'data-go="station:${esc(s.id)}">${s.i + 7} ${esc(s.title)}</button>`))');
-  s = s.replace('data-go="delivery">Delivery</button>', 'data-go="delivery">16 Delivery</button>');
+  // numbering 5..14 on pills and chips (the setup row is 1..4), and a handle for sheet-numbers.js (safe to run twice)
+  s = s.replace('pillShape(pin, s.title, s.pillW, PILL_H);', 'pillShape(pin, (s.i + 5) + " · " + s.title, s.pillW + 46, PILL_H);');
+  s = s.replace('data-go="station:${esc(s.id)}">${esc(s.title)}</button>`))', 'data-go="station:${esc(s.id)}">${s.i + 5} ${esc(s.title)}</button>`))');
+  s = s.replace('data-go="delivery">Delivery</button>', 'data-go="delivery">14 Delivery</button>');
   if (!s.includes('window.__lab = ')) s = s.replace('  function flyTo(', "  window.__lab = { flyTo, fitRect, select, W, L, NB, get cam() { return cam; }, panel: document.getElementById('panel'), chips: document.getElementById('chips'), svg };\n  function flyTo(");
   s = s.replace(/<style id="sheet">[\s\S]*?<\/style>\n?/, '').replace(/<script id="sheetjs">[\s\S]*?<\/script>\n?/, '').replace(/<script id="sheetnum">[\s\S]*?<\/script>\n?/, '');
   return s.replace('</body>', `<style id="sheet">\n${css}</style>\n<script id="sheetjs">\n${js}</script>\n<script id="sheetnum">\n${nums}</script>\n</body>`);

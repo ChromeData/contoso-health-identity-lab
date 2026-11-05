@@ -111,7 +111,7 @@ variable "apply_graph_roles" {
     "Policy.Read.All",                             # required alongside CA write
     "Policy.ReadWrite.ConditionalAccess",          # CA policies, named location, auth strength
     "Application.Read.All",                        # READ-only: Graph requires it to set a CA policy's application condition (admin portals: CA005/CA020/CA022). Proven 2026-10-27: 403 "Application.Read.All scope is required to add/edit application condition" without it.
-    "EntitlementManagement.ReadWrite.All",         # catalog, packages, policies
+    "EntitlementManagement.ReadWrite.All",         # catalog, packages, policies; also the automatic assignment policies terraform-apply.yml writes after the apply (post-apply/Set-AutoAssignmentPolicies.ps1 -UseAzureCliToken, whose user/group reads User/Group.ReadWrite.All cover)
     "RoleManagement.ReadWrite.Directory",          # role-assignable groups + role assignments
     "RoleManagementPolicy.ReadWrite.AzureADGroup", # PIM-for-Groups activation policy
     "AdministrativeUnit.ReadWrite.All",            # AU-Workforce-Standard + the AU-scoped Helpdesk / Authentication Administrator assignments (enable_helpdesk_au_scoping)
@@ -148,4 +148,121 @@ variable "extra_apply_graph_roles" {
   type        = list(string)
   description = "Additional Microsoft Graph APPLICATION roles for the APPLY identity. Every addition widens a Tier-0 identity: record it in the APPLY risk acceptance (lab/docs/risk-register.md)."
   default     = []
+}
+
+# -----------------------------------------------------------------------------
+# HR-SYNC identity (opt-in): .github/workflows/hr-feed.yml uploads changed HR
+# rows to the API-driven inbound provisioning app. See main.tf for the
+# permission reasoning and the trust boundary.
+# -----------------------------------------------------------------------------
+variable "hr_sync_enabled" {
+  type        = bool
+  description = "Create the HR-SYNC app registration, service principal, federated credential (hr_sync_branch) and its Graph roles. Off by default: a new identity that can create and disable workforce accounts is a deliberate, human bootstrap apply."
+  default     = false
+}
+
+variable "hr_sync_app_display_name" {
+  type        = string
+  description = "Display name of the HR-SYNC app registration."
+  default     = "HR-SYNC (gh-oidc hr-feed upload)"
+}
+
+variable "hr_sync_branch" {
+  type        = string
+  description = "The ONLY branch whose runs may sign in as HR-SYNC: subject repo:OWNER@OWNER-ID/REPO@REPO-ID:ref:refs/heads/<this>. Protect it with a ruleset (only the HR owner pushes)."
+  default     = "hr-feed"
+
+  # Never main: every workflow on main could then upload HR data. A plain
+  # branch name, not a ref path or a wildcard (Entra matches the subject
+  # exactly anyway, so '*' would simply never match).
+  validation {
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$", var.hr_sync_branch)) && !contains(["main", "master"], var.hr_sync_branch) && !startswith(var.hr_sync_branch, "refs/")
+    error_message = "hr_sync_branch must be a dedicated branch name (not main/master, not a refs/ path, no wildcards)."
+  }
+}
+
+variable "hr_provisioning_app_client_id" {
+  type        = string
+  description = "Client (app) id of the API-driven inbound provisioning app (lab/scripts/mock-hr/New-InboundProvisioningApp.ps1). Needed when hr_sync_upload_scope = \"owned\": HR-SYNC becomes an owner of that app. Empty otherwise."
+  default     = ""
+
+  validation {
+    condition     = var.hr_provisioning_app_client_id == "" || can(regex("^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$", var.hr_provisioning_app_client_id))
+    error_message = "hr_provisioning_app_client_id must be a GUID (the provisioning app's client id) or empty."
+  }
+}
+
+variable "hr_sync_upload_scope" {
+  type        = string
+  description = <<-EOT
+    Which bulkUpload application permission HR-SYNC gets:
+      "owned"  SynchronizationData-User.Upload.OwnedBy (least privileged):
+               only provisioning apps HR-SYNC owns; HR-SYNC is made an owner
+               of the app named by hr_provisioning_app_client_id.
+      "tenant" SynchronizationData-User.Upload: every API-driven
+               provisioning app in the tenant. Use only if "owned" is proven
+               not to work (verify note in main.tf).
+  EOT
+  default     = "owned"
+
+  validation {
+    condition     = contains(["owned", "tenant"], var.hr_sync_upload_scope)
+    error_message = "hr_sync_upload_scope must be \"owned\" or \"tenant\"."
+  }
+}
+
+variable "hr_sync_log_read_graph_roles" {
+  type        = list(string)
+  description = "Read-only Graph APPLICATION roles HR-SYNC uses to read the provisioning log for the run summary. Default AuditLog.Read.All (the GET /auditLogs/provisioning page also lists Directory.Read.All; add it only if the first run proves it is needed). ProvisioningLog.Read.All is the narrower candidate (verify)."
+  default     = ["AuditLog.Read.All"]
+
+  # Same allow-list shape as extra_plan_graph_roles: read verbs only, so this
+  # list can never become a second write path for HR-SYNC.
+  validation {
+    condition = alltrue([
+      for r in var.hr_sync_log_read_graph_roles :
+      can(regex("^[A-Za-z]+(\\.[A-Za-z]+)*\\.(Read|ReadBasic)(\\.(All|Directory|AzureADGroup|OwnedBy|Hidden))?$", r))
+    ])
+    error_message = "hr_sync_log_read_graph_roles accepts read-only roles only (<Resource>.Read[Basic][.All|...]); the upload permission comes from hr_sync_upload_scope."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# EVIDENCE identity (opt-in): .github/workflows/evidence-pack.yml exports the
+# evidence pack (read-only Graph) and files it in the WORM evidence store.
+# See main.tf for each role's use and the trust boundary.
+# -----------------------------------------------------------------------------
+variable "evidence_enabled" {
+  type        = bool
+  description = "Create the EVIDENCE app registration, service principal, federated credential (ref:refs/heads/main) and its read-only Graph roles. Off by default: a new identity is a deliberate, human bootstrap apply. Its storage grant is made in envs/bootstrap."
+  default     = false
+}
+
+variable "evidence_app_display_name" {
+  type        = string
+  description = "Display name of the EVIDENCE app registration."
+  default     = "EVIDENCE (gh-oidc evidence pack)"
+}
+
+variable "evidence_graph_roles" {
+  type        = list(string)
+  description = "Read-only Graph APPLICATION roles EVIDENCE exports the evidence pack with: the six Export-EvidencePack.ps1 reads (main.tf lists what each covers). Read roles only (validated)."
+  default = [
+    "AuditLog.Read.All",
+    "AccessReview.Read.All",
+    "Policy.Read.All",
+    "RoleManagement.Read.Directory",
+    "PrivilegedAssignmentSchedule.Read.AzureADGroup",
+    "Directory.Read.All",
+  ]
+
+  # Same allow-list shape as extra_plan_graph_roles: read verbs only, so this
+  # list can never become a write path into the tenant.
+  validation {
+    condition = alltrue([
+      for r in var.evidence_graph_roles :
+      can(regex("^[A-Za-z]+(\\.[A-Za-z]+)*\\.(Read|ReadBasic)(\\.(All|Directory|AzureADGroup|OwnedBy|Hidden))?$", r))
+    ])
+    error_message = "evidence_graph_roles accepts read-only roles only (<Resource>.Read[Basic][.All|.Directory|.AzureADGroup|.OwnedBy|.Hidden]); the evidence pack never changes the tenant."
+  }
 }

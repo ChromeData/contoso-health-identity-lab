@@ -38,3 +38,21 @@ log_analytics_workspace_id = ""
 #     before envs/dev enable_itdr_detections' identity_risk rule.
 enable_app_management_roles     = false
 enable_identity_protection_logs = false
+
+# HR-SYNC (.github/workflows/hr-feed.yml). Protect the hr-feed branch first.
+# The client id is the last segment of the HR provisioning job id
+# (API2AD.<tenant>.<client id>). After the apply: run the printed
+# hr_sync_service_principal_owner_command once, grant admin consent if the
+# portal asks, and set the HR_SYNC_CLIENT_ID repo variable.
+enable_hr_sync                = false
+hr_provisioning_app_client_id = ""
+hr_sync_upload_scope          = "owned"
+
+# EVIDENCE (.github/workflows/evidence-pack.yml, main only): read-only Graph
+# for the evidence pack + create-only access to the WORM evidence container.
+# The account name is envs/dev's evidence_storage_account_name output. After
+# the apply: set the EVIDENCE_CLIENT_ID repo variable
+# (terraform output -raw github_oidc_evidence_client_id).
+enable_evidence_pack          = false
+evidence_storage_account_name = "stidlabevidence7f3a"
+evidence_resource_group_name  = "rg-identity-lab"

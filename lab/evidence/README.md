@@ -140,6 +140,99 @@ person reviews it, normally in the same PR that updates the baseline.
 this folder and goes to `out/config-snapshots/`; a snapshot without
 `-Public` (object ids) is refused here too.
 
+## Evidence pack from GitHub Actions (`evidence-pack.yml`)
+
+The logbook, one click: *Actions → evidence-pack → Run workflow* on `main`.
+GitHub signs in as **EVIDENCE** over OIDC (no secret), pulls the auditor
+evidence pack out of Entra read-only (`Export-EvidencePack.ps1
+-UseAzureCliToken`: PIM activations and live assignments, the PIM audit
+trail, access-review decisions, Conditional Access, MFA registration,
+privileged role holders, each SHA-256 hashed in `manifest.json`), and files
+it in the WORM container as **new files only**
+(`Publish-EvidencePack.ps1`). The job summary, for someone who is not an
+identity engineer:
+
+> **Evidence pack filed — 7 records, each fingerprinted**
+> (one row per record with its entry count)
+> Stored in the locked evidence store: nobody can change or delete these
+> files for 2190 days. [Open the evidence store in the Azure portal]
+
+"N days" is what the store itself reported for the files just uploaded
+(the earliest retention expiry), never a configured number; while the
+policy is still Unlocked the summary says an administrator could shorten
+it. Every stored file is downloaded again and its SHA-256 compared: a
+read-back that does not finish (time-out, expired sign-in) fails the run
+as "could not be checked", never "filed". Technical details (store,
+folder, every SHA-256, read-back result,
+lock mode) are folded underneath. Counts only: no name, UPN, raw Graph
+error or token, in the summary or the log. The pack files name people, so
+they exist only in the job's temp folder (emptied after the job) and in the
+private container, never as a GitHub artifact.
+
+**Where it lands:** `evidence/evidence-packs/<UTC date>/<HHMMSS>Z-run<run id>-<attempt>/`:
+the seven JSON records, `SUMMARY.md` and `manifest.json`, each blob with
+metadata `sha256`, `runid` and `commit` (the commit whose companion
+evidence the manifest hashed). Every file is checked against the manifest
+before upload and downloaded and re-hashed after it. To re-check later,
+download the folder and compare `shasum -a 256` with `manifest.json`.
+
+**Who may write there:** EVIDENCE holds Storage Blob Data Contributor on
+the evidence container only, with an ABAC condition that denies
+`blobs/write` and `blobs/delete` there, so what is left is create-new
+(`blobs/add/action`) and read. It cannot overwrite, re-tier or delete a
+file, even one whose retention has expired (stricter than the operator's
+E05 grant). Graph: six application read roles, nothing that changes the
+tenant (`lab/terraform/modules/pipeline-identity/main.tf` lists each one's
+use).
+
+### One-time setup (an admin)
+
+1. **Bootstrap apply** (local, as the tenant admin). In
+   `lab/terraform/envs/bootstrap/terraform.tfvars`:
+   ```hcl
+   enable_evidence_pack          = true
+   evidence_storage_account_name = "<envs/dev output evidence_storage_account_name>"
+   ```
+   ```bash
+   cd lab/terraform/envs/bootstrap
+   terraform plan -out evidence.tfplan   # expect: EVIDENCE app + SP + federated credential
+                                         # (ref:refs/heads/main), 6 app role assignments,
+                                         # 1 role assignment on .../containers/evidence (condition 2.0)
+   terraform apply evidence.tfplan
+   ```
+2. **Consent check:** *Enterprise applications → EVIDENCE (gh-oidc evidence
+   pack) → Permissions* shows the six read roles as *Granted*.
+3. **Repository variable** (an identifier, not a secret; `AZURE_TENANT_ID`,
+   `AZURE_SUBSCRIPTION_ID` and `TF_EVIDENCE_STORAGE_ACCOUNT_NAME` exist
+   already):
+   ```bash
+   gh variable set EVIDENCE_CLIENT_ID --body "$(terraform output -raw github_oidc_evidence_client_id)"
+   ```
+4. **Network.** The account's firewall admits only `TF_OPERATOR_IP_RANGES`,
+   and a GitHub-hosted runner is outside it: there the upload is refused
+   ("the evidence store refused the connection") after the records were
+   collected. Pick one:
+   - a **self-hosted runner** on an admitted network (*Settings → Actions →
+     Runners → New self-hosted runner*, with `pwsh` and `az` installed), then
+     `gh variable set EVIDENCE_RUNNER --body <its label>`. The job keeps its
+     Azure CLI profile and the Graph modules in its own temp folder, so the
+     machine's own sign-ins and modules are not touched;
+   - **private networking for GitHub-hosted runners** (GitHub Team or
+     Enterprise: an Azure VNet for the runners plus the module's
+     `enable_private_endpoint`).
+   Opening the firewall to GitHub's address ranges is not an option: they
+   are far wider than the `/24` the module accepts.
+5. **First run:** confirm the summary, then the role assignment as evidence
+   (like E05): `az role assignment list --scope <evidence_container_id> --assignee <EVIDENCE service principal id> -o json`
+   shows the condition and `conditionVersion: 2.0`.
+
+*verify (first real run):* that a new blob uploads with only
+`blobs/add/action` left by the condition, and that `az storage blob show`
+reports the inherited account policy per blob (`immutabilityPolicy`); if it
+does not, the summary says the lock could not be read back instead of
+printing a number. Whether `Directory.Read.All` is needed for the expanded
+principals on the role rows: a 403 shows as a failed record in the manifest.
+
 ## Not here yet
 
 - Sentinel evidence for the detections: a rule deployed to a workspace,

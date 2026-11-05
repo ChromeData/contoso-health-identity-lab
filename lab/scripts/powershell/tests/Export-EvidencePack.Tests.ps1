@@ -1,7 +1,10 @@
 # Pester 5 tests for Export-EvidencePack.ps1 - the parts added for the
 # senior-scope build: PIM tier groups join the PIM artifacts when they exist,
 # and the companion evidence other scripts wrote under lab/evidence is hashed
-# into the SAME manifest (absent = listed as absent, offline-mock = never).
+# into the SAME manifest (absent = listed as absent, offline-mock = never);
+# and the pipeline path evidence-pack.yml uses (-UseAzureCliToken app-only as
+# EVIDENCE, token never printed, -GeneratedBy in the manifest, EVIDENCE's
+# Terraform roles cover every scope the script checks).
 # Every Graph call is mocked; no tenant is contacted.
 
 BeforeAll {
@@ -33,7 +36,7 @@ BeforeAll {
     }
 }
 
-AfterAll { Remove-Variable -Name PackTest -Scope Global -ErrorAction SilentlyContinue }
+AfterAll { Remove-Variable -Name PackTest, PackFakeToken, PackEvidenceRoles -Scope Global -ErrorAction SilentlyContinue }
 
 Describe 'Export-EvidencePack.ps1 - tier groups + companion evidence' {
     BeforeEach {
@@ -94,5 +97,66 @@ Describe 'Export-EvidencePack.ps1 - tier groups + companion evidence' {
             $row.sha256 | Should -BeNullOrEmpty
         }
         Should -Invoke Write-Warning -Times 2 -ParameterFilter { $Message -match 'NOT a tenant run' }
+    }
+}
+
+Describe 'Export-EvidencePack.ps1 -UseAzureCliToken (app-only as EVIDENCE, evidence-pack.yml)' {
+    BeforeAll {
+        # EVIDENCE's Graph roles, read from the Terraform default.
+        $vt = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..' 'terraform' 'modules' 'pipeline-identity' 'variables.tf') -Raw
+        $block = [regex]::Match($vt, '(?s)variable "evidence_graph_roles"\s*\{.*?default\s*=\s*\[(?<list>.*?)\]').Groups['list'].Value
+        $global:PackEvidenceRoles = @([regex]::Matches(($block -replace '(?m)#.*$', ''), '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+        $global:PackFakeToken = 'eyFAKE.evidence-token.never-printed'
+    }
+    BeforeEach {
+        $script:ev = Join-Path $TestDrive ("app-" + [guid]::NewGuid().ToString('N').Substring(0, 6))
+        $script:out = Join-Path $ev 'out'
+        New-Item -ItemType Directory -Path $out -Force | Out-Null
+        $script:SavedGha = $env:GITHUB_ACTIONS
+        $env:GITHUB_ACTIONS = $null
+        Set-PackMocks
+        $global:PackOut = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $global:PackOut.Add([string]$Object) }
+        Mock az { $global:LASTEXITCODE = 0; $global:PackFakeToken }
+        Mock Connect-MgGraph {}
+        Mock Get-MgContext { [pscustomobject]@{ Scopes = $global:PackEvidenceRoles; TenantId = '11111111-1111-1111-1111-111111111111'; Account = $null; AuthType = 'UserProvidedAccessToken' } }
+    }
+    AfterEach { $env:GITHUB_ACTIONS = $script:SavedGha; Remove-Variable -Name PackOut -Scope Global -ErrorAction SilentlyContinue }
+
+    It 'EVIDENCE''s Terraform roles are exactly the scopes the script checks (read-only, nothing missing)' {
+        $line = (Get-Content -LiteralPath $script:Pack -Raw) -replace '\r', ''
+        $req = [regex]::Match($line, "(?s)\`$requiredScopes = @\((?<l>.*?)\)").Groups['l'].Value
+        $required = @([regex]::Matches($req, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
+        $required.Count | Should -Be 6
+        @($required | Sort-Object) | Should -Be @($global:PackEvidenceRoles | Sort-Object)
+        foreach ($r in $global:PackEvidenceRoles) { $r | Should -Match '\.Read(\.|$)' }
+    }
+
+    It 'signs in with the Azure CLI token (SecureString), never prints it, records -GeneratedBy' {
+        $m = & $Pack -OutputDirectory $out -EvidenceRoot $ev -UseAzureCliToken -GeneratedBy 'EVIDENCE app, GitHub Actions run 42 (commit abc1234)' -WarningVariable wv -WarningAction SilentlyContinue
+        Should -Invoke az -Times 1 -Exactly -ParameterFilter { $args -contains 'get-access-token' -and $args -contains 'ms-graph' }
+        Should -Invoke Connect-MgGraph -Times 1 -Exactly -ParameterFilter { $AccessToken -is [securestring] -and [System.Net.NetworkCredential]::new('', $AccessToken).Password -eq $global:PackFakeToken }
+        Should -Invoke Connect-MgGraph -Times 0 -ParameterFilter { $Scopes }
+        ($global:PackOut -join "`n") | Should -Not -Match ([regex]::Escape($global:PackFakeToken))
+        ($wv -join "`n") | Should -Not -Match 'does not list'
+        $m.evidencePack.generatedBy | Should -Be 'EVIDENCE app, GitHub Actions run 42 (commit abc1234)'
+        $disk = Get-Content (Join-Path $out 'manifest.json') -Raw | ConvertFrom-Json
+        $disk.evidencePack.generatedBy | Should -Be 'EVIDENCE app, GitHub Actions run 42 (commit abc1234)'
+        @($disk.artifacts | Where-Object { -not $_.PSObject.Properties['source'] -and $_.file -like '*.json' }).Count | Should -Be 7
+    }
+
+    It 'masks the token in GitHub Actions (::add-mask::) - the only line that ever carries it' {
+        $env:GITHUB_ACTIONS = 'true'
+        $null = & $Pack -OutputDirectory $out -EvidenceRoot $ev -UseAzureCliToken -WarningAction SilentlyContinue
+        $hits = @($global:PackOut | Where-Object { $_ -match [regex]::Escape($global:PackFakeToken) })
+        $hits.Count | Should -Be 1
+        $hits[0] | Should -BeExactly "::add-mask::$($global:PackFakeToken)"
+    }
+
+    It 'stops before any Graph call when the Azure CLI has no session' {
+        Mock az { $global:LASTEXITCODE = 1 }
+        { & $Pack -OutputDirectory $out -EvidenceRoot $ev -UseAzureCliToken } | Should -Throw '*No Microsoft Graph token from the Azure CLI*'
+        Should -Invoke Invoke-MgGraphRequest -Times 0
+        Test-Path (Join-Path $out 'manifest.json') | Should -BeFalse
     }
 }

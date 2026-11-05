@@ -63,3 +63,20 @@ output "github_readonly_role_subjects" {
   description = "Exact OIDC subjects the read-only role trusts (StringEquals)."
   value       = var.enable_github_oidc ? local.github_oidc_subjects : []
 }
+
+# ---- Patient portal stand-in (patient-portal.tf) ----------------------------
+
+output "patient_portal_bucket_name" {
+  description = "The patient-portal stand-in bucket (owned by Cloud Engineering)."
+  value       = aws_s3_bucket.patient_portal.bucket
+}
+
+output "patient_portal_console_url" {
+  description = "Where a cloud engineer opens the bucket after signing in through the AWS access portal (ViewOnlyAccess lists the objects; reading one is AccessDenied)."
+  value       = "https://${var.aws_region}.console.aws.amazon.com/s3/buckets/${aws_s3_bucket.patient_portal.bucket}?region=${var.aws_region}"
+}
+
+output "patient_portal_object_keys" {
+  description = "The objects Terraform keeps in the bucket."
+  value       = sort(keys(aws_s3_object.patient_portal))
+}

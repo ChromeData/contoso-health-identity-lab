@@ -3,7 +3,8 @@
 # -----------------------------------------------------------------------------
 # Runs on every pull request (TruffleHog always; the rest only when the
 # Terraform changed - see the `changes` job). Formats, inits, validates, and plans the Entra ID (azuread) + Azure (azurerm) configuration,
-# then posts the plan as a PR comment. Security scans (Checkov, TruffleHog) run
+# then posts the plan as a PR comment (a plain-English summary on top, from
+# .github/scripts/plain-plan.py). Security scans (Checkov, TruffleHog) run
 # alongside. Authentication to Entra is GitHub OIDC workload-identity
 # federation against the read-only PLAN app registration — NO stored credential,
 # NO client secret, NO service-principal password anywhere.
@@ -63,7 +64,7 @@ jobs:
           if ! files="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"; then
             echo "::warning::git diff failed; failing closed (tf=true)"
             echo "tf=true" >> "$GITHUB_OUTPUT"
-          elif grep -qE '^(lab/terraform/|\.github/workflows/terraform-plan\.yml$)' <<< "$files"; then
+          elif grep -qE '^(lab/terraform/|\.github/workflows/terraform-plan\.yml$|\.github/scripts/plain-plan\.py$)' <<< "$files"; then
             echo "tf=true" >> "$GITHUB_OUTPUT"
           else
             echo "tf=false" >> "$GITHUB_OUTPUT"
@@ -244,6 +245,36 @@ jobs:
           exit 0                    # the final step below turns the job red
         working-directory: ${{ env.TF_WORKING_DIR }}
 
+      # The plan in plain English for readers who do not read Terraform: one
+      # headline plus a bullet per change, at the top of the PR comment and on
+      # the run's Summary page. .github/scripts/plain-plan.py (stdlib only)
+      # prints names and on/off states, never a value Terraform marks
+      # sensitive. The JSON plan holds every variable value in clear text, so
+      # it goes to RUNNER_TEMP (outside the workspace, never uploaded), is
+      # never printed, and is deleted on exit. continue-on-error: a summary
+      # bug never fails the check; the comment then says there is no summary.
+      - name: Plain-English summary
+        id: summary
+        if: ${{ !cancelled() && steps.plan.outputs.plan_exit == '0' }}
+        continue-on-error: true
+        env:
+          SUMMARY_FILE: ${{ runner.temp }}/plain-summary.md
+        run: |
+          plan_json="${RUNNER_TEMP}/plan.json"
+          trap 'rm -f "$plan_json" "${SUMMARY_FILE}.tmp"' EXIT
+          terraform show -json tfplan > "$plan_json"
+          python3 "${GITHUB_WORKSPACE}/.github/scripts/plain-plan.py" "$plan_json" > "${SUMMARY_FILE}.tmp"
+          mv "${SUMMARY_FILE}.tmp" "$SUMMARY_FILE"
+          cat "$SUMMARY_FILE"
+          {
+            echo "## Plan summary — \`${TF_WORKING_DIR}\`"
+            echo ""
+            cat "$SUMMARY_FILE"
+            echo ""
+            echo "_The full technical plan is in the pull request comment and in the \"terraform plan\" step log._"
+          } >> "$GITHUB_STEP_SUMMARY"
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
       - name: Post plan to PR
         if: ${{ !cancelled() }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -252,6 +283,7 @@ jobs:
           INIT:     ${{ steps.init.outcome }}
           VALIDATE: ${{ steps.validate.outcome }}
           PLAN_EXIT: ${{ steps.plan.outputs.plan_exit || 'not run' }}
+          SUMMARY_FILE: ${{ runner.temp }}/plain-summary.md
           # In a Dependabot run `secrets` holds Dependabot secrets only. Each
           # EMPTY_* is the string true/false (is it unset?), never a value.
           DEPENDABOT_RUN: ${{ github.actor == 'dependabot[bot]' }}
@@ -267,8 +299,31 @@ jobs:
             try { plan = fs.readFileSync(`${process.env.GITHUB_WORKSPACE}/plan.txt`, 'utf8'); }
             catch { plan = ''; }
             if (!plan.trim()) plan = '(no plan output — see job log)';
-            // GitHub comment hard limit is 65536 chars; truncate the middle.
-            const MAX = 60000;
+            // Plain-English summary from the step above (plain-plan.py); it
+            // goes first, for readers who do not read Terraform.
+            let summary = '';
+            try { summary = fs.readFileSync(process.env.SUMMARY_FILE, 'utf8').trim(); }
+            catch { summary = ''; }
+            if (!summary) {
+              summary = process.env.PLAN_EXIT === '0'
+                ? '_No plain-English summary this time (its step failed). The full plan is under Technical details below._'
+                : '**What this change does:** not known yet. The plan did not finish; Technical details below show which step failed.';
+            }
+            const checks = [
+              ['formatting', process.env.FMT === 'success'],
+              ['setup', process.env.INIT === 'success'],
+              ['validation', process.env.VALIDATE === 'success'],
+              ['plan', process.env.PLAN_EXIT === '0'],
+            ];
+            const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
+            const listed = failed.length > 1
+              ? `${failed.slice(0, -1).join(', ')} and ${failed[failed.length - 1]}` : failed.join('');
+            const checksLine = failed.length === 0
+              ? 'Terraform checks: formatting, setup, validation and plan all passed.'
+              : `Terraform checks: **${listed} did not pass** (see Technical details below).`;
+            // GitHub comment hard limit is 65536 chars; truncate the plan,
+            // leaving room for the summary (plain-plan.py caps its bullets).
+            const MAX = Math.max(20000, 60000 - summary.length);
             if (plan.length > MAX) {
               plan = plan.slice(0, MAX) + '\n\n... [truncated — see the full plan in the Actions log] ...';
             }
@@ -286,18 +341,24 @@ jobs:
               core.warning(msg);
               banner.push('> [!WARNING]', `> ${msg}`, '');
             }
+            // The marker heading stays the FIRST line: the upsert below
+            // matches on it (startsWith).
             const body = [
               '## Terraform plan — `lab/terraform/envs/dev`',
               '',
+              summary,
+              '',
+              checksLine,
+              '',
               ...banner,
+              '<details><summary>Technical details: step results and the full Terraform plan</summary>',
+              '',
               `| step | result |`,
               `|---|---|`,
               `| fmt | \`${process.env.FMT}\` |`,
               `| init | \`${process.env.INIT}\` |`,
               `| validate | \`${process.env.VALIDATE}\` |`,
               `| plan exit code | \`${process.env.PLAN_EXIT}\` |`,
-              '',
-              '<details><summary>Show plan</summary>',
               '',
               '```terraform',
               plan,

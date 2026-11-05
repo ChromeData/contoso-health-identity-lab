@@ -50,11 +50,15 @@
           Get-MgServicePrincipal -Filter "displayName eq '<your app name>'"
           Get-MgServicePrincipalSynchronizationJob -ServicePrincipalId <spId>
     * Microsoft.Graph.Authentication module (Connect-MgGraph / Invoke-MgGraphRequest).
-    * A caller allowed to POST to /bulkUpload (GRAPH SCOPES below). This
-      script connects DELEGATED (interactive, lab): SynchronizationData-User.Upload
-      consented, and the signed-in user must hold User Administrator. In
-      production an HR extract job or HR ISV integration calls it app-only
-      (client credentials) with the application permission.
+    * A caller allowed to POST to /bulkUpload (GRAPH SCOPES below). Two ways in:
+        - DELEGATED (interactive, lab default): SynchronizationData-User.Upload
+          consented, and the signed-in user must hold User Administrator.
+        - APP-ONLY (-UseAzureCliToken, the pipeline path): the Azure CLI is
+          already signed in as an app - in GitHub Actions, azure/login over
+          OIDC as HR-SYNC (.github/workflows/hr-feed.yml) - and the script
+          takes a Microsoft Graph token from it. No secret anywhere; the
+          token stays in this process (masked in Actions), never in argv,
+          a file or the output.
 
 .GRAPH SCOPES  (Microsoft Graph, per the bulkUpload API reference)
     One of these, with admin consent:
@@ -122,6 +126,30 @@
     Push even when the mass-change guard trips. Use only for a reviewed bulk
     change; the run still prints how many accounts it will disable.
 
+.PARAMETER EmployeeId
+    Send only these workers (employeeId). The whole feed is still loaded and
+    validated first, and an id that is not in the feed stops the run before
+    anything is sent. The pipeline passes the rows that changed in a push
+    (Get-HrFeedChange.ps1), so the mass-change guard counts exactly the
+    people that push would disable or move.
+
+.PARAMETER UseAzureCliToken
+    App-only sign-in for pipelines: take a Microsoft Graph token from the
+    Azure CLI session (`az account get-access-token --resource-type ms-graph`)
+    and connect with it. Only used when something is actually sent (never
+    under -WhatIf).
+
+.PARAMETER ResultPath
+    Write a machine-readable result (JSON) for the run summary
+    (Write-HrFeedSummary.ps1): the selected rows (employeeId + status only),
+    the guard outcome, each batch's HTTP status, and when the send started.
+    Written on every outcome: dry run, refused by the guard, sent, failed.
+
+.PARAMETER HidePayload
+    Print one line per batch instead of the SCIM JSON. For pipeline logs: the
+    payload carries user names (UPNs), employee and manager ids and hire
+    dates, which a run log does not need.
+
 .PARAMETER WhatIf
     Standard. With -WhatIf the script builds and prints the SCIM payloads but
     performs NO POST -- use this to review exactly what would be sent (great on
@@ -134,6 +162,11 @@
 .EXAMPLE
     # Push only new hires (segment-2 demo):
     ./Invoke-InboundProvisioning.ps1 -ServicePrincipalId <spId> -JobId <jobId> -StatusFilter joiner
+
+.EXAMPLE
+    # Pipeline (hr-feed.yml): app-only, only the changed rows, no payload echo:
+    ./Invoke-InboundProvisioning.ps1 -ServicePrincipalId <spId> -JobId <jobId> -UpnDomain <domain> `
+        -EmployeeId 400104 -UseAzureCliToken -HidePayload -ResultPath ./sent.json -Confirm:$false
 
 .EXAMPLE
     # Full roster sync (what a scheduled HR extract job would push):
@@ -215,7 +248,24 @@ param(
 
     [Parameter()]
     [ValidateNotNullOrEmpty()]
-    [string]$StatePath = (Join-Path $PSScriptRoot '.state' 'last-pushed-roster.json')
+    [string]$StatePath = (Join-Path $PSScriptRoot '.state' 'last-pushed-roster.json'),
+
+    # Only these workers (employeeId); the pipeline passes the changed rows.
+    [Parameter()]
+    [ValidatePattern('^\d+$', ErrorMessage = 'EmployeeId values are numeric worker ids.')]
+    [string[]]$EmployeeId = @(),
+
+    # App-only sign-in from the Azure CLI session (azure/login over OIDC).
+    [Parameter()]
+    [switch]$UseAzureCliToken,
+
+    # Machine-readable result for the run summary (Write-HrFeedSummary.ps1).
+    [Parameter()]
+    [string]$ResultPath = '',
+
+    # One line per batch instead of the SCIM JSON (pipeline logs).
+    [Parameter()]
+    [switch]$HidePayload
 )
 
 # --- Fail fast, surface every error, no silent $null property access. --------
@@ -238,6 +288,11 @@ $BulkUploadUri        = "https://graph.microsoft.com/$GraphApiVersion/servicePri
 
 Write-Verbose "Target endpoint: $BulkUploadUri"
 
+# Run-result state for -ResultPath (Save-RunResult). Set before any check
+# that can stop the run, so every outcome is recorded.
+$script:SentAtUtc = $null
+$script:BatchResults = [System.Collections.Generic.List[object]]::new()
+
 # =============================================================================
 # PURE HELPERS (tests/Invoke-InboundProvisioning.Tests.ps1)
 # =============================================================================
@@ -251,6 +306,66 @@ function ConvertTo-HireDate {
         return $d.ToString('yyyy-MM-dd') + 'T00:00:00Z'
     }
     return ''
+}
+
+function Save-RunResult {
+    # The run summary's input (-ResultPath). Holds employee ids and statuses,
+    # never names, UPNs or payloads. No-op without -ResultPath.
+    param([Parameter(Mandatory)][string]$Outcome, [object]$Refusal = $null, [switch]$NoSelection)
+    if (-not $ResultPath) { return }
+    $sel = @(if (-not $NoSelection -and (Test-Path variable:script:roster)) { $script:roster | ForEach-Object { [ordered]@{ employeeId = [string]$_.employeeId; status = [string]$_.status } } })
+    $doc = [ordered]@{
+        schema             = 'hr-feed-send/1'
+        outcome            = $Outcome          # invalid | dry-run | nothing | refused | sent | partial | failed
+        refusal            = $Refusal
+        jobId              = $JobId
+        servicePrincipalId = $ServicePrincipalId
+        selected           = $sel
+        sentAtUtc          = $script:SentAtUtc
+        batches            = @($script:BatchResults)
+    }
+    # -WhatIf:$false: the result is the dry run's own report, not a change
+    # to anything (under -WhatIf, Set-Content would otherwise skip it).
+    $dir = Split-Path -Parent $ResultPath
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force -WhatIf:$false | Out-Null }
+    ($doc | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $ResultPath -Encoding utf8NoBOM -WhatIf:$false
+}
+
+function Stop-InvalidFeed {
+    # A feed the script refuses to send: record it for the summary, then stop.
+    # $Kind is what the summary explains in plain English; the message (with
+    # the row's employeeId) stays in the log.
+    param([Parameter(Mandatory)][string]$Kind, [Parameter(Mandatory)][string]$Message)
+    Save-RunResult -Outcome 'invalid' -Refusal ([ordered]@{ kind = $Kind }) -NoSelection
+    throw $Message
+}
+
+function Get-HttpStatusFromError {
+    # HTTP status of a failed Invoke-MgGraphRequest, or 0 when unknown.
+    param([System.Management.Automation.ErrorRecord]$ErrorRecord)
+    $resp = $null
+    try { $resp = $ErrorRecord.Exception.Response } catch { $resp = $null }
+    if ($resp -and $resp.PSObject.Properties['StatusCode']) { return [int]$resp.StatusCode }
+    $m = [regex]::Match([string]$ErrorRecord.Exception.Message, '\b(400|401|403|404|409|429|500|502|503)\b')
+    if ($m.Success) { return [int]$m.Value }
+    return 0
+}
+
+function Connect-GraphFromAzureCli {
+    # App-only: the Azure CLI is already signed in as an app (azure/login over
+    # GitHub OIDC). The token never leaves this process: masked in Actions,
+    # handed to Connect-MgGraph as a SecureString, then dropped.
+    $global:LASTEXITCODE = 0
+    $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {
+        throw 'No Microsoft Graph token from the Azure CLI. Sign it in first (azure/login with OIDC in GitHub Actions, or az login locally).'
+    }
+    $token = ([string]$token).Trim()
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Host "::add-mask::$token" }
+    # NetworkCredential.SecurePassword: the same SecureString as
+    # ConvertTo-SecureString -AsPlainText, without the analyzer error rule.
+    Connect-MgGraph -AccessToken ([System.Net.NetworkCredential]::new('', $token).SecurePassword) -NoWelcome | Out-Null
+    Remove-Variable -Name token
 }
 
 function Get-AccessChange {
@@ -274,8 +389,8 @@ function Get-AccessChange {
 # support). We keep the header line and all data lines.
 $rawLines = Get-Content -LiteralPath $CsvPath
 $dataLines = $rawLines | Where-Object { $_ -notmatch '^\s*#' -and $_ -ne '' }
-if (-not $dataLines -or $dataLines.Count -lt 2) {
-    throw "CsvPath '$CsvPath' has no data rows after stripping comments."
+if (-not $dataLines -or @($dataLines).Count -lt 2) {
+    Stop-InvalidFeed 'no-rows' "CsvPath '$CsvPath' has no data rows after stripping comments."
 }
 $roster = @($dataLines | ConvertFrom-Csv)   # @() keeps a one-row feed an array
 
@@ -284,7 +399,7 @@ $requiredColumns = 'employeeId', 'givenName', 'surname', 'dept', 'jobTitle', 'ma
 $presentColumns  = $roster[0].PSObject.Properties.Name
 $missing = $requiredColumns | Where-Object { $_ -notin $presentColumns }
 if ($missing) {
-    throw "hr_feed.csv is missing required column(s): $($missing -join ', ')"
+    Stop-InvalidFeed 'missing-column' "hr_feed.csv is missing required column(s): $($missing -join ', ')"
 }
 
 # Per-row validation. We refuse to transmit a half-formed record.
@@ -292,17 +407,26 @@ $validStatuses = 'joiner', 'active', 'leaver'
 foreach ($row in $roster) {
     foreach ($req in 'employeeId', 'givenName', 'surname', 'status') {
         if ([string]::IsNullOrWhiteSpace($row.$req)) {
-            throw "Row for employeeId '$($row.employeeId)' has empty required field '$req'."
+            Stop-InvalidFeed 'empty-field' "Row for employeeId '$($row.employeeId)' has empty required field '$req'."
         }
     }
     if ($row.status -notin $validStatuses) {
-        throw "Row employeeId '$($row.employeeId)' has invalid status '$($row.status)'. Expected one of: $($validStatuses -join ', ')."
+        Stop-InvalidFeed 'bad-status' "Row employeeId '$($row.employeeId)' has invalid status '$($row.status)'. Expected one of: $($validStatuses -join ', ')."
     }
     # startDate becomes employeeHireDate: the birthright rules' base condition.
     # A joiner/active worker without one would silently get no clinical access.
     if ($row.status -ne 'leaver' -and -not (ConvertTo-HireDate $row.startDate)) {
-        throw "Row employeeId '$($row.employeeId)' ($($row.status)) has no valid startDate (YYYY-MM-DD): it maps to employeeHireDate, which every birthright rule requires."
+        Stop-InvalidFeed 'bad-start-date' "Row employeeId '$($row.employeeId)' ($($row.status)) has no valid startDate (YYYY-MM-DD): it maps to employeeHireDate, which every birthright rule requires."
     }
+}
+
+# Only the named workers (the pipeline's changed rows). Checked against the
+# validated feed: an unknown id is a typo or a deleted row, never "nothing".
+if ($EmployeeId.Count -gt 0) {
+    $known = @($roster | ForEach-Object { [string]$_.employeeId })
+    $unknown = @($EmployeeId | Where-Object { $_ -notin $known })
+    if ($unknown) { Stop-InvalidFeed 'unknown-employee' "EmployeeId(s) not in '$CsvPath': $($unknown -join ', '). Nothing was sent." }
+    $roster = @($roster | Where-Object { [string]$_.employeeId -in $EmployeeId })
 }
 
 # Apply the status filter (demo convenience).
@@ -311,15 +435,18 @@ if ($StatusFilter -ne 'all') {
 }
 if ($roster.Count -eq 0) {
     Write-Warning "No rows to process after StatusFilter '$StatusFilter'. Nothing to do."
+    Save-RunResult -Outcome 'nothing'
     return
 }
-Write-Host "Loaded $($roster.Count) HR record(s) to process (filter: $StatusFilter)." -ForegroundColor Cyan
+$filterText = if ($EmployeeId.Count -gt 0) { "$StatusFilter, $($EmployeeId.Count) named worker(s)" } else { $StatusFilter }
+Write-Host "Loaded $($roster.Count) HR record(s) to process (filter: $filterText)." -ForegroundColor Cyan
 
 # Mass-change guard (R10). Checked BEFORE any payload is sent - and under
 # -WhatIf too, so a dry run shows the refusal the real run would hit.
 $disabling = @($roster | Where-Object { $_.status -eq 'leaver' })
 if ($disabling.Count -gt $MaxChanges) {
     if (-not $Force) {
+        Save-RunResult -Outcome 'refused' -Refusal ([ordered]@{ kind = 'mass-disable'; count = $disabling.Count; threshold = $MaxChanges })
         throw ("Mass-change guard: this run would DISABLE $($disabling.Count) account(s) (status=leaver), over -MaxChanges $MaxChanges. " +
             'Nothing was sent. Check the HR extract (a mapping or export error looks exactly like this); for a reviewed bulk change re-run with -Force.')
     }
@@ -339,6 +466,7 @@ else { Write-Host "Access-change guard: no baseline yet ($StatePath) - first pus
 $accessChanges = @(Get-AccessChange -Rows $roster -Baseline $baseline)
 if ($accessChanges.Count -gt $MaxChanges) {
     if (-not $Force) {
+        Save-RunResult -Outcome 'refused' -Refusal ([ordered]@{ kind = 'mass-access-change'; count = $accessChanges.Count; threshold = $MaxChanges })
         throw ("Mass-change guard: this run would change department or job title for $($accessChanges.Count) worker(s), over -MaxChanges $MaxChanges. " +
             'Birthright clinical access follows those attributes, so this would move or remove access for all of them at the next evaluation. Nothing was sent. ' +
             "First change(s): $(@($accessChanges | Select-Object -First 3 | ForEach-Object { "$($_.employeeId): $($_.From) -> $($_.To)" }) -join '; '). " +
@@ -451,6 +579,11 @@ Write-Host "Prepared $($batches.Count) batch(es) of up to $MaxBatchSize records 
 $willSend = $PSCmdlet.ShouldProcess($BulkUploadUri, "POST $($batches.Count) SCIM bulk batch(es)")
 if ($willSend) {
     $ctx = $null
+    if ($UseAzureCliToken) {
+        # App-only (pipeline): always this identity, never a leftover context.
+        Write-Host 'Signing in to Microsoft Graph app-only (token from the Azure CLI session)...' -ForegroundColor Yellow
+        Connect-GraphFromAzureCli
+    }
     try { $ctx = Get-MgContext } catch { $ctx = $null }
     if (-not $ctx) {
         Write-Host 'No Graph context. Connecting (service auth recommended in prod)...' -ForegroundColor Yellow
@@ -463,7 +596,8 @@ if ($willSend) {
     # Soft-check the scope is present; warn (don't hard-fail) because app-only
     # tokens surface roles differently than delegated scopes.
     $ctx = Get-MgContext
-    if ($ctx.Scopes -and ('SynchronizationData-User.Upload' -notin $ctx.Scopes)) {
+    # App-only contexts list the token's roles here: either upload role will do.
+    if ($ctx.Scopes -and -not @($ctx.Scopes | Where-Object { $_ -in 'SynchronizationData-User.Upload', 'SynchronizationData-User.Upload.OwnedBy' })) {
         Write-Warning "Current context does not list 'SynchronizationData-User.Upload'. The POST will 403 unless the app has SynchronizationData-User.Upload(.OwnedBy), or, delegated, the signed-in user holds User Administrator."
     }
 }
@@ -483,12 +617,20 @@ foreach ($batch in $batches) {
     if (-not $willSend) {
         # -WhatIf / declined: show precisely what WOULD be transmitted.
         Write-Host "`n--- [WhatIf] Batch $batchIndex/$($batches.Count) -> $BulkUploadUri" -ForegroundColor DarkYellow
-        Write-Host "    Content-Type: application/scim+json" -ForegroundColor DarkGray
-        Write-Host $json
+        if ($HidePayload) {
+            Write-Host "    $($batch.Count) SCIM record(s), application/scim+json (payload not printed: -HidePayload)" -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "    Content-Type: application/scim+json" -ForegroundColor DarkGray
+            Write-Host $json
+        }
+        $script:BatchResults.Add([ordered]@{ index = $batchIndex; records = $batch.Count; employeeIds = @($batch | ForEach-Object { [string]$_.employeeId }); httpStatus = 0; accepted = $false })
         continue
     }
 
     Write-Host "`nSending batch $batchIndex/$($batches.Count) ($($batch.Count) record(s))..." -ForegroundColor Green
+    if (-not $script:SentAtUtc) { $script:SentAtUtc = [datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ') }
+    $statusCode = 0
     try {
         # 202 Accepted on success. The body is queued; it is NOT processed
         # synchronously. ResponseHeadersVariable lets us surface the location/
@@ -502,6 +644,7 @@ foreach ($batch in $batches) {
             -StatusCodeVariable statusCode | Out-Null
 
         Write-Host "  HTTP $statusCode (expected 202 Accepted) -- batch accepted for async processing." -ForegroundColor Green
+        $script:BatchResults.Add([ordered]@{ index = $batchIndex; records = $batch.Count; employeeIds = @($batch | ForEach-Object { [string]$_.employeeId }); httpStatus = [int]$statusCode; accepted = $true })
     }
     catch {
         # No silent swallow: report the batch, the record ids, and the error,
@@ -509,8 +652,10 @@ foreach ($batch in $batches) {
         # Write-Warning, not Write-Error: under EAP=Stop Write-Error would
         # terminate here. The failure still ends the run with exit 1 below.
         $failedBatches++
-        $ids = ($batch | ForEach-Object { $_.employeeId }) -join ', '
-        Write-Warning "Batch $batchIndex FAILED (employeeIds: $ids): $($_.Exception.Message)"
+        $http = Get-HttpStatusFromError $_
+        $script:BatchResults.Add([ordered]@{ index = $batchIndex; records = $batch.Count; employeeIds = @($batch | ForEach-Object { [string]$_.employeeId }); httpStatus = $http; accepted = $false })
+        $ids = if ($HidePayload) { "$($batch.Count) record(s)" } else { 'employeeIds: ' + (($batch | ForEach-Object { $_.employeeId }) -join ', ') }
+        Write-Warning "Batch $batchIndex FAILED ($ids): $($_.Exception.Message)"
     }
 }
 
@@ -520,6 +665,7 @@ foreach ($batch in $batches) {
 if (-not $willSend) {
     # -WhatIf or a declined confirm prompt: never claim anything was submitted.
     Write-Host "`nDry run - nothing was sent to $BulkUploadUri." -ForegroundColor DarkYellow
+    Save-RunResult -Outcome 'dry-run'
     return
 }
 
@@ -533,6 +679,7 @@ Submitted $acceptedBatches of $($batches.Count) batch(es). Processing is asynchr
   * Then continue the joiner story with ./powershell/02-Joiner.ps1 for Dana Okafor.
 "@ -ForegroundColor Cyan
 }
+Save-RunResult -Outcome $(if ($failedBatches -eq 0) { 'sent' } elseif ($acceptedBatches -gt 0) { 'partial' } else { 'failed' })
 if ($failedBatches -gt 0) {
     # Re-running is safe: the engine upserts on the employeeId anchor (see IDEMPOTENCY).
     # The access-change baseline is NOT moved: the next run still compares

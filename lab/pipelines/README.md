@@ -44,6 +44,7 @@ Conditional Access, access packages, PIM, the lot.
    • environment: prod   ⟵ REQUIRED REVIEWER GATE (run pauses here)
    • OIDC login (APPLY app, WRITE)
    • init / plan -out / apply
+   • automatic access rules (Set-AutoAssignmentPolicies.ps1, app-only)
    • step summary
                 │
                 ▼
@@ -118,7 +119,10 @@ These **federated credentials** are created by Terraform in
 | App | Credential subject (`sub`) | Why |
 |---|---|---|
 | PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:pull_request` | same-repo PRs can plan (read-only); fork PRs get no OIDC token |
+| PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | the nightly `config-drift.yml` runs on main (schedule); still read-only. Missing = AADSTS700213 on every scheduled run |
 | APPLY app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:environment:prod` | only the `prod` deploy can apply |
+| HR-SYNC app (opt-in) | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/hr-feed` | `hr-feed.yml` uploads changed HR rows (SCIM bulkUpload) and reads the provisioning log; nothing else. Protect the branch with a ruleset |
+| EVIDENCE app (opt-in) | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | `evidence-pack.yml` (manual, main only) reads the evidence pack (six read-only Graph roles) and adds it to the WORM evidence container (create-only ABAC grant); nothing else |
 
 Why the numeric ids: GitHub.com emits this immutable form by default for repos
 created (or renamed / transferred) after 2026-07-15, and because the ids are
@@ -126,8 +130,11 @@ never reused it also blocks subject recycling (a deleted, re-registered owner
 or repo name cannot mint a matching token). verify: confirm both subjects with
 GitHub's OIDC subject preview before the first PR.
 
-Optional extra PLAN subject if you also want plan on branch pushes:
-`repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main`.
+The main-ref PLAN subject is created by default (config-drift). HR-SYNC
+exists only with `enable_hr_sync = true` in envs/bootstrap
+(`lab/scripts/mock-hr/README.md`, *HR changes through GitHub Actions*),
+EVIDENCE only with `enable_evidence_pack = true`
+(`lab/evidence/README.md`, *Evidence pack from GitHub Actions*).
 
 Issuer / audience for all of them:
 
@@ -308,6 +315,18 @@ privacy-only exceptions follow the list):
 - [ ] `AZURE_SUBSCRIPTION_ID`
 - [ ] `AZURE_PLAN_CLIENT_ID`  (PLAN app client ID)
 - [ ] `AZURE_APPLY_CLIENT_ID` (APPLY app client ID)
+- [ ] (HR feed, optional) `HR_SYNC_CLIENT_ID` (bootstrap output `github_oidc_hr_sync_client_id`),
+      `HR_PROV_SP_ID`, `HR_PROV_JOB_ID` (the HR provisioning app, `lab/setup/handback.env`),
+      `HR_UPN_DOMAIN`; optional `HR_FEED_WAIT_SECONDS` (default 180) and
+      `HR_FEED_BASE_SHA` (the commit the first push is compared with; default
+      the point where `hr-feed` left `main`)
+- [ ] (Evidence pack, optional) `EVIDENCE_CLIENT_ID` (bootstrap output
+      `github_oidc_evidence_client_id`); it also reads `AZURE_TENANT_ID`,
+      `AZURE_SUBSCRIPTION_ID` and `TF_EVIDENCE_STORAGE_ACCOUNT_NAME`. Optional:
+      `EVIDENCE_RUNNER` (a self-hosted runner label on a network the evidence
+      store's firewall admits; default `ubuntu-latest`, which it refuses),
+      `EVIDENCE_RESOURCE_GROUP` (default `rg-identity-lab`),
+      `EVIDENCE_CONTAINER_NAME` (default `evidence`)
 - [ ] `AZURE_OPENAI_ENDPOINT`    e.g. `https://contoso-health-aoai.openai.azure.com`
 - [ ] `AZURE_OPENAI_DEPLOYMENT`  e.g. `gpt-5.4-mini` (**verify:** a current GA
       chat model in your region at deploy time; gpt-4o is Deprecated/Legacy per
@@ -454,8 +473,11 @@ with no PR and no review, lock the WORM store irreversibly.
       on). The publish script does it; verify in Settings.
 
 ### G. Smoke test
-- [ ] Open a trivial PR under `lab/terraform/**` → confirm the plan comment, the
-      Checkov/TruffleHog checks, and the AI-review comment appear.
+- [ ] Open a trivial PR under `lab/terraform/**` → confirm the plan comment
+      (plain-English summary on top from `.github/scripts/plain-plan.py`, the
+      raw plan under *Technical details*), the Checkov/TruffleHog checks, and
+      the AI-review comment appear. The summary's tests run offline:
+      `python3 -m unittest discover -s .github/scripts/tests`.
 - [ ] Open a docs-only PR (e.g. edit `lab/docs/*.md`) → confirm `terraform plan`
       and `checkov (IaC scan)` show *Skipped*, `trufflehog (secret scan)` runs,
       and the PR is mergeable (not stuck on *Pending*).
@@ -469,12 +491,14 @@ with no PR and no review, lock the WORM store irreversibly.
 | Path | Purpose |
 |---|---|
 | `../../.github/workflows/terraform-plan.yml` | every PR: TruffleHog; if `lab/terraform/**` changed, also fmt/init/validate/plan + Checkov |
-| `../../.github/workflows/terraform-apply.yml` | main: reviewer-gated OIDC apply (a push that touches only `lab/terraform/aws/**` or `lab/terraform/k8s/**` doesn't start it) |
+| `../../.github/workflows/terraform-apply.yml` | main: reviewer-gated OIDC apply (a push that touches only `lab/terraform/aws/**` or `lab/terraform/k8s/**` doesn't start it); after a successful apply, the same job (fresh APPLY sign-in, app-only Graph token) writes the birthright automatic assignment policies with `Set-AutoAssignmentPolicies.ps1`, and the Apply summary says in plain English who each changed package now goes to. Not `continue-on-error`: a refused or failed rule turns the run red, the summary says the Terraform part is live |
 | `../../.github/workflows/ai-review.yml` | same-repo PR touching `lab/terraform/**`: Azure OpenAI (Entra-auth) security review |
 | `./ai-review/review.py` | stdlib script that calls Azure OpenAI with the Entra bearer token |
 | `../../.github/workflows/k8s-identity.yml` | PR touching `lab/k8s/**` or `lab/terraform/k8s/**` (or manual): runs `../k8s/ci/pipeline.sh` on an ephemeral kind cluster, no cloud credentials (§7) |
 | `../../.github/workflows/lab-tests.yml` | every PR and main, **no credentials**: `terraform fmt`, `init -backend=false` + `validate` in every root and module, every mocked `terraform test`; PSScriptAnalyzer + the Pester suites (`lab/scripts/powershell/tests`, ITDR, PAM dependency scan) with pinned modules; the vault-ingest shell test and the Splunk savedsearches drift check |
 | `../../.github/workflows/pam-harness.yml` | manual and nightly, **no credentials**: `lab/pam/test/run-all.sh` (default suites) from a fresh clone on a fresh runner: no `.env`, no `.secrets/`, no Docker volumes. Its console output and per-suite job summary are the third-party-timestamped run of the PAM harness. BUILT, not run (no workflow has run yet) |
+| `../../.github/workflows/hr-feed.yml` | push to the `hr-feed` branch changing `lab/scripts/mock-hr/hr_feed.csv` (or manual, dry run by default): **HR-SYNC app (OIDC), no secrets**: sends only the changed rows to Entra API-driven inbound provisioning (mass-change guard first), waits up to 3 min for the provisioning log, writes a plain-English job summary (names, title, department only). `actions: read` finds the last successful send (the diff base). Concurrency group `hr-feed`, never cancelled |
+| `../../.github/workflows/evidence-pack.yml` | manual, **main only**, **EVIDENCE app (OIDC), no secrets**: `Export-EvidencePack.ps1 -UseAzureCliToken` (seven read-only Graph collections, SHA-256 manifest), then `Publish-EvidencePack.ps1` files every file as a new blob in the WORM evidence container under `evidence-packs/<UTC date>/<time>-run<id>-<attempt>/` (overwrite refused, each file read back and re-hashed, the store's retention lock read per file), then a plain-English job summary (counts only) with a portal link. The pack never goes to GitHub artifacts. Concurrency group `evidence-pack`, never cancelled. BUILT, not run |
 | `../../.github/workflows/config-drift.yml` | nightly and manual, **PLAN app (read-only, OIDC), no secrets**: `Export-IdentityConfig.ps1 -Public` then `Compare-IdentityConfig.ps1` against `lab/config-baseline/`; snapshot + findings as a run artifact, Markdown in the job summary, one `identity-drift` issue on drift (closed by the next clean run). Needs `issues: write` on the job. Succeeds with a notice while the baseline is the placeholder. BUILT, not run |
 
 **Not planned or applied by CI: `lab/terraform/aws/`.** The AWS IAM Identity

@@ -80,3 +80,16 @@ run "send_and_manage_roles_are_refused" {
   }
   expect_failures = [var.extra_plan_graph_roles]
 }
+
+# terraform-apply.yml runs post-apply/Set-AutoAssignmentPolicies.ps1 after a
+# successful apply, as APPLY, app-only: it needs EntitlementManagement.ReadWrite.All
+# and reads users (hire-date preflight) and groups (privileged guard), which
+# the ReadWrite roles cover. Dropping one of them breaks that step with a 403.
+run "apply_holds_what_the_auto_assignment_step_needs" {
+  command = plan
+
+  assert {
+    condition     = alltrue([for r in ["EntitlementManagement.ReadWrite.All", "User.ReadWrite.All", "Group.ReadWrite.All"] : contains(output.apply_graph_roles, r)])
+    error_message = "APPLY must keep EntitlementManagement.ReadWrite.All + User/Group.ReadWrite.All: terraform-apply.yml's automatic access rule step depends on them"
+  }
+}

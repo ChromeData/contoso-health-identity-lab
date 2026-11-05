@@ -1,0 +1,884 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.5",
+  "variables": {
+    "alert_email": {
+      "value": "secops-oncall@contoso-health.example"
+    },
+    "operator_ip_ranges": {
+      "value": [
+        "203.0.113.24/32"
+      ]
+    },
+    "tenant_id": {
+      "value": "11111111-2222-4333-8444-555555555555"
+    }
+  },
+  "planned_values": {
+    "root_module": {
+      "child_modules": [
+        {
+          "address": "module.entitlement[0]",
+          "resources": [
+            {
+              "address": "module.entitlement[0].azuread_access_package_catalog.clinical",
+              "mode": "managed",
+              "type": "azuread_access_package_catalog",
+              "name": "clinical",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "description": "Clinical application access for Contoso Health staff",
+                "display_name": "Clinical",
+                "externally_visible": false,
+                "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+                "published": true,
+                "timeouts": null
+              },
+              "sensitive_values": {}
+            },
+            {
+              "address": "module.entitlement[0].azuread_access_package_resource_catalog_association.groups[\"servicenow\"]",
+              "mode": "managed",
+              "type": "azuread_access_package_resource_catalog_association",
+              "name": "groups",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+                "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                "resource_origin_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                "resource_origin_system": "AadGroup",
+                "timeouts": null
+              },
+              "sensitive_values": {},
+              "index": "servicenow"
+            },
+            {
+              "address": "module.entitlement[0].azuread_access_package_resource_catalog_association.groups[\"aws\"]",
+              "mode": "managed",
+              "type": "azuread_access_package_resource_catalog_association",
+              "name": "groups",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+                "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                "resource_origin_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                "resource_origin_system": "AadGroup",
+                "timeouts": null
+              },
+              "sensitive_values": {},
+              "index": "aws"
+            },
+            {
+              "address": "module.entitlement[0].azuread_access_package.this[\"nurse\"]",
+              "mode": "managed",
+              "type": "azuread_access_package",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+                "description": "Clinical apps for nursing staff (ServiceNow + AWS).",
+                "display_name": "Nurse - Clinical Apps",
+                "hidden": false,
+                "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+                "timeouts": null
+              },
+              "sensitive_values": {},
+              "index": "nurse"
+            },
+            {
+              "address": "module.entitlement[0].azuread_access_package_resource_package_association.groups[\"nurse.servicenow\"]",
+              "mode": "managed",
+              "type": "azuread_access_package_resource_package_association",
+              "name": "groups",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "access_package_id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+                "access_type": "Member",
+                "catalog_resource_association_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01/9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01/Member",
+                "timeouts": null
+              },
+              "sensitive_values": {},
+              "index": "nurse.servicenow"
+            },
+            {
+              "address": "module.entitlement[0].azuread_access_package_resource_package_association.groups[\"nurse.aws\"]",
+              "mode": "managed",
+              "type": "azuread_access_package_resource_package_association",
+              "name": "groups",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "access_package_id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+                "access_type": "Member",
+                "catalog_resource_association_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01/9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02/Member",
+                "timeouts": null
+              },
+              "sensitive_values": {},
+              "index": "nurse.aws"
+            }
+          ]
+        },
+        {
+          "address": "module.groups[0]",
+          "resources": [
+            {
+              "address": "module.groups[0].azuread_group.app_access[\"servicenow\"]",
+              "mode": "managed",
+              "type": "azuread_group",
+              "name": "app_access",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "administrative_unit_ids": [],
+                "assignable_to_role": false,
+                "auto_subscribe_new_members": false,
+                "behaviors": [],
+                "description": "Grants App-ServiceNow-Users [Managed by Terraform - lab/terraform]",
+                "display_name": "App-ServiceNow-Users",
+                "dynamic_membership": [],
+                "external_senders_allowed": false,
+                "hide_from_address_lists": false,
+                "hide_from_outlook_clients": false,
+                "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                "mail": "",
+                "mail_enabled": false,
+                "mail_nickname": "app-servicenow-users",
+                "members": [],
+                "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                "onpremises_group_type": "",
+                "owners": [],
+                "prevent_duplicate_names": false,
+                "provisioning_options": [],
+                "security_enabled": true,
+                "theme": "",
+                "timeouts": null,
+                "types": [],
+                "visibility": "",
+                "writeback_enabled": false
+              },
+              "sensitive_values": {},
+              "index": "servicenow"
+            },
+            {
+              "address": "module.groups[0].azuread_group.app_access[\"aws\"]",
+              "mode": "managed",
+              "type": "azuread_group",
+              "name": "app_access",
+              "provider_name": "registry.terraform.io/hashicorp/azuread",
+              "schema_version": 0,
+              "values": {
+                "administrative_unit_ids": [],
+                "assignable_to_role": false,
+                "auto_subscribe_new_members": false,
+                "behaviors": [],
+                "description": "Grants App-AWS-IdentityCenter-Users [Managed by Terraform - lab/terraform]",
+                "display_name": "App-AWS-IdentityCenter-Users",
+                "dynamic_membership": [],
+                "external_senders_allowed": false,
+                "hide_from_address_lists": false,
+                "hide_from_outlook_clients": false,
+                "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                "mail": "",
+                "mail_enabled": false,
+                "mail_nickname": "app-aws-identitycenter-users",
+                "members": [],
+                "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                "onpremises_group_type": "",
+                "owners": [],
+                "prevent_duplicate_names": false,
+                "provisioning_options": [],
+                "security_enabled": true,
+                "theme": "",
+                "timeouts": null,
+                "types": [],
+                "visibility": "",
+                "writeback_enabled": false
+              },
+              "sensitive_values": {},
+              "index": "aws"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "data.azuread_client_config.current",
+      "mode": "data",
+      "type": "azuread_client_config",
+      "name": "current",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "read"
+        ],
+        "before": null,
+        "after": {
+          "tenant_id": "11111111-2222-4333-8444-555555555555"
+        },
+        "after_unknown": {
+          "object_id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "action_reason": "read_because_dependency_pending"
+    },
+    {
+      "address": "module.entitlement[0].azuread_access_package.this[\"nurse\"]",
+      "module_address": "module.entitlement[0]",
+      "mode": "managed",
+      "type": "azuread_access_package",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+          "description": "Clinical apps for nursing staff (ServiceNow + AWS).",
+          "display_name": "Nurse - Clinical Apps",
+          "hidden": false,
+          "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+          "timeouts": null
+        },
+        "after": {
+          "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+          "description": "Clinical apps for nursing staff (ServiceNow + AWS).",
+          "display_name": "Nurse - Clinical Apps",
+          "hidden": false,
+          "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "index": "nurse"
+    },
+    {
+      "address": "module.entitlement[0].azuread_access_package_catalog.clinical",
+      "module_address": "module.entitlement[0]",
+      "mode": "managed",
+      "type": "azuread_access_package_catalog",
+      "name": "clinical",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "description": "Clinical application access for Contoso Health staff",
+          "display_name": "Clinical",
+          "externally_visible": false,
+          "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+          "published": true,
+          "timeouts": null
+        },
+        "after": {
+          "description": "Clinical application access for Contoso Health staff",
+          "display_name": "Clinical",
+          "externally_visible": false,
+          "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+          "published": true,
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "previous_address": "module.entitlement[0].azuread_access_package_catalog.this"
+    },
+    {
+      "address": "module.entitlement[0].azuread_access_package_resource_catalog_association.groups[\"aws\"]",
+      "module_address": "module.entitlement[0]",
+      "mode": "managed",
+      "type": "azuread_access_package_resource_catalog_association",
+      "name": "groups",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+          "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "resource_origin_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "resource_origin_system": "AadGroup",
+          "timeouts": null
+        },
+        "after": {
+          "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+          "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "resource_origin_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "resource_origin_system": "AadGroup",
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "index": "aws"
+    },
+    {
+      "address": "module.entitlement[0].azuread_access_package_resource_catalog_association.groups[\"servicenow\"]",
+      "module_address": "module.entitlement[0]",
+      "mode": "managed",
+      "type": "azuread_access_package_resource_catalog_association",
+      "name": "groups",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+          "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "resource_origin_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "resource_origin_system": "AadGroup",
+          "timeouts": null
+        },
+        "after": {
+          "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+          "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "resource_origin_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "resource_origin_system": "AadGroup",
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "index": "servicenow"
+    },
+    {
+      "address": "module.entitlement[0].azuread_access_package_resource_package_association.groups[\"nurse.aws\"]",
+      "module_address": "module.entitlement[0]",
+      "mode": "managed",
+      "type": "azuread_access_package_resource_package_association",
+      "name": "groups",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "access_package_id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+          "access_type": "Member",
+          "catalog_resource_association_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01/9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02/Member",
+          "timeouts": null
+        },
+        "after": {
+          "access_package_id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+          "access_type": "Member",
+          "catalog_resource_association_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01/9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02/Member",
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "index": "nurse.aws"
+    },
+    {
+      "address": "module.entitlement[0].azuread_access_package_resource_package_association.groups[\"nurse.servicenow\"]",
+      "module_address": "module.entitlement[0]",
+      "mode": "managed",
+      "type": "azuread_access_package_resource_package_association",
+      "name": "groups",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "access_package_id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+          "access_type": "Member",
+          "catalog_resource_association_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01/9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01/Member",
+          "timeouts": null
+        },
+        "after": {
+          "access_package_id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+          "access_type": "Member",
+          "catalog_resource_association_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01/9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01/Member",
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "index": "nurse.servicenow"
+    },
+    {
+      "address": "module.groups[0].azuread_group.app_access[\"aws\"]",
+      "module_address": "module.groups[0]",
+      "mode": "managed",
+      "type": "azuread_group",
+      "name": "app_access",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "administrative_unit_ids": [],
+          "assignable_to_role": false,
+          "auto_subscribe_new_members": false,
+          "behaviors": [],
+          "description": "Grants App-AWS-IdentityCenter-Users [Managed by Terraform - lab/terraform]",
+          "display_name": "App-AWS-IdentityCenter-Users",
+          "dynamic_membership": [],
+          "external_senders_allowed": false,
+          "hide_from_address_lists": false,
+          "hide_from_outlook_clients": false,
+          "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "mail": "",
+          "mail_enabled": false,
+          "mail_nickname": "app-aws-identitycenter-users",
+          "members": [],
+          "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "onpremises_group_type": "",
+          "owners": [],
+          "prevent_duplicate_names": false,
+          "provisioning_options": [],
+          "security_enabled": true,
+          "theme": "",
+          "timeouts": null,
+          "types": [],
+          "visibility": "",
+          "writeback_enabled": false
+        },
+        "after": {
+          "administrative_unit_ids": [],
+          "assignable_to_role": false,
+          "auto_subscribe_new_members": false,
+          "behaviors": [],
+          "description": "Grants App-AWS-IdentityCenter-Users [Managed by Terraform - lab/terraform]",
+          "display_name": "App-AWS-IdentityCenter-Users",
+          "dynamic_membership": [],
+          "external_senders_allowed": false,
+          "hide_from_address_lists": false,
+          "hide_from_outlook_clients": false,
+          "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "mail": "",
+          "mail_enabled": false,
+          "mail_nickname": "app-aws-identitycenter-users",
+          "members": [],
+          "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+          "onpremises_group_type": "",
+          "owners": [],
+          "prevent_duplicate_names": false,
+          "provisioning_options": [],
+          "security_enabled": true,
+          "theme": "",
+          "timeouts": null,
+          "types": [],
+          "visibility": "",
+          "writeback_enabled": false
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "index": "aws"
+    },
+    {
+      "address": "module.groups[0].azuread_group.app_access[\"servicenow\"]",
+      "module_address": "module.groups[0]",
+      "mode": "managed",
+      "type": "azuread_group",
+      "name": "app_access",
+      "provider_name": "registry.terraform.io/hashicorp/azuread",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "administrative_unit_ids": [],
+          "assignable_to_role": false,
+          "auto_subscribe_new_members": false,
+          "behaviors": [],
+          "description": "Grants App-ServiceNow-Users [Managed by Terraform - lab/terraform]",
+          "display_name": "App-ServiceNow-Users",
+          "dynamic_membership": [],
+          "external_senders_allowed": false,
+          "hide_from_address_lists": false,
+          "hide_from_outlook_clients": false,
+          "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "mail": "",
+          "mail_enabled": false,
+          "mail_nickname": "app-servicenow-users",
+          "members": [],
+          "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "onpremises_group_type": "",
+          "owners": [],
+          "prevent_duplicate_names": false,
+          "provisioning_options": [],
+          "security_enabled": true,
+          "theme": "",
+          "timeouts": null,
+          "types": [],
+          "visibility": "",
+          "writeback_enabled": false
+        },
+        "after": {
+          "administrative_unit_ids": [],
+          "assignable_to_role": false,
+          "auto_subscribe_new_members": false,
+          "behaviors": [],
+          "description": "Grants App-ServiceNow-Users [Managed by Terraform - lab/terraform]",
+          "display_name": "App-ServiceNow-Users",
+          "dynamic_membership": [],
+          "external_senders_allowed": false,
+          "hide_from_address_lists": false,
+          "hide_from_outlook_clients": false,
+          "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "mail": "",
+          "mail_enabled": false,
+          "mail_nickname": "app-servicenow-users",
+          "members": [],
+          "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+          "onpremises_group_type": "",
+          "owners": [],
+          "prevent_duplicate_names": false,
+          "provisioning_options": [],
+          "security_enabled": true,
+          "theme": "",
+          "timeouts": null,
+          "types": [],
+          "visibility": "",
+          "writeback_enabled": false
+        },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      },
+      "index": "servicenow"
+    }
+  ],
+  "prior_state": {
+    "format_version": "1.0",
+    "terraform_version": "1.16.5",
+    "values": {
+      "root_module": {
+        "child_modules": [
+          {
+            "address": "module.entitlement[0]",
+            "resources": [
+              {
+                "address": "module.entitlement[0].azuread_access_package_catalog.clinical",
+                "mode": "managed",
+                "type": "azuread_access_package_catalog",
+                "name": "clinical",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "description": "Clinical application access for Contoso Health staff",
+                  "display_name": "Clinical",
+                  "externally_visible": false,
+                  "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+                  "published": true,
+                  "timeouts": null
+                },
+                "sensitive_values": {}
+              },
+              {
+                "address": "module.entitlement[0].azuread_access_package_resource_catalog_association.groups[\"servicenow\"]",
+                "mode": "managed",
+                "type": "azuread_access_package_resource_catalog_association",
+                "name": "groups",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+                  "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                  "resource_origin_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                  "resource_origin_system": "AadGroup",
+                  "timeouts": null
+                },
+                "sensitive_values": {},
+                "index": "servicenow"
+              },
+              {
+                "address": "module.entitlement[0].azuread_access_package_resource_catalog_association.groups[\"aws\"]",
+                "mode": "managed",
+                "type": "azuread_access_package_resource_catalog_association",
+                "name": "groups",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+                  "id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                  "resource_origin_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                  "resource_origin_system": "AadGroup",
+                  "timeouts": null
+                },
+                "sensitive_values": {},
+                "index": "aws"
+              },
+              {
+                "address": "module.entitlement[0].azuread_access_package.this[\"nurse\"]",
+                "mode": "managed",
+                "type": "azuread_access_package",
+                "name": "this",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "catalog_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01",
+                  "description": "Clinical apps for nursing staff (ServiceNow + AWS).",
+                  "display_name": "Nurse - Clinical Apps",
+                  "hidden": false,
+                  "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+                  "timeouts": null
+                },
+                "sensitive_values": {},
+                "index": "nurse"
+              },
+              {
+                "address": "module.entitlement[0].azuread_access_package_resource_package_association.groups[\"nurse.servicenow\"]",
+                "mode": "managed",
+                "type": "azuread_access_package_resource_package_association",
+                "name": "groups",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "access_package_id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+                  "access_type": "Member",
+                  "catalog_resource_association_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                  "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01/9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01/Member",
+                  "timeouts": null
+                },
+                "sensitive_values": {},
+                "index": "nurse.servicenow"
+              },
+              {
+                "address": "module.entitlement[0].azuread_access_package_resource_package_association.groups[\"nurse.aws\"]",
+                "mode": "managed",
+                "type": "azuread_access_package_resource_package_association",
+                "name": "groups",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "access_package_id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01",
+                  "access_type": "Member",
+                  "catalog_resource_association_id": "4b1d6f1e-2c4a-4c39-9a51-0c7e8d1f2a01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                  "id": "7c2e9a10-5b3d-4e6f-8a9b-0c1d2e3f4a01/9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b01/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02/Member",
+                  "timeouts": null
+                },
+                "sensitive_values": {},
+                "index": "nurse.aws"
+              }
+            ]
+          },
+          {
+            "address": "module.groups[0]",
+            "resources": [
+              {
+                "address": "module.groups[0].azuread_group.app_access[\"servicenow\"]",
+                "mode": "managed",
+                "type": "azuread_group",
+                "name": "app_access",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "administrative_unit_ids": [],
+                  "assignable_to_role": false,
+                  "auto_subscribe_new_members": false,
+                  "behaviors": [],
+                  "description": "Grants App-ServiceNow-Users [Managed by Terraform - lab/terraform]",
+                  "display_name": "App-ServiceNow-Users",
+                  "dynamic_membership": [],
+                  "external_senders_allowed": false,
+                  "hide_from_address_lists": false,
+                  "hide_from_outlook_clients": false,
+                  "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                  "mail": "",
+                  "mail_enabled": false,
+                  "mail_nickname": "app-servicenow-users",
+                  "members": [],
+                  "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e01",
+                  "onpremises_group_type": "",
+                  "owners": [],
+                  "prevent_duplicate_names": false,
+                  "provisioning_options": [],
+                  "security_enabled": true,
+                  "theme": "",
+                  "timeouts": null,
+                  "types": [],
+                  "visibility": "",
+                  "writeback_enabled": false
+                },
+                "sensitive_values": {},
+                "index": "servicenow"
+              },
+              {
+                "address": "module.groups[0].azuread_group.app_access[\"aws\"]",
+                "mode": "managed",
+                "type": "azuread_group",
+                "name": "app_access",
+                "provider_name": "registry.terraform.io/hashicorp/azuread",
+                "schema_version": 0,
+                "values": {
+                  "administrative_unit_ids": [],
+                  "assignable_to_role": false,
+                  "auto_subscribe_new_members": false,
+                  "behaviors": [],
+                  "description": "Grants App-AWS-IdentityCenter-Users [Managed by Terraform - lab/terraform]",
+                  "display_name": "App-AWS-IdentityCenter-Users",
+                  "dynamic_membership": [],
+                  "external_senders_allowed": false,
+                  "hide_from_address_lists": false,
+                  "hide_from_outlook_clients": false,
+                  "id": "/groups/0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                  "mail": "",
+                  "mail_enabled": false,
+                  "mail_nickname": "app-aws-identitycenter-users",
+                  "members": [],
+                  "object_id": "0f6a3b2c-8d1e-4f5a-9b7c-1a2b3c4d5e02",
+                  "onpremises_group_type": "",
+                  "owners": [],
+                  "prevent_duplicate_names": false,
+                  "provisioning_options": [],
+                  "security_enabled": true,
+                  "theme": "",
+                  "timeouts": null,
+                  "types": [],
+                  "visibility": "",
+                  "writeback_enabled": false
+                },
+                "sensitive_values": {},
+                "index": "aws"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "configuration": {
+    "provider_config": {
+      "azuread": {
+        "name": "azuread",
+        "full_name": "registry.terraform.io/hashicorp/azuread"
+      }
+    },
+    "root_module": {
+      "module_calls": {
+        "groups": {
+          "source": "../../modules/groups",
+          "count_expression": {
+            "references": [
+              "var.enable_premium"
+            ]
+          },
+          "module": {
+            "resources": [
+              {
+                "address": "azuread_group.app_access",
+                "mode": "managed",
+                "type": "azuread_group",
+                "name": "app_access",
+                "expressions": {
+                  "display_name": {
+                    "references": [
+                      "each.value.display_name",
+                      "each.value"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "entitlement": {
+          "source": "../../modules/entitlement",
+          "module": {
+            "resources": [
+              {
+                "address": "azuread_access_package.this",
+                "mode": "managed",
+                "type": "azuread_access_package",
+                "name": "this",
+                "expressions": {
+                  "catalog_id": {
+                    "references": [
+                      "azuread_access_package_catalog.clinical.id",
+                      "azuread_access_package_catalog.clinical"
+                    ]
+                  }
+                }
+              },
+              {
+                "address": "azuread_access_package_resource_catalog_association.groups",
+                "mode": "managed",
+                "type": "azuread_access_package_resource_catalog_association",
+                "name": "groups",
+                "expressions": {
+                  "catalog_id": {
+                    "references": [
+                      "azuread_access_package_catalog.clinical.id",
+                      "azuread_access_package_catalog.clinical"
+                    ]
+                  },
+                  "resource_origin_id": {
+                    "references": [
+                      "var.catalog_group_object_ids",
+                      "each.value"
+                    ]
+                  }
+                }
+              },
+              {
+                "address": "azuread_access_package_resource_package_association.groups",
+                "mode": "managed",
+                "type": "azuread_access_package_resource_package_association",
+                "name": "groups",
+                "expressions": {
+                  "access_package_id": {
+                    "references": [
+                      "azuread_access_package.this[each.value.package].id",
+                      "azuread_access_package.this[each.value.package]",
+                      "azuread_access_package.this",
+                      "each.value.package",
+                      "each.value"
+                    ]
+                  },
+                  "catalog_resource_association_id": {
+                    "references": [
+                      "azuread_access_package_resource_catalog_association.groups[each.value.group].id",
+                      "azuread_access_package_resource_catalog_association.groups[each.value.group]",
+                      "azuread_access_package_resource_catalog_association.groups",
+                      "each.value.group",
+                      "each.value"
+                    ]
+                  },
+                  "access_type": {
+                    "constant_value": "Member"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "relevant_attributes": [],
+  "timestamp": "2026-11-02T18:00:00Z",
+  "applyable": true,
+  "complete": true,
+  "errored": false
+}
