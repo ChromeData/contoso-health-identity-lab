@@ -115,7 +115,7 @@ export function scenes(ids) {
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:signin').catch(() => {}); } },
     { say: "Ten, admin power. No admin keeps it day to day, in Entra or in AWS; they borrow it for a few hours, with a reason, and it switches off. Only the build account and a few system and emergency accounts hold it. Why: a stolen admin account can't do damage all day.", audio: `${OUT}/clips/km/02-map-6.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:privileged').catch(() => {}); } },
-    { say: "Eleven, alarms. Microsoft Sentinel watches every sign-in and change. I wrote twenty-two alarm rules, and all twenty-two fire in Splunk too. Why: catch misuse fast, whatever tool the hospital owns.", audio: `${OUT}/clips/km/02-map-7.mp3`,
+    { say: "Eleven, alarms. Microsoft Sentinel watches every sign-in and change, and Splunk watches the same records. I wrote twenty-two alarm rules, and Splunk runs all twenty-two. Why: catch misuse fast, whatever tool the hospital owns.", audio: `${OUT}/clips/km/02-map-7.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:detect').catch(() => {}); } },
     { say: "Twelve, leaving. HR marks Dana as gone, and everything closes on its own: on-site in seven seconds, the cloud in three minutes, AWS in nine. Why: no access after the last day.", audio: `${OUT}/clips/km/02-map-8.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:leaver').catch(() => {}); } },
@@ -269,7 +269,7 @@ export function scenes(ids) {
       run: async (r) => { await r.click({ text: /Directory role assigned outside PIM/, nth: 0 }); await sleep(6000); await r.settle(200); } },
   ] },
   { id: '12b-splunk', kind: 'local', beats: [
-    { say: "One more thing on the cameras. These rules aren't tied to Microsoft. All twenty-two were rewritten for Splunk, a second camera system, and replayed against test footage. Every one fired. So the hospital keeps its detections even if it switches brands.", audio: `${OUT}/clips/km/12b-splunk-0.mp3`,
+    { say: "One more thing on the cameras. These rules aren't tied to Microsoft. All twenty-two were rewritten for Splunk, a second camera system that watches the live lab too, and every one fired on a replay of test attacks. So the hospital keeps its detections even if it switches brands.", audio: `${OUT}/clips/km/12b-splunk-0.mp3`,
       prep: async (r) => { await r.page.goto(SHOT); await r.ov('hideCursor', true); await r.page.evaluate((src) => window.shot(src), BIMG('splunk')); await sleep(600); },
       run: async (r, b) => { await b.until(0.9); } },
   ] },
@@ -313,12 +313,12 @@ export function scenes(ids) {
       run: async (r, b) => { await b.until(0.95); } },
   ] },
   { id: '22-splunk-search', kind: 'local', beats: [
-    { say: "Piece eight, a second camera system. This is Splunk, the one many hospitals already own, running on my own machine, not Microsoft's cloud. The same kinds of events flow in, nearly a thousand of them: failed sign-ins, vault check-outs, password reads. This is test footage, not a live feed.", audio: `${OUT}/clips/km/22-splunk-search-0.mp3`,
+    { say: "Piece eight, a second camera system. This is Splunk, the one many hospitals already own, running on my own machine, not Microsoft's cloud. Every five minutes the lab's own sign-ins and changes flow in, the same records Sentinel reads. A test burst of twelve wrong passwords from one address set off its failed sign-in alarm, and Sentinel caught the same burst.", audio: `${OUT}/clips/km/22-splunk-search-0.mp3`,
       prep: async (r) => { await r.page.goto(SHOT); await r.ov('hideCursor', true); await r.page.evaluate((src) => window.shot(src), BIMG('splunk')); await sleep(600); },
       run: async (r, b) => { await b.until(0.95); } },
   ] },
   { id: '23-splunk-rules', kind: 'local', beats: [
-    { say: "And here are all twenty-two alarm rules, rewritten in Splunk's own language: emergency-badge sign-ins, attacks on service passwords, admin power granted outside the loan system, and forbidden pairs of doors. I replayed the test attacks, and all twenty-two fired. The logic is mine, and it moves with the hospital.", audio: `${OUT}/clips/km/23-splunk-rules-0.mp3`,
+    { say: "And here are all twenty-two alarm rules, rewritten in Splunk's own language: emergency-badge sign-ins, attacks on service passwords, admin power granted outside the loan system, and forbidden pairs of doors. All twenty-two fired on a replay of test attacks, and they run on the live lab too. The logic is mine, and it moves with the hospital.", audio: `${OUT}/clips/km/23-splunk-rules-0.mp3`,
       prep: async (r) => { await r.page.goto(SHOT); await r.ov('hideCursor', true); await r.page.evaluate((src) => window.shot(src), BIMG('splunk-rules')); await sleep(600); },
       run: async (r, b) => { await b.until(0.95); } },
   ] },

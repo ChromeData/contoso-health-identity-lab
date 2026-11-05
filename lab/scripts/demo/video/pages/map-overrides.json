@@ -164,7 +164,7 @@
    "The cabinet's sign-out sheet, copied."
   ],
   "SPLUNK": [
-   "A second alarm system running the very same detection rules, to show they aren't tied to one product. Proven on this machine: every rule fired on a replay of the synthetic test events. It has no live feed from the tenant.",
+   "A second alarm system running the very same detection rules, to show they aren't tied to one product. It watches the live lab, fed every five minutes. Every rule fired on a replay of test attacks, and the failed sign-in alarm has fired on live events.",
    "A second security desk."
   ],
   "REVIEW": [
@@ -239,7 +239,8 @@
   "LCW": "RAN · tenant",
   "CONTAIN": "RAN · tenant",
   "PB": "RAN · tenant",
-  "SNOW": "RAN · tenant"
+  "SNOW": "RAN · tenant",
+  "SPLUNK": "RAN · tenant"
  },
  "fields": {
   "OKTA": {
@@ -249,7 +250,7 @@
    "where.0.label": "Entra side: the okta-clinic-idp app (Terraform)"
   },
   "SPLUNK": {
-   "going.after": "RAN · harness (stays)"
+   "going.after": "RAN · tenant"
   },
   "DYNGRP": {
    "going.after": "RAN · tenant (no capture films it)"
