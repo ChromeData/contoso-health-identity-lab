@@ -307,6 +307,14 @@ function Get-DrillAssessment {
     return [pscustomobject]@{ Result = $result; Reasons = $reasons; SignIns = $rows }
 }
 
+function Get-PendingIncident {
+    # Sentinel path only: the accounts whose sign-in was alerted but has no
+    # incident number yet (Log Analytics alerts raise no incident). Pure.
+    param($Assessment, [string]$AlertPath)
+    if ($AlertPath -ne 'sentinel' -or -not $Assessment) { return @() }
+    return @(@($Assessment.SignIns) | Where-Object { $_.alertObserved -and -not $_.incidentNumber } | ForEach-Object { [string]$_.account })
+}
+
 function Test-PublicRecordSafe {
     # The public drill log must not carry an email/UPN, IP address, GUID or
     # onmicrosoft domain (lab/evidence/drills/README.md). Emits the offending
@@ -667,7 +675,14 @@ $deadline = (Get-Date).AddMinutes($WaitMinutes)
 do {
     $obs = Get-DrillObservation -StartUtc $DrillStartUtc -AlertPath $alertPath -RuleName $RuleDisplayName
     $assess = Get-DrillAssessment -Declared $declared -SignIns $obs.SignIns -Alerts $obs.Alerts -Incidents $obs.Incidents -AlertsCarryAccounts $obs.AlertsCarryAccounts
-    if ($assess.Result -eq 'Pass' -or (Get-Date) -ge $deadline) { break }
+    # A Pass is final only once each alerted sign-in also has its incident on
+    # the Sentinel path: the incident is created seconds after the alert and
+    # reaches SecurityIncident later still (first lab drill, 2026-11-05: alert
+    # 10:52:45Z, incident 10:52:55Z; stopping at the alert left the incident
+    # number out of the record).
+    $pending = @(Get-PendingIncident -Assessment $assess -AlertPath $alertPath)
+    if (($assess.Result -eq 'Pass' -and -not $pending.Count) -or (Get-Date) -ge $deadline) { break }
+    if ($assess.Result -eq 'Pass') { Write-Console ("  {0:HH:mm:ss} Pass; waiting for the incident of: {1}" -f (Get-Date), ($pending -join ', ')) -ForegroundColor DarkGray; Start-Sleep -Seconds $PollSeconds; continue }
     Write-Console ("  {0:HH:mm:ss} {1}: {2}" -f (Get-Date), $assess.Result, ($assess.Reasons -join '; ')) -ForegroundColor DarkGray
     Start-Sleep -Seconds $PollSeconds
 } while ($true)

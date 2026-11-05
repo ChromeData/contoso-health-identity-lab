@@ -252,6 +252,45 @@ Describe 'Invoke-BreakGlassDrill.ps1 (mocked Graph, az and Log Analytics)' {
         (Get-Content -LiteralPath $detail.FullName -Raw) | Should -Match '203\.0\.113\.10'
     }
 
+    It 'Verify: keeps polling after a Pass until the Sentinel incident reaches the workspace, and records it' {
+        Set-DrillMocks
+        $global:DrillTest.IncidentPolls = 0
+        Mock Invoke-LaQuery {
+            $t = $global:DrillTest
+            if ($Query -match '^SecurityIncident') {
+                # The first poll sees the alerts but not yet the incident.
+                $t.IncidentPolls++
+                if ($t.IncidentPolls -lt 2) { return @() }
+                return @([pscustomobject]@{ IncidentNumber = 42; CreatedTime = $t.Start.AddMinutes(12).ToString('o'); Status = 'New'; AlertIds = @('alert-1', 'alert-2') })
+            }
+            if ($Query -match 'AADNonInteractiveUserSignInLogs') {
+                return @(
+                    [pscustomobject]@{ TimeGenerated = $t.Start.AddMinutes(5).ToString('o'); UserPrincipalName = 'bg-admin-01@contosolab.onmicrosoft.com'; SignInType = 'interactive'; ResultType = '0'; Methods = 'Passkey (device-bound)'; IPAddress = '203.0.113.10'; CorrelationId = 'c1' },
+                    [pscustomobject]@{ TimeGenerated = $t.Start.AddMinutes(9).ToString('o'); UserPrincipalName = 'bg-admin-02@contosolab.onmicrosoft.com'; SignInType = 'interactive'; ResultType = '0'; Methods = 'Passkey (device-bound)'; IPAddress = '203.0.113.10'; CorrelationId = 'c2' })
+            }
+            if ($Query -match '^SecurityAlert') { return @([pscustomobject]@{ TimeUtc = $t.Start.AddMinutes(11).ToString('o'); AlertId = 'alert-1'; Accounts = @('bg-admin-01', 'bg-admin-02') }) }
+            if ($Query -match '^AuditLogs') { return @([pscustomobject]@{ Operations = 0 }) }
+            if ($Query -match '^SigninLogs \| where TimeGenerated > ago\(1d\) \| count') { return @([pscustomobject]@{ Count = 12 }) }
+            throw "unexpected KQL in test: $Query"
+        }
+        $pub = Join-Path $TestDrive 'wait-pub'; $priv = Join-Path $TestDrive 'wait-priv'
+        $global:LASTEXITCODE = 0
+        & $script:Drill -Phase Verify -DrillStartUtc $global:DrillTest.Start -DeclaredSignIns 'bg-admin-01:key 1', 'bg-admin-02:key 1' `
+            -WaitMinutes 5 -PollSeconds 15 -EvidenceDirectory $pub -PrivateDirectory $priv -WarningAction SilentlyContinue
+        $LASTEXITCODE | Should -Be 0
+        $global:DrillTest.IncidentPolls | Should -Be 2
+        Should -Invoke Start-Sleep -Times 1 -Exactly
+        $rec = Get-Content -LiteralPath @(Get-ChildItem -LiteralPath $pub -Filter '*.json')[0].FullName -Raw | ConvertFrom-Json
+        $rec.result | Should -Be 'Pass'
+        @($rec.signIns | ForEach-Object incidentNumber) | Should -Be @('42', '42')
+    }
+
+    It 'Pending incidents: Sentinel path only, alerted sign-ins without an incident number' {
+        $a = [pscustomobject]@{ SignIns = @([pscustomobject]@{ account = 'bg-admin-01'; alertObserved = $true; incidentNumber = $null }, [pscustomobject]@{ account = 'bg-admin-02'; alertObserved = $true; incidentNumber = '42' }, [pscustomobject]@{ account = 'bg-admin-03'; alertObserved = $false; incidentNumber = $null }) }
+        @(Get-PendingIncident -Assessment $a -AlertPath 'sentinel') | Should -Be @('bg-admin-01')
+        @(Get-PendingIncident -Assessment $a -AlertPath 'log-analytics') | Should -BeNullOrEmpty
+    }
+
     It 'Verify: one sign-in without an alert -> Partial, exit 1' {
         Set-DrillMocks -AlertedAccounts @('bg-admin-01')
         $v = Invoke-Verify 'partial'

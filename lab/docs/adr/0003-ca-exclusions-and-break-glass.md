@@ -93,15 +93,14 @@ non-interactive, triggers an alert. The threshold is 1.
 - **Risk: the detection matches the naming pattern** (`bg-admin-NN@`), so
   renaming an account blinds it. The production fix is matching on object
   IDs from a Sentinel watchlist.
-- **No drill has been run yet.** The design calls for one sign-in drill per
-  key every 90 days. The procedure is written
-  (`lab/docs/runbooks/break-glass-drill.md`). `Invoke-BreakGlassDrill.ps1`
+- **Drills.** The design calls for one sign-in drill per key every 90
+  days (`lab/docs/runbooks/break-glass-drill.md`). `Invoke-BreakGlassDrill.ps1`
   automates the checks around it: a read-only preflight, then reading the
   sign-ins and alerts back from Log Analytics and writing the record. The
-  sign-ins themselves stay manual. The script has never run, and the drill
-  log (`lab/evidence/drills/README.md`) is an empty template. Record each
-  drill when it happens: date, account, key, alert latency, ticket number.
-  (Fill in after running.)
+  first drill ran in the lab on 2026-11-05 with one software passkey per
+  account (the runbook's lab deviation): Pass, Sentinel incident #42 for
+  both sign-ins, no changes made (`lab/evidence/drills/README.md`, E49). In
+  production the sign-ins stay manual, with hardware keys.
 - **Workload identities are out of scope.** User-scoped CA doesn't apply to
   service principals, including the pipeline identities. CA for workload
   identities is a separate licence (verify: Workload ID Premium). Pipeline

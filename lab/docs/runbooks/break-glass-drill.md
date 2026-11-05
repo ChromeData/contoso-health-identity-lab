@@ -2,11 +2,15 @@
 
 **Scenario:** Contoso Health lab (fictional 5,000-user hospital).
 
-> **Status: this drill has NOT been run.** The tenant exists (2026-10-27), but
-> the drill has not run in it yet. The drill log, [`../../evidence/drills/README.md`](../../evidence/drills/README.md),
-> is an empty template until the first real run. Don't cite a drill result
-> anywhere until a row exists there. The drill script,
-> `lab/scripts/powershell/Invoke-BreakGlassDrill.ps1`, has never run either.
+> **Status: RAN · tenant once, 2026-11-05, in the lab form** (one software
+> passkey per account, app-only checks; see [Lab deviation](#lab-deviation-software-passkeys-in-the-operators-keychain)).
+> Preflight passed; both accounts signed in to My Account with the passkey
+> only; Sentinel raised High incident #42 for both, 10.2 minutes after the
+> sign-ins reached the workspace; no audit operation by either account.
+> Result Pass. Not done: Teams card and ServiceNow INC (the notify playbook
+> is not triggered by any automation rule yet), Splunk leg, a change ticket
+> and a second reviewer. Record: [`../../evidence/drills/`](../../evidence/drills/README.md)
+> (`2026-11-05T1041Z-break-glass-drill.json`), capture log E49.
 
 ## Tooling
 
