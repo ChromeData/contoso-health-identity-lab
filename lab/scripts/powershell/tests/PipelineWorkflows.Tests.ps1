@@ -6,6 +6,8 @@
 #   * terraform-apply.yml: the automatic access rule step runs only after a
 #     successful apply, after a fresh APPLY sign-in, app-only, and is NOT
 #     continue-on-error; the Apply summary reads its lines.
+#   * config-drift.yml: a night the check could not run (no comparison)
+#     opens or updates an issue instead of only going red.
 # The YAML is parsed by python3 + PyYAML (lab-tests.yml installs python3-yaml
 # before the Pester step); without them these checks are skipped, not passed.
 
@@ -109,5 +111,40 @@ Describe 'terraform-apply.yml - automatic access rules after the apply' -Skip:(-
         $s['env']['AUTOASSIGN_OUTCOME'] | Should -Be '${{ steps.autoassign.outcome }}'
         $s['run'] | Should -Match 'plain-autoassign\.md'
         $s['run'] | Should -Match 'tech-autoassign\.md'
+    }
+}
+
+Describe 'config-drift.yml - a night the check could not run is never silent' -Skip:(-not $script:CanParse) {
+    # 2026-10-30 to 2026-11-04: the job could not sign in (AADSTS700213) and
+    # went red six nights with no issue, because the drift issue needs a
+    # comparison (lab/docs/field-notes.md, entry 5).
+    BeforeAll {
+        $script:D = Read-Workflow 'config-drift.yml'
+        $script:DJob = $script:D['jobs']['reconcile']
+        $script:Step = Get-Step $script:DJob 'Open or close the "check could not run" issue'
+    }
+
+    It 'has the step, runs it on every outcome but a cancel, with a SHA-pinned github-script' {
+        $script:Step | Should -Not -BeNullOrEmpty
+        $script:Step['if'] | Should -Be '${{ !cancelled() }}'
+        [string]$script:Step['uses'] | Should -Match '^actions/github-script@[0-9a-f]{40}$'
+        $script:DJob['permissions']['issues'] | Should -Be 'write'
+    }
+
+    It 'treats only compare_exit 0, 1 or 2 as "the check ran"; anything else (3, missing) opens or updates the issue' {
+        $script:Step['env']['COMPARE_EXIT'] | Should -Be '${{ steps.compare.outputs.compare_exit }}'
+        $js = [string]$script:Step['with']['script']
+        $js | Should -Match "\['0', '1', '2'\]\.includes\(code\)"
+        $js | Should -Match "process\.env\.COMPARE_EXIT \|\| 'missing'"
+        $js | Should -Match 'issues\.create\('
+        $js | Should -Match "state: 'closed'"
+        $js | Should -Match 'AADSTS700213'
+    }
+
+    It 'comes before the step that fails the job, and the compare step still runs after a failed sign-in' {
+        $names = @($script:DJob['steps'] | ForEach-Object { [string]$_['name'] })
+        [array]::IndexOf($names, 'Open or close the "check could not run" issue') | Should -BeLessThan ([array]::IndexOf($names, 'Fail job on drift or a failed export (once a baseline exists)'))
+        (Get-Step $script:DJob 'Compare against the baseline*')['if'] | Should -Be '${{ !cancelled() }}'
+        (Get-Step $script:DJob 'Compare against the baseline*')['run'] | Should -Match 'compare_exit=3'
     }
 }
