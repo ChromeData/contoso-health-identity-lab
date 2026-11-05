@@ -28,7 +28,8 @@
 #   * every list is followed across pages, and drill incidents are filtered
 #     by title on the server: an older drill behind 60 newer incidents is
 #     still found and closed;
-#   * an interrupted arm's run (card not posted yet) is reused, not doubled;
+#   * an interrupted arm's run (card not posted yet) is reused, not doubled,
+#     and a retry before the incident's entity arrived waits for it;
 #   * disarm cancels a drill run that has not posted its card yet;
 #   * a running run whose trigger cannot be read is left alone, fails the
 #     disarm read-back (NOT CLEAN) and makes arm refuse;
@@ -267,6 +268,23 @@ p=os.environ["STUB_STATE"]; d=json.load(open(p)); d["runs"][0]["card"]="none"; d
 PY
 run disarm
 [ $rc -eq 0 ] && [ "$(q 'd["runs"][0]["status"]')" = Cancelled ] && pass "disarm cancels a drill run whose card is not posted yet" || fail "pre-card run: rc=$rc status=$(q 'd["runs"][0]["status"]') $out"
+
+# --- 4d3. arm interrupted before the incident's entity arrived: a retry waits ------
+fresh; python3 - <<'PY'
+import json,os
+p=os.environ["STUB_STATE"]; d=json.load(open(p)); d["entity_delay"]=0; json.dump(d,open(p,"w"))
+PY
+run arm; run disarm   # leaves rule ids "recently deleted"; start clean again below
+fresh 0; python3 - <<'PY'
+import json,os,uuid
+p=os.environ["STUB_STATE"]; d=json.load(open(p))
+uid=str(uuid.uuid4())
+d["users"]["itdr-drill-20261105@contosohealthlab.onmicrosoft.com"]={"id":uid,"userPrincipalName":"itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com","accountEnabled":True,"onPremisesSyncEnabled":None,"jobTitle":"Throwaway containment drill target (containment-drill.sh) - delete after the drill"}
+d["incidents"].insert(0,{"name":"inc-150","number":150,"status":"New","title":"Contoso DRILL - containment approval drill (temporary, containment-drill.sh)","rule":"r","oids":[uid],"comments":[],"entity_delay":3})
+json.dump(d,open(p,"w"))
+PY
+run arm
+[ $rc -eq 0 ] && [ "$(printf '%s\n' "$out" | tail -1)" = "DRILL_INCIDENT=150" ] && pass "a retry on an incident whose entity has not arrived yet waits for it (no 'not about')" || fail "entity-delay retry: rc=$rc $out"
 
 # --- 4e. a waiting run whose trigger cannot be read is never "clean" -----------------
 fresh; run arm

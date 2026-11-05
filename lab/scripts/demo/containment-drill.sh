@@ -336,9 +336,14 @@ print(json.dumps({"accountEnabled":True,"displayName":"ITDR Drill %s (throwaway)
   [ "$enabled" = "True" ] || die "$UPN is disabled (an earlier take was contained): run disarm, then arm" 4
 
   # An open drill incident must be about THIS user (not an earlier date's).
+  # No Account entity YET is the normal few-second delay after creation (the
+  # wait below handles it), not proof of another user: only an incident that
+  # names someone else is refused.
   if [ -n "$inc" ]; then
     read -r name num status <<<"$inc"
-    [ "$(incident_oids "$name" | sort -u | tr -d '\n')" = "$oid" ] || die "open drill incident #$num is not about $UPN: run disarm, then arm" 4
+    local seen
+    seen="$(incident_oids "$name" | sort -u | tr -d '\n')" || die "could not read the entities of incident #$num"
+    [ -z "$seen" ] || [ "$seen" = "$oid" ] || die "open drill incident #$num is not about $UPN: run disarm, then arm" 4
   fi
 
   # 2. one incident through the temporary rule
