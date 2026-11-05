@@ -107,7 +107,10 @@ run_suite() {
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$verdict" "$p" "$f" "$k" "$rc" "$secs" >> "$RUN_DIR/results.tsv"
   log "   $verdict  $name: $p passed, $f failed, $k skipped (exit $rc, ${secs}s) - log: $RUN_DIR/$name.log"
   if [[ $verdict == FAIL ]]; then
-    { grep -E '^FAIL|ABORTED|ERROR' "$RUN_DIR/$name.log" || tail -n 15 "$RUN_DIR/$name.log"; } | head -n 20 | sed 's/^/      /'
+    # Real failures first: the e2e suite prints ~20 EXPECTED "ERROR:" lines
+    # (refusal tests), which used to fill this window and hide the FAIL names.
+    { grep -E '^FAIL|ABORTED' "$RUN_DIR/$name.log"; grep -E 'ERROR' "$RUN_DIR/$name.log" | grep -vE '^FAIL|ABORTED'; } | head -n 20 | sed 's/^/      /'
+    grep -qE '^FAIL|ABORTED|ERROR' "$RUN_DIR/$name.log" || tail -n 15 "$RUN_DIR/$name.log" | sed 's/^/      /'
   fi
   return 0
 }
