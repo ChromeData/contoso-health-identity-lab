@@ -161,6 +161,16 @@
       "birthright": [],
       "requestable": [],
       "note": "Workforce account only: no privileged birthright (neverBirthright). Admin work is done from a separate cloud-only adm- account in lab/iga/admin-accounts.json that is only ever PIM-eligible (Set-PimGroupEligibility.ps1). She is the reviewer of record for privileged reviews and approves from this workforce account, so her adm- account holds no PIM eligibility (SOD-08)."
+    },
+    {
+      "department": "Information Technology",
+      "jobTitle": "Cloud Engineer",
+      "jobCode": "IT-CLOUD",
+      "birthright": [
+        "IT - Cloud Engineering Apps"
+      ],
+      "requestable": [],
+      "note": "Cloud engineers run the patient portal in AWS, so ServiceNow + AWS (ViewOnlyAccess) arrive on day one. First holder: Sam Rivera (manager 400100, Joan Ferris) once HR adds him."
     }
   ]
 }
