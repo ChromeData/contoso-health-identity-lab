@@ -39,6 +39,23 @@ variable "app_owner_object_ids" {
   }
 }
 
+variable "iac_owner_client_id" {
+  type        = string
+  description = <<-EOT
+    Client id of the identity Terraform runs as on APPLY (the GitHub APPLY
+    app, repo variable AZURE_APPLY_CLIENT_ID). It is made an owner of every app
+    here so it can keep managing them with Application.ReadWrite.OwnedBy -
+    whoever runs a plan or a local apply. Empty = the caller (offline tests, a
+    first local apply before the APPLY app exists).
+  EOT
+  default     = ""
+
+  validation {
+    condition     = var.iac_owner_client_id == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.iac_owner_client_id))
+    error_message = "iac_owner_client_id must be empty or an app (client) id GUID."
+  }
+}
+
 variable "service_management_reference" {
   type        = string
   description = <<-EOT

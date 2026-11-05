@@ -63,10 +63,22 @@
 # tenant id for the federation-metadata URL output.
 data "azuread_client_config" "current" {}
 
+# The Terraform identity that must own the apps (Application.ReadWrite.OwnedBy):
+# the APPLY identity, named by client id - NOT "whoever runs this". With the
+# caller's id, every pull-request plan (run as PLAN) showed the six apps'
+# owners changing to PLAN, a change the real apply (run as APPLY) never makes,
+# and every local apply by a human dropped APPLY as an owner.
+data "azuread_service_principal" "iac_owner" {
+  count     = var.iac_owner_client_id != "" ? 1 : 0
+  client_id = var.iac_owner_client_id
+}
+
 locals {
-  # Owners = the Terraform identity + named humans. distinct() because a human
-  # running a local apply may also be in app_owner_object_ids.
-  app_owners = distinct(concat([data.azuread_client_config.current.object_id], var.app_owner_object_ids))
+  # Owners = the Terraform (APPLY) identity + named humans. Falls back to the
+  # caller only when iac_owner_client_id is unset (offline / first local
+  # apply). distinct() because a human may also be in app_owner_object_ids.
+  iac_owner_object_id = one(data.azuread_service_principal.iac_owner[*].object_id) != null ? one(data.azuread_service_principal.iac_owner[*].object_id) : data.azuread_client_config.current.object_id
+  app_owners          = distinct(concat([local.iac_owner_object_id], var.app_owner_object_ids))
 
   # Graph's own sample shows the AWS IAM Identity Center template instantiating
   # with these two app roles. They are looked up by name at apply time; the id

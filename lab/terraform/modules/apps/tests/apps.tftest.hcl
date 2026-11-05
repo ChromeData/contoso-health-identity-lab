@@ -429,3 +429,29 @@ run "everything_on_mocked_apply" {
     error_message = "the App ID URI must be api://<client-id>"
   }
 }
+
+# The APPLY identity owns the apps whoever runs the plan: a PR plan (run as
+# PLAN, the mocked caller 4444...) must not try to make itself an owner.
+run "apps_are_owned_by_the_apply_identity_not_the_caller" {
+  command = plan
+
+  variables {
+    iac_owner_client_id = "77777777-7777-7777-7777-777777777777"
+  }
+
+  override_data {
+    target = data.azuread_service_principal.iac_owner[0]
+    values = {
+      object_id = "88888888-8888-8888-8888-888888888888"
+    }
+  }
+
+  assert {
+    condition     = contains(tolist(azuread_service_principal.aws.owners), "88888888-8888-8888-8888-888888888888") && !contains(tolist(azuread_service_principal.aws.owners), "44444444-4444-4444-4444-444444444444")
+    error_message = "owners must be the APPLY identity (looked up by client id), never the identity running the plan"
+  }
+  assert {
+    condition     = contains(tolist(azuread_service_principal.aws.owners), "66666666-6666-6666-6666-666666666666")
+    error_message = "the named human owner must stay"
+  }
+}

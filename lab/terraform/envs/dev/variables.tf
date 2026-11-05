@@ -503,6 +503,12 @@ variable "app_owner_object_ids" {
   sensitive   = true
 }
 
+variable "apply_client_id" {
+  type        = string
+  description = "Client id of the GitHub APPLY app (repo variable AZURE_APPLY_CLIENT_ID, passed as TF_VAR_apply_client_id by both pipeline workflows). modules/apps makes it the Terraform owner of every app, so a PR plan run as PLAN, or a local apply by a human, does not try to change the owners. Empty = the caller."
+  default     = ""
+}
+
 variable "saml_cert_notification_emails" {
   type        = list(string)
   description = "Addresses Entra mails before the AWS SAML signing certificate expires (a team mailbox). Sensitive so the public plan comment never shows it."
