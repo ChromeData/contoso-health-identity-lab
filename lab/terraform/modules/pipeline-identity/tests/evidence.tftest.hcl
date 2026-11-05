@@ -76,7 +76,7 @@ run "evidence_enabled" {
     error_message = "EVIDENCE = the six reads Export-EvidencePack.ps1 makes, nothing else"
   }
   assert {
-    condition     = length(azuread_app_role_assignment.evidence) == 6
+    condition     = length(azuread_app_role_assignment.evidence) == 7
     error_message = "every EVIDENCE role must be granted (app role assignment)"
   }
   assert {

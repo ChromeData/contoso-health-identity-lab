@@ -65,7 +65,8 @@
       Microsoft.Graph.Identity.DirectoryManagement.
 
 .GRAPH SCOPES  (delegated; admin-consent -- all READ-ONLY)
-    RoleManagement.Read.Directory     PIM schedule requests/instances + role defs
+    RoleManagement.Read.Directory     role definitions + role assignments
+    RoleAssignmentSchedule.Read.Directory  PIM-for-roles schedule requests/instances
     RoleEligibilitySchedule.Read.Directory  (read eligible assignments)
     PrivilegedAssignmentSchedule.Read.AzureADGroup  PIM-for-Groups requests/instances
     AccessReview.Read.All             access-review definitions/instances/decisions
@@ -77,8 +78,9 @@
     APPLICATION permissions. .github/workflows/evidence-pack.yml signs in as
     the EVIDENCE identity (modules/pipeline-identity evidence_graph_roles):
     AuditLog.Read.All, AccessReview.Read.All, Policy.Read.All,
-    RoleManagement.Read.Directory, PrivilegedAssignmentSchedule.Read.AzureADGroup,
-    Directory.Read.All - read-only, nothing else. RoleEligibilitySchedule.Read.Directory
+    RoleManagement.Read.Directory, RoleAssignmentSchedule.Read.Directory,
+    PrivilegedAssignmentSchedule.Read.AzureADGroup, Directory.Read.All -
+    read-only, nothing else. RoleEligibilitySchedule.Read.Directory
     above is listed for completeness; no artifact reads eligibility schedules.
 
     API versions: CA policies, access reviews and PIM schedules are v1.0.
@@ -129,7 +131,7 @@
     Standard. Reports what it WOULD export and writes nothing.
 
 .EXAMPLE
-    Connect-MgGraph -Scopes 'RoleManagement.Read.Directory','PrivilegedAssignmentSchedule.Read.AzureADGroup','AccessReview.Read.All','Policy.Read.All','AuditLog.Read.All','Directory.Read.All'
+    Connect-MgGraph -Scopes 'RoleManagement.Read.Directory','RoleAssignmentSchedule.Read.Directory','PrivilegedAssignmentSchedule.Read.AzureADGroup','AccessReview.Read.All','Policy.Read.All','AuditLog.Read.All','Directory.Read.All'
     ./Export-EvidencePack.ps1 -WhatIf
     ./Export-EvidencePack.ps1
 .EXAMPLE
@@ -218,8 +220,8 @@ function Connect-GraphFromAzureCli {
 }
 
 $requiredScopes = @(
-    'RoleManagement.Read.Directory', 'PrivilegedAssignmentSchedule.Read.AzureADGroup',
-    'AccessReview.Read.All', 'Policy.Read.All', 'AuditLog.Read.All', 'Directory.Read.All'
+    'RoleManagement.Read.Directory', 'RoleAssignmentSchedule.Read.Directory',
+    'PrivilegedAssignmentSchedule.Read.AzureADGroup', 'AccessReview.Read.All', 'Policy.Read.All', 'AuditLog.Read.All', 'Directory.Read.All'
 )
 if ($UseAzureCliToken) {
     # App-only (pipeline): always this identity, never a leftover context.
