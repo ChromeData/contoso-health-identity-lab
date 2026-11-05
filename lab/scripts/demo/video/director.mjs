@@ -45,6 +45,8 @@ function ids() {
 // The Whisperglass lab map, with the tiles that now run in the tenant marked
 // "RAN · tenant" (blue) and the "nothing in a tenant yet" copy updated.
 const RAN_HARNESS = ['SPLUNK']; // proven on this machine's Splunk replay, not a tenant (E61)
+// pages/map-overrides.json "status" is applied after these (injectSheet) and wins: it holds the
+// corrections from the 2026-11-05 readiness check (e.g. LCW back to BUILT: built in the tenant, never run).
 const RAN_TENANT = ['HR', 'AGENT', 'AD', 'SYNC', 'ENTRA', 'LCW', 'DYNGRP', 'BIRTH', 'AP', 'SOD', 'CABASE', 'CARISK', 'CASESS', 'BG', 'PIM', 'HDAU', 'KV', 'LA', 'LEAVER', 'NHI', 'EVID', 'WORM', 'KPI'];
 // Sheet mode: one white grid sheet, chips top-left, zoom top-right, compact panel bottom-left (pages/sheet.css + sheet.js).
 function injectSheet(s) {
@@ -55,8 +57,15 @@ function injectSheet(s) {
   // plain names, purposes and definitions (the same file the map artifact uses)
   const re = /(<script type="application\/json" id="lab-data">)([\s\S]*?)(<\/script>)/;
   const d = JSON.parse(s.match(re)[2]);
-  for (const st of d.stations) if (ovr.stations[st.id]) st.purpose = ovr.stations[st.id];
-  for (const n of d.nodes) { if (ovr.nodes[n.id]) { n.definition = ovr.nodes[n.id][0]; n.analogy = ovr.nodes[n.id][1]; } if (ovr.names[n.id]) n.name = ovr.names[n.id]; }
+  // status labels and other per-bubble fields too ('going.days.0.ids' = dotted path; a path not in the data fails loudly)
+  const put = (o, p, v) => { const ks = p.split('.'), last = ks.pop(); for (const k of ks) o = o[k]; if (!(last in o)) throw new Error(`map-overrides.json: ${p} is not in the lab data`); o[last] = v; };
+  for (const st of d.stations) { if (ovr.stations[st.id]) st.purpose = ovr.stations[st.id]; for (const [p, v] of Object.entries((ovr.stationFields || {})[st.id] || {})) put(st, p, v); }
+  for (const n of d.nodes) {
+    if (ovr.nodes[n.id]) { n.definition = ovr.nodes[n.id][0]; n.analogy = ovr.nodes[n.id][1]; } if (ovr.names[n.id]) n.name = ovr.names[n.id];
+    if ((ovr.status || {})[n.id]) n.status = ovr.status[n.id];
+    for (const [p, v] of Object.entries((ovr.fields || {})[n.id] || {})) put(n, p, v);
+  }
+  for (const [p, v] of Object.entries(ovr.delivery || {})) put(d.delivery, p, v);
   s = s.replace(re, (_, a, __, c) => a + JSON.stringify(d).replace(/</g, '\\u003c') + c);
   // numbering 5..14 on pills and chips (the setup row is 1..4), and a handle for sheet-numbers.js (safe to run twice)
   s = s.replace('pillShape(pin, s.title, s.pillW, PILL_H);', 'pillShape(pin, (s.i + 5) + " · " + s.title, s.pillW + 46, PILL_H);');

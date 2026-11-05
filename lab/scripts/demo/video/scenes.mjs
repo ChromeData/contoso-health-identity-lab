@@ -1,5 +1,5 @@
 // Scenes for the lab demo video: narration beats + what the camera does.
-// Narration states only what the tenant shows (checked 2026-10-27).
+// Narration states only what the tenant shows (checked 2026-10-27; corrected 2026-11-05 from the readiness reports).
 import fs from 'node:fs';
 import path from 'node:path';
 import { OUT, REPO, sleep } from './rec.mjs';
@@ -43,27 +43,27 @@ function buildMapData() {
     kick: 'How the lab was built', title: 'From six sign-ups to <em>one running tenant</em>', sub: 'The wiring is half the work. Read it left to right, like the lab map.',
     foot: 'Orange: done by a person. Blue: written as code and applied by the pipeline. Screens are real pages from this lab.',
     stations: [
-      { title: 'Sign-ups', kicker: 'Six platforms, by hand', goal: 'Real accounts on every platform', text: 'Every platform is a real account with a trial licence. Opening them is the one step a person has to do: a card, a phone, a verification mail.',
+      { title: 'Sign-ups', kicker: 'Six platforms, by hand', goal: 'Real accounts on every platform', text: 'Every platform is a real account, on a free trial or a free developer edition; AWS is pay-as-you-go. Opening them is the one step a person has to do: a card, a phone, a verification mail.',
         bullets: ['Microsoft Entra: the cloud directory (E5, Governance and Intune trials)', 'Azure: the servers and storage, on a free-trial subscription', 'AWS, ServiceNow, Okta: the apps staff will sign in to', 'GitHub: every line of code, in a private repository', 'contosohealthlab.com: the hospital\'s own web name, so logins look like the hospital'],
         chips: [{ text: 'BY HAND', kind: 'hand' }, { text: 'DONE', kind: 'done' }],
         tiles: [{ name: 'Microsoft Entra', note: 'Where every staff login lives', img: BIMG('entra'), kind: 'hand' }, { name: 'Azure', note: 'Hosts the server and the evidence files', img: BIMG('azure'), kind: 'hand' }, { name: 'AWS', note: "Amazon's cloud, where hospitals run their own apps", img: BIMG('aws'), kind: 'hand' },
                 { name: 'ServiceNow', note: 'The IT help desk', img: BIMG('servicenow'), kind: 'hand' }, { name: 'Okta', note: "A partner clinic's own login system", img: BIMG('okta'), kind: 'hand' }, { name: 'GitHub', note: 'Where the code and the change history live', img: BIMG('github'), kind: 'hand' }],
-        outs: ['<b>6</b> accounts', '<b>3</b> free trials', '<b>1</b> verified domain'] },
-      { title: 'The pipeline', kicker: '64 reviewed changes', goal: 'Reviewed, repeatable, provable', text: 'Every change is a pull request. Checks rehearse it, a person approves it, Terraform applies it. That is how all of the lab was built, in days.',
+        outs: ['<b>6</b> accounts', '<b>1</b> verified domain'] },
+      { title: 'The pipeline', kicker: 'More than 70 reviewed changes', goal: 'Reviewed, repeatable, provable', text: 'Every change is a pull request. Checks rehearse it, a person approves it, Terraform applies it. That is how the lab was built, in days.',
         bullets: ['Day 1: sign-in rules, report-only', 'Day 2: admin tiers (PIM)', 'Day 3: access governance (packages, workflows)', 'Then: 17 detection rules, then the domain controller, then single sign-on for AWS, ServiceNow and Okta, with automatic accounts for AWS'],
         chips: [{ text: 'AS CODE', kind: 'code' }, { text: 'DONE', kind: 'done' }],
-        tiles: [{ name: 'Pull request', note: 'A change plus a reviewer', img: BIMG('github'), kind: 'code' }, { name: 'Checks', note: '13 mocked tests', glyph: '13 ✓', kind: 'code' }, { name: 'Approve', note: 'A person types it', glyph: 'approve', kind: 'hand' }, { name: 'Terraform apply', note: 'Makes the tenant match', glyph: 'TF', kind: 'code' }],
-        outs: ['<b>64</b> merged pull requests', '<b>13</b> checks on each one'] },
+        tiles: [{ name: 'Pull request', note: 'A change, its plan and an AI review', img: BIMG('github'), kind: 'code' }, { name: 'Checks', note: 'Automatic, on every change', glyph: '✓', kind: 'code' }, { name: 'Approve', note: 'A person types it', glyph: 'approve', kind: 'hand' }, { name: 'Terraform apply', note: 'Makes the tenant match', glyph: 'TF', kind: 'code' }],
+        outs: ['<b>70+</b> reviewed changes', 'Automatic checks on every change'] },
       { title: 'The directory', kicker: 'DC01 + Cloud Sync', goal: 'On-site accounts flow to the cloud', text: 'A Windows server in Azure was promoted to a domain controller, the on-site directory most hospitals still run. The Cloud Sync agent on it copies accounts up to Entra.',
-        bullets: ['DC01: Windows Server 2022, created by the pipeline, shuts down nightly', 'Cloud Sync: copies the Workforce and Disabled folders every few minutes', 'One password in both places, carried as a scrambled hash'],
+        bullets: ['DC01: Windows Server 2022, created by the pipeline, shuts down nightly', 'Cloud Sync: copies the Workforce and Disabled folders up to Entra on a schedule', 'One password in both places, carried as a scrambled hash'],
         chips: [{ text: 'AS CODE', kind: 'code' }, { text: 'AGENT BY SCRIPT', kind: 'hand' }, { text: 'DONE', kind: 'done' }],
         tiles: [{ name: 'DC01', note: 'Windows Server 2022 in Azure', img: BIMG('dc01'), kind: 'code' }, { name: 'Cloud Sync agent', note: 'Installed on DC01', img: BIMG('cloudsync'), kind: 'hand' }, { name: 'Entra ID', note: 'The cloud directory', img: BIMG('entra'), kind: 'code' }],
-        outs: ['<b>1</b> domain controller', 'Sync every few minutes'] },
+        outs: ['<b>1</b> domain controller', 'One login, both places'] },
       { title: 'The people', kicker: '13 staff, 3 admins', goal: 'Access follows HR from day one', text: 'A spreadsheet of thirteen fake staff stands in for HR. It went through Microsoft\'s HR front door into the directory, each person in the right department, then up to the cloud.',
         bullets: ['HR row → inbound provisioning API → Active Directory → Cloud Sync → Entra', 'One leaver (Priya) arrives disabled, in the Disabled folder', 'Three IT staff get separate admin logins (adm-)'],
         chips: [{ text: 'AS CODE', kind: 'code' }, { text: 'DONE', kind: 'done' }],
-        tiles: [{ name: 'HR spreadsheet', note: '13 staff, 1 leaver', glyph: 'CSV', kind: 'hand' }, { name: 'HR front door', note: 'Inbound provisioning app', img: BIMG('hrapp'), kind: 'code' }, { name: 'People in Entra', note: 'Synced up from AD', img: BIMG('users'), kind: 'code' }, { name: 'Admin accounts', note: '3 separate logins', glyph: 'adm-', kind: 'code' }],
-        outs: ['<b>13</b> staff in AD and Entra', '<b>3</b> admin accounts', '<b>4</b> nurses auto-assigned'] },
+        tiles: [{ name: 'HR spreadsheet', note: '13 fake staff', glyph: 'CSV', kind: 'hand' }, { name: 'HR front door', note: 'Inbound provisioning app', img: BIMG('hrapp'), kind: 'code' }, { name: 'People in Entra', note: 'Synced up from AD', img: BIMG('users'), kind: 'code' }, { name: 'Admin accounts', note: '3 separate logins', glyph: 'adm-', kind: 'code' }],
+        outs: ['<b>13</b> staff in AD and Entra', '<b>3</b> admin accounts', 'Nurses get their apps by rule'] },
     ],
     overview: { title: 'Six sign-ups, one pipeline, one tenant', goal: "That's the wiring.", text: 'Built with an AI engineering assistant doing the heavy typing. Every change still went through the same review and the same tests.',
       bullets: ['Everything from here is a tour of what it does', 'Glossary: lab/docs/glossary.md', 'Every script that built this is in the repo'], chips: [{ text: 'RAN · TENANT', kind: 'code' }, { text: 'GLOSSARY IN REPO', kind: 'done' }] },
@@ -91,7 +91,7 @@ export function scenes(ids) {
   { id: '01-built', kind: 'local', beats: [
     { say: "Here's how it's wired. One, the sign-ups. Microsoft is the center: Entra is everyone's work badge, and Azure runs the servers. HR decides who works here, and everything else plugs into Entra: ServiceNow, AWS and Okta. GitHub holds the code.", audio: `${OUT}/clips/km/01-built-0.mp3`, prep: async (r) => { await r.page.goto(BMAP); await r.ov('hideCursor', true); await r.page.evaluate((d) => window.bmap.init(d), buildMapData()); await sleep(1400); await r.page.evaluate(() => window.bmap.overview(false)); await sleep(300); },
       run: async (r, b) => { await b.until(0.02); await bmapGo(r, 0); } },
-    { say: "Two, the pipeline. Every change is written as code, tested, and approved by a person before it goes live. Sixty-four changes, all reviewed, so anyone can see what changed and who approved it.", audio: `${OUT}/clips/km/01-built-1.mp3`,
+    { say: "Two, the pipeline. Every change is written as code, tested, and approved by a person before it goes live. More than seventy reviewed changes, so anyone can see what changed and who approved it.", audio: `${OUT}/clips/km/01-built-1.mp3`,
       run: async (r, b) => { await b.until(0.02); await bmapGo(r, 1); } },
     { say: "Three, the directory. Hospital PCs still use an older on-site login system, Active Directory. Cloud Sync copies it to Entra, so one login works on old PCs and new cloud apps.", audio: `${OUT}/clips/km/01-built-2.mp3`,
       run: async (r, b) => { await b.until(0.02); await bmapGo(r, 2); } },
@@ -109,26 +109,26 @@ export function scenes(ids) {
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:directory').catch(() => {}); } },
     { say: "Seven, Entra to the apps a job needs. A nurse gets nurse apps on day one. Extras need a manager's OK, and they expire. Why: no waiting on day one, and no access piling up.", audio: `${OUT}/clips/km/02-map-3.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:joiner').catch(() => {}); } },
-    { say: "Eight, Entra to outside systems. ServiceNow is the IT help desk. AWS is Amazon's cloud, where hospitals run their own apps. Okta is the login of a clinic the hospital bought. None of them keeps its own passwords; they all trust Entra. Why: one switch turns someone off everywhere.", audio: `${OUT}/clips/km/02-map-4.mp3`,
+    { say: "Eight, Entra to outside systems. ServiceNow is the IT help desk. AWS is Amazon's cloud, where hospitals run their own apps. Okta is the login of a clinic the hospital bought. AWS and Okta trust Entra; ServiceNow is wired, with its sign-in switched off for now. Why: one switch turns someone off in every app that trusts Entra.", audio: `${OUT}/clips/km/02-map-4.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:apps').catch(() => {}); } },
-    { say: "Nine, sign-in rules. A password isn't enough: everyone needs a second check, and admins need a phishing-proof one. Why: a stolen password gets nobody in.", audio: `${OUT}/clips/km/02-map-5.mp3`,
+    { say: "Nine, sign-in rules. A password isn't enough: everyone needs a second check. The phishing-proof rule for admins is only watching for now, until their security keys are issued. Why: a stolen password gets nobody in.", audio: `${OUT}/clips/km/02-map-5.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:signin').catch(() => {}); } },
-    { say: "Ten, admin power. Nobody keeps it. Admins switch it on for a few hours, with a reason, and it switches off. Why: a stolen admin account can't do damage all day.", audio: `${OUT}/clips/km/02-map-6.mp3`,
+    { say: "Ten, admin power. No admin keeps it day to day; they borrow it for a few hours, with a reason, and it switches off. Only the build account and a few system and emergency accounts hold it. Why: a stolen admin account can't do damage all day.", audio: `${OUT}/clips/km/02-map-6.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:privileged').catch(() => {}); } },
     { say: "Eleven, alarms. Microsoft Sentinel watches every sign-in and change. I wrote twenty-two alarm rules, and all twenty-two fire in Splunk too. Why: catch misuse fast, whatever tool the hospital owns.", audio: `${OUT}/clips/km/02-map-7.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:detect').catch(() => {}); } },
     { say: "Twelve, leaving. HR marks Dana as gone, and everything closes on its own: on-site in seven seconds, the cloud in three minutes, AWS in nine. Why: no access after the last day.", audio: `${OUT}/clips/km/02-map-8.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:leaver').catch(() => {}); } },
-    { say: "Thirteen, proof. Every step is logged where nobody can edit it. Why: an auditor can check it instead of taking my word.", audio: `${OUT}/clips/km/02-map-9.mp3`,
+    { say: "Thirteen, proof. The evidence is filed where nobody can edit it. Why: an auditor can check it instead of taking my word.", audio: `${OUT}/clips/km/02-map-9.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'station:proof').catch(() => {}); } },
-    { say: "And fourteen, delivery: all of it shipped through that same reviewed pipeline. Now each piece, live.", audio: `${OUT}/clips/km/02-map-10.mp3`,
+    { say: "And fourteen, delivery: all of it ships as reviewed code, and the pipeline's own identities are set up by hand, on purpose. Now each piece, live.", audio: `${OUT}/clips/km/02-map-10.mp3`,
       run: async (r, b) => { await b.until(0.02); await mapGo(r, 'delivery').catch(() => {}); } },
   ] },
   { id: '03-delivery', kind: 'local', beats: [
-    { say: "Piece one, the blueprints. This is the change history: sixty-four approved changes. Each one is a pull request, a proposed edit shown line by line before anything is built. Read the titles like chapters: sign-in rules, then admin power, then access, then the cameras, the server and the outside doors. From here I follow one nurse, Dana, from her first day to her last.", audio: `${OUT}/clips/km/03-delivery-0.mp3`,
+    { say: "Piece one, the blueprints. This is the change history: more than seventy approved changes. Each one is a pull request, a proposed edit shown line by line before anything is built. Read the titles like chapters: sign-in rules, then admin power, then access, then the cameras, the server and the outside doors. From here I follow one nurse, Dana, from her first day to her last.", audio: `${OUT}/clips/km/03-delivery-0.mp3`,
       prep: termOpen,
       run: async (r, b) => { await cmd(r, 'gh pr list --state merged --limit 40'); await out(r, T('prs.txt'), 22); await r.define('Pull request', 'A proposed change plus a reviewer. Merged means accepted.'); await b.until(0.55); await mark(r, 'Day 1'); await b.until(0.65); await mark(r, 'Day 2'); await b.until(0.72); await mark(r, 'Day 3'); await b.until(0.8); await mark(r, 'enable_sentinel'); await b.until(0.86); await mark(r, 'enable_dc'); await b.until(0.92); await mark(r, '^#3[5-7]|^#36'); } },
-    { say: "Before a person even looks, the change is tested. Thirteen checks run it against a fake copy of the hospital. Some are guard rails. This one refuses to demand the strongest sign-in for admins until the rule that provides it is switched on. Otherwise every admin would be locked out.", audio: `${OUT}/clips/km/03-delivery-1.mp3`,
+    { say: "Before a person even looks, the change is tested. Thirteen tests rehearse it against a fake copy of the hospital. Some are guard rails. This one refuses to demand the strongest sign-in for admins until the rule that provides it is switched on. Otherwise every admin would be locked out.", audio: `${OUT}/clips/km/03-delivery-1.mp3`,
       run: async (r, b) => { await clear(r); await cmd(r, 'terraform test -var-file=lab.tfvars'); await out(r, T('tf-test.txt'), 9); await r.define('Mocked test', 'The change is rehearsed against a fake tenant first.'); await b.until(0.5); await mark(r, 'pim_auth_context_refused_while'); } },
     { say: "Then it stops at a human gate. A person types approve, and only then is the change built, signing in with a pass that lasts minutes, with no stored password. One honest caveat: here I'm both the author and the approver. In production that's a different person, enforced by the system.", audio: `${OUT}/clips/km/03-delivery-2.mp3`,
       run: async (r, b) => { await clear(r); await cmd(r, 'gh run view 40549067405');
@@ -170,7 +170,7 @@ export function scenes(ids) {
       prep: async (r) => { await r.chip('Directory', 'AD is the master, Entra is the hub');
         await r.goto(`https://portal.azure.com/#@ContosoHealthLab.onmicrosoft.com/resource${ids.vmId}/overview`, 14000); await r.settle(); },
       run: async (r, b) => { await r.ring({ text: 'vm-dc01', exact: true, nth: 0 }); await r.define('Virtual machine', 'A computer rented in the cloud, not in a server room.'); await b.until(0.4); await r.ring({ text: /Windows Server 2022 Datacenter/, nth: 0 }, 'Domain controller'); } },
-    { say: "Cloud Sync is the bridge. A small agent on that server copies everyone up to Entra every few minutes. The connection is healthy. It carries a scrambled form of each password, so staff have one password for both. Fix a person once, fixed everywhere.", audio: `${OUT}/clips/km/07-directory-1.mp3`,
+    { say: "Cloud Sync is the bridge. A small agent on that server copies everyone up to Entra on a schedule. The connection is healthy. It carries a scrambled form of each password, so staff have one password for both. Fix a person once, fixed everywhere.", audio: `${OUT}/clips/km/07-directory-1.mp3`,
       prep: async (r) => { await r.unring(); await r.goto(`${ENTRA}Microsoft_AAD_Connect_Provisioning/AADConnectMenuBlade/~/CloudSync`, 12000); await r.settle(); },
       run: async (r, b) => { await r.ring({ text: 'corp.contosohealthlab.com', row: true }); await r.define('Cloud Sync', 'The bridge that copies on-site accounts into the cloud directory.'); await b.until(0.45); await r.ring({ text: 'Healthy', exact: true }, 'Healthy'); } },
   ] },
@@ -182,7 +182,7 @@ export function scenes(ids) {
         await r.ring({ text: 'On-premises sync enabled', exact: true }, 'Synced from AD').catch(() => {}); await b.until(0.58);
         await r.ring({ text: 'Registered Nurse', exact: true }, 'Job title from HR').catch(() => {}); await b.until(0.8);
         await r.ring({ text: 'Employee hire date', exact: true }, 'Hire date from HR').catch(() => {}); } },
-    { say: "An access package is a bundle of doors for one job, with rules for who gets it and for how long. There are four. Nurse and ICU are handed out automatically from HR's job title. ICU Float needs a manager's yes and expires after a hundred and eighty days. Pharmacy is request-only. Dana is a nurse, so her badge opened the nurse doors on its own: the IT help desk, ServiceNow, and AWS. No ticket.", audio: `${OUT}/clips/km/08-joiner-1.mp3`,
+    { say: "An access package is a bundle of doors for one job, with rules for who gets it and for how long. There are four. Nurse and ICU are handed out automatically from HR's job title. ICU Float needs a manager's yes and expires after a hundred and eighty days. Pharmacy is request-only. Dana is a nurse, so the nurse doors were added to her badge on their own: ServiceNow, the IT help desk, and AWS. No ticket.", audio: `${OUT}/clips/km/08-joiner-1.mp3`,
       prep: async (r) => { await r.unring(); await r.goto(`${ENTRA}Microsoft_AAD_ERM/DashboardBlade/~/elmEntitlement`, 12000); await r.settle(); },
       run: async (r, b) => { await r.define('Access package', 'A bundle of access for one job, with rules on who gets it and for how long.'); await b.until(0.28); await r.ring({ text: 'Nurse - Clinical Apps', row: true }, 'Automatic'); await b.until(0.38); await r.ring({ text: 'ICU - Critical Care Apps', row: true }, 'Automatic'); await b.until(0.5); await r.ring({ text: 'ICU - Float Access', row: true }, 'Request · approval · 180 days'); await b.until(0.63); await r.ring({ text: /Pharmacy - Controlled Substances/, row: true }, 'Request only'); await b.until(0.75); await r.ring({ text: 'Nurse - Clinical Apps', row: true }, 'Dana · 4 active'); } },
     { say: "Some doors never open together. Nurse and pharmacy are marked incompatible, so no one can hold both. That's separation of duties, and the system enforces it, not a manager's memory.", audio: `${OUT}/clips/km/08-joiner-2.mp3`,
@@ -203,10 +203,10 @@ export function scenes(ids) {
       run: async (r, b) => { await r.ring({ text: 'State', exact: true }, 'Report-only').catch(() => {}); await r.define('Report-only', 'The rule logs what it would block, without blocking yet.'); await b.until(0.62); await r.unring(); await r.define('Break-glass account', 'An emergency login kept in a safe, excluded from every rule.'); } },
   ] },
   { id: '10-pim', kind: 'portal', beats: [
-    { say: "Admin power works like a master key on loan. The tool is PIM, Privileged Identity Management. You're allowed to borrow the key, but you don't carry it. The most powerful keys, the ones that could change security itself, need a ticket, a second proof and someone else's approval, for four hours at most. Two exceptions: the emergency badges, and the account that built the lab, which is next to fix.", audio: `${OUT}/clips/km/10-pim-0.mp3`,
+    { say: "Admin power works like a master key on loan. The tool is PIM, Privileged Identity Management. You're allowed to borrow the key, but you don't carry it. The most powerful keys, the ones that could change security itself, need a ticket, a second proof and someone else's approval, for four hours at most. Three exceptions: the emergency badges, the Cloud Sync service account, and the account that built the lab, which is next to fix.", audio: `${OUT}/clips/km/10-pim-0.mp3`,
       prep: async (r) => { await r.chip('Privileged access', 'No standing privilege'); await r.goto(`${ENTRA}Microsoft_Azure_PIMCommon/CommonMenuBlade/~/aadgroup`, 12000); await r.settle(); },
       run: async (r, b) => { await r.define('PIM', 'Admin power you switch on for a short window. It switches itself off.'); await r.type({ css: 'input[placeholder*="Search by group"]' }, 'PIM-Tier', 90); await sleep(3000); await r.ring({ text: 'PIM-Tier0-CA-Admins', row: true }, 'Tier 0 · approval + ticket · 4h'); } },
-    { say: "The help desk gets a smaller key. Raj Patel has a separate admin badge that can borrow help-desk power, but only over everyday staff. He can't touch another admin or an executive.", audio: `${OUT}/clips/km/10-pim-1.mp3`,
+    { say: "The help desk gets a smaller key. Raj Patel has a separate admin badge that can borrow help-desk power, but only over staff accounts that came from HR. He can't touch an admin account.", audio: `${OUT}/clips/km/10-pim-1.mp3`,
       prep: async (r) => { await r.unring(); await r.click({ css: 'input[placeholder*="Search by group"]' }); await r.page.keyboard.press('Meta+A'); await r.page.keyboard.type('PIM-Tier1', { delay: 30 }); await sleep(2500);
         await r.click({ text: 'PIM-Tier1-Helpdesk', exact: true }); await sleep(5000); await r.settle(200);
         await r.click({ text: 'Assignments', exact: true }); await sleep(4000); await r.click({ text: 'Eligible assignments', exact: true }); await sleep(3000); },
@@ -274,7 +274,7 @@ export function scenes(ids) {
       run: async (r, b) => { await b.until(0.9); } },
   ] },
   { id: '13-leaver', kind: 'portal', beats: [
-    { say: "Piece nine, leaving. The same path runs in reverse, and this time it was timed. HR flipped Dana to leaver. Seven seconds later her badge was off in the badge list. Under three minutes later, off in the cloud. And at nine minutes, AWS had removed her too. Nobody filed a ticket.", audio: `${OUT}/clips/km/13-leaver-0.mp3`,
+    { say: "Piece nine, leaving. The same path runs in reverse, and this time it was timed. HR flipped Dana to leaver. Seven seconds later her badge was off in the badge list. Under three minutes later, off in the cloud. And at nine minutes, AWS had switched her off too. Nobody filed a ticket.", audio: `${OUT}/clips/km/13-leaver-0.mp3`,
       prep: async (r) => { await r.chip('Leaver', 'No way back in, timed'); await r.goto(userBlade(ids.priya), 12000); await r.settle(); },
       run: async (r, b) => { await r.define('Leaver', 'HR marks someone gone; the account is disabled everywhere, automatically.'); await r.ring({ text: 'Priya Nair', exact: true, nth: 0 }); await b.until(0.55); await r.ring({ text: /^\W*Disabled$/, nth: 0 }, 'Disabled by HR'); } },
     { say: "Priya is the other case. HR sent her already marked as gone, so her badge was created switched off, with no doors at all. A leaver who never gets a working day one.", audio: `${OUT}/clips/km/13-leaver-1.mp3`,
@@ -285,19 +285,19 @@ export function scenes(ids) {
       prep: async (r) => { await r.chip('Proof', 'Proof on demand'); await r.goto(`https://portal.azure.com/#@ContosoHealthLab.onmicrosoft.com/resource${ids.stId}/containersList`, 14000); await r.settle();
         await r.click({ text: 'evidence', exact: true }); await sleep(6000); await r.settle(); },
       run: async (r, b) => { await r.define('WORM store', 'Write once, read many: evidence nobody can delete or change.'); await b.until(0.3); await r.ring({ text: 'captures', exact: true, row: true }, 'Hashed evidence'); } },
-    { say: "It keeps everything for six years, the HIPAA record window. Anyone writing evidence can add pages, never remove them, and a rewrite only adds a new version beside the old one.", audio: `${OUT}/clips/km/14-worm-1.mp3`,
+    { say: "It keeps everything for six years, the HIPAA record window. Anyone writing evidence can add pages, never remove them, and a rewrite only adds a new version. In the lab the lock stays in its trial setting; production locks it for good.", audio: `${OUT}/clips/km/14-worm-1.mp3`,
       prep: async (r) => { await r.unring(); await r.goto(`https://portal.azure.com/#@ContosoHealthLab.onmicrosoft.com/resource${ids.stId}/dataProtection`, 12000); await r.settle();
         await r.reveal({ text: /version-level immutability/i, nth: 0 }); await sleep(800); },
       run: async (r, b) => { await b.until(0.15); await r.ring({ text: /version-level immutability/i, nth: 0 }, '2190 days · WORM'); await b.until(0.6); await r.ring({ text: /Enable versioning for blobs/i, nth: 0 }, 'Overwrite = new version').catch(() => {}); } },
   ] },
   { id: '15-evidence', kind: 'local', beats: [
-    { say: "Piece ten, the logbook. Every step leaves a numbered row: what happened, when, a fingerprint of the file, and where it's stored. Here's the row that closes Dana's story: off on-site in seven seconds, out of the cloud in under three minutes, gone from AWS in nine. Every number comes from a real timestamp.", audio: `${OUT}/clips/km/15-evidence-0.mp3`,
+    { say: "Piece ten, the logbook. Every step leaves a numbered row: what happened, when, a fingerprint of the file, and where it's stored. Here's the row that closes Dana's story: off on-site in seven seconds, out of the cloud in under three minutes, switched off in AWS in nine. Every number comes from a real timestamp.", audio: `${OUT}/clips/km/15-evidence-0.mp3`,
       prep: async (r) => { await termOpen(r); await r.page.evaluate(() => { document.getElementById('scr').style.fontSize = '18px'; }); },
       run: async (r, b) => { await cmd(r, 'grep ^E lab/evidence/capture-log.csv | cut -c1-140');
         await out(r, T('elog.txt'), 8); await r.define('Hash', 'A fingerprint of a file. Change one byte and it changes.'); await b.until(0.55); await mark(r, '^E52|^E06|^E03'); } },
   ] },
   { id: '17-close', kind: 'local', beats: [
-    { say: "That's Contoso Health. One badge per person, made from HR on day one, opening the right doors in every building, checked at each one, watched by two camera systems, and gone from every building within nine minutes of leaving, with a logbook to prove it. Sixty-four reviewed changes. The code is available on request. Thanks for watching.", audio: `${OUT}/clips/km/17-close-0.mp3`,
+    { say: "That's Contoso Health. One badge per person, made from HR on day one, opening the right doors in every building, checked at each one, watched by two camera systems, and gone from every building within nine minutes of leaving, with a logbook to prove it. More than seventy reviewed changes. The code is available on request. Thanks for watching.", audio: `${OUT}/clips/km/17-close-0.mp3`,
       prep: card({ kick: 'Contoso Health identity lab', title: 'Access follows HR.<br>Admin power is <em>temporary</em>.<br>Every change is proven.', sub: 'Glossary: lab/docs/glossary.md', chips: [] }) },
   ] },
   { id: '20-tf-pipeline', kind: 'local', beats: [

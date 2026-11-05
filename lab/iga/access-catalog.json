@@ -1,7 +1,7 @@
 {
   "$comment": [
     "Contoso Health (fictional) access catalog: every access package, group and directory role the IGA rule files (birthright-rules.json, sod-rules.json) may name.",
-    "status 'terraform' = defined in lab/terraform and created when the named flag is on (NOT a claim that it exists in any tenant: no tenant has been built).",
+    "status 'terraform' = defined in lab/terraform and created when the named flag is on (on its own NOT a claim that it exists in a tenant; the four Clinical packages are live in the lab tenant).",
     "status 'planned'   = designed here, not defined anywhere yet. Scripts skip planned objects and say so; they never count them as clean.",
     "tier follows ADR 0012: T1 privileged, T2 requestable, T3 birthright clinical. assignment: automatic (HR attributes, T3 only, no expiry) or request (approval + expiry, T1/T2). One model per package: a requestable extra on top of a birthright bundle is its own package (ICU - Float Access), never a second policy on the birthright one.",
     "tests/Set-AutoAssignmentPolicies.Tests.ps1 checks every 'terraform' entry against the Terraform source, and modules/entitlement/tests/governance.tftest.hcl checks tier, assignment and resources of every Terraform package against this file, so neither side can drift."
