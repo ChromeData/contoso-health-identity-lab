@@ -1,7 +1,7 @@
 {
   "schema": "contoso-identity-config/v1",
-  "label": "snapshot",
-  "generatedAtUtc": "2026-10-29T01:31:39.8583470Z",
+  "label": "nightly",
+  "generatedAtUtc": "2026-11-05T02:18:41.8256104Z",
   "generator": "lab/scripts/powershell/Export-IdentityConfig.ps1",
   "source": "tenant",
   "public": true,
@@ -1033,7 +1033,8 @@
                 "targetType": "group"
               }
             ],
-            "state": "disabled"
+            "state": "disabled",
+            "telecomProviderSettings": null
           },
           {
             "excludeTargets": [],
@@ -1091,7 +1092,8 @@
               }
             ],
             "isOfficePhoneAllowed": false,
-            "state": "disabled"
+            "state": "disabled",
+            "telecomProviderSettings": null
           },
           {
             "authenticationModeConfiguration": {
