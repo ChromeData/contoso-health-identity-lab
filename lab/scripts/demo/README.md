@@ -185,6 +185,21 @@ wait for one Cloud Sync cycle plus delivery.
 
 License: Entra ID Governance for the access-package part (same as 02/03/04).
 
+## Before every recording or rehearsal: `preflight.sh`
+
+```bash
+lab/scripts/demo/preflight.sh            # fixes what breaks overnight, checks the rest
+lab/scripts/demo/preflight.sh --check    # look only
+lab/scripts/demo/preflight.sh --intune   # also start the Intune pilot device
+```
+
+Runs as the lab operator. DC01 shuts down every evening, which takes the
+Cloud Sync agent offline and makes Microsoft pause ("quarantine") the
+Active Directory to Entra sync. Preflight starts DC01, waits for its agent,
+clears the pause, then checks the HR, Cloud Sync and AWS sync jobs, that no
+demo hire is left over, the evidence runner, Splunk, the trial end dates and
+the time left before the evening shutdown. It ends with READY or NOT READY.
+
 ## One demo hire through GitHub Actions: `reset-demo-hire.sh`
 
 The "add a hire row on the `hr-feed` branch, push, watch Actions" demo
