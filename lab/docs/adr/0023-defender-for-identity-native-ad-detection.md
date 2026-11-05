@@ -159,10 +159,11 @@ Analytics read).
 
 **Consequences.**
 
-- The twins now fire on real events. First proof (capture-log E113): test-user
-  sign-ins from one IP in one 10-minute bin reached Splunk within minutes and
-  the *Failed sign-in spike* alert fired on them, the same pattern Sentinel's
-  KQL rule caught earlier that day.
+- The twins now fire on real events. First proof (capture-log E113): twelve
+  wrong passwords for two lab test users from one IP in one 10-minute bin
+  (16:30Z) reached Splunk by the 16:41Z feed run, and the *Failed sign-in
+  spike* alert fired at 16:45Z with the same row Sentinel's KQL rule produced
+  at 16:42Z (incident #57): FailedCount 12, two users, likely brute force.
 - **Lag:** Entra reaches the workspace 2-15 minutes after an event, then up to
   5 minutes to the next poll, then up to 5 minutes to the next scheduled
   search. Sentinel's NRT break-glass rule is faster; the scheduled twins are
