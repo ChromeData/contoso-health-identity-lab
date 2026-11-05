@@ -37,6 +37,8 @@ mock_provider "azuread" {
         "Team.Create"                                          = "23fc2474-f741-46ce-8465-674744c5c361"
         "TeamMember.ReadWrite.All"                             = "0121dc95-1b9f-4aed-8bac-58c5ac466691"
         "DelegatedPermissionGrant.ReadWrite.All"               = "8e8e4742-1d95-4f68-9d56-6ee75648c72a"
+        "SecurityEvents.Read.All"                              = "bf394140-e372-4bf9-a898-299cfc7564e5"
+        "AccessReview.ReadWrite.All"                           = "ef5f7d5c-338f-44b0-86c3-351f46c8bb5f"
       }
     }
   }
@@ -103,6 +105,20 @@ run "grants_are_exactly_the_reviewed_lists" {
     # ACTIVE (activation stays the user's own MFA-backed request).
     condition     = contains(var.operator_graph_roles, "PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup") && !contains(var.operator_graph_roles, "PrivilegedEligibilitySchedule.Read.AzureADGroup") && length([for r in var.operator_graph_roles : r if startswith(r, "PrivilegedAssignmentSchedule.")]) == 0
     error_message = "PIM groups: eligibility write only (it includes the read); no PrivilegedAssignmentSchedule role, which could make a member ACTIVE without an activation"
+  }
+  assert {
+    # Secure Score history (the KPI one-pager's "after" scan) is a READ: the
+    # operator gets SecurityEvents.Read.All, never .ReadWrite.All, which could
+    # change alerts and incidents the SOC works from.
+    condition     = contains(var.operator_graph_roles, "SecurityEvents.Read.All") && !contains(var.operator_graph_roles, "SecurityEvents.ReadWrite.All")
+    error_message = "Secure Score: SecurityEvents.Read.All only (no SecurityEvents.ReadWrite.All)"
+  }
+  assert {
+    # Creating the Terraform-rendered review series (New-AccessReviewDefinitions.ps1)
+    # needs AccessReview.ReadWrite.All; the read-only reports check their Graph
+    # context for AccessReview.Read.All by name, so both are granted.
+    condition     = contains(var.operator_graph_roles, "AccessReview.ReadWrite.All") && contains(var.operator_graph_roles, "AccessReview.Read.All")
+    error_message = "access reviews: ReadWrite (create the rendered series) plus Read (the report scripts' scope check)"
   }
   assert {
     condition     = toset(keys(azurerm_role_assignment.operator)) == toset(["Owner", "Storage Blob Data Contributor", "Key Vault Secrets Officer"])
