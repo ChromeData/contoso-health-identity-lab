@@ -119,6 +119,12 @@ b2b_connected_organization_id = ""
 # ---- SSO apps (modules/apps) -------------------------------------------------
 # Accountable human owners of every app (your admin@ object id).
 app_owner_object_ids = ["33333333-3333-3333-3333-333333333333"]
+# The GitHub APPLY app's client id (envs/bootstrap output
+# github_oidc_apply_client_id). It owns every app whoever applies: leave it
+# empty and a local apply makes YOU the Terraform owner and drops APPLY,
+# whose next CI apply then fails with 403 on the apps. Keep it current (or
+# pass -var="apply_client_id=..." on the command line, which wins over this).
+apply_client_id = "00000000-0000-0000-0000-000000000000"
 # Team mailbox for SAML signing-certificate expiry mails.
 saml_cert_notification_emails = []
 
