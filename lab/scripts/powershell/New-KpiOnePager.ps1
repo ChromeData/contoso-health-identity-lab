@@ -88,6 +88,10 @@ function Get-KpiCatalog {
         [pscustomobject]@{ Key = 'nhi_expired_or_orphaned'; Title = 'Non-human identities expired or without an owner'; Good = 'down'; Board = $false; Why = '' }
         [pscustomobject]@{ Key = 'nhi_with_expired_credential'; Title = 'Non-human identities with an expired credential'; Good = 'down'; Board = $false; Why = '' }
         [pscustomobject]@{ Key = 'nhi_orphaned'; Title = 'Non-human identities without an accountable owner'; Good = 'down'; Board = $false; Why = '' }
+        # Microsoft's own score of the tenant's security settings. Its note
+        # carries the baseline day vs today from Microsoft's daily history,
+        # so the before/after reads even against a snapshot that predates it.
+        [pscustomobject]@{ Key = 'secure_score_pct'; Title = 'Microsoft Secure Score'; Good = 'up'; Board = $false; Why = "Microsoft's rating of the tenant's security settings" }
     )
 }
 

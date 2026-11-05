@@ -519,6 +519,72 @@ Describe 'Authentication-method classification parity with 07-Passwordless-Rollo
     }
 }
 
+Describe 'Measure-SecureScore (baseline day vs today, from Microsoft''s daily history)' {
+    BeforeAll {
+        function New-ScoreDay([string]$At, [double]$Cur, [double]$Max, [hashtable]$Controls) {
+            @{ id = "11111111-1111-1111-1111-111111111111_$($At.Substring(0, 10))"; azureTenantId = '11111111-1111-1111-1111-111111111111'
+                createdDateTime = $At; currentScore = $Cur; maxScore = $Max
+                controlScores = @($Controls.Keys | Sort-Object | ForEach-Object { @{ controlName = $_; controlCategory = 'Identity'; score = $Controls[$_] } })
+            }
+        }
+        $script:History = @(
+            (New-ScoreDay '2026-11-05T02:00:00Z' 120 200 @{ AdminMFAV2 = 10; BlockLegacyAuthentication = 8; SigninRiskPolicy = 7; PWAgePolicyNew = 8 }),
+            (New-ScoreDay '2026-10-21T02:00:00Z' 40 200 @{ AdminMFAV2 = 0; BlockLegacyAuthentication = 0; MFARegistrationV2 = 2; PWAgePolicyNew = 8 }),
+            (New-ScoreDay '2026-10-27T02:00:00Z' 60 200 @{ AdminMFAV2 = 5; BlockLegacyAuthentication = 0; PWAgePolicyNew = 8 })
+        )
+    }
+    It 'takes the oldest day as the baseline and the newest as today, in any input order' {
+        $r = Measure-SecureScore -History $script:History
+        $r.Baseline.date | Should -Be '2026-10-21'
+        $r.Baseline.pct | Should -Be 20
+        $r.Latest.date | Should -Be '2026-11-05'
+        $r.Latest.pct | Should -Be 60
+        $r.DeltaPct | Should -Be 40
+        $r.DeltaScore | Should -Be 80
+        $r.Days | Should -Be 3
+        $r.MaxScoreChanged | Should -BeFalse
+    }
+    It 'lists only the controls that moved, biggest change first; one-sided controls carry null, never 0' {
+        $r = Measure-SecureScore -History $script:History
+        @($r.ControlsMoved | ForEach-Object { $_['control'] }) | Should -Be @('AdminMFAV2', 'BlockLegacyAuthentication', 'MFARegistrationV2', 'SigninRiskPolicy')
+        $r.ControlsMoved[0]['delta'] | Should -Be 10
+        $gone = $r.ControlsMoved | Where-Object { $_['control'] -eq 'MFARegistrationV2' }
+        $gone['before'] | Should -Be 2
+        $gone['after'] | Should -BeNullOrEmpty
+        $gone['delta'] | Should -BeNullOrEmpty
+        @($r.ControlsMoved | Where-Object { $_['control'] -eq 'PWAgePolicyNew' }).Count | Should -Be 0
+    }
+    It '-BaselineDate picks the first day on or after it' {
+        (Measure-SecureScore -History $script:History -BaselineDate '2026-10-22').Baseline.date | Should -Be '2026-10-27'
+    }
+    It 'refuses a baseline date after the newest record instead of comparing a day with itself silently' {
+        { Measure-SecureScore -History $script:History -BaselineDate '2026-12-01' } | Should -Throw '*No Secure Score record on or after 2026-12-01*'
+    }
+    It 'keeps the later record when a day appears twice' {
+        $dup = @($script:History) + @(New-ScoreDay '2026-11-05T20:00:00Z' 130 200 @{ AdminMFAV2 = 10 })
+        (Measure-SecureScore -History $dup).Latest.score | Should -Be 130
+    }
+    It 'fails on a record whose current score is missing, instead of reading it as 0' {
+        $noCur = New-ScoreDay '2026-11-06T02:00:00Z' 0 200 @{}
+        $noCur.Remove('currentScore')
+        { Measure-SecureScore -History (@($script:History) + @($noCur)) } | Should -Throw '*no currentScore*'
+    }
+    It 'keeps an unknown control score as null (a change it cannot see is not a change to 0)' {
+        $day = New-ScoreDay '2026-11-06T02:00:00Z' 120 200 @{ AdminMFAV2 = 10 }
+        $day['controlScores'] = @(@{ controlName = 'AdminMFAV2'; controlCategory = 'Identity'; score = $null })
+        $r = Measure-SecureScore -History (@($script:History) + @($day)) -BaselineDate '2026-11-05'
+        $m = @($r.ControlsMoved | Where-Object { $_['control'] -eq 'AdminMFAV2' })
+        $m.Count | Should -Be 1
+        $m[0]['before'] | Should -Be 10
+        $m[0]['after'] | Should -BeNullOrEmpty
+        $m[0]['delta'] | Should -BeNullOrEmpty
+    }
+    It 'fails on an empty history or a record without a maximum (never reports 0)' {
+        { Measure-SecureScore -History @() } | Should -Throw '*empty*'
+        { Measure-SecureScore -History @(New-ScoreDay '2026-11-05T02:00:00Z' 10 0 @{}) } | Should -Throw '*no maxScore*'
+    }
+}
+
 Describe '08-Measure-KPIs.ps1 end to end (mocked Graph, -SkipPam)' {
     BeforeAll {
         Mock Write-Host {}
@@ -582,6 +648,15 @@ Describe '08-Measure-KPIs.ps1 end to end (mocked Graph, -SkipPam)' {
                                 conditions = @{ clientAppTypes = @('all'); applications = @{ includeApplications = @('All'); excludeApplications = @() }; users = @{ includeUsers = @('All'); excludeGroups = @('g-bg') } } }) }
                 }
                 '/accessReviews/definitions' { return @{ value = @() } }
+                # Real records carry the tenant id in id and azureTenantId: the
+                # public snapshot must keep neither.
+                '/security/secureScores' {
+                    return @{ value = @(
+                            @{ id = '11111111-1111-1111-1111-111111111111_2026-11-05'; azureTenantId = '11111111-1111-1111-1111-111111111111'; createdDateTime = '2026-11-05T02:00:00Z'; currentScore = 90; maxScore = 180
+                                controlScores = @(@{ controlName = 'AdminMFAV2'; controlCategory = 'Identity'; score = 10 }) },
+                            @{ id = '11111111-1111-1111-1111-111111111111_2026-10-20'; azureTenantId = '11111111-1111-1111-1111-111111111111'; createdDateTime = '2026-10-20T02:00:00Z'; currentScore = 45; maxScore = 180
+                                controlScores = @(@{ controlName = 'AdminMFAV2'; controlCategory = 'Identity'; score = 0 }) }) }
+                }
                 '/v1\.0/applications\?' { return @{ value = @(@{ id = 'a1'; displayName = 'orphan'; owners = @(); passwordCredentials = @(@{ endDateTime = $old }); keyCredentials = @() }) } }
                 default { throw "unexpected Graph call in test: $Uri" }
             }
@@ -601,7 +676,8 @@ Describe '08-Measure-KPIs.ps1 end to end (mocked Graph, -SkipPam)' {
         foreach ($k in 'admin_standing_users', 'admin_eligible_only_users', 'admin_jit_pct', 'privileged_service_principals', 'phishing_resistant_pct',
             'phishing_resistant_device_bound_pct', 'ca_mfa_coverage_pct', 'ca_mfa_coverage_incl_report_only_pct', 'access_review_completion_pct',
             'access_review_revocation_pct', 'access_review_revocation_applied_pct', 'stale_accounts', 'hr_to_disable_minutes',
-            'nhi_expired_or_orphaned', 'nhi_with_expired_credential', 'nhi_orphaned', 'pam_vaulted_pct', 'pam_rotated_within_policy_pct', 'pam_sessions_recorded_pct') {
+            'nhi_expired_or_orphaned', 'nhi_with_expired_credential', 'nhi_orphaned', 'pam_vaulted_pct', 'pam_rotated_within_policy_pct', 'pam_sessions_recorded_pct',
+            'secure_score_pct') {
             $j['kpis'].Contains($k) | Should -BeTrue -Because "KPI '$k' must always be present (measured, failed or not-measured)"
         }
     }
@@ -629,6 +705,32 @@ Describe '08-Measure-KPIs.ps1 end to end (mocked Graph, -SkipPam)' {
         $j['kpis']['access_review_completion_pct']['status'] | Should -Be 'not-measured'
         $j['kpis']['hr_to_disable_minutes']['status'] | Should -Be 'not-measured'
         $j['kpis']['pam_vaulted_pct']['status'] | Should -Be 'not-measured'
+    }
+
+    It 'leaves Secure Score not-measured (with the reason) unless -IncludeSecureScore is passed' {
+        $j = Get-Content -LiteralPath $script:File.FullName -Raw | ConvertFrom-Json -AsHashtable
+        $j['kpis']['secure_score_pct']['status'] | Should -Be 'not-measured'
+        $j['kpis']['secure_score_pct']['note'] | Should -Match 'IncludeSecureScore.*SecurityEvents\.Read\.All'
+        Should -Invoke Invoke-MgGraphRequest -Times 0 -ParameterFilter { $Uri -like '*secureScores*' }
+    }
+
+    It '-IncludeSecureScore measures today vs the oldest day kept, lists the moved controls, and keeps no tenant id' {
+        $global:LASTEXITCODE = 0
+        $dir = Join-Path $TestDrive 'kpis-ss'
+        $null = & $script:Kpi -Label 'ss' -OutputDirectory $dir -DetailDirectory (Join-Path $TestDrive 'detail-ss') -SkipPam -IncludeSecureScore -WarningAction SilentlyContinue
+        $LASTEXITCODE | Should -Be 0
+        $f = @(Get-ChildItem -LiteralPath $dir -Filter '*.json')[0]
+        $j = Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json -AsHashtable
+        $k = $j['kpis']['secure_score_pct']
+        $k['status'] | Should -Be 'measured'
+        $k['value'] | Should -Be 50
+        $k['numerator'] | Should -Be 90
+        $k['denominator'] | Should -Be 180
+        $k['detail']['baseline']['date'] | Should -Be '2026-10-20'
+        $k['detail']['baseline']['pct'] | Should -Be 25
+        $k['detail']['controlsMoved'][0]['control'] | Should -Be 'AdminMFAV2'
+        $k['note'] | Should -Match '^2026-10-20: 25 % .* -> 2026-11-05: 50 % .*; 1 control\(s\) moved$'
+        (Get-Content -LiteralPath $f.FullName -Raw) | Should -Not -Match '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}'
     }
 
     It 'holds no names, UPNs, object ids or tenant domain (the kpis folder is public)' {
