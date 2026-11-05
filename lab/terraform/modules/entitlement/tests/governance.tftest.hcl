@@ -1,9 +1,10 @@
 # Offline mock tests for modules/entitlement (no tenant, no state):
 #   terraform init -backend=false && terraform test
 # Pins the ADR 0012 governance contract:
-#   * T3 birthright packages (Nurse, ICU) have NO Terraform policy: no request
-#     path, no expiry, no review. The automatic assignment policy comes from
-#     post-apply/Set-AutoAssignmentPolicies.ps1.
+#   * T3 birthright packages (Nurse, ICU, IT - Cloud Engineering) have NO
+#     Terraform policy: no request path, no expiry, no review. The automatic
+#     assignment policy comes from post-apply/Set-AutoAssignmentPolicies.ps1.
+#     AWS goes to cloud engineers (the patient portal runs there), not nurses.
 #   * T2 request packages (ICU - Float Access, Pharmacy) expire after 180 days;
 #     a policy review only when one outlives 180 days or allows extension.
 #   * The review flags are INDEPENDENT: turning on T1 never puts a review (or
@@ -109,11 +110,11 @@ run "birthright_packages_have_no_policy_no_expiry" {
   command = plan
 
   assert {
-    condition     = length(azuread_access_package.this) == 4 && jsonencode(sort(keys(azuread_access_package_assignment_policy.this))) == jsonencode(["icu_float", "pharmacy"])
-    error_message = "All four packages exist, but only the request packages (icu_float, pharmacy) get a Terraform policy: no requestable policy may compete with the automatic assignment policy on Nurse or ICU."
+    condition     = length(azuread_access_package.this) == 5 && jsonencode(sort(keys(azuread_access_package_assignment_policy.this))) == jsonencode(["icu_float", "pharmacy"])
+    error_message = "All five packages exist, but only the request packages (icu_float, pharmacy) get a Terraform policy: no requestable policy may compete with the automatic assignment policy on Nurse, ICU or Cloud Engineering."
   }
   assert {
-    condition = alltrue([for k in ["nurse", "icu"] :
+    condition = alltrue([for k in ["nurse", "icu", "cloud_engineering"] :
       output.package_assignment_model[k].tier == "T3" &&
       output.package_assignment_model[k].assignment == "automatic" &&
       output.package_assignment_model[k].expires_after_days == null &&
@@ -123,8 +124,12 @@ run "birthright_packages_have_no_policy_no_expiry" {
     error_message = "Birthright (T3) packages must have no expiry, no request policy and no review."
   }
   assert {
-    condition     = jsonencode(output.birthright_package_names) == jsonencode(["ICU - Critical Care Apps", "Nurse - Clinical Apps"])
-    error_message = "birthright_package_names must list the two T3 packages Set-AutoAssignmentPolicies.ps1 has to cover."
+    condition     = jsonencode(output.birthright_package_names) == jsonencode(["ICU - Critical Care Apps", "IT - Cloud Engineering Apps", "Nurse - Clinical Apps"])
+    error_message = "birthright_package_names must list the three T3 packages Set-AutoAssignmentPolicies.ps1 has to cover."
+  }
+  assert {
+    condition     = jsonencode(var.access_packages["nurse"].group_keys) == jsonencode(["servicenow"]) && jsonencode(var.access_packages["cloud_engineering"].group_keys) == jsonencode(["servicenow", "aws"])
+    error_message = "AWS is the cloud engineers' birthright (they run the patient portal), never the nurses'."
   }
   assert {
     condition = alltrue([for k in ["icu_float", "pharmacy"] :
@@ -185,7 +190,7 @@ run "t1_flag_never_reviews_clinical_packages" {
       "App-Okta-Federation-Users" = "40000000-0000-0000-0000-000000000001"
     }
     access_packages = {
-      nurse     = { display_name = "Nurse - Clinical Apps", description = "d", group_keys = ["servicenow", "aws"], tier = "T3", assignment = "automatic" }
+      nurse     = { display_name = "Nurse - Clinical Apps", description = "d", group_keys = ["servicenow"], tier = "T3", assignment = "automatic" }
       icu       = { display_name = "ICU - Critical Care Apps", description = "d", group_keys = ["servicenow", "icu_critical_care"], tier = "T3", assignment = "automatic" }
       icu_float = { display_name = "ICU - Float Access", description = "d", group_keys = ["servicenow", "icu_critical_care"], tier = "T2", assignment = "request", duration_in_days = 365, extension_enabled = true }
       pharmacy  = { display_name = "Pharmacy - Controlled Substances Apps", description = "d", group_keys = ["pharmacy_dispensing"], tier = "T2", assignment = "request", duration_in_days = 365, extension_enabled = true }
@@ -220,7 +225,7 @@ run "t2_flag_reviews_only_long_or_extendable_packages" {
       "Privileged-IAM-Admins" = "30000000-0000-0000-0000-000000000001"
     }
     access_packages = {
-      nurse     = { display_name = "Nurse - Clinical Apps", description = "d", group_keys = ["servicenow", "aws"], tier = "T3", assignment = "automatic" }
+      nurse     = { display_name = "Nurse - Clinical Apps", description = "d", group_keys = ["servicenow"], tier = "T3", assignment = "automatic" }
       icu_float = { display_name = "ICU - Float Access", description = "d", group_keys = ["servicenow", "icu_critical_care"], tier = "T2", assignment = "request" }
       pharmacy  = { display_name = "Pharmacy - Controlled Substances Apps", description = "d", group_keys = ["pharmacy_dispensing"], tier = "T2", assignment = "request", duration_in_days = 365 }
       extend    = { display_name = "Extendable T2", description = "d", group_keys = ["servicenow"], tier = "T2", assignment = "request", extension_enabled = true }
@@ -261,7 +266,7 @@ run "t1_package_reviewed_quarterly_by_governance_group" {
     privileged_review_reviewer_group_object_id = "22222222-2222-2222-2222-222222222222"
     sod_incompatible_pairs                     = []
     access_packages = {
-      nurse     = { display_name = "Nurse - Clinical Apps", description = "d", group_keys = ["servicenow", "aws"], tier = "T3", assignment = "automatic" }
+      nurse     = { display_name = "Nurse - Clinical Apps", description = "d", group_keys = ["servicenow"], tier = "T3", assignment = "automatic" }
       ehr_admin = { display_name = "EHR - Admin Console", description = "d", group_keys = ["servicenow"], tier = "T1", assignment = "request", duration_in_days = 90 }
     }
   }
