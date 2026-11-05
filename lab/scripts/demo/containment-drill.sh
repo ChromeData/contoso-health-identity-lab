@@ -37,9 +37,10 @@
 #      ticket) first, for the whole alert-to-approval story.
 #
 # disarm (idempotent: nothing left = nothing to do)
-#   1. Cancels every containment run still waiting on a drill incident: no
-#      approval stays pending. (Teams keeps showing that card; a click on it
-#      after the cancel reaches nothing.)
+#   1. Cancels every containment run still running on a drill incident,
+#      whether its card is waiting or not posted yet: no approval stays
+#      pending. (Teams keeps showing a posted card; a click on it after the
+#      cancel reaches nothing.)
 #   2. Deletes and PURGES every itdr-drill-* user that carries the marker.
 #   3. Deletes the temporary rule.
 #   4. Closes each drill incident as BenignPositive / SuspiciousButExpected,
@@ -398,22 +399,24 @@ print(json.dumps({"accountEnabled":True,"displayName":"ITDR Drill %s (throwaway)
 }
 
 cmd_disarm() {
-  local incs cards ids name num status run inc upn uid rid rc ok=1 summary cur
+  local incs runs ids name num status run inc upn uid rid rc ok=1 summary cur
   say "== containment drill: disarm"
   incs="$(drill_incidents)" || die "could not read the incidents"
-  cards="$(waiting_cards)" || die "could not read the waiting cards"
+  runs="$(running_runs | awk 'NF { print $1, $2 }' | sort -u)" || die "could not read the running containment runs"
 
-  # 1. no approval left pending on a drill incident. A waiting run whose
+  # 1. no containment run left on a drill incident - waiting on a card OR
+  # still on its way to one (an interrupted arm): a run that has read the
+  # user can still post its card after the user is gone. A running run whose
   # incident cannot be read is left alone (it might be a real approval) and
   # makes the read-back below fail: never reported clean.
-  while read -r run inc upn; do
+  while read -r run inc; do
     [ -z "$run" ] && continue
-    if [ "$inc" = "?" ]; then say "cannot tell which incident waiting run $run belongs to: left alone"; continue; fi
+    if [ "$inc" = "?" ]; then say "cannot tell which incident running run $run belongs to: left alone"; continue; fi
     if printf '%s\n' "$incs" | awk -v n="$inc" '$2 == n' | grep -q .; then
       rest POST "$WF/pb-identity-contain/runs/$run/cancel?$LOGIC_API" >/dev/null || die "could not cancel run $run"
-      say "cancelled the waiting containment run $run (incident #$inc)"
+      say "cancelled the containment run $run (incident #$inc)"
     fi
-  done <<<"$cards"
+  done <<<"$runs"
 
   # 2. drill users: delete and purge (marker required)
   ids="$(rest_all "$GRAPH/users?\$filter=startswith(userPrincipalName,'itdr-drill-')&\$select=id,userPrincipalName,jobTitle,onPremisesSyncEnabled" | M="$MARKER" py '
@@ -481,13 +484,13 @@ print(json.dumps({"etag":d.get("etag"),"properties":{"title":p["title"],"severit
   done <<<"$incs"
 
   # 5. read everything back
-  cards="$(waiting_cards)" || die "could not re-read the waiting cards"
+  runs="$(running_runs | awk 'NF { print $1, $2 }' | sort -u)" || die "could not re-read the running containment runs"
   incs="$(drill_incidents)" || die "could not re-read the incidents"
-  while read -r run inc upn; do
+  while read -r run inc; do
     [ -z "$run" ] && continue
-    if [ "$inc" = "?" ]; then say "NOT CLEAN: waiting run $run cannot be tied to an incident (trigger unreadable): check it by hand"; ok=0; continue; fi
-    if printf '%s\n' "$incs" | awk -v n="$inc" '$2 == n' | grep -q .; then say "NOT CLEAN: card still pending for drill incident #$inc (run $run)"; ok=0; fi
-  done <<<"$cards"
+    if [ "$inc" = "?" ]; then say "NOT CLEAN: running run $run cannot be tied to an incident (trigger unreadable): check it by hand"; ok=0; continue; fi
+    if printf '%s\n' "$incs" | awk -v n="$inc" '$2 == n' | grep -q .; then say "NOT CLEAN: containment run $run still running for drill incident #$inc"; ok=0; fi
+  done <<<"$runs"
   if printf '%s\n' "$incs" | awk 'NF && $3 != "Closed"' | grep -q .; then say "NOT CLEAN: a drill incident is still open"; ok=0; fi
   ids="$(live_drill_users)" || { say "NOT CLEAN: could not list the drill users"; ok=0; ids=""; }
   [ -z "$ids" ] || { say "NOT CLEAN: drill user(s) still exist: $ids"; ok=0; }

@@ -29,7 +29,8 @@
 #     by title on the server: an older drill behind 60 newer incidents is
 #     still found and closed;
 #   * an interrupted arm's run (card not posted yet) is reused, not doubled;
-#   * a waiting run whose trigger cannot be read is left alone, fails the
+#   * disarm cancels a drill run that has not posted its card yet;
+#   * a running run whose trigger cannot be read is left alone, fails the
 #     disarm read-back (NOT CLEAN) and makes arm refuse;
 #   * an arm that fails after switching the rule on switches it off again;
 #   * disarm never touches an itdr-drill user without the marker, and then
@@ -258,6 +259,15 @@ run arm
 run disarm
 [ $rc -eq 0 ] && [ "$(q '[i["status"] for i in d["incidents"] if i["number"]==101][0]')" = Closed ] && pass "disarm finds the drill incident behind 60 newer ones (paged, filtered by title)" || fail "older drill incident: rc=$rc $out"
 
+# --- 4d2. disarm also cancels a run that has not posted its card yet ---------------
+fresh; run arm
+python3 - <<'PY'
+import json,os
+p=os.environ["STUB_STATE"]; d=json.load(open(p)); d["runs"][0]["card"]="none"; d["runs"][0]["card_after"]=99; json.dump(d,open(p,"w"))
+PY
+run disarm
+[ $rc -eq 0 ] && [ "$(q 'd["runs"][0]["status"]')" = Cancelled ] && pass "disarm cancels a drill run whose card is not posted yet" || fail "pre-card run: rc=$rc status=$(q 'd["runs"][0]["status"]') $out"
+
 # --- 4e. a waiting run whose trigger cannot be read is never "clean" -----------------
 fresh; run arm
 python3 - <<'PY'
@@ -265,7 +275,7 @@ import json,os
 p=os.environ["STUB_STATE"]; d=json.load(open(p)); d["runs"][0]["trigger"]="bad"; json.dump(d,open(p,"w"))
 PY
 run disarm
-[ $rc -ne 0 ] && grep -q "NOT CLEAN: waiting run run-1 cannot be tied" <<<"$out" && pass "disarm fails NOT CLEAN on an unidentifiable waiting run" || fail "unreadable run: rc=$rc $out"
+[ $rc -ne 0 ] && grep -q "NOT CLEAN: running run run-1 cannot be tied" <<<"$out" && pass "disarm fails NOT CLEAN on an unidentifiable waiting run" || fail "unreadable run: rc=$rc $out"
 [ "$(q 'd["runs"][0]["status"]')" = Running ] && pass "...and leaves that run alone" || fail "cancelled an unidentified run"
 run arm
 [ $rc -eq 3 ] && pass "arm refuses while a waiting card's trigger is unreadable" || fail "arm with unreadable run: rc=$rc $out"
