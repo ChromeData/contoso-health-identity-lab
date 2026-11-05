@@ -205,3 +205,40 @@ test('entraBlocker: ordinary sign-in pages are not blockers', () => {
   assert.equal(entraBlocker('Sign in\nCan\'t access your account?\nNext'), null);
   assert.equal(entraBlocker('Enter code\nEnter the code displayed in your authenticator app'), null);
 });
+
+// ---- the lock across processes ------------------------------------------------
+import { spawn } from 'node:child_process';
+function child(env) {
+  return new Promise((resolve, reject) => {
+    const c = spawn(process.execPath, [path.join(path.dirname(new URL(import.meta.url).pathname), 'totp-child.mjs')], { env: { ...process.env, ...env } });
+    let out = '', err = ''; c.stdout.on('data', (d) => { out += d; }); c.stderr.on('data', (d) => { err += d; });
+    c.on('close', (code) => (code === 0 ? resolve(out) : reject(new Error(err))));
+  });
+}
+
+test('two processes recovering the same stale lock still get different codes, and leave no lock behind', async () => {
+  const upn = 'test-user-a@contosohealthlab.com';
+  const dir = path.join(home, 'session', 'browser');
+  const lock = path.join(dir, 'test-user-a.totp-lock');
+  fs.rmSync(path.join(dir, 'test-user-a.totp-step'), { force: true });
+  fs.writeFileSync(lock, 'crashed-holder'); const old = (Date.now() - 120000) / 1000; fs.utimesSync(lock, old, old);
+  const env = { UPN: upn, SEED: RFC_SEED, T0: String(1_700_000_010_000), START: String(Date.now()) };
+  const [a, b] = await Promise.all([child(env), child(env)]);
+  assert.notEqual(a, b, 'the second process must wait for the next window');
+  assert.equal(fs.existsSync(lock), false, 'no lock left behind');
+  assert.deepEqual(fs.readdirSync(dir).filter((n) => n.startsWith('test-user-a.totp-lock.')), [], 'no renamed-aside lock left behind');
+});
+
+test('a holder never removes a lock it does not own', async () => {
+  const upn = 'test-user-b@contosohealthlab.com';
+  const lock = path.join(home, 'session', 'browser', 'test-user-b.totp-lock');
+  fs.rmSync(path.join(home, 'session', 'browser', 'test-user-b.totp-step'), { force: true });
+  let t = 1_700_000_010_000;
+  // While "we" hold the lock, someone else's lock replaces it (as after a wrong
+  // stale recovery). Our release must leave theirs in place.
+  const clock = { now: () => t, sleep: async (ms) => { t += ms; fs.writeFileSync(lock, 'someone-else'); } };
+  fs.writeFileSync(path.join(home, 'session', 'browser', 'test-user-b.totp-step'), String(Math.floor(t / 30000))); // force one wait
+  await lib.freshTotp(upn, RFC_SEED, clock);
+  assert.equal(fs.readFileSync(lock, 'utf8'), 'someone-else');
+  fs.rmSync(lock);
+});

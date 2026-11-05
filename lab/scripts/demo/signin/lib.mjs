@@ -148,7 +148,7 @@ export function totp(secretB32, { now = Date.now(), step = 30, digits = 6 } = {}
 // sign-ins inside one 30-second window wait for the next code. Read, wait
 // and reservation happen under a per-user lock file (exclusive create), so
 // overlapping sign-ins - in one process or several - never get the same
-// code. A lock older than 90 s is a crashed holder's and is taken over.
+// code (see recoverStaleLock for a crashed holder's lock).
 const stepFile = (upn) => path.join(STATE_DIR, `${localPart(upn)}.totp-step`);
 const lockFile = (upn) => path.join(STATE_DIR, `${localPart(upn)}.totp-lock`);
 const realClock = { now: () => Date.now(), sleep };
@@ -156,20 +156,40 @@ export function markTotpStep(upn, counter) {
   fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
   fs.writeFileSync(stepFile(upn), String(counter), { mode: 0o600 });
 }
+// The lock file holds its owner's token. Only the owner removes it. A lock
+// older than STALE_MS (a crashed holder; a live one holds it < 40 s) is
+// recovered by renaming it aside - rename is atomic, so of two recoverers
+// only one moves it - and the mover checks it moved the stale lock it saw;
+// if a fresh lock had replaced it in between, it is put back (link = create
+// only if the slot is still free) and nobody else's lock is lost.
+const STALE_MS = 90000;
+function recoverStaleLock(f) {
+  let seen, st;
+  try { st = fs.statSync(f); seen = fs.readFileSync(f, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return true; throw e; }
+  if (Date.now() - st.mtimeMs <= STALE_MS) return false;
+  const aside = `${f}.${crypto.randomUUID()}`;
+  try { fs.renameSync(f, aside); } catch (e) { if (e.code === 'ENOENT') return true; throw e; }
+  let moved = null; try { moved = fs.readFileSync(aside, 'utf8'); } catch {}
+  if (moved !== seen) { try { fs.linkSync(aside, f); } catch (e) { if (e.code !== 'EEXIST') throw e; } }
+  fs.rmSync(aside, { force: true });
+  return true;
+}
 async function withTotpLock(upn, clock, fn) {
   fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
   const f = lockFile(upn);
+  const me = `${process.pid}:${crypto.randomUUID()}`;
   const giveUp = clock.now() + 120000;
   for (;;) {
-    try { fs.closeSync(fs.openSync(f, 'wx', 0o600)); break; } catch (e) {
+    try { fs.writeFileSync(f, me, { flag: 'wx', mode: 0o600 }); break; } catch (e) {
       if (e.code !== 'EEXIST') throw e;
-      let age = 0; try { age = Date.now() - fs.statSync(f).mtimeMs; } catch { continue; }
-      if (age > 90000) { fs.rmSync(f, { force: true }); continue; }
+      if (recoverStaleLock(f)) continue;
       if (clock.now() > giveUp) throw new Error(`another sign-in for ${upn} holds ${f}`);
       await clock.sleep(200);
     }
   }
-  try { return await fn(); } finally { fs.rmSync(f, { force: true }); }
+  try { return await fn(); } finally {
+    try { if (fs.readFileSync(f, 'utf8') === me) fs.rmSync(f, { force: true }); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  }
 }
 // `clock` is a test seam (a fake now/sleep); callers leave it out.
 export async function freshTotp(upn, seed, clock = realClock) {
