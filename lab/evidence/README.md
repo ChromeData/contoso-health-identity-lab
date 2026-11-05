@@ -66,7 +66,7 @@ hash file beside it:
 | `nhi/<UTC>/nhi-summary.json` | `06-NHI-Inventory.ps1 -PublicSummaryDirectory` | counts by kind, severity, OWASP NHI id and finding id; the SHA-256 of each private `out/nhi_*` file | `shasum -a 256 -c SHA256SUMS` |
 | `sod/<UTC>/` | `09-SoD-Report.ps1` | rule status and violations under pseudonyms (`U-` + hash prefix) | `shasum -a 256 -c manifest.sha256` |
 
-The 2026-11-05 runs are capture-log E70 (NHI), E71 (SoD) and E72 (KPIs).
+The 2026-11-05 runs are capture-log E70 (NHI), E71 (SoD) and E72 (KPIs); the first evidence pack with all 7 records is E74.
 
 ## Re-checking a record
 
