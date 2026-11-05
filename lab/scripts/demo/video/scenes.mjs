@@ -50,7 +50,7 @@ function buildMapData() {
                 { name: 'ServiceNow', note: 'The IT help desk', img: BIMG('servicenow'), kind: 'hand' }, { name: 'Okta', note: "A partner clinic's own login system", img: BIMG('okta'), kind: 'hand' }, { name: 'GitHub', note: 'Where the code and the change history live', img: BIMG('github'), kind: 'hand' }],
         outs: ['<b>6</b> accounts', '<b>1</b> verified domain'] },
       { title: 'The pipeline', kicker: 'More than 70 reviewed changes', goal: 'Reviewed, repeatable, provable', text: 'Every change is a pull request. Checks rehearse it, a person approves it, Terraform applies it. That is how the lab was built, in days.',
-        bullets: ['Day 1: sign-in rules, report-only', 'Day 2: admin tiers (PIM)', 'Day 3: access governance (packages, workflows)', 'Then: 17 detection rules, then the domain controller, then single sign-on for AWS, ServiceNow and Okta, with automatic accounts for AWS'],
+        bullets: ['Day 1: sign-in rules, report-only', 'Day 2: admin tiers (PIM)', 'Day 3: access governance (packages, workflows)', 'Then: 17 detection rules, then the domain controller, then single sign-on for AWS, ServiceNow and Okta, with automatic accounts for AWS and ServiceNow'],
         chips: [{ text: 'AS CODE', kind: 'code' }, { text: 'DONE', kind: 'done' }],
         tiles: [{ name: 'Pull request', note: 'A change, its plan and an AI review', img: BIMG('github'), kind: 'code' }, { name: 'Checks', note: 'Automatic, on every change', glyph: '✓', kind: 'code' }, { name: 'Approve', note: 'A person types it', glyph: 'approve', kind: 'hand' }, { name: 'Terraform apply', note: 'Makes the tenant match', glyph: 'TF', kind: 'code' }],
         outs: ['<b>70+</b> reviewed changes', 'Automatic checks on every change'] },
