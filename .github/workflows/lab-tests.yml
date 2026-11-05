@@ -165,6 +165,7 @@ jobs:
           set -euo pipefail
           bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
           bash lab/scripts/demo/tests/reset-demo-hire.test.sh
+          bash lab/scripts/demo/tests/close-build-noise.test.sh
           node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs
           node --test lab/terraform/okta/tests/trust-claims.test.mjs
           (cd lab/splunk && ./render-savedsearches.sh --check)
