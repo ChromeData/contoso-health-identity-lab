@@ -60,7 +60,14 @@ holds the signing certificate's private key.
 - **The Reply URL replaces the template's wildcard.** The template ships
   `https://*.signin.aws.amazon.com/platform/saml/acs/*`. After apply, Entra
   posts assertions only to this Identity Center instance. Wildcards are
-  rejected at plan.
+  rejected at plan. List **every** ACS URL of the instance: on 2026-11-05 the
+  first staff sign-in through the access portal failed with AADSTS50011
+  because the portal's AuthnRequest names
+  `https://us-east-1.signin.aws/platform/saml/acs/<id>` while only the
+  console panel's `https://us-east-1.sso.signin.aws/...` was listed. To read
+  the URL AWS really sends: open the access portal in a private window and
+  decode the `SAMLRequest` it posts to `login.microsoftonline.com/<tenant>/saml2`
+  (base64; `AssertionConsumerServiceURL` attribute).
 - **Claims are code.** A claims-mapping policy supersedes the portal's
   *Attributes & Claims* blade, which becomes read-only. NameID is pinned to
   `userPrincipalName`, the value the connector's default mapping sends as the
