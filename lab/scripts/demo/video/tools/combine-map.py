@@ -133,13 +133,19 @@ lab=_re.sub(lambda m: m.group(1)+json.dumps(_d,ensure_ascii=False).replace('<','
 # The 'Tested offline' links in the source map name a test record that was never
 # committed; point them at the committed one.
 lab=lab.replace('offline-tests/20261021T074732Z/','offline-tests/20261020T235044Z/')
-# The lab overview's four rules: name every account that still holds standing admin power.
-lab=lab.replace("'Nobody keeps admin power when they\\'re not using it. The exceptions are two emergency accounts and the build account, which is flagged and next to go.'",
-                "'No admin keeps power when they\\'re not using it. The exceptions are the build account and two locked emergency accounts.'")
-# Overview rule 3: the base text says 'a few lab secrets' lack an expiry and promises them ('yet');
-# none of the 9 vault secrets has one (checker 13:49Z), so say only what holds: where they live.
-lab=lab.replace("'No passwords are stored in the system that rolls out changes, and every other secret has an owner, an expiry and a plan to replace it. A few lab secrets don\\'t meet that yet; they\\'re tracked.'",
-                "'No passwords are stored in the system that rolls out changes. The few secrets the lab needs sit in a locked vault, reached over a private link plus one allow-listed admin address.'")
+# The lab overview's four rules, rules 2 and 3, as true today (director.mjs makes the same swap when it
+# builds map-video.html, so here the new text is usually present already). Rule 2: name every account that
+# still holds standing admin power. Rule 3: none of the 9 vault secrets has an expiry, so say only where the
+# secrets live. Fail closed: if neither the old nor the new text is there, the base map's wording or quoting
+# moved, and the build must stop rather than publish the old claim.
+def swap_rule(a,b_):
+    global lab
+    if a in lab: lab=lab.replace(a,b_); return
+    if b_ not in lab: raise SystemExit('combine-map: overview rule not found (wording or quoting changed): '+a[1:70]+'...')
+swap_rule("'Nobody keeps admin power when they\\'re not using it. The exceptions are two emergency accounts and the build account, which is flagged and next to go.'",
+          "'No admin keeps power when they\\'re not using it. The exceptions are the build account and two locked emergency accounts.'")
+swap_rule("'No passwords are stored in the system that rolls out changes, and every other secret has an owner, an expiry and a plan to replace it. A few lab secrets don\\'t meet that yet; they\\'re tracked.'",
+          "'No passwords are stored in the system that rolls out changes. The few secrets the lab needs sit in a locked vault, reached over a private link plus one allow-listed admin address.'")
 lab=lab.replace('<title>Contoso Health Lab Map</title>','').replace('<meta name="claude:viewport-fit-sides" content="cover">','')
 def rep(a,b_,n=1):
     # Tolerate already-numbered input: director.mjs numbers the map before saving, so a

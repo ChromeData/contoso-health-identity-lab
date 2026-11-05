@@ -89,9 +89,14 @@ function buildMap() {
   // reads this file's output). Rule 2: the Cloud Sync account no longer holds a standing role and nothing
   // is "next to go". Rule 3: none of the 9 vault secrets has an expiry, so it says only where they live.
   // The base map holds them as single-quoted JS strings, hence the \' escapes.
-  s = s.replace("'Nobody keeps admin power when they\\'re not using it. The exceptions are two emergency accounts and the build account, which is flagged and next to go.'",
+  // Fail closed: if the base map's wording or quoting moves, stop the build rather than publish the old claim.
+  const swapRule = (from, to) => {
+    if (s.includes(from)) { s = s.replace(from, to); return; }
+    if (!s.includes(to)) throw new Error(`overview rule not found in the base map (wording or quoting changed): ${from.slice(1, 70)}...`);
+  };
+  swapRule("'Nobody keeps admin power when they\\'re not using it. The exceptions are two emergency accounts and the build account, which is flagged and next to go.'",
     "'No admin keeps power when they\\'re not using it. The exceptions are the build account and two locked emergency accounts.'");
-  s = s.replace("'No passwords are stored in the system that rolls out changes, and every other secret has an owner, an expiry and a plan to replace it. A few lab secrets don\\'t meet that yet; they\\'re tracked.'",
+  swapRule("'No passwords are stored in the system that rolls out changes, and every other secret has an owner, an expiry and a plan to replace it. A few lab secrets don\\'t meet that yet; they\\'re tracked.'",
     "'No passwords are stored in the system that rolls out changes. The few secrets the lab needs sit in a locked vault, reached over a private link plus one allow-listed admin address.'");
   s = injectSheet(s);
   fs.writeFileSync(path.join(OUT, 'map-video.html'), s);
