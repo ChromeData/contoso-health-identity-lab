@@ -97,7 +97,7 @@ run "grants_are_exactly_the_reviewed_lists" {
     error_message = "every reviewed Graph role, and only those, is granted"
   }
   assert {
-    condition     = toset(keys(azurerm_role_assignment.operator)) == toset(["Owner", "Storage Blob Data Contributor", "Key Vault Secrets User"])
+    condition     = toset(keys(azurerm_role_assignment.operator)) == toset(["Owner", "Storage Blob Data Contributor", "Key Vault Secrets Officer"])
     error_message = "Azure roles must be the three reviewed ones"
   }
   assert {
