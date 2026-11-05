@@ -9,7 +9,7 @@ clinic's enterprise Okta tenant (the Okta row in
 > (capture-log E58), the authorize-request fix live 2026-11-05 (#140), and the
 > routing domain switched to `contosohealthlab.com` the same day (targeted
 > apply of the routing rule and the group rule). The first federated sign-in
-> (E102) reached Okta through Entra: Okta created the user by JIT, put her in
+> (capture-log E102, added by PR #131) reached Okta through Entra: Okta created the user by JIT, put her in
 > Clinic-Staff and started her session; the Okta dashboard then asked for an
 > Okta factor (see the verify list). Runtime statements still marked *verify:*
 > are not proven by that run.
