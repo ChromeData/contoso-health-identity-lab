@@ -38,7 +38,7 @@ caller closes it), `timeoutMs`.
 
 | Thing | Where | Why |
 |---|---|---|
-| Password | Keychain `contoso-lab-pw-<local>`; the test users' older `contoso-lab-test-user-a/b/c` (account = UPN) are used as they are | Secrets only in the login Keychain (AGENT-RULES) |
+| Password | Keychain `contoso-lab-pw-<local>`; the test users' older `contoso-lab-test-user-a/b/c` are used as they are. Every item (password, seed, pending) is read by service **and account = the full UPN** | Secrets only in the login Keychain (AGENT-RULES); the lab has two domains, so the local part alone could name two people |
 | Authenticator seed | Keychain `contoso-lab-totp-<local>` (account = UPN), written over stdin to `security -i` **before** the code is submitted | A crash after Entra accepts the code cannot lose the seed |
 | Temporary Access Pass | This process's memory only; deleted through Graph afterwards | One-time, never printed or stored |
 | Cookies | `~/.contoso-operator/session/browser/<local>.json`, mode 600, with the owner's full UPN inside | The operator's private session folder; reused by the next `signIn` **only for that UPN** (a same-named user on the other lab domain, an owner-less or unreadable file starts clean) |
