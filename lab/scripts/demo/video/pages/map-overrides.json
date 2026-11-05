@@ -84,7 +84,7 @@
    "A nightly stock-take of every door and lock."
   ],
   "LCW": [
-   "First-day and last-day checklists, built in the tenant; the first one runs on a hire day. On day one the manager gets a one-time pass to hand the new hire. On the last day the account is closed out.",
+   "First-day and last-day checklists. The first-day one runs on its own on the hire date, and the manager gets a one-time pass to hand the new hire. The last-day one is started the moment HR says someone has gone, and closes the account out.",
    "A first- and last-day checklist that runs itself."
   ],
   "DYNGRP": [
@@ -236,7 +236,7 @@
   "INTUNE": "RAN · tenant",
   "REVIEW": "RAN · tenant",
   "DRIFT": "RAN · tenant",
-  "LCW": "BUILT"
+  "LCW": "RAN · tenant"
  },
  "fields": {
   "OKTA": {
