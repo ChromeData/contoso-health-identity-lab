@@ -14,11 +14,12 @@
 # the temporary analytics rule, the incident and the playbook run.
 #
 # arm (idempotent: a second arm reports the same incident and changes nothing)
-#   0. REFUSES while any containment card is waiting about an account that is
-#      not a lab test or drill account (a card about a real person - the
-#      owner's admin account after a portal change, say - must never sit next
-#      to the drill card on camera). It names those incidents and how to clear
-#      them. A waiting card whose subject cannot be read counts as real.
+#   0. REFUSES while any containment run - card waiting or not posted yet -
+#      is about an account that is not a lab test or drill account (a card
+#      about a real person - the owner's admin account after a portal change,
+#      say - must never sit next to the drill card on camera), and checks
+#      again just before it reports ready. It names those incidents and how
+#      to clear them. A run whose subject cannot be read counts as real.
 #   1. Creates itdr-drill-<UTC date>@<domain>: cloud-only, no licence, a random
 #      password nobody keeps (it never signs in). An existing account of that
 #      name is reused ONLY if it carries this script's job-title marker and is
@@ -271,20 +272,23 @@ run_playbook() {  # $1 incident name, $2 playbook resource id
     rest POST "$SI/incidents/$1/runPlaybook?api-version=2024-04-01-preview" --stdin >/dev/null
 }
 
+# Refuse while ANY running containment run (card posted or still on its way)
+# is about an account that is not a test or drill account; print the open
+# drill-safe cards ("<run> <incident> <upn>") otherwise. $1 = what to say.
 refuse_real_cards() {
-  local cards real
-  cards="$(waiting_cards)" || die "could not read the waiting containment cards: refusing (fail closed)"
+  local runs real
+  runs="$(running_runs)" || die "could not read the running containment runs: refusing (fail closed)"
   real=""
-  while read -r run inc upn; do
+  while read -r run inc waiting upn; do
     [ -z "$run" ] && continue
-    is_drill_subject "$upn" || real="$real$run incident #$inc about $upn"$'\n'
-  done <<<"$cards"
+    is_drill_subject "$upn" || real="$real$run incident #$inc about $upn$([ "$waiting" = 1 ] && echo ' (card waiting)' || echo ' (card not posted yet)')"$'\n'
+  done <<<"$runs"
   if [ -n "$real" ]; then
-    printf 'containment-drill: refused - a containment card is waiting about an account that is not a test or drill account:\n%s' "$real" >&2
+    printf 'containment-drill: refused%s - a containment run is going about an account that is not a test or drill account:\n%s' "${1:+ $1}" "$real" >&2
     printf 'Clear each first: an approver answers Reject on that card, or cancel the run:\n  %s az rest --method POST --url "%s/pb-identity-contain/runs/<run>/cancel?%s"\n' "$OP" "$WF" "$LOGIC_API" >&2
     exit 3
   fi
-  printf '%s' "$cards"
+  printf '%s\n' "$runs" | awk 'NF && $3 == 1 { print $1, $2, $4 }'
 }
 
 # =============================================================================
@@ -395,6 +399,9 @@ print(json.dumps({"accountEnabled":True,"displayName":"ITDR Drill %s (throwaway)
   while [ $waited -le "$WAIT" ]; do
     cards="$(waiting_cards)" || die "could not read the waiting cards"
     if printf '%s\n' "$cards" | awk -v n="$num" -v u="$(printf '%s' "$UPN" | tr '[:upper:]' '[:lower:]')" '$2 == n && tolower($3) == u' | grep -q .; then
+      # A real person's run could have started while we waited: the same
+      # refusal as at the start, before reporting the drill ready.
+      refuse_real_cards "(the drill card for incident #$num is posted, but it is not safe to record)" >/dev/null || exit $?
       say "approval card waiting in Contoso SOC / Identity-SecOps for incident #$num (about $UPN)"
       say "DRILL_INCIDENT=$num"; return 0
     fi

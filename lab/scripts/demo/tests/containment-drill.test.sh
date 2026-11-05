@@ -12,6 +12,8 @@
 #     entity, disables the rule, starts pb-identity-contain, waits for the
 #     card, prints DRILL_INCIDENT=<n> last;
 #   * a second arm is idempotent: same incident, no new user, rule or run;
+#   * arm REFUSES (exit 3) while a containment run is going about a real
+#     account, card posted or not, and checks again before reporting ready;
 #   * arm REFUSES (exit 3, nothing created) while a card waits about a real
 #     account (subject = the run's incident Account entity, UPN from Graph by
 #     object id), and when a waiting card's subject cannot be read (an
@@ -146,6 +148,8 @@ if "/incidents" in u and "Microsoft.SecurityInsights" in u:
         if body["logicAppsResourceId"].endswith("/pb-identity-contain"):
             assert i.get("entity_delay", 0) == 0, "playbook started before the Account entity was attached"
             st["runs"].append({"name": "run-%d" % (len(st["runs"]) + 1), "status": "Running", "card": "Waiting", "incident": i["number"]})
+            if st.get("real_run_during_arm"):   # a real incident's run starts meanwhile
+                st["runs"].append({"name": "run-real-late", "status": "Running", "card": "none", "card_after": 99, "incident": 7})
         out({})
     if "/comments/" in tail and m == "PUT":
         i["comments"].append(body["properties"]["message"]); out({})
@@ -327,6 +331,24 @@ p=os.environ["STUB_STATE"]; d=json.load(open(p)); d["incidents"][0]["oids"]=["no
 PY
 run arm
 [ $rc -eq 3 ] && pass "a waiting card with an unreadable subject also refuses" || fail "unreadable subject: rc=$rc $out"
+
+python3 - <<'PY'
+import json,os
+p=os.environ["STUB_STATE"]; d=json.load(open(p)); d["incidents"][0]["oids"]=["11111111-1111-4111-8111-111111111111"]; d["runs"][0]["card"]="none"; d["runs"][0]["card_after"]=99; json.dump(d,open(p,"w"))
+PY
+run arm
+[ $rc -eq 3 ] && grep -q "card not posted yet" <<<"$out" && pass "arm also refuses a real-account run whose card is not posted yet" || fail "pre-card real run: rc=$rc $out"
+
+fresh; python3 - <<'PY'
+import json,os
+p=os.environ["STUB_STATE"]; d=json.load(open(p))
+d["users"]["michaelwilliams@contosohealthlab.onmicrosoft.com"]={"id":"11111111-1111-4111-8111-111111111111","userPrincipalName":"MichaelWilliams@ContosoHealthLab.onmicrosoft.com","accountEnabled":True,"onPremisesSyncEnabled":None,"jobTitle":"Owner"}
+d["incidents"].append({"name":"inc-7","number":7,"status":"New","title":"Contoso ITDR - Directory role assigned outside PIM","rule":"contoso-role-assigned-outside-pim","oids":["11111111-1111-4111-8111-111111111111"],"comments":[]})
+d["real_run_during_arm"]=True
+json.dump(d,open(p,"w"))
+PY
+run arm
+[ $rc -eq 3 ] && grep -q "drill card for incident #101 is posted, but it is not safe to record" <<<"$out" && ! grep -q "^DRILL_INCIDENT=" <<<"$out" && pass "a real run that starts while arm waits is caught before 'ready'" || fail "late real run: rc=$rc $out"
 
 # --- 6. an itdr-drill user that is not ours / disabled ------------------------------
 fresh; python3 - <<PY
