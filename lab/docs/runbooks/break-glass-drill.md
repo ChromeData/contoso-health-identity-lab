@@ -141,16 +141,16 @@ Record every time in UTC.
    reviews that result.
 7. **Close out.** Keys back in their safes. Close the Sentinel incident
    only **once no break-glass sign-in row has reached the workspace for an
-   hour**: the rule re-alerts every 5 minutes on every row in its 1 h
-   window (suppression off), the window counts from ingestion time, and late
-   copies of one sign-in kept arriving for 27 minutes (2026-11-05). Alerts
-   group into the open incident; an incident closed earlier is followed by a
-   new one, with a new Teams card and ServiceNow ticket. Check with
+   hour**: alerts group into the open incident for an hour, late copies of
+   one sign-in kept arriving for 27 minutes (2026-11-05), and an incident
+   closed earlier is followed by a new one. Check with
    `union SigninLogs, AADNonInteractiveUserSignInLogs | where UserPrincipalName startswith "bg-admin" | summarize max(TimeGenerated)`.
-   For the same reason,
-   a second drill sign-in while the first incident is open is grouped into
-   it and sends no new card or ticket: close the previous drill's incident
-   (after its hour) before a re-drill. The Verify phase re-runs the
+   Since 2026-11-05 the rule alerts once per newly ingested batch of rows
+   (`ingestion_time()`, not every 5 minutes over the hour), and an alert that
+   joins the open incident runs the notify playbook again (automation rule
+   "notify again when an alert joins an open incident"): a second drill
+   sign-in inside the hour gets its own Teams card and ServiceNow ticket, and
+   so can a late batch of rows from the same sign-in. The Verify phase re-runs the
    preflight; re-run `01-Verify-Baseline.ps1` too. Link the Sentinel
    incident(s) and INC number(s) to the change ticket and close them as
    "drill".

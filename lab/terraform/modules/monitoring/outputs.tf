@@ -60,3 +60,8 @@ output "defender_for_identity_connector_id" {
   description = "Microsoft Defender XDR data connector that carries MDI alerts into SecurityAlert (ADR 0023; null unless enable_sentinel + enable_defender_for_identity). The sensor, MDI workspace and licence are human steps - see the runbook."
   value       = one(azurerm_sentinel_data_connector_microsoft_threat_protection.mdi[*].id)
 }
+
+output "notify_alert_added_rule_id" {
+  description = "Automation rule that runs the notify playbook again when an alert joins an open incident of a rule in notify_on_alert_added_rule_keys (null until the notify playbook id is set)."
+  value       = one(azurerm_sentinel_automation_rule.notify_on_alert_added[*].id)
+}

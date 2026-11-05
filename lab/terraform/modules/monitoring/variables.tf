@@ -250,6 +250,26 @@ variable "privileged_user_ids" {
   }
 }
 
+variable "notify_on_alert_added_rule_keys" {
+  type        = list(string)
+  description = <<-EOT
+    Rules whose incidents run the notify playbook AGAIN when an alert is added
+    to an open incident (automation rule: incident Updated + Alerts added,
+    Microsoft Learn "Automate threat response with automation rules",
+    incident update trigger). For rules where every hit needs its own card
+    and ticket even inside the incident grouping window. Default: the
+    break-glass sign-in rule, which raises one alert per sign-in
+    (break-glass-signin.kql, ingestion_time()). Only rules that alert once
+    per event belong here: a rule that re-alerts every run would post a card
+    every five minutes.
+  EOT
+  default     = ["break_glass_signin"]
+  validation {
+    condition     = alltrue([for k in var.notify_on_alert_added_rule_keys : contains(["break_glass_signin", "pim_activation", "blocked_country_signin", "failed_signin_spike", "legacy_auth"], k)])
+    error_message = "notify_on_alert_added_rule_keys: core rule keys only (break_glass_signin, pim_activation, blocked_country_signin, failed_signin_spike, legacy_auth)."
+  }
+}
+
 variable "containment_on_alert_added" {
   type        = bool
   description = <<-EOT
