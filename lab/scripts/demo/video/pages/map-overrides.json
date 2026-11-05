@@ -84,7 +84,7 @@
    "A nightly stock-take of every door and lock."
   ],
   "LCW": [
-   "First-day and last-day checklists. The first-day one runs on its own on the hire date, and the manager gets a one-time pass to hand the new hire. The last-day one is started the moment HR says someone has gone, and closes the account out.",
+   "First-day and last-day checklists. The first-day one runs on its own on the hire date, and the manager gets a one-time pass to hand the new hire. The last-day one, for cutting someone off at once, is ready to run on demand.",
    "A first- and last-day checklist that runs itself."
   ],
   "DYNGRP": [
