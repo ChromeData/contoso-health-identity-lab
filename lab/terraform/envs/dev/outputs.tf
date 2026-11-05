@@ -461,6 +461,11 @@ output "servicenow_provisioning_job_id" {
   value       = one(module.apps[*].servicenow_provisioning_job_id)
 }
 
+output "servicenow_provisioning_reply_url_import_id" {
+  description = "Seeding step: terraform import id of the ServiceNow provisioning app's existing Web redirect set (modules/apps README \"ServiceNow provisioning\")."
+  value       = one(module.apps[*].servicenow_provisioning_reply_url_import_id)
+}
+
 output "servicenow_provisioning_job_enabled" {
   description = "Whether the ServiceNow provisioning cycle is started (false = created stopped)."
   value       = one(module.apps[*].servicenow_provisioning_job_enabled)

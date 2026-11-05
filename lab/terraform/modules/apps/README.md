@@ -298,8 +298,11 @@ sensitive (accepted residual risk; revoke = reset it in ServiceNow).
 **Order, and why the CI apply waits.** CI runners cannot reach the vault, so
 the credential's creating run is local. After the PR merges:
 
-1. The seeding apply, as the operator, targeted at the new objects (a full
-   local apply also tries to reconcile objects outside this change):
+1. The seeding apply, as the operator, in three targeted steps (a full
+   local apply also tries to reconcile objects outside this change). The
+   gallery app arrives with a Web redirect set, so the provider will only
+   *update* `azuread_application_redirect_uris.servicenow_provisioning`
+   after an import (the AWS gallery app needed the same, PR #59):
    ```bash
    cd lab/terraform/envs/dev
    # The values travel through a pipe only (never a command-line argument).
@@ -313,14 +316,24 @@ the credential's creating run is local. After the PR merges:
    export TF_VAR_require_scim_credentials=true
    apply_id="$(terraform -chdir=../bootstrap output -raw github_oidc_apply_client_id)" && [ -n "$apply_id" ] \
      || { echo "no APPLY client id: init envs/bootstrap first" >&2; return 1 2>/dev/null || exit 1; }
+   # a) everything except the reply URL: app, SP, owner, assignment, stopped job, credential
    terraform apply -var-file=lab.tfvars -var="apply_client_id=$apply_id" \
      -target='module.apps[0].azuread_synchronization_secret.servicenow[0]' \
      -target='module.apps[0].azuread_app_role_assignment.servicenow_provisioning_users[0]' \
+     -target='module.apps[0].azuread_application_owner.servicenow_provisioning[0]'
+   # b) adopt the template's Web redirect set
+   import_id="$(terraform output -raw servicenow_provisioning_reply_url_import_id)" && [ -n "$import_id" ] \
+     || { echo "no import id: step a did not create the app" >&2; return 1 2>/dev/null || exit 1; }
+   terraform import -var-file=lab.tfvars -var="apply_client_id=$apply_id" \
+     'module.apps[0].azuread_application_redirect_uris.servicenow_provisioning[0]' "$import_id"
+   # c) replace the wildcard with the instance's one URL (an in-place update)
+   terraform apply -var-file=lab.tfvars -var="apply_client_id=$apply_id" \
      -target='module.apps[0].azuread_application_redirect_uris.servicenow_provisioning[0]'
    unset TF_VAR_servicenow_provisioning_credentials
    ```
-   The three targets pull in the app, its service principal, the owner and
-   the stopped job. The plan must show only those.
+   Step a's plan must show only the provisioning objects (6 to add: app,
+   service principal, owner, assignment, job, credential) and step c's only
+   the reply-URL update (1 to change).
 2. Then approve the CI apply. One that ran before step 1 failed its plan on
    the credential postcondition and changed nothing: re-run it.
 3. Test Connection (`validateCredentials`), then provision on demand one

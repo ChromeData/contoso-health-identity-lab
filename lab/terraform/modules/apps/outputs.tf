@@ -239,6 +239,11 @@ output "servicenow_provisioning_job_enabled" {
   value       = one(azuread_synchronization_job.servicenow[*].enabled)
 }
 
+output "servicenow_provisioning_reply_url_import_id" {
+  description = "SEEDING STEP (README \"ServiceNow provisioning\"): the id to `terraform import` the gallery app's existing Web redirect set under azuread_application_redirect_uris.servicenow_provisioning before the apply that replaces its wildcard."
+  value       = one([for a in azuread_application_from_template.servicenow_provisioning : "${a.application_id}/redirectUris/Web"])
+}
+
 output "servicenow_provisioning_assigned_group_object_id" {
   description = "The single principal assigned to the provisioning app - the same App-ServiceNow-Users as the SSO app."
   value       = one(azuread_app_role_assignment.servicenow_provisioning_users[*].principal_object_id)

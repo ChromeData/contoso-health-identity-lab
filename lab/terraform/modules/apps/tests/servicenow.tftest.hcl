@@ -562,6 +562,10 @@ run "provisioning_on_mocked_apply" {
     error_message = "with no role reported by the SP, the gallery 'User' role id (read on the instantiated template) must be used, never default access"
   }
   assert {
+    condition     = output.servicenow_provisioning_reply_url_import_id == "/applications/12121212-1212-1212-1212-121212121212/redirectUris/Web"
+    error_message = "the import id must be the provider's /applications/<object id>/redirectUris/Web form for the provisioning app"
+  }
+  assert {
     condition     = output.servicenow_provisioning_job_enabled == false && output.servicenow_provisioning_assigned_group_object_id == "77777777-7777-7777-7777-777777777777"
     error_message = "the outputs must show a stopped job scoped to App-ServiceNow-Users"
   }

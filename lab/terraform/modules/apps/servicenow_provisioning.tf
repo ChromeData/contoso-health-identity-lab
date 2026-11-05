@@ -157,6 +157,14 @@ resource "azuread_application_owner" "servicenow_provisioning" {
 # but a wildcard would let ANY ServiceNow instance receive a token for it, so
 # it is replaced by this instance's one URL, as for the SSO app. Authoritative
 # for the Web type.
+#
+# IMPORT FIRST: because the template already made a Web redirect set, the
+# provider refuses to CREATE this resource ("already exists - to be managed
+# via Terraform this resource needs to be imported", the AWS gallery app's
+# one-time import in PR #59). The seeding recipe creates everything else,
+# imports this set (output servicenow_provisioning_reply_url_import_id), then
+# applies the one URL - all before the CI apply (README "ServiceNow
+# provisioning").
 resource "azuread_application_redirect_uris" "servicenow_provisioning" {
   count = local.servicenow_provisioning_enabled ? 1 : 0
 
