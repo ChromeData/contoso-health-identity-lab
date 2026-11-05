@@ -285,23 +285,35 @@ Describe 'Teams drill helpers (authorize-teams-connection.mjs, answer-teams-card
         $authorize | Should -Match 'checkUpn\('
     }
 
-    It 'acts (Contain / Revoke) only on cards about lab test or drill accounts; Reject is always allowed' {
-        $answer | Should -Match "choice !== 'reject' && !DRILL_SUBJECT\.test\(subject\)"
+    It 'acts (Contain / Revoke) only when every account on the incident is a test or drill account, read from Sentinel + Graph, never the card text' {
+        # Trusted sources: the incident's entities, then each UPN by object id.
+        $answer | Should -Match '/entities\?\$\{api\}'
+        $answer | Should -Match 'graph\.microsoft\.com/v1\.0/users/\$\{id\}\?\$select=userPrincipalName'
+        $answer | Should -Match "choice !== 'reject'"
+        $answer | Should -Match '!drillOnly\(subjects\)'
+        # No subject parsed out of card text (a display name can hold a fake address).
+        $answer | Should -Not -Match 'subjectOf'
+        # The click goes to the tagged button, never to a page-wide index that can shift.
+        $answer | Should -Match 'button\[data-soc-drill='
+        $answer | Should -Not -Match "locator\('button'\)\.nth\("
         $node = Get-Command node -ErrorAction SilentlyContinue
         if (-not $node) { Set-ItResult -Skipped -Because 'node is not installed'; return }
-        $fn = [regex]::Match($answer, '(?ms)^function subjectOf.*?^}').Value
+        $fn = [regex]::Match($answer, '(?ms)^function drillOnly.*?^}').Value
         $re = [regex]::Match($answer, 'const DRILL_SUBJECT = (/.*/i);').Groups[1].Value
         $fn | Should -Not -BeNullOrEmpty
         $js = @"
+const DRILL_SUBJECT = $re;
 $fn
-const DR = $re;
 const cases = [
-  ['Account\tITDR Drill (throwaway) (itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com)\nEntra object id\tx', true],
-  ['Account\tMichael Williams (MichaelWilliams@ContosoHealthLab.onmicrosoft.com)\nEntra object id\tx', false],
-  ['Account\tEvil (test-user-a@contosohealthlab.com) (adm-x@contosohealthlab.com)\nEntra object id\tx', false],
-  ['Account\tno address here\nEntra object id\tx', false],
+  [['itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com'], true],
+  [['test-user-a@contosohealthlab.com', 'itdr-drill-x@contosohealthlab.com'], true],
+  [['MichaelWilliams@ContosoHealthLab.onmicrosoft.com'], false],
+  [['test-user-a@contosohealthlab.com', 'adm-raj@contosohealthlab.com'], false],
+  [['test-user-a@evil.example'], false],
+  [[''], false],
+  [[], false],
 ];
-const bad = cases.filter(([t, ok]) => DR.test(subjectOf(t)) !== ok);
+const bad = cases.filter(([u, ok]) => drillOnly(u) !== ok);
 console.log(bad.length);
 "@
         $out = $js | & $node.Source -
