@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# =============================================================================
+# op - run one command AS THE LAB OPERATOR
+# -----------------------------------------------------------------------------
+#   lab/scripts/operator/op az ad sp list --display-name "gh-oidc" -o table
+#   lab/scripts/operator/op tofu -chdir=lab/terraform/envs/bootstrap plan
+#   lab/scripts/operator/op aws s3 ls
+# Sets AZURE_CONFIG_DIR (the operator's own az profile) and AWS_PROFILE
+# (idlab-operator), signing in first if the Azure session has lapsed.
+# Terraform/OpenTofu's azurerm and azuread providers pick up the operator
+# through the az CLI; the aws provider through AWS_PROFILE.
+# =============================================================================
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=common.sh
+. "$here/common.sh"
+op_load_config
+
+if ! az account get-access-token --tenant "$OP_TENANT_ID" --query expiresOn -o tsv >/dev/null 2>&1 \
+  || [ ! -f "$OP_PEM" ]; then
+  "$here/lab-signin.sh" >&2
+fi
+
+export AWS_PROFILE="$OP_AWS_PROFILE"
+export ARM_TENANT_ID="$OP_TENANT_ID" ARM_SUBSCRIPTION_ID="$OP_SUBSCRIPTION_ID"
+exec "$@"

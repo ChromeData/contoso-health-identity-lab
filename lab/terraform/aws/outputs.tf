@@ -80,3 +80,8 @@ output "patient_portal_object_keys" {
   description = "The objects Terraform keeps in the bucket."
   value       = sort(keys(aws_s3_object.patient_portal))
 }
+
+output "entra_operator_role_arn" {
+  description = "Role the lab operator assumes with its Entra token (lab/scripts/operator)."
+  value       = one(aws_iam_role.entra_operator[*].arn)
+}

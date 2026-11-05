@@ -1,0 +1,12 @@
+# =============================================================================
+# envs/operator :: terraform.tfvars.example
+# -----------------------------------------------------------------------------
+# Copy to terraform.tfvars (gitignored). No credentials here, ever: the
+# certificate's private key stays in the Keychain.
+# =============================================================================
+
+subscription_id = "00000000-0000-0000-0000-000000000000"
+tenant_id       = "00000000-0000-0000-0000-000000000000"
+
+# Public certificate from lab/scripts/operator/new-operator-cert.sh
+operator_certificate_path = "~/.contoso-operator/operator.crt"
