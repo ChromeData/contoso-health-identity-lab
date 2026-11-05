@@ -45,7 +45,12 @@ private key's lasting copy is a login Keychain item; a session copy (mode
   EntitlementManagement.ReadWrite.All, Policy.Read.All; added 2026-11-05 after
   the map readiness check hit 403s: AccessReview, LifecycleWorkflows, PIM
   eligibility and policy reads, Intune device and configuration reads (all
-  read-only), and User.DeleteRestore.All for demo-hire resets
+  read-only), and User.DeleteRestore.All for demo-hire resets; then, to finish
+  the lab's last tenant steps without borrowing the admin account,
+  AdministrativeUnit.ReadWrite.All, RoleManagement.ReadWrite.Directory,
+  LifecycleWorkflows.ReadWrite.All, UserAuthenticationMethod.ReadWrite.All,
+  User.ReadWrite.All and GroupMember.ReadWrite.All (no new reach: the
+  operator was already Tier 0 through AppRoleAssignment.ReadWrite.All)
 - **Azure, lab subscription:** Owner, Storage Blob Data Contributor,
   Key Vault Secrets User
 - **Entra role:** Security Reader (refreshing the tenant diagnostic setting)
