@@ -107,12 +107,21 @@ await activatePim('adm-presenter', 'PIM-Demo-Readers', 8, 'INC-1234: demo, read-
   - `allowTap` lets an identity with `fallback: "tap"` use a one-time pass if
     its own method fails. It is off by default because a pass is a credential
     issued in the tenant.
-- **`keepSignedIn(context, id)`** watches every page of the context. When an
+- **One Entra identity per context.** `signIn` refuses a context that is
+  already signed in to Entra as someone else; switching users inside one
+  context would let an app keep the old account silently. A context with an
+  Entra session the tool did not make is checked once, on My Account. The
+  cockpit therefore uses one context (or profile) per Entra identity.
+  ServiceNow and Splunk identities can share any context.
+- **Local passwords and codes are typed only into the exact origin** (scheme,
+  host, port) of the identity's `loginUrl`.
+- **`keepSignedIn(context, id)`** watches every page of the context, including
+  pages already on a sign-in screen when it starts. When an
   app sends one back to a sign-in page, it signs in again where the page is:
   an expired session, CA020's 4-hour re-authentication, ServiceNow's or
   Splunk's login form. This was seen live after wiping the session.
   "Stay signed in?" is answered yes.
-- **`activatePim(id, group, hours, reason)`** (**BUILT**, not yet run live: its first live run is adm-presenter → PIM-Demo-Readers after that group's apply) goes through Entra admin center →
+- **`activatePim(id, group, hours, reason)`** (**BUILT**, not yet run live: its first live run is adm-presenter → PIM-Demo-Readers after that group's apply). The duration must be set and read back. Success means the group's row under *Active assignments* with Deactivate; otherwise it throws and records nothing. It goes through Entra admin center →
   PIM → My roles → Groups → Activate, with duration and justification. If the
   blade asks for a fresh MFA, the identity's own method answers it in place.
   The end time is recorded in `~/.contoso-operator/session/browser/<id>.pim.json`

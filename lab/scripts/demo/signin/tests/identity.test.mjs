@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 process.env.CONTOSO_OPERATOR_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'identity-test-'));
 process.env.SIGNIN_QUIET = '1';
-const { validateRegistry, readEnvFileKey, needsSignIn, loadRegistry } = await import('../identity.mjs');
+const { validateRegistry, readEnvFileKey, needsSignIn, loadRegistry, sameOrigin, ownerConflict } = await import('../identity.mjs');
 const { landing } = await import('../signin.mjs');
 const { age, nextExpiry, sessionCookieExpiry, table } = await import('../doctor.mjs');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -113,4 +113,22 @@ test('doctor: sessionCookieExpiry reads Entra\'s persistent cookie only', () => 
 test('doctor: the table has the six asked-for columns', () => {
   const t = table([{ identity: 'a', method: 'passkey', works: 'yes', 'session age': '1 min', 'PIM state': '-', 'next expiry': '-' }]);
   assert.match(t.split('\n')[0], /^identity\s+method\s+works\s+session age\s+PIM state\s+next expiry/);
+});
+
+// ---- review fixes: one identity per context; secrets only to the exact origin -------
+test('ownerConflict: a context signed in as someone else is refused; the same account (any case) or none is fine', () => {
+  assert.match(ownerConflict('adm-labops@contosohealthlab.onmicrosoft.com', 'adm-presenter@contosohealthlab.onmicrosoft.com'), /already signed in to Entra as adm-labops@.*use a separate context/);
+  assert.equal(ownerConflict('ADM-Presenter@ContosoHealthLab.onmicrosoft.com', 'adm-presenter@contosohealthlab.onmicrosoft.com'), null);
+  assert.equal(ownerConflict(null, 'adm-presenter@contosohealthlab.onmicrosoft.com'), null);
+});
+test('sameOrigin: scheme, host AND port must match the loginUrl (another service on 127.0.0.1 never gets the password)', () => {
+  const login = 'http://127.0.0.1:8000/en-US/account/login';
+  assert.equal(sameOrigin('http://127.0.0.1:8000/en-US/app/search', login), true);
+  assert.equal(sameOrigin('http://127.0.0.1:8001/en-US/account/login', login), false);
+  assert.equal(sameOrigin('https://127.0.0.1:8000/en-US/account/login', login), false);
+  assert.equal(sameOrigin('https://dev459905.service-now.com.evil.example/login.do', 'https://dev459905.service-now.com/login.do'), false);
+});
+test('needsSignIn: a look-alike origin or another port is not this identity\'s sign-in page', () => {
+  const splunk = { kind: 'splunk-local', loginUrl: 'http://127.0.0.1:8000/en-US/account/login' };
+  assert.equal(needsSignIn('http://127.0.0.1:9000/en-US/account/login', splunk), false);
 });

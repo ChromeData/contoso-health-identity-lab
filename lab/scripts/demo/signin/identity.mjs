@@ -167,6 +167,13 @@ async function entra(page, e, opts) {
 }
 // ServiceNow login.do -> (validate_multifactor_auth_code.do) -> the app.
 // Splunk /account/login -> the app. Done when landing() sees the signed-in app.
+// A local password or code is typed only into a page of EXACTLY the origin of
+// the identity's loginUrl (scheme, host and port): never a look-alike host, a
+// redirect target or another service on 127.0.0.1.
+export const sameOrigin = (url, loginUrl) => { try { return new URL(url).origin === new URL(loginUrl).origin; } catch { return false; } };
+function assertOrigin(page, e) {
+  if (!sameOrigin(page.url(), e.loginUrl)) throw new Error(`${e.id}: a sign-in form at ${new URL(page.url()).origin} is not ${new URL(e.loginUrl).origin}: nothing typed`);
+}
 async function local(page, e, opts) {
   const deadline = Date.now() + (opts.timeoutMs || 120000);
   const target = page.url();
@@ -180,6 +187,7 @@ async function local(page, e, opts) {
     const user = await onScreen(page, '#user_name, input[name="user_name"], input[name="username"]');
     const pass = await onScreen(page, '#user_password, input[name="user_password"], input[name="password"]');
     if (user && pass) {
+      assertOrigin(page, e);
       if (typed++ > 1) throw new Error(`${e.id}: the login form came back: username or password refused`);
       await user.fill(e.username); await pass.fill(secret(e.secrets.password));
       const b = await onScreen(page, '#sysverb_login, button[type=submit], input[type=submit]'); if (b) await b.click(); else await pass.press('Enter');
@@ -191,6 +199,7 @@ async function local(page, e, opts) {
     if (/validate_multifactor_auth_code|Verify your identity|authenticator app/i.test(page.url() + ' ' + text) && e.secrets.totp) {
       const box = await onScreen(page, '#txtResponse, input[name="txtResponse"], input[autocomplete="one-time-code"]');
       if (box) {
+        assertOrigin(page, e);
         if (coded++ > 2) throw new Error(`${e.id}: the authenticator code was refused three times`);
         await box.fill(await freshTotp(`${e.username}@${host(e.loginUrl)}`, secret(e.secrets.totp)));
         const b = await onScreen(page, '#sysverb_validate_mfa_code, button:has-text("Verify"), button[type=submit]'); if (b) await b.click(); else await box.press('Enter');
@@ -212,8 +221,34 @@ async function local(page, e, opts) {
 //   allowTap: let a passkey/password identity with fallback "tap" use a pass if
 //             its own method fails (a pass is issued in the tenant; off by default)
 // Returns { page, context, browser, close, id, method, landed }.
+// One Entra identity per browser context. A context this tool signed in as
+// someone else is refused (switching users inside one context would let an app
+// keep the old account silently); a context with an Entra session the tool did
+// not make is checked first: My Account names its account.
+const contextOwner = new WeakMap();
+export function ownerConflict(current, wanted) { return current && current.toLowerCase() !== wanted.toLowerCase() ? `this context is already signed in to Entra as ${current}, not ${wanted}: use a separate context` : null; }
+async function entraAccountOf(context) {
+  const hasSession = (await context.cookies('https://login.microsoftonline.com')).some((c) => /^ESTSAUTH/.test(c.name));
+  if (!hasSession) return null;
+  const p = await context.newPage();
+  try {
+    await p.goto('https://myaccount.microsoft.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    for (let i = 0; i < 30; i++) {
+      if (LOGIN_HOST.test(host(p.url()))) return null; // the session did not sign anyone in silently
+      const m = (await pageText(p)).match(/[A-Za-z0-9._%+-]+@contosohealthlab\.(com|onmicrosoft\.com)/i);
+      if (m) return m[0].toLowerCase();
+      await sleep(1000);
+    }
+    throw new Error('could not tell which Entra account this context is signed in as (My Account showed no account)');
+  } finally { await p.close().catch(() => {}); }
+}
 export async function signIn(id, url, opts = {}) {
   const e = identity(id);
+  if (opts.context && e.kind === 'entra') {
+    const known = contextOwner.get(opts.context);
+    const conflict = ownerConflict(known || await entraAccountOf(opts.context), e.upn);
+    if (conflict) throw new Error(`${id}: ${conflict}`);
+  }
   const own = !opts.context;
   const browser = own ? await playwright().chromium.launch({ headless: opts.headless !== false }) : null;
   let context = opts.context, page = opts.page || null, usedMethod = e.method;
@@ -238,6 +273,7 @@ export async function signIn(id, url, opts = {}) {
       }
       if (own) await saveState(context, e.upn);
     } else await local(page, e, opts);
+    if (e.kind === 'entra') contextOwner.set(context, e.upn);
     log(`${id}: signed in (${usedMethod}) at ${host(page.url())}`);
     return { page, context, browser, close, id, method: usedMethod, landed: page.url() };
   } catch (err) {
@@ -255,7 +291,7 @@ export async function signIn(id, url, opts = {}) {
 export function needsSignIn(url, e) {
   const h = host(url);
   if (e.kind === 'entra') return LOGIN_HOST.test(h);
-  if (h !== host(e.loginUrl)) return false;
+  if (!sameOrigin(url, e.loginUrl)) return false;
   return e.kind === 'servicenow-local' ? /\/(login\.do|validate_multifactor_auth_code\.do)/i.test(url) : /\/account\/login/i.test(url);
 }
 export function keepSignedIn(context, id, { onEvent = (m) => log(m) } = {}) {
@@ -268,7 +304,7 @@ export function keepSignedIn(context, id, { onEvent = (m) => log(m) } = {}) {
       if (!needsSignIn(page.url(), e)) {
         // A local app can show its sign-in form at an ordinary URL (ServiceNow
         // navpage.do with SSO on, seen live): look at the page itself.
-        if (e.kind === 'entra' || host(page.url()) !== host(e.loginUrl)) return;
+        if (e.kind === 'entra' || !sameOrigin(page.url(), e.loginUrl)) return;
         await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
         if (!(await onScreen(page, '#user_name, input[name="user_name"], input[name="username"]'))) return;
       }
@@ -289,6 +325,8 @@ export function keepSignedIn(context, id, { onEvent = (m) => log(m) } = {}) {
   };
   context.pages().forEach(watch);
   context.on('page', watch);
+  // Pages already sitting on a sign-in page when the watcher starts: check once.
+  for (const [p, h] of handlers) h(p.mainFrame()).catch(() => {});
   return () => { context.off('page', watch); for (const [p, h] of handlers) p.off('framenavigated', h); };
 }
 
@@ -332,25 +370,35 @@ export async function activatePim(id, group, hours, reason, opts = {}) {
     if (!target) throw new Error(`${id} has no eligible assignment for ${group} on the PIM page`);
     await target.getByRole('button', { name: /^Activate$/ }).or(target.getByRole('link', { name: /^Activate$/ })).first().click();
     await sleep(4000);
-    const fill = async (sel, v) => inFrames(page, async (f) => { const l = f.locator(sel).first(); if (!(await l.isVisible())) return null; await l.fill(String(v)); return true; });
-    if (!(await fill('input[aria-label*="slider value"], input[aria-label*="Duration" i], input[type="number"]', hours))) log(`${id}: no duration box found; the blade's default applies`);
+    const fill = async (sel, v) => inFrames(page, async (f) => { const l = f.locator(sel).first(); if (!(await l.isVisible())) return null; await l.fill(String(v)); await l.press('Tab').catch(() => {}); return l; });
+    // The duration must be set AND read back: never record an end time the blade did not take.
+    const dur = await fill('input[aria-label*="slider value"], input[aria-label*="Duration" i], input[type="number"]', hours);
+    if (!dur) throw new Error('no duration box on the activation blade: not activating with an unknown duration');
+    const got = Number(await dur.inputValue().catch(() => NaN));
+    if (got !== Number(hours)) throw new Error(`the blade took ${Number.isNaN(got) ? 'no' : got} hours, not ${hours} (above the group's maximum?): not activating`);
     if (!(await fill('textarea', reason))) throw new Error('no justification box on the activation blade');
     const submit = async () => inFrames(page, async (f) => { const b = f.getByRole('button', { name: /^Activate$/ }).last(); if (!(await b.isVisible()) || !(await b.isEnabled())) return null; await b.click(); return true; });
     if (!(await submit())) throw new Error('the Activate button on the blade is not available');
-    // A fresh MFA can be asked for: verify in place, then submit again.
-    for (let i = 0; i < 40; i++) {
+    // Proof = the group's row under Active assignments with Deactivate/Extend.
+    // A fresh MFA can be asked for first: it is answered in place.
+    let proven = false;
+    for (let i = 0; i < 45 && !proven; i++) {
       await sleep(2000);
       const text = await pageText(page);
-      if (/Activation request (is being processed|completed)|successfully activated|is now active|Active assignments/i.test(text) && !/Additional verification required/i.test(text)) break;
+      if (/pending approval|requires approval/i.test(text)) throw new Error(`${group} needs an approver: not a self-service activation`);
       const verify = await inFrames(page, async (f) => { const b = f.getByRole('button', { name: /Verify your identity|Additional verification/i }).first(); return (await b.isVisible()) ? b : null; });
       if (verify) {
         const [pop] = await Promise.all([page.context().waitForEvent('page', { timeout: 15000 }).catch(() => null), verify.click()]);
         const where = pop || page;
         await entra(where, e, { until: async (p) => !LOGIN_HOST.test(host(p.url())) || p.isClosed(), timeoutMs: 120000 }).catch((err) => { if (!where.isClosed()) throw err; });
-        await sleep(2000); await submit();
+        await sleep(2000); await submit(); continue;
       }
-      if (/approval|pending approval/i.test(text) && /request/i.test(text)) throw new Error(`${group} needs an approver: not a self-service activation`);
+      if (i % 5 === 4) {
+        const tab = await inFrames(page, async (f) => { const t = f.getByRole('tab', { name: /Active assignments/i }).first(); return (await t.isVisible()) ? t : null; });
+        if (tab) { await tab.click().catch(() => {}); await sleep(2500); const a = await row(); proven = !!(a && /Deactivate|Extend/i.test(await a.innerText().catch(() => ''))); }
+      }
     }
+    if (!proven) throw new Error(`no active row for ${group} after activating: not recorded as active`);
     const endsUtc = new Date(Date.now() + hours * 3600000).toISOString();
     recordPim(id, { group, activatedUtc: new Date().toISOString(), endsUtc, reason });
     log(`${id}: ${group} activated for ${hours} h (until ${endsUtc})`);
