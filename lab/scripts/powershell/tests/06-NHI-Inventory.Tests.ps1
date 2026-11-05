@@ -258,3 +258,96 @@ Describe '06-NHI-Inventory.ps1 -SecretsRegisterPath (non-Entra long-lived secret
         $LASTEXITCODE | Should -Be 1
     }
 }
+
+Describe '06-NHI-Inventory.ps1 -OwnersRegisterPath (Tier-0 identities owned by a role, never by an Entra owner)' {
+    BeforeAll {
+        . (Get-ScriptFunctionBlock -Path $script:Nhi -Name 'Read-OwnersRegister', 'Get-Value')
+        $script:Owners = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' '..' 'iga' 'nhi-owners.json'))
+        function New-OwnersRegisterFile([string]$Name, [object[]]$Identities) {
+            $p = Join-Path $TestDrive "$Name.json"
+            @{ roles = @{ 'Identity Platform Owner' = @{ holder = 'test' } }; identities = $Identities } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $p
+            return $p
+        }
+        function Invoke-OfflineWithRegister([string]$Register, [string]$Name) {
+            Mock Write-Host {}
+            Mock Out-Host {}
+            $global:LASTEXITCODE = 0
+            return (& $script:Nhi -Offline -OutputDirectory (Join-Path $TestDrive $Name) -OwnersRegisterPath $Register -WarningAction SilentlyContinue)
+        }
+        $script:ApplyRole = @{ displayName = 'gh-oidc-entra-apply (write)'; ownerModel = 'role'; accountableOwnerRole = 'Identity Platform Owner'; tier = 'Tier 0' }
+        $script:PlanRole = @{ displayName = 'gh-oidc-entra-plan (read-only)'; ownerModel = 'role'; accountableOwnerRole = 'Identity Platform Owner'; tier = 'Tier 0 (by state access)' }
+    }
+
+    It 'the committed register is valid: the five CI and operator identities are owned by a defined role' {
+        $map = Read-OwnersRegister -Register (Get-Content -LiteralPath $script:Owners -Raw | ConvertFrom-Json -AsHashtable)
+        @($map.Keys | Sort-Object) | Should -Be @('Contoso Lab Operator (local Mac, certificate)', 'EVIDENCE (gh-oidc evidence pack)', 'gh-oidc-entra-apply (write)', 'gh-oidc-entra-plan (read-only)', 'HR-SYNC (gh-oidc hr-feed upload)')
+        foreach ($k in $map.Keys) { $map[$k].Role | Should -Be 'Identity Platform Owner'; $map[$k].Tier | Should -BeLike 'Tier 0*' }
+    }
+
+    It 'the committed register never makes the access governance lead an owner of an identity that creates or disables accounts (SOD-08)' {
+        $r = Get-Content -LiteralPath $script:Owners -Raw | ConvertFrom-Json -AsHashtable
+        foreach ($n in 'Contoso HR Inbound Provisioning', 'corp.contosohealthlab.com', 'HR-SYNC (gh-oidc hr-feed upload)') {
+            $e = @($r['identities'] | Where-Object { $_['displayName'] -eq $n })[0]
+            @($e['owners']) | Should -Not -Contain 'adm-mei.tanaka'
+        }
+    }
+
+    It 'counts a role-owned Tier-0 identity with no Entra owner as owned (no OWNER-NONE), and says so on its row' {
+        $base = Invoke-OfflineWithRegister -Register (New-OwnersRegisterFile 'none' @(@{ displayName = 'unrelated'; ownerModel = 'entra' })) -Name 'base'
+        $r = Invoke-OfflineWithRegister -Register (New-OwnersRegisterFile 'role' @($script:ApplyRole, $script:PlanRole)) -Name 'role'
+        $LASTEXITCODE | Should -Be 0
+        foreach ($n in 'gh-oidc-entra-apply (write)', 'gh-oidc-entra-plan (read-only)') {
+            @($r.Findings | Where-Object { $_.DisplayName -eq $n -and $_.FindingId -like 'OWNER-*' }).Count | Should -Be 0
+            $row = $r.Inventory | Where-Object DisplayName -eq $n
+            $row.OwnerModel | Should -Be 'Register role (Identity Platform Owner)'
+            $row.AccountableOwner | Should -Be 'Identity Platform Owner'
+            $row.OwnerCount | Should -Be ''
+        }
+        $r.Summary.kpi.orphanedNhi | Should -Be ($base.Summary.kpi.orphanedNhi - 2)
+        $r.Summary.kpi.roleOwnedNhi | Should -Be 2
+        ($r.DataSources | Where-Object Name -eq 'ownersRegister').Status | Should -Be 'ok'
+    }
+
+    It 'flags a Tier-0 identity (by permission) that HAS an Entra owner: OWNER-TIER0, raised to Critical' {
+        $r = Invoke-OfflineWithRegister -Register (New-OwnersRegisterFile 'none2' @(@{ displayName = 'unrelated'; ownerModel = 'entra' })) -Name 'perm'
+        $f = @($r.Findings | Where-Object { $_.DisplayName -eq 'legacy-report-exporter' -and $_.FindingId -eq 'OWNER-TIER0' })
+        $f.Count | Should -Be 1
+        $f[0].Severity | Should -Be 'Critical'
+        $f[0].OwaspNhi | Should -Be 'NHI5:2025'
+    }
+
+    It 'flags a register Tier-0 identity that HAS an Entra owner (OWNER-TIER0, never "add a second owner")' {
+        $mp = @{ displayName = 'midpoint-reader'; ownerModel = 'role'; accountableOwnerRole = 'Identity Platform Owner'; tier = 'Tier 0' }
+        $r = Invoke-OfflineWithRegister -Register (New-OwnersRegisterFile 'mp' @($mp)) -Name 'mp'
+        $ids = @($r.Findings | Where-Object DisplayName -eq 'midpoint-reader' | ForEach-Object FindingId)
+        $ids | Should -Contain 'OWNER-TIER0'
+        $ids | Should -Not -Contain 'OWNER-SINGLE'
+        ($r.Inventory | Where-Object DisplayName -eq 'midpoint-reader').OwnerModel | Should -Be 'Entra owners'
+        $r.Summary.kpi.tierZeroWithEntraOwner | Should -BeGreaterOrEqual 1
+    }
+
+    It 'an invalid register is a FAILED source (exit 1) and covers nothing: the Tier-0 orphan stays OWNER-NONE' {
+        $bad = New-OwnersRegisterFile 'bad' @(@{ displayName = 'gh-oidc-entra-apply (write)'; ownerModel = 'role'; accountableOwnerRole = 'Nobody'; tier = 'Tier 0' })
+        $r = Invoke-OfflineWithRegister -Register $bad -Name 'bad'
+        $LASTEXITCODE | Should -Be 1
+        ($r.DataSources | Where-Object Name -eq 'ownersRegister').Status | Should -BeLike 'FAILED*'
+        @($r.Findings | Where-Object { $_.DisplayName -eq 'gh-oidc-entra-apply (write)' -and $_.FindingId -eq 'OWNER-NONE' }).Count | Should -Be 1
+    }
+
+    It 'refuses a register that lists an identity twice or has an unknown owner model' {
+        { Read-OwnersRegister -Register @{ roles = @{ R = @{} }; identities = @(@{ displayName = 'a'; ownerModel = 'entra' }, @{ displayName = 'a'; ownerModel = 'entra' }) } } | Should -Throw '*listed twice*'
+        { Read-OwnersRegister -Register @{ roles = @{ R = @{} }; identities = @(@{ displayName = 'a'; ownerModel = 'owner' }) } } | Should -Throw "*must be 'entra' or 'role'*"
+        { Read-OwnersRegister -Register @{ identities = @(@{ displayName = 'a'; ownerModel = 'entra' }) } } | Should -Throw "*'roles'*"
+    }
+
+    It 'never covers a display name that matches two app registrations (a look-alike must not inherit the role)' {
+        Set-NhiTenantMocks
+        $twin = $global:NhiTest.Apps[0].Clone(); $twin['id'] = 'app-3'; $twin['appId'] = 'aid-3'
+        $global:NhiTest.Apps = @($global:NhiTest.Apps) + @($twin)
+        $reg = New-OwnersRegisterFile 'twin' @(@{ displayName = 'orphan-app'; ownerModel = 'role'; accountableOwnerRole = 'Identity Platform Owner'; tier = 'Tier 0' })
+        $global:LASTEXITCODE = 0
+        $r = & $script:Nhi -OutputDirectory (Join-Path $TestDrive 'nhi-twin') -SkipSignInActivity -OwnersRegisterPath $reg -WarningAction SilentlyContinue
+        @($r.Findings | Where-Object { $_.DisplayName -eq 'orphan-app' -and $_.FindingId -eq 'OWNER-NONE' }).Count | Should -Be 2
+        ($r.DataSources | Where-Object Name -eq 'ownersRegister').Detail | Should -Match "'orphan-app' matches 2 app registrations"
+    }
+}

@@ -134,27 +134,14 @@ run "grants_are_exactly_the_reviewed_lists" {
   }
 }
 
-# ADR 0018: the operator is Tier 0, so its owners are the lead's decision;
-# by default no owners change is planned, and a named owner lands on both
-# the app registration and the service principal.
-run "owners_only_when_named" {
+# ADR 0018 (Tier-0 identities): the operator never has an Entra owner - an
+# owner could add a credential and act as it. owners is an explicit empty
+# list on the app and the service principal.
+run "operator_has_no_entra_owner" {
   command = plan
 
   assert {
-    condition     = azuread_application.operator.owners == null && azuread_service_principal.operator.owners == null
-    error_message = "no owners change unless operator_owner_object_ids names someone"
-  }
-}
-
-run "named_owners_on_app_and_sp" {
-  command = plan
-
-  variables {
-    operator_owner_object_ids = ["b0b0b0b0-0000-4000-8000-0000000000b1", "b0b0b0b0-0000-4000-8000-0000000000b2"]
-  }
-
-  assert {
-    condition     = length(azuread_application.operator.owners) == 2 && toset(azuread_service_principal.operator.owners) == toset(azuread_application.operator.owners)
-    error_message = "named owners go on the app registration and the service principal"
+    condition     = length(azuread_application.operator.owners) == 0 && length(azuread_service_principal.operator.owners) == 0
+    error_message = "the operator must have no Entra owner (accountable owner: the Identity Platform Owner role, lab/iga/nhi-owners.json)"
   }
 }

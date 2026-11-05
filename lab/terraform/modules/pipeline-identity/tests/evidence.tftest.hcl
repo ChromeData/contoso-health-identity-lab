@@ -87,6 +87,12 @@ run "evidence_enabled" {
     condition     = output.plan_graph_roles == tolist(["AdministrativeUnit.Read.All", "EntitlementManagement.Read.All", "Group.Read.All", "Policy.Read.All", "RoleManagement.Read.Directory", "RoleManagementPolicy.Read.AzureADGroup", "RoleManagementPolicy.Read.Directory", "User.Read.All"])
     error_message = "enabling EVIDENCE must not change the PLAN identity"
   }
+  # ADR 0018 (Tier-0 identities): EVIDENCE writes the audit evidence, so it has
+  # no Entra owner who could add a credential and write as it.
+  assert {
+    condition     = length(azuread_application.evidence[0].owners) == 0 && length(azuread_service_principal.evidence[0].owners) == 0
+    error_message = "EVIDENCE must have no Entra owner (accountable owner: a role in lab/iga/nhi-owners.json)"
+  }
 }
 
 run "evidence_roles_are_read_only" {

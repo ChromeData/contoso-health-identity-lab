@@ -269,42 +269,25 @@ variable "evidence_graph_roles" {
 }
 
 # -----------------------------------------------------------------------------
-# Accountable human owners (ADR 0018, nhi-standard N1). Who and why per
-# identity: lab/iga/nhi-owners.json.
+# Accountable human owners of the HR provisioning app (ADR 0018). The CI
+# identities themselves never get an Entra owner (main.tf, no_entra_owners).
+# Who and why: lab/iga/nhi-owners.json.
 # -----------------------------------------------------------------------------
-variable "owner_object_ids" {
-  type = object({
-    plan     = optional(list(string), [])
-    apply    = optional(list(string), [])
-    hr_sync  = optional(list(string), [])
-    evidence = optional(list(string), [])
-    # Human owners of the HR provisioning app HR-SYNC uploads to (made by
-    # lab/scripts/mock-hr/New-InboundProvisioningApp.ps1, looked up by client
-    # id); only used while HR-SYNC owns it (hr_sync_upload_scope = "owned").
-    hr_provisioning = optional(list(string), [])
-  })
+variable "hr_provisioning_owner_object_ids" {
+  type        = list(string)
   description = <<-EOT
-    Entra USER object ids recorded as owners (app registration + service
-    principal) of each CI identity. ADR 0018 wants two people per identity
-    (a named owner plus a backup). An owner can add a credential and act AS
-    the identity, so the owners of a Tier-0 identity must be Tier-0 people
-    (ADR 0018 Consequences): APPLY (RoleManagement.ReadWrite.Directory) and
-    PLAN (it can read the envs/dev state, which holds the generated
-    break-glass passwords - see envs/bootstrap main.tf "Remote state") stay
-    empty until the lead names them. An empty list = no owners change planned
-    (null, not []).
-    Not marked sensitive, unlike envs/dev's app_owner_object_ids: this module
-    is applied only from envs/bootstrap, on the operator's Mac, so no plan of
-    it is ever posted to a pull request; and hr_provisioning feeds a for_each,
-    which Terraform refuses to key on a sensitive value.
+    Entra USER object ids added as owners of the HR provisioning app's
+    REGISTRATION (one azuread_application_owner each; its service principal and
+    HR-SYNC's own ownership are untouched). ADR 0018: two people. Only used
+    while HR-SYNC owns the app (hr_sync_upload_scope = "owned"). Not marked
+    sensitive, unlike envs/dev's app_owner_object_ids: this module is applied
+    only from envs/bootstrap on the operator's Mac (no plan is ever posted to a
+    pull request), and for_each refuses a sensitive set.
   EOT
-  default     = {}
+  default     = []
 
   validation {
-    condition = alltrue([
-      for id in flatten([var.owner_object_ids.plan, var.owner_object_ids.apply, var.owner_object_ids.hr_sync, var.owner_object_ids.evidence, var.owner_object_ids.hr_provisioning]) :
-      can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))
-    ])
-    error_message = "owner_object_ids: every entry must be an Entra object id (GUID)."
+    condition     = alltrue([for id in var.hr_provisioning_owner_object_ids : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))])
+    error_message = "hr_provisioning_owner_object_ids: every entry must be an Entra object id (GUID)."
   }
 }

@@ -57,16 +57,8 @@ enable_evidence_pack          = false
 evidence_storage_account_name = "stidlabevidence7f3a"
 evidence_resource_group_name  = "rg-identity-lab"
 
-# Accountable human owners of each CI identity (ADR 0018, nhi-standard N1):
-# two people per identity, a named owner plus a backup, from the adm- admin
-# accounts (never break-glass). lab/iga/nhi-owners.json records who and why.
-# PLAN and APPLY are Tier 0 (APPLY: RoleManagement.ReadWrite.Directory; PLAN:
-# reads the envs/dev state, which holds the generated break-glass passwords),
-# so their owners must be Tier-0 people - the lead's decision; leave them
-# empty until then. An owner added in the portal is removed by the next
-# bootstrap apply once a list is set here.
-# pipeline_owner_object_ids = {
-#   hr_sync         = ["33333333-3333-3333-3333-333333333333"]
-#   hr_provisioning = ["33333333-3333-3333-3333-333333333333"]
-#   evidence        = ["33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"]
-# }
+# Human owners of the HR provisioning app's registration (ADR 0018, two
+# people from the adm- admin accounts; never the access governance lead,
+# SOD-08). The CI identities (PLAN, APPLY, HR-SYNC, EVIDENCE) never get an
+# Entra owner: their accountable owner is a role in lab/iga/nhi-owners.json.
+# hr_provisioning_owner_object_ids = ["33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"]

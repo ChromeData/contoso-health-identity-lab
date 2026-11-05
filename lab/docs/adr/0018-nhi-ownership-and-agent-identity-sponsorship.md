@@ -79,7 +79,8 @@ whose staff's access it summarises, not an engineer.
 
 - **Owners can become the app,** and two owners double that exposure. Owners
   of Tier-0 NHIs must be Tier-0 people; `Find-ShadowAdmins.ps1` reports
-  them.
+  them. (Superseded 2026-11-05: Tier-0 NHIs have no Entra owner at all, see
+  the amendment.)
 - **The policy guards the future.** It blocks creates and updates, so
   existing secrets live until they expire; the inventory finds them, but
   an orphan can exist for up to a month between runs.
@@ -111,29 +112,44 @@ Fill this in after the first tenant run of `06-NHI-Inventory.ps1`.
 ## Amendment 2026-11-05: who owns what
 
 `lab/iga/nhi-owners.json` is the register: every robot account in the
-tenant, its owners, where the list lives (Terraform or a one-time
-post-apply step) and why. The named owner is the access governance lead's
-admin account (`adm-mei.tanaka`), the backup the IAM engineer's
-(`adm-ava.lin`). Two rules decide who may hold ownership, because an owner
-can add a credential and act as the app:
+tenant, its owner model, its owners, where the list lives (Terraform or a
+one-time post-apply step) and why. `06-NHI-Inventory.ps1 -OwnersRegisterPath`
+reads it.
 
-1. **Tier 0 (this ADR's Consequences).** APPLY, the lab operator and PLAN
-   (which reads the envs/dev state, holding the generated break-glass
-   passwords) need Tier-0 owners. A standing owner of a Tier-0 identity
-   holds Tier-0 power without a PIM activation, against ADR 0020's zero
-   standing access (no admin keeps power they are not using). Their owners are left to
-   the lead: the build account already holds standing Global
-   Administrator, so it is the one owner that adds no new reach.
-2. **SOD-08.** The access governance lead certifies access, so she does not
-   own an identity that creates, changes or disables accounts: HR-SYNC, the
-   HR provisioning app and the Cloud Sync configuration app get the IAM
-   engineer, and a second owner is the lead's call.
+An Entra owner can add a credential and act **as** the app, so ownership is
+power. Two owner models follow from that:
 
-Everything else (the SSO and provisioning apps, EVIDENCE, P2P Server) has
-both. `modules/apps` now warns on every plan unless `app_owner_object_ids`
-names two people. Managed identities (owned through Azure RBAC on their
-resource) and Microsoft's own apps are out of scope, with the reasons in the
-register.
+1. **Tier-0 identities have NO Entra owner** (lead decision, 2026-11-05).
+   These are APPLY, PLAN (it reads the envs/dev state, which holds the
+   generated break-glass passwords), the lab operator, EVIDENCE (it writes the
+   audit evidence) and HR-SYNC (its uploads create and disable workforce
+   accounts). A standing owner of one of them would hold that power with no
+   PIM activation, against ADR 0020's zero standing access. Their accountable
+   owner is a **role**, the Identity Platform Owner (the risk owner in ADR 0005
+   and ADR 0024). It answers for purpose, permissions and credentials and
+   changes them only through reviewed code. `modules/pipeline-identity` and
+   `envs/operator` set `owners = []`, so an owner added in the portal is
+   removed by the next apply. The inventory counts a role-owned identity as
+   owned while it has no Entra owner. It flags `OWNER-TIER0` on any Tier-0
+   identity that has one, whether Tier 0 comes from a permission, a directory
+   role or the register. A look-alike app with the same display name is never
+   covered: a duplicate name leaves both unowned.
+   This replaces this ADR's earlier "owners of Tier-0 NHIs must be Tier-0
+   people": no person owns them.
+2. **Every other robot account has two named admin owners.** The SSO and
+   provisioning apps (`modules/apps`, secret `TF_APP_OWNER_OBJECT_IDS`) and
+   P2P Server have `adm-ava.lin` and `adm-mei.tanaka`; `modules/apps` warns
+   on every plan with fewer than two. **SOD-08**: the access governance lead
+   certifies access, so she does not own an identity that creates or
+   disables accounts. The HR provisioning app and the Cloud Sync app
+   (`corp.contosohealthlab.com`) have `adm-ava.lin` and `adm-raj.patel`.
+   Raj is on SOD-08's administration side only: he certifies nothing and
+   reviews nothing. He owns the app **registrations** only, because their
+   jobs live on the service principals, which the help desk does not own.
+   That keeps the restricted VIP unit out of the help desk's reach.
+
+Managed identities (owned through Azure RBAC on their resource) and
+Microsoft's own apps are out of scope, with the reasons in the register.
 
 ## Revisit trigger
 
