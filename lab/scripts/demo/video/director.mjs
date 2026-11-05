@@ -97,7 +97,7 @@ function buildMap() {
   swapRule("'Nobody keeps admin power when they\\'re not using it. The exceptions are two emergency accounts and the build account, which is flagged and next to go.'",
     "'No admin keeps power when they\\'re not using it. The exceptions are the build account and two locked emergency accounts.'");
   swapRule("'No passwords are stored in the system that rolls out changes, and every other secret has an owner, an expiry and a plan to replace it. A few lab secrets don\\'t meet that yet; they\\'re tracked.'",
-    "'No passwords are stored in the system that rolls out changes. The few secrets the lab needs sit in a locked vault, reached over a private link plus one allow-listed admin address.'");
+    "'No passwords are stored in the system that rolls out changes. The secrets the automation needs sit in a locked vault, reached over a private link plus one allow-listed admin address.'");
   s = injectSheet(s);
   fs.writeFileSync(path.join(OUT, 'map-video.html'), s);
   console.log('map-video.html written', RAN_TENANT.length, 'tiles marked RAN · tenant');

@@ -145,7 +145,7 @@ def swap_rule(a,b_):
 swap_rule("'Nobody keeps admin power when they\\'re not using it. The exceptions are two emergency accounts and the build account, which is flagged and next to go.'",
           "'No admin keeps power when they\\'re not using it. The exceptions are the build account and two locked emergency accounts.'")
 swap_rule("'No passwords are stored in the system that rolls out changes, and every other secret has an owner, an expiry and a plan to replace it. A few lab secrets don\\'t meet that yet; they\\'re tracked.'",
-          "'No passwords are stored in the system that rolls out changes. The few secrets the lab needs sit in a locked vault, reached over a private link plus one allow-listed admin address.'")
+          "'No passwords are stored in the system that rolls out changes. The secrets the automation needs sit in a locked vault, reached over a private link plus one allow-listed admin address.'")
 lab=lab.replace('<title>Contoso Health Lab Map</title>','').replace('<meta name="claude:viewport-fit-sides" content="cover">','')
 def rep(a,b_,n=1):
     # Tolerate already-numbered input: director.mjs numbers the map before saving, so a
