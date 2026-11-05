@@ -629,6 +629,12 @@ def reader_setup(admin: SplunkRest) -> None:
         log("Splunk role %s created" % READER_ROLE)
     else:
         admin.call("POST", "/services/authorization/roles/" + READER_ROLE, role)
+    # Read the role back instead of trusting the POST: exactly `search`, only the entra
+    # index, nothing imported (an imported role would bring its capabilities and indexes).
+    rc = admin.call("GET", "/services/authorization/roles/" + READER_ROLE)["entry"][0]["content"]
+    if rc.get("capabilities") != ["search"] or rc.get("imported_roles") or rc.get("srchIndexesAllowed") != [INDEX]:
+        raise FeedError("role %s is broader than search on index=%s (capabilities %s, imported %s, indexes %s)"
+                        % (READER_ROLE, INDEX, rc.get("capabilities"), rc.get("imported_roles"), rc.get("srchIndexesAllowed")))
     pw = keychain_get(*READER_KEYCHAIN)
     exists = admin.call("GET", "/services/authentication/users/" + READER_USER, ok404=True) is not None
     works = False

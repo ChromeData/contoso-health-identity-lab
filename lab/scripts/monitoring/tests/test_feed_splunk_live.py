@@ -402,7 +402,7 @@ class FakeSplunkRest:
     def __init__(self):
         self.token = None            # dict(index, indexes, token) once created
         self.ignore_updates = False
-        self.roles, self.users, self.posts = {}, {}, []
+        self.roles, self.users, self.posts, self.role_posts = {}, {}, [], []
         outer = self
 
         class H(http.server.BaseHTTPRequestHandler):
@@ -425,7 +425,8 @@ class FakeSplunkRest:
                 if path == outer.TOKEN_ITEM:
                     return self._send(200, {"entry": [{"content": outer.token}]}) if outer.token else self._send(404)
                 if path.startswith("/services/authorization/roles/"):
-                    return self._send(200, {"entry": [{}]}) if path.rsplit("/", 1)[1] in outer.roles else self._send(404)
+                    name = path.rsplit("/", 1)[1]
+                    return self._send(200, {"entry": [{"content": outer.roles[name]}]}) if name in outer.roles else self._send(404)
                 if path.startswith("/services/authentication/users/"):
                     return self._send(200, {"entry": [{}]}) if path.rsplit("/", 1)[1] in outer.users else self._send(404)
                 if path == "/services/authentication/current-context":
@@ -447,7 +448,12 @@ class FakeSplunkRest:
                         outer.token.update(index=body["index"], indexes=[body["indexes"]], disabled=False)
                     return self._send(200, {"entry": [{"content": outer.token}]})
                 if path.startswith("/services/authorization/roles"):
-                    outer.roles[body.get("name") or path.rsplit("/", 1)[1]] = body
+                    name = body.get("name") or path.rsplit("/", 1)[1]
+                    cur = outer.roles.setdefault(name, {"imported_roles": []})
+                    cur["capabilities"] = [body["capabilities"]]          # Splunk sets, it does not append
+                    cur["srchIndexesAllowed"] = [body["srchIndexesAllowed"]]
+                    cur["srchIndexesDefault"] = [body["srchIndexesDefault"]]
+                    outer.role_posts.append(body)
                     return self._send(201)
                 if path.startswith("/services/authentication/users"):
                     name = body.get("name") or path.rsplit("/", 1)[1]
@@ -505,26 +511,34 @@ class Setup(unittest.TestCase):
 
     def test_reader_gets_only_search_on_entra(self):
         feed.reader_setup(self.admin)
-        role = self.rest.roles["contoso_feed_reader"]
-        self.assertEqual((role["capabilities"], role["srchIndexesAllowed"], role["srchIndexesDefault"]), ("search", "entra", "entra"))
-        self.assertNotIn("imported_roles", role)
+        sent = self.rest.role_posts[0]
+        self.assertEqual((sent["capabilities"], sent["srchIndexesAllowed"], sent["srchIndexesDefault"]), ("search", "entra", "entra"))
+        self.assertNotIn("imported_roles", sent)
         self.assertEqual(self.rest.users["contoso-feed-check"]["roles"], ["contoso_feed_reader"])
         self.assertEqual(self.rest.users["contoso-feed-check"]["password"], self.kc["contoso-splunk-feed-reader"])
 
     def test_a_working_reader_password_is_kept(self):
-        self.rest.roles["contoso_feed_reader"] = {}
+        self.rest.roles["contoso_feed_reader"] = {"imported_roles": []}
         self.rest.users["contoso-feed-check"] = {"password": "kept-password-0123456789", "roles": ["contoso_feed_reader"]}
         self.kc["contoso-splunk-feed-reader"] = "kept-password-0123456789"
         feed.reader_setup(self.admin)
         self.assertFalse([p for p, _ in self.rest.posts if p.startswith("/services/authentication/users")])
 
     def test_a_reader_with_extra_roles_is_refused(self):
-        self.rest.roles["contoso_feed_reader"] = {}
+        self.rest.roles["contoso_feed_reader"] = {"imported_roles": []}
         self.rest.users["contoso-feed-check"] = {"password": "kept-password-0123456789", "roles": ["contoso_feed_reader"]}
         self.kc["contoso-splunk-feed-reader"] = "kept-password-0123456789"
         self.rest.users["contoso-feed-check"]["roles"] = ["contoso_feed_reader", "admin"]
         with self.assertRaises(feed.FeedError):
             feed.reader_setup(self.admin)
+
+
+    def test_a_role_that_imports_another_role_is_refused(self):
+        self.rest.roles["contoso_feed_reader"] = {"imported_roles": ["user"]}
+        with self.assertRaises(feed.FeedError) as cm:
+            feed.reader_setup(self.admin)
+        self.assertIn("broader", str(cm.exception))
+        self.assertNotIn("contoso-splunk-feed-reader", self.kc)
 
 
 if __name__ == "__main__":
