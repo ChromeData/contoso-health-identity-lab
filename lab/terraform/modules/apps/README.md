@@ -116,6 +116,8 @@ year (*verify:*). It is handled like this:
      --arg t "$(az keyvault secret show --vault-name <kv> --name aws-scim-token     --query value -o tsv)" \
      '{tenant_url:$u, secret_token:$t}')"
    export TF_VAR_require_scim_credentials=true
+   # Keeps APPLY as the apps' Terraform owner during a local apply:
+   export TF_VAR_apply_client_id="$(terraform -chdir=../bootstrap output -raw github_oidc_apply_client_id)"
    terraform apply -var-file=lab.tfvars     # in envs/dev, as the documented local deployment
    unset TF_VAR_aws_scim_credentials
    ```
