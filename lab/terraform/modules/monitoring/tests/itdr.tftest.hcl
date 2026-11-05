@@ -104,8 +104,8 @@ run "sentinel_with_itdr_columns_match_kql" {
   }
 
   assert {
-    condition     = length(azurerm_sentinel_alert_rule_scheduled.this) == 16
-    error_message = "Expected 5 core + 11 ITDR Sentinel rules."
+    condition     = length(azurerm_sentinel_alert_rule_scheduled.this) == 15 && length(azurerm_sentinel_alert_rule_nrt.this) == 1
+    error_message = "Expected 5 core + 11 ITDR Sentinel rules: 15 scheduled + the break-glass NRT rule."
   }
   assert {
     condition = alltrue([
@@ -241,8 +241,8 @@ run "exclude_holds_back_one_rule" {
   }
 
   assert {
-    condition     = length(azurerm_sentinel_alert_rule_scheduled.this) == 14 && !contains(keys(azurerm_sentinel_alert_rule_scheduled.this), "identity_risk")
-    error_message = "itdr_exclude_rules must hold rules back (16 - 2 = 14)."
+    condition     = length(azurerm_sentinel_alert_rule_scheduled.this) == 13 && !contains(keys(azurerm_sentinel_alert_rule_scheduled.this), "identity_risk")
+    error_message = "itdr_exclude_rules must hold rules back (15 scheduled - 2 = 13; break-glass is NRT)."
   }
 }
 

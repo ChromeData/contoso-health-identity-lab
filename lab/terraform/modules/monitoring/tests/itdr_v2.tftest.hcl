@@ -60,7 +60,7 @@ run "v2_off_by_default" {
 
   assert {
     condition = (
-      length(azurerm_sentinel_alert_rule_scheduled.this) == 16 &&
+      length(azurerm_sentinel_alert_rule_scheduled.this) == 15 && length(azurerm_sentinel_alert_rule_nrt.this) == 1 &&
       !anytrue([for k in keys(azurerm_sentinel_alert_rule_scheduled.this) : contains(["device_code_signin", "security_info_registered_risky", "dc_logon_outside_operator_allowlist", "vault_privileged_access_anomaly", "sod_violation_granted", "pim_activation_without_auth_context"], k)])
     )
     error_message = "enable_itdr_detections alone must keep the 5 core + 11 ITDR rules: the v2 set is opt-in."
@@ -94,7 +94,7 @@ run "sentinel_v2_rules" {
   }
 
   assert {
-    condition     = length(azurerm_sentinel_alert_rule_scheduled.this) == 22 && length(output.itdr_rule_keys) == 17
+    condition     = length(azurerm_sentinel_alert_rule_scheduled.this) == 21 && length(azurerm_sentinel_alert_rule_nrt.this) == 1 && length(output.itdr_rule_keys) == 17
     error_message = "Expected 5 core + 11 ITDR + 6 ITDR v2 Sentinel rules."
   }
   assert {
@@ -332,8 +332,8 @@ run "exclude_accepts_every_rule_key" {
   }
 
   assert {
-    condition     = length(azurerm_sentinel_alert_rule_scheduled.this) == 5 && length(output.itdr_rule_keys) == 0
-    error_message = "Every ITDR key (v1 + v2) must be a valid exclusion; excluding all leaves the 5 core rules."
+    condition     = length(azurerm_sentinel_alert_rule_scheduled.this) == 4 && length(azurerm_sentinel_alert_rule_nrt.this) == 1 && length(output.itdr_rule_keys) == 0
+    error_message = "Every ITDR key (v1 + v2) must be a valid exclusion; excluding all leaves the 5 core rules (4 scheduled + the break-glass NRT rule)."
   }
 }
 
@@ -351,7 +351,7 @@ run "watchlist_before_dc_rule" {
       length(azurerm_sentinel_watchlist.operator_ips) == 1 &&
       length(azurerm_sentinel_watchlist_item.operator_ips) == 0 &&
       !contains(keys(azurerm_sentinel_alert_rule_scheduled.this), "dc_logon_outside_operator_allowlist") &&
-      length(azurerm_sentinel_alert_rule_scheduled.this) == 20
+      length(azurerm_sentinel_alert_rule_scheduled.this) == 19
     )
     error_message = "The watchlist exists (empty without ranges) while the DC01 rule is still held back."
   }

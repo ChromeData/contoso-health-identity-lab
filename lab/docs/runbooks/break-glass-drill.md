@@ -145,8 +145,10 @@ Record every time in UTC.
    one sign-in kept arriving for 27 minutes (2026-11-05), and an incident
    closed earlier is followed by a new one. Check with
    `union SigninLogs, AADNonInteractiveUserSignInLogs | where UserPrincipalName startswith "bg-admin" | summarize max(TimeGenerated)`.
-   Since 2026-11-05 the rule alerts once per newly ingested batch of rows
-   (`ingestion_time()`, not every 5 minutes over the hour), and an alert that
+   Since 2026-11-05 the rule is near-real-time: it runs every minute on the
+   rows ingested in the minute before, so each row alerts exactly once and a
+   late row is never missed (it used to re-alert every 5 minutes over the
+   hour), and an alert that
    joins the open incident runs the notify playbook again (automation rule
    "notify again when an alert joins an open incident"): a second drill
    sign-in inside the hour gets its own Teams card and ServiceNow ticket, and

@@ -4,7 +4,7 @@
 
 output "sentinel_rule_ids" {
   description = "Map of rule key => Sentinel analytics rule id (empty until enable_sentinel)."
-  value       = { for k, r in azurerm_sentinel_alert_rule_scheduled.this : k => r.id }
+  value       = local.sentinel_rule_ids
 }
 
 output "la_alert_rule_ids" {

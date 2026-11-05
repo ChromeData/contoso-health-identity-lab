@@ -35,24 +35,26 @@
 //     rename cannot blind the rule. Terraform output
 //     `break_glass_user_principal_names` lists the current accounts.
 //
-// SUGGESTED SENTINEL RULE
-//   Frequency 5m · Lookback 1h · Trigger > 0 rows · Severity High ·
-//   Entities: Account=UserPrincipalName, IP=IPAddress.
+// SENTINEL RULE: NEAR-REAL-TIME (NRT), since 2026-11-05
+//   modules/monitoring deploys this query as an NRT rule: it runs every
+//   minute over the rows INGESTED in the previous minute (two-minute built-in
+//   delay), so neither the data source's delay nor a late run can drop a row
+//   (Learn, "Quick threat detection with near-real-time (NRT) analytics
+//   rules"). That is why the query has NO time filter: a TimeGenerated
+//   window would drop a sign-in ingested late, and an ingestion_time()
+//   window equal to a 5-minute schedule (the first fix, #170) could miss a
+//   row when a run is late or skipped. Each ingested row is judged exactly
+//   once, so one sign-in no longer raises 12 alerts (incidents #42 / #48).
+//   Severity High · Entities: Account=UserPrincipalName, IP=IPAddress.
+//   The Log Analytics alert path (post-trial) runs the same query on its
+//   own 1 h window.
 //
-// ONE ALERT PER SIGN-IN (2026-11-05)
-//   The rule runs every 5 minutes over a 1-hour window, so one sign-in used
-//   to sit in 12 runs and raise 12 alerts (incidents #42 and #48: 12 and 15
-//   alerts). That hid the next sign-in: a second break-glass sign-in inside
-//   the hour joined the open incident, and the notify automation rule only
-//   fired on incident creation. Two changes, both from Microsoft Learn:
-//   * here, "Handle ingestion delay in scheduled analytics rules": keep the
-//     wide TimeGenerated window (sign-in logs can arrive minutes late) and
-//     tie each row to the ONE run after it was ingested with
-//     `ingestion_time() > ago(RuleLookBack)`, RuleLookBack = the rule's
-//     query frequency (modules/monitoring, break_glass_signin.frequency);
-//   * in modules/monitoring, an automation rule on "incident updated, alerts
-//     added" for this rule runs the notify playbook again, so a sign-in that
-//     joins an open incident still posts its own card and ticket.
+//   A second break-glass sign-in inside an hour joins the open incident
+//   (grouping by account + IP); the automation rule "notify again when an
+//   alert joins an open incident" (modules/monitoring) still posts its own
+//   Teams card and ServiceNow ticket.
+//   Guarded by modules/monitoring/tests/notify.tftest.hcl (NRT, no time
+//   filter) and the Kusto harness case late-ingested-old-row.
 //
 // AUTOMATED RESPONSE (Logic App - lab/monitoring/playbook-notify.json)
 //   Shared by all five rules, Sentinel path only (the post-trial Log
@@ -71,8 +73,6 @@
 
 // Break-glass naming convention from lab/terraform/modules/groups.
 let BreakGlassPattern = @"(?i)^bg-admin-\d{2}@";
-// = the rule's query frequency: each row alerts in exactly one run.
-let RuleLookBack = 5m;
 // SCHEMA TRAP: LocationDetails is `dynamic` in SigninLogs but `string` in
 // AADNonInteractiveUserSignInLogs. A plain union splits it into
 // LocationDetails_dynamic / LocationDetails_string and the property access
@@ -84,8 +84,6 @@ union
     (AADNonInteractiveUserSignInLogs
         | extend SignInType = "non-interactive"
         | extend LocationDetails = todynamic(tostring(LocationDetails)))
-| where TimeGenerated > ago(1h)
-| where ingestion_time() > ago(RuleLookBack)
 | where UserPrincipalName matches regex BreakGlassPattern
 | extend Country = tostring(LocationDetails.countryOrRegion)
 | project TimeGenerated, SignInType, UserPrincipalName, IPAddress, Country,
