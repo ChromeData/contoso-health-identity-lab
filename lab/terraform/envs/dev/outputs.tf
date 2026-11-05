@@ -448,6 +448,24 @@ output "servicenow_federation_metadata_url" {
   value       = one(module.apps[*].servicenow_federation_metadata_url)
 }
 
+# ---- ServiceNow provisioning (enable_servicenow_provisioning) ------------------
+# Provision-on-demand, Test Connection and the provisioning logs act on these.
+
+output "servicenow_provisioning_service_principal_object_id" {
+  description = "Object id of the ServiceNow provisioning enterprise app (null while enable_servicenow_provisioning is off)."
+  value       = one(module.apps[*].servicenow_provisioning_service_principal_object_id)
+}
+
+output "servicenow_provisioning_job_id" {
+  description = "ServiceNow provisioning job id: provisionOnDemand and validateCredentials (Test Connection) take it."
+  value       = one(module.apps[*].servicenow_provisioning_job_id)
+}
+
+output "servicenow_provisioning_job_enabled" {
+  description = "Whether the ServiceNow provisioning cycle is started (false = created stopped)."
+  value       = one(module.apps[*].servicenow_provisioning_job_enabled)
+}
+
 output "servicenow_saml_signing_cert_activation_command" {
   description = "S1a: the Update-MgServicePrincipal line that activates the ServiceNow SAML signing certificate (azuread cannot set preferredTokenSigningKeyThumbprint)."
   value       = one(module.apps[*].servicenow_saml_signing_cert_activation_command)

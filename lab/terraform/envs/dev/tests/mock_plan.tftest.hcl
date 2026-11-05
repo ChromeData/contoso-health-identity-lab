@@ -36,6 +36,7 @@ variables {
   aws_scim_template_id                   = "aWSSingleSignon"                                                                                                             # synthetic: enable_scim_provisioning precondition (lab.tfvars stage)
   okta_org_domain                        = "integrator-0000000.okta.com"                                                                                                 # synthetic org host: enable_okta_federation precondition (lab.tfvars stage)
   servicenow_instance_url                = "https://dev00000.service-now.com"                                                                                            # synthetic PDI: enable_servicenow_sso precondition (lab.tfvars stage)
+  servicenow_provisioning_credentials    = { user_name = "svc-entra-provisioning", password = "dummy-password-for-mocked-tests" }                                        # lab.tfvars turns ServiceNow provisioning on; the creating run reads the real values from Key Vault
   app_owner_object_ids                   = ["cccccccc-cccc-cccc-cccc-cccccccccccc"]                                                                                      # the apps module's human-owner check
   onmicrosoft_domain                     = "contosohealthlab.onmicrosoft.com"
   pim_approver_object_ids                = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
@@ -111,6 +112,10 @@ run "plan_lab_tfvars" {
   assert {
     condition     = nonsensitive(output.apps_nhi_inventory) != null && nonsensitive(output.apps_nhi_inventory).servicenow != null && nonsensitive(output.apps_nhi_inventory).okta_clinic_idp != null && output.guacamole_psm_client_id == null && output.ca_policy_display_names != null
     error_message = "Day 1 + apps: CA001-CA010 and CA020 exist (enable_premium + the CA flags); enable_sso_apps plans the AWS IAM Identity Center and Clinical Portal apps; the PAM app (enable_pam_oidc_app) is still off"
+  }
+  assert {
+    condition     = nonsensitive(output.apps_nhi_inventory).servicenow_provisioning != null && output.servicenow_provisioning_job_enabled == false
+    error_message = "lab.tfvars: enable_servicenow_provisioning plans the ServiceNow provisioning app with its job STOPPED (servicenow_provisioning_job_enabled = false until Test Connection + one on-demand)"
   }
   assert {
     condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003", "CA004", "CA020", "CA010", "CA001", "CA009", "CA006", "CA007", "CA005"], k) ? "enabled" : "enabledForReportingButNotEnforced")])
@@ -230,6 +235,7 @@ run "plan_legacy_flags_on_new_flags_off" {
     # The new flags, explicitly off (lab.tfvars says the same).
     enable_registration_ca                  = false
     enable_servicenow_sso                   = false
+    enable_servicenow_provisioning          = false
     enable_okta_federation                  = false
     enable_device_code_block                = false
     enable_admin_session_controls           = false
@@ -296,8 +302,8 @@ run "plan_legacy_flags_on_new_flags_off" {
     error_message = "expected 18 privileged group reviews + 1 inactive-user review and no GA eligibility review"
   }
   assert {
-    condition     = output.apps_nhi_inventory.servicenow == null
-    error_message = "the ServiceNow SAML app must not be planned while enable_servicenow_sso is off"
+    condition     = output.apps_nhi_inventory.servicenow == null && output.apps_nhi_inventory.servicenow_provisioning == null && output.servicenow_provisioning_job_id == null
+    error_message = "neither the ServiceNow SAML app nor the provisioning app may be planned while their flags are off"
   }
   assert {
     condition     = output.apps_nhi_inventory.okta_clinic_idp == null && output.okta_idp_client_id == null
@@ -335,6 +341,7 @@ run "plan_all_flags_on_sentinel" {
     enable_shared_clinical_ca           = true
     enable_sso_apps                     = true
     enable_servicenow_sso               = true
+    enable_servicenow_provisioning      = true
     enable_okta_federation              = true
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
@@ -437,6 +444,10 @@ run "plan_all_flags_on_sentinel" {
     error_message = "enable_servicenow_sso must plan the ServiceNow SAML app (modules/apps servicenow.tf)"
   }
   assert {
+    condition     = output.apps_nhi_inventory.servicenow_provisioning != null
+    error_message = "enable_servicenow_provisioning must plan the ServiceNow provisioning app (modules/apps servicenow_provisioning.tf)"
+  }
+  assert {
     condition     = output.apps_nhi_inventory.okta_clinic_idp != null && output.okta_idp_redirect_uri == "https://integrator-1234567.okta.com/oauth2/v1/authorize/callback"
     error_message = "enable_okta_federation must plan okta-clinic-idp with the Okta callback as its one redirect URI (modules/apps okta.tf)"
   }
@@ -469,6 +480,7 @@ run "plan_all_flags_on_la_alerts" {
     enable_shared_clinical_ca           = true
     enable_sso_apps                     = true
     enable_servicenow_sso               = true
+    enable_servicenow_provisioning      = true
     enable_okta_federation              = true
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
@@ -535,6 +547,10 @@ run "plan_all_flags_on_la_alerts" {
   assert {
     condition     = output.apps_nhi_inventory.servicenow != null
     error_message = "enable_servicenow_sso must plan the ServiceNow SAML app (modules/apps servicenow.tf)"
+  }
+  assert {
+    condition     = output.apps_nhi_inventory.servicenow_provisioning != null
+    error_message = "enable_servicenow_provisioning must plan the ServiceNow provisioning app (modules/apps servicenow_provisioning.tf)"
   }
   assert {
     condition     = output.apps_nhi_inventory.okta_clinic_idp != null && output.okta_idp_redirect_uri == "https://integrator-1234567.okta.com/oauth2/v1/authorize/callback"
@@ -732,6 +748,7 @@ run "flags_without_premium_warn" {
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
     enable_servicenow_sso               = true
+    enable_servicenow_provisioning      = true
     enable_okta_federation              = true
     enable_pim_tiers                    = true
     enable_helpdesk_au_scoping          = true
@@ -750,6 +767,7 @@ run "flags_without_premium_warn" {
     check.scim_requires_sso_apps,
     check.pam_oidc_app_requires_sso_apps,
     check.servicenow_sso_requires_sso_apps,
+    check.servicenow_provisioning_requires_sso_apps,
     check.okta_federation_requires_sso_apps,
     check.pim_extensions_require_premium,
     check.b2b_requires_governance,

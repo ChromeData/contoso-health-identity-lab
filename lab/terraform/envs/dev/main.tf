@@ -52,6 +52,9 @@
 #                                          CA022 (was CA009) admin strength.
 #     enable_servicenow_sso             ->   + ServiceNow PDI SAML app (needs
 #                                          servicenow_instance_url).
+#     enable_servicenow_provisioning    ->   + ServiceNow provisioning app (gallery,
+#                                          hidden), job STOPPED + credential:
+#                                          LOCAL seeding apply first.
 #     enable_okta_federation            ->   + okta-clinic-idp, Entra as the IdP
 #                                          for the clinic's Okta org (needs
 #                                          okta_org_domain; ADR 0022).
@@ -186,6 +189,13 @@ check "servicenow_sso_requires_sso_apps" {
   assert {
     condition     = !var.enable_servicenow_sso || (var.enable_premium && var.enable_sso_apps)
     error_message = "enable_servicenow_sso = true has no effect unless enable_premium and enable_sso_apps are both true (the ServiceNow SAML app lives in modules/apps)."
+  }
+}
+
+check "servicenow_provisioning_requires_sso_apps" {
+  assert {
+    condition     = !var.enable_servicenow_provisioning || (var.enable_premium && var.enable_sso_apps)
+    error_message = "enable_servicenow_provisioning = true has no effect unless enable_premium and enable_sso_apps are both true (the ServiceNow provisioning app lives in modules/apps)."
   }
 }
 
@@ -647,11 +657,19 @@ module "apps" {
   clinical_portal_preauthorize_azure_cli = var.clinical_portal_preauthorize_azure_cli
 
   # ServiceNow PDI SAML app (default false). The ONE principal on it is
-  # App-ServiceNow-Users; provisioning to ServiceNow is designed, not built.
+  # App-ServiceNow-Users - also the ONLY principal on the provisioning app
+  # (enable_servicenow_provisioning), so sign-in and accounts share one scope.
   enable_servicenow_sso            = var.enable_servicenow_sso
   servicenow_instance_url          = var.servicenow_instance_url
   servicenow_sso_sys_id            = var.servicenow_sso_sys_id
   servicenow_users_group_object_id = module.groups[0].app_access_group_object_ids["servicenow"]
+
+  # ServiceNow provisioning (default false): gallery app, job STOPPED unless
+  # servicenow_provisioning_job_enabled, credential from Key Vault in the
+  # local seeding apply only (fails closed in CI via require_scim_credentials).
+  enable_servicenow_provisioning      = var.enable_servicenow_provisioning
+  servicenow_provisioning_job_enabled = var.servicenow_provisioning_job_enabled
+  servicenow_provisioning_credentials = var.servicenow_provisioning_credentials
 
   # okta-clinic-idp (default false): Entra as the OIDC identity provider for
   # the acquired clinic's Okta org (runbook Phase 1, ADR 0022). The ONE

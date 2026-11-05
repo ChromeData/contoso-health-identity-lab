@@ -24,8 +24,7 @@
 #   5. ServiceNow (SAML, servicenow.tf; enable_servicenow_sso)
 #        non-gallery SAML app for the ServiceNow PDI: Identifier / Reply URL
 #        from servicenow_instance_url, Entra-minted signing certificate,
-#        NameID = UPN, ONE assignment: App-ServiceNow-Users. Provisioning to
-#        ServiceNow is designed there, not built.
+#        NameID = UPN, ONE assignment: App-ServiceNow-Users.
 #
 #   6. okta-clinic-idp (OIDC, okta.tf; enable_okta_federation)
 #        Entra as the identity provider for the acquired clinic's Okta org
@@ -33,6 +32,13 @@
 #        callback), assignment required, ONE assignment:
 #        App-Okta-Federation-Users. The client secret is minted by a human
 #        post-apply, never by Terraform. The Okta half is lab/terraform/okta.
+#
+#   7. ServiceNow provisioning (servicenow_provisioning.tf;
+#      enable_servicenow_provisioning)
+#        gallery "ServiceNow" app used for provisioning only (hidden from My
+#        Apps), assigned to the SSO app's group App-ServiceNow-Users, its
+#        ServiceNowOutDelta job (created STOPPED) and its credential (the
+#        ServiceNow integration user, from Key Vault, written once).
 #
 # NO STAND-IN: these are real Entra objects and the real AWS IAM Identity
 # Center connector. NOTHING HERE HAS RUN AGAINST A TENANT YET - every
