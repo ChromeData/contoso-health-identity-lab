@@ -73,10 +73,11 @@ each Conditional Access graduation.
 3. **Apps.** The packages' `App-*` groups drive SSO and provisioning as code:
    AWS IAM Identity Center over SAML plus SCIM (the SCIM job is created
    stopped), and the Clinical Portal and the Guacamole broker over OIDC.
-   ServiceNow takes incidents and change tickets. Its SAML sign-in is code
-   too, behind a flag that stays off until the developer instance's URL is
-   set; the identity-provider record inside ServiceNow is a portal step, and
-   ServiceNow user provisioning is designed, not built.
+   ServiceNow takes incidents and change tickets. Staff sign in to it through
+   Entra (SAML, code in `servicenow.tf`; the identity-provider record and the
+   instance switch inside ServiceNow are tenant steps), and Entra creates and
+   switches off their ServiceNow accounts through a second, hidden gallery
+   app assigned to the same group (`servicenow_provisioning.tf`).
    Okta trusts Entra as its IdP while the acquired clinic's apps move across
    one at a time ([`okta-migration-runbook.md`](okta-migration-runbook.md)).
 4. **Access.** Conditional Access is code and starts report-only, one policy
