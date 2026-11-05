@@ -74,7 +74,7 @@ mock_provider "azuread" {
 
 variables {
   aws_users_group_object_id = "55555555-5555-5555-5555-555555555555"
-  app_owner_object_ids      = ["66666666-6666-6666-6666-666666666666"]
+  app_owner_object_ids      = ["66666666-6666-6666-6666-666666666666", "ffffffff-ffff-ffff-ffff-ffffffffffff"] # a named owner + a backup (ADR 0018)
 }
 
 run "okta_absent_by_default" {

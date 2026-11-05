@@ -95,7 +95,10 @@ holds the signing certificate's private key.
   which `Application.ReadWrite.OwnedBy` requires, alongside
   `app_owner_object_ids`. A `check` warns on every plan without a human
   owner, and `nhi_inventory` exports owner and credential expiry for the NHI
-  evidence pack.
+  evidence pack. In the lab tenant (2026-11-05) the two accountable owners are
+  named lab admins, the IAM Engineer and the Access Governance Lead (secret
+  `TF_APP_OWNER_OBJECT_IDS`), so no app depends on one person; the build
+  account is not an app owner.
 
 ---
 

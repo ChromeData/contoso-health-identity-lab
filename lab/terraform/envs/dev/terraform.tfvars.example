@@ -117,8 +117,11 @@ b2b_connected_organization = {
 b2b_connected_organization_id = ""
 
 # ---- SSO apps (modules/apps) -------------------------------------------------
-# Accountable human owners of every app (your admin@ object id).
-app_owner_object_ids = ["33333333-3333-3333-3333-333333333333"]
+# Accountable human owners of every app: TWO people, a named owner plus a
+# backup (ADR 0018, nhi-standard N1; fewer and a check warns). Use admin
+# (adm-) accounts, never a break-glass account. lab/iga/nhi-owners.json says
+# who owns which robot account and why.
+app_owner_object_ids = ["33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"]
 # The GitHub APPLY app's client id (envs/bootstrap output
 # github_oidc_apply_client_id). It owns every app whoever applies: leave it
 # empty and a local apply makes YOU the Terraform owner and drops APPLY,

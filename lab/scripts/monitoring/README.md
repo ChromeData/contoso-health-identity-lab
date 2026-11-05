@@ -23,12 +23,23 @@ detections need.
 | `Deploy-Playbook.ps1` | Deploys `lab/monitoring/playbook-notify.json` (Teams card to the SOC channel + ServiceNow ticket on every incident; for the break-glass rule also on every alert that joins an open incident - `modules/monitoring`, `notify_on_alert_added_rule_keys`). |
 | `authorize-teams-connection.mjs` | Authorizes a playbook's Teams API connection once, headless, as `svc-soc-automation` (ARM `listConsentLinks` / `confirmConsentCode`, staff sign-in toolkit), and fails unless the connection reads back Connected as that account. |
 | `answer-teams-card.mjs` | Drill aid: answers a containment card in Teams on the web as a lab TEST user (the playbook still decides whether that answer counts). |
+| `../demo/containment-drill.sh` | Arms the on-camera drill (throwaway user, one incident, the card waiting) and disarms it; see `lab/scripts/demo/README.md`. |
 | `Deploy-ContainmentPlaybook.ps1` | Deploys `lab/monitoring/playbook-contain.json` and grants its managed identity exactly the rights it uses. |
 | `Invoke-AdContainment.ps1` | The AD half of containment: disables / re-enables an AD account on DC01 through `az vm run-command`, writes an evidence record. |
 | `ingest-vault-audit.sh` | Ships Vault check-out / check-in evidence (lab/pam audit log) to the `VaultCheckout_CL` table through the Logs Ingestion API. |
 | `tests/` | Offline tests: `Itdr.Tests.ps1` (Pester) and `ingest-vault-audit.test.sh` (stubbed `az`/`curl`, synthetic audit log). |
 
 ## Detections
+
+> **Reading the rules back.** The break-glass sign-in rule is a
+> near-real-time (NRT) rule since 2026-11-05 (`contoso-break-glass-signin-nrt`).
+> The GA `alertRules` API versions do not return NRT rules (Learn REST
+> *Alert Rules - List*: no NRT kind in any GA version up to 2025-09-01; live,
+> 2024-09-01 lists 17 rules and 2025-01-01-preview 18). Every script that reads
+> rules uses `api-version=2025-01-01-preview`: `Invoke-BreakGlassDrill.ps1`,
+> `post-apply/Convert-BuildAccountToEligible.ps1`,
+> `../demo/containment-drill.sh`. Incidents from NRT rules are listed by the GA
+> incidents API as usual.
 
 All eleven live in `lab/kql/` with an SPL twin in `lab/splunk/detections/` and
 are deployed by `lab/terraform/modules/monitoring` (`itdr.tf`). Each rule maps

@@ -498,7 +498,7 @@ variable "require_scim_credentials" {
 
 variable "app_owner_object_ids" {
   type        = list(string)
-  description = "Entra USER object ids recorded as owners of the apps in modules/apps (accountable human owner for every NHI). Empty = only the Terraform identity (a check warns). TF_APP_OWNER_OBJECT_IDS secret; sensitive because the plan (and the public PR plan comment) would otherwise print each id, which GitHub's secret masking does not cover."
+  description = "Entra USER object ids recorded as owners of the apps in modules/apps: at least TWO accountable humans, a named owner plus a backup (ADR 0018, nhi-standard N1; fewer and a check warns). lab/iga/nhi-owners.json records who and why. TF_APP_OWNER_OBJECT_IDS secret; sensitive because the plan (and the public PR plan comment) would otherwise print each id, which GitHub's secret masking does not cover."
   default     = []
   sensitive   = true
 }

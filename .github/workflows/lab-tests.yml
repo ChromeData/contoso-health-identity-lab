@@ -168,6 +168,7 @@ jobs:
           bash lab/scripts/demo/tests/close-build-noise.test.sh
           node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs
           node --test lab/terraform/okta/tests/trust-claims.test.mjs
+          bash lab/scripts/demo/tests/containment-drill.test.sh
           (cd lab/splunk && ./render-savedsearches.sh --check)
           # Pure parts of the lab passkey tool (no browser, Graph or Keychain);
           # node is preinstalled on ubuntu-latest, node:test needs no package.

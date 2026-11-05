@@ -526,11 +526,13 @@ resource "azuread_application_pre_authorized" "azure_cli" {
 # Governance checks (warnings, never block)
 # =============================================================================
 
-# An app with no human owner is an orphan the day its creator leaves.
-check "apps_have_a_human_owner" {
+# An app with one human owner is an orphan the day that person leaves; the
+# Terraform identity next to them is not accountable for anything. ADR 0018 /
+# nhi-standard N1: at least TWO human owners (a named owner plus a backup).
+check "apps_have_two_human_owners" {
   assert {
-    condition     = length(var.app_owner_object_ids) > 0
-    error_message = "modules/apps: no app_owner_object_ids - both apps are owned only by the Terraform identity. Name an accountable human owner (NHI governance)."
+    condition     = length(distinct(var.app_owner_object_ids)) >= 2
+    error_message = "modules/apps: fewer than two app_owner_object_ids - every app needs two accountable human owners (ADR 0018, nhi-standard N1): a named owner plus a backup."
   }
 }
 

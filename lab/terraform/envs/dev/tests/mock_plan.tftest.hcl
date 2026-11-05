@@ -37,7 +37,7 @@ variables {
   okta_org_domain                        = "integrator-0000000.okta.com"                                                                                                 # synthetic org host: enable_okta_federation precondition (lab.tfvars stage)
   servicenow_instance_url                = "https://dev00000.service-now.com"                                                                                            # synthetic PDI: enable_servicenow_sso precondition (lab.tfvars stage)
   servicenow_provisioning_credentials    = { user_name = "svc-entra-provisioning", password = "dummy-password-for-mocked-tests" }                                        # lab.tfvars turns ServiceNow provisioning on; the creating run reads the real values from Key Vault
-  app_owner_object_ids                   = ["cccccccc-cccc-cccc-cccc-cccccccccccc"]                                                                                      # the apps module's human-owner check
+  app_owner_object_ids                   = ["cccccccc-cccc-cccc-cccc-cccccccccccc", "c0c0c0c0-0000-4000-8000-00000000000c"]                                              # the apps module's human-owner check
   onmicrosoft_domain                     = "contosohealthlab.onmicrosoft.com"
   pim_approver_object_ids                = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
   iac_principal_ids                      = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
@@ -144,6 +144,18 @@ run "plan_lab_tfvars" {
       output.package_assignment_model != null,
     ])
     error_message = "Day 3: CA021 body, help-desk AU rule and the access-package assignment model exist (enable_governance); PIM still asks for MFA (CA021 report-only); the privileged (T1) access reviews render with enable_access_reviews_privileged"
+  }
+  # 2026-11-05 (E110): every review tier is on. The inactive-user review of the
+  # clinic's Okta-federated staff renders for the post-apply script; the T2
+  # flag renders nothing for the two 180-day, no-extension packages (their
+  # expiry + re-approval is the certification, ADR 0012); no flag ever puts a
+  # review on a birthright (T3) package.
+  assert {
+    condition = alltrue([
+      var.enable_access_reviews_privileged && var.enable_access_reviews_requestable && var.enable_access_reviews_inactive,
+      contains(keys(output.access_review_definitions), "inactive:App-Okta-Federation-Users"),
+    ])
+    error_message = "lab.tfvars turns all three review tiers on: the inactive-user review of App-Okta-Federation-Users must render (access_review_definitions)"
   }
   assert {
     condition     = output.pim_privileged_role_template_ids != null && nonsensitive(output.directory_role_pim_policies) != null
@@ -277,7 +289,7 @@ run "plan_legacy_flags_on_new_flags_off" {
     }
     admin_fido2_allowed_aaguids = ["cb69481e-8ff7-4039-93ec-0a2729a154a8"]
     iac_principal_ids           = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
-    app_owner_object_ids        = ["cccccccc-cccc-cccc-cccc-cccccccccccc"]
+    app_owner_object_ids        = ["cccccccc-cccc-cccc-cccc-cccccccccccc", "c0c0c0c0-0000-4000-8000-00000000000c"]
     aws_scim_template_id        = "placeholderTemplate"
     containment_playbook_id     = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Logic/workflows/pb-identity-contain"
     aws_scim_credentials = {
@@ -399,7 +411,7 @@ run "plan_all_flags_on_sentinel" {
     # The workforce passkey rollout needs the admin key-model allow-list.
     admin_fido2_allowed_aaguids = ["cb69481e-8ff7-4039-93ec-0a2729a154a8"]
     iac_principal_ids           = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
-    app_owner_object_ids        = ["cccccccc-cccc-cccc-cccc-cccccccccccc"]
+    app_owner_object_ids        = ["cccccccc-cccc-cccc-cccc-cccccccccccc", "c0c0c0c0-0000-4000-8000-00000000000c"]
     aws_scim_template_id        = "placeholderTemplate"
     containment_playbook_id     = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Logic/workflows/pb-identity-contain"
     servicenow_instance_url     = "https://dev00000.service-now.com" # synthetic PDI
@@ -543,7 +555,7 @@ run "plan_all_flags_on_la_alerts" {
     # The workforce passkey rollout needs the admin key-model allow-list.
     admin_fido2_allowed_aaguids = ["cb69481e-8ff7-4039-93ec-0a2729a154a8"]
     iac_principal_ids           = ["dddddddd-dddd-dddd-dddd-dddddddddddd"]
-    app_owner_object_ids        = ["cccccccc-cccc-cccc-cccc-cccccccccccc"]
+    app_owner_object_ids        = ["cccccccc-cccc-cccc-cccc-cccccccccccc", "c0c0c0c0-0000-4000-8000-00000000000c"]
     aws_scim_template_id        = "placeholderTemplate"
     servicenow_instance_url     = "https://dev00000.service-now.com" # synthetic PDI
     okta_org_domain             = "integrator-1234567.okta.com"      # synthetic Integrator Free org

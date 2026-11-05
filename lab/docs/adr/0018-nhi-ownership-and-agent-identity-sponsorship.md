@@ -1,6 +1,6 @@
 # ADR 0018: Non-human identity ownership and agent identity sponsorship
 
-- **Status:** Accepted (lab). BUILT: the inventory, app management policy, consent policy, leaver hand-off and agent identity scripts, with offline Pester tests against mocks. Applied: `enable_nhi_governance` is on in the lab tenant; `enable_agent_identity` is still off, so no agent identity exists.
+- **Status:** Accepted (lab). BUILT: the inventory, app management policy, consent policy, leaver hand-off and agent identity scripts, with offline Pester tests against mocks. Applied: `enable_nhi_governance` is on in the lab tenant; `enable_agent_identity` is still off, so no agent identity exists. RAN · tenant: the inventory (capture-log E70, E70a) and named owners per `lab/iga/nhi-owners.json` (amendment 2026-11-05).
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
@@ -88,7 +88,9 @@ whose staff's access it summarises, not an engineer.
     `ownedObjects`, and the inventory flags an agent with no sponsor but
     not one whose only sponsor is disabled. verify: whether a lifecycle
     workflow or Microsoft moves sponsorship to the sponsor's manager.
-  - Owners on the Terraform-managed pipeline apps.
+  - ~~Owners on the Terraform-managed pipeline apps.~~ Built 2026-11-05:
+    `envs/bootstrap` `pipeline_owner_object_ids`, `envs/operator`
+    `operator_owner_object_ids`, `modules/apps` (two owners or a warning).
   - Disabling orphans after 30 days, which exists only as a rule in the
     standard.
   - Registering raw-Graph agents in the Microsoft 365 agent registry.
@@ -105,6 +107,33 @@ Fill this in after the first tenant run of `06-NHI-Inventory.ps1`.
 | Tier-0 NHIs with no current risk acceptance | `PERM-TIER0` findings vs. the exception register | 0 |
 | Leaver-owned NHIs with no new owner by the disable date | `04-Leaver.ps1` report | 0 |
 | Agent identities with no enabled sponsor | `AGENT-NO-SPONSOR` (the disabled-sponsor check isn't built) | 0 |
+
+## Amendment 2026-11-05: who owns what
+
+`lab/iga/nhi-owners.json` is the register: every robot account in the
+tenant, its owners, where the list lives (Terraform or a one-time
+post-apply step) and why. The named owner is the access governance lead's
+admin account (`adm-mei.tanaka`), the backup the IAM engineer's
+(`adm-ava.lin`). Two rules decide who may hold ownership, because an owner
+can add a credential and act as the app:
+
+1. **Tier 0 (this ADR's Consequences).** APPLY, the lab operator and PLAN
+   (which reads the envs/dev state, holding the generated break-glass
+   passwords) need Tier-0 owners. A standing owner of a Tier-0 identity
+   holds Tier-0 power without a PIM activation, against ADR 0020's zero
+   standing access (no admin keeps power they are not using). Their owners are left to
+   the lead: the build account already holds standing Global
+   Administrator, so it is the one owner that adds no new reach.
+2. **SOD-08.** The access governance lead certifies access, so she does not
+   own an identity that creates, changes or disables accounts: HR-SYNC, the
+   HR provisioning app and the Cloud Sync configuration app get the IAM
+   engineer, and a second owner is the lead's call.
+
+Everything else (the SSO and provisioning apps, EVIDENCE, P2P Server) has
+both. `modules/apps` now warns on every plan unless `app_owner_object_ids`
+names two people. Managed identities (owned through Azure RBAC on their
+resource) and Microsoft's own apps are out of scope, with the reasons in the
+register.
 
 ## Revisit trigger
 

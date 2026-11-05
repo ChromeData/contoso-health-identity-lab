@@ -267,3 +267,44 @@ variable "evidence_graph_roles" {
     error_message = "evidence_graph_roles accepts read-only roles only (<Resource>.Read[Basic][.All|.Directory|.AzureADGroup|.OwnedBy|.Hidden]); the evidence pack never changes the tenant."
   }
 }
+
+# -----------------------------------------------------------------------------
+# Accountable human owners (ADR 0018, nhi-standard N1). Who and why per
+# identity: lab/iga/nhi-owners.json.
+# -----------------------------------------------------------------------------
+variable "owner_object_ids" {
+  type = object({
+    plan     = optional(list(string), [])
+    apply    = optional(list(string), [])
+    hr_sync  = optional(list(string), [])
+    evidence = optional(list(string), [])
+    # Human owners of the HR provisioning app HR-SYNC uploads to (made by
+    # lab/scripts/mock-hr/New-InboundProvisioningApp.ps1, looked up by client
+    # id); only used while HR-SYNC owns it (hr_sync_upload_scope = "owned").
+    hr_provisioning = optional(list(string), [])
+  })
+  description = <<-EOT
+    Entra USER object ids recorded as owners (app registration + service
+    principal) of each CI identity. ADR 0018 wants two people per identity
+    (a named owner plus a backup). An owner can add a credential and act AS
+    the identity, so the owners of a Tier-0 identity must be Tier-0 people
+    (ADR 0018 Consequences): APPLY (RoleManagement.ReadWrite.Directory) and
+    PLAN (it can read the envs/dev state, which holds the generated
+    break-glass passwords - see envs/bootstrap main.tf "Remote state") stay
+    empty until the lead names them. An empty list = no owners change planned
+    (null, not []).
+    Not marked sensitive, unlike envs/dev's app_owner_object_ids: this module
+    is applied only from envs/bootstrap, on the operator's Mac, so no plan of
+    it is ever posted to a pull request; and hr_provisioning feeds a for_each,
+    which Terraform refuses to key on a sensitive value.
+  EOT
+  default     = {}
+
+  validation {
+    condition = alltrue([
+      for id in flatten([var.owner_object_ids.plan, var.owner_object_ids.apply, var.owner_object_ids.hr_sync, var.owner_object_ids.evidence, var.owner_object_ids.hr_provisioning]) :
+      can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))
+    ])
+    error_message = "owner_object_ids: every entry must be an Entra object id (GUID)."
+  }
+}

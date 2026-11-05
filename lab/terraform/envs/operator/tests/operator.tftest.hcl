@@ -37,6 +37,8 @@ mock_provider "azuread" {
         "Team.Create"                                          = "23fc2474-f741-46ce-8465-674744c5c361"
         "TeamMember.ReadWrite.All"                             = "0121dc95-1b9f-4aed-8bac-58c5ac466691"
         "DelegatedPermissionGrant.ReadWrite.All"               = "8e8e4742-1d95-4f68-9d56-6ee75648c72a"
+        "SecurityEvents.Read.All"                              = "bf394140-e372-4bf9-a898-299cfc7564e5"
+        "AccessReview.ReadWrite.All"                           = "ef5f7d5c-338f-44b0-86c3-351f46c8bb5f"
       }
     }
   }
@@ -105,6 +107,20 @@ run "grants_are_exactly_the_reviewed_lists" {
     error_message = "PIM groups: eligibility write only (it includes the read); no PrivilegedAssignmentSchedule role, which could make a member ACTIVE without an activation"
   }
   assert {
+    # Secure Score history (the KPI one-pager's "after" scan) is a READ: the
+    # operator gets SecurityEvents.Read.All, never .ReadWrite.All, which could
+    # change alerts and incidents the SOC works from.
+    condition     = contains(var.operator_graph_roles, "SecurityEvents.Read.All") && !contains(var.operator_graph_roles, "SecurityEvents.ReadWrite.All")
+    error_message = "Secure Score: SecurityEvents.Read.All only (no SecurityEvents.ReadWrite.All)"
+  }
+  assert {
+    # Creating the Terraform-rendered review series (New-AccessReviewDefinitions.ps1)
+    # needs AccessReview.ReadWrite.All; the read-only reports check their Graph
+    # context for AccessReview.Read.All by name, so both are granted.
+    condition     = contains(var.operator_graph_roles, "AccessReview.ReadWrite.All") && contains(var.operator_graph_roles, "AccessReview.Read.All")
+    error_message = "access reviews: ReadWrite (create the rendered series) plus Read (the report scripts' scope check)"
+  }
+  assert {
     condition     = toset(keys(azurerm_role_assignment.operator)) == toset(["Owner", "Storage Blob Data Contributor", "Key Vault Secrets Officer"])
     error_message = "Azure roles must be the three reviewed ones"
   }
@@ -115,5 +131,30 @@ run "grants_are_exactly_the_reviewed_lists" {
   assert {
     condition     = toset(keys(azuread_directory_role_assignment.operator)) == toset(["Security Reader"])
     error_message = "the only directory role is Security Reader"
+  }
+}
+
+# ADR 0018: the operator is Tier 0, so its owners are the lead's decision;
+# by default no owners change is planned, and a named owner lands on both
+# the app registration and the service principal.
+run "owners_only_when_named" {
+  command = plan
+
+  assert {
+    condition     = azuread_application.operator.owners == null && azuread_service_principal.operator.owners == null
+    error_message = "no owners change unless operator_owner_object_ids names someone"
+  }
+}
+
+run "named_owners_on_app_and_sp" {
+  command = plan
+
+  variables {
+    operator_owner_object_ids = ["b0b0b0b0-0000-4000-8000-0000000000b1", "b0b0b0b0-0000-4000-8000-0000000000b2"]
+  }
+
+  assert {
+    condition     = length(azuread_application.operator.owners) == 2 && toset(azuread_service_principal.operator.owners) == toset(azuread_application.operator.owners)
+    error_message = "named owners go on the app registration and the service principal"
   }
 }

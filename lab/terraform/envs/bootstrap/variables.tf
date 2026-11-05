@@ -176,3 +176,18 @@ variable "evidence_container_name" {
   description = "The evidence container EVIDENCE may add files to (modules/evidence-store container_name)."
   default     = "evidence"
 }
+
+variable "pipeline_owner_object_ids" {
+  type = object({
+    plan     = optional(list(string), [])
+    apply    = optional(list(string), [])
+    hr_sync  = optional(list(string), [])
+    evidence = optional(list(string), [])
+    # Human owners of the HR provisioning app HR-SYNC uploads to (made by
+    # lab/scripts/mock-hr/New-InboundProvisioningApp.ps1, looked up by client
+    # id); only used while HR-SYNC owns it (hr_sync_upload_scope = "owned").
+    hr_provisioning = optional(list(string), [])
+  })
+  description = "Accountable human owners (Entra USER object ids) of each CI identity, app registration + service principal, and of the HR provisioning app (modules/pipeline-identity owner_object_ids; ADR 0018: two people, Tier-0 identities only Tier-0 people). Who and why: lab/iga/nhi-owners.json. Empty list = no owners change planned for that identity. Not sensitive: this root is applied locally and never planned in a pull request (see the module variable)."
+  default     = {}
+}

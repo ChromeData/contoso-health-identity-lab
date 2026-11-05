@@ -309,6 +309,7 @@ EntitlementManagement.Read.All
 **Senior-scope additions** (consent only the ones for the flags you turn on):
 ```
 AccessReview.ReadWrite.All                         New-AccessReviewDefinitions
+SecurityEvents.Read.All                            08 -IncludeSecureScore (Secure Score history)
 PrivilegedEligibilitySchedule.Read.AzureADGroup    New-AccessReviewDefinitions, 08, Find-ShadowAdmins
 GroupMember.Read.All                               New-B2BConnectedOrganization, 07, Invoke-BreakGlassDrill
 Policy.ReadWrite.AuthenticationMethod              Set-AuthenticationMethodsPolicy

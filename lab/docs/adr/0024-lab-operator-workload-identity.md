@@ -50,7 +50,10 @@ private key's lasting copy is a login Keychain item; a session copy (mode
   AdministrativeUnit.ReadWrite.All, RoleManagement.ReadWrite.Directory,
   LifecycleWorkflows.ReadWrite.All, UserAuthenticationMethod.ReadWrite.All,
   User.ReadWrite.All and GroupMember.ReadWrite.All (no new reach: the
-  operator was already Tier 0 through AppRoleAssignment.ReadWrite.All)
+  operator was already Tier 0 through AppRoleAssignment.ReadWrite.All);
+  then SecurityEvents.Read.All (Secure Score history) and
+  AccessReview.ReadWrite.All (create the rendered review series), see the
+  amendment below
 - **Azure, lab subscription:** Owner, Storage Blob Data Contributor,
   Key Vault Secrets Officer (Secrets User until 2026-11-05)
 - **Entra role:** Security Reader (refreshing the tenant diagnostic setting)
@@ -139,3 +142,26 @@ make the lab-operations admin account ELIGIBLE for `PIM-AWS-Lab-Admins`
 not given `PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup`: making a
 member ACTIVE stays an activation by the member, with MFA and a reason. No
 new reach: the operator was already Tier 0 (Consequences above).
+
+## Amendment 2026-11-05: Secure Score read and review creation
+
+Two Graph application roles close the last two stated gaps in the demo:
+
+- `SecurityEvents.Read.All`: read Microsoft Secure Score history
+  (`GET /security/secureScores`, one record a day for about 90 days, and
+  `/security/secureScoreControlProfiles`). It is the least privileged
+  application permission Microsoft Learn lists for both. It gives the KPI
+  one-pager its "after" security scan: the score on the lab's first day
+  against today, and which controls moved. It reads only;
+  `SecurityEvents.ReadWrite.All`, which can change alerts, is not granted
+  (`tests/operator.tftest.hcl` pins this).
+- `AccessReview.ReadWrite.All`: create the review series Terraform renders
+  (`post-apply/New-AccessReviewDefinitions.ps1`), the step a Global
+  Administrator used to run with a delegated sign-in. The script only sends
+  the Terraform body and refuses one that keeps access on silence without a
+  reviewer and a fallback reviewer. `AccessReview.Read.All` stays too: the
+  read-only report scripts check their Graph context for that exact name.
+
+No new reach: the operator was already Tier 0 (Consequences above), so it
+could have granted itself either role. Like every change here, both arrive
+through a reviewed pull request and the operator's own apply.
