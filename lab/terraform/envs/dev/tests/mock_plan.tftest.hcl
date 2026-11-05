@@ -196,6 +196,7 @@ run "plan_lab_itdr_hold_back" {
 run "plan_lab_itdr_hold_back_la_alerts" {
   command = plan
   variables {
+    enable_itdr_containment   = false # pinned: lab.tfvars turns containment on (Day 13); the post-trial Log Analytics path has none (automation rules are Sentinel-only)
     enable_sentinel           = false # pinned: lab.tfvars turns Sentinel on from Day 2; this run is the post-trial Log Analytics path
     onmicrosoft_domain        = "contosohealthlab.onmicrosoft.com"
     pim_approver_object_ids   = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
@@ -480,6 +481,7 @@ run "plan_all_flags_on_sentinel" {
 run "plan_all_flags_on_la_alerts" {
   command = plan
   variables {
+    enable_itdr_containment              = false # pinned: lab.tfvars turns containment on (Day 13); Sentinel-only, so off on this path
     enable_premium                       = true
     enable_governance                    = true
     enable_access_reviews                = true # the all-three shorthand
@@ -757,6 +759,7 @@ run "flags_without_premium_warn" {
   command = plan
 
   variables {
+    enable_itdr_containment             = false # pinned: lab.tfvars turns containment on (Day 13); it needs enable_itdr_detections, off in this run
     enable_intune_vm                    = false # lab.tfvars turns it on; this run has no premium licence
     enable_itdr_detections_v2           = false # lab.tfvars turns it on; this run keeps the ITDR telemetry off
     enable_premium                      = false
