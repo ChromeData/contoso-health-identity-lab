@@ -330,19 +330,28 @@ resource "azuread_application_owner" "hr_sync_owns_provisioning_app" {
 #
 #   Graph  evidence_graph_roles - application READ roles only (validated
 #          allow-list, like PLAN's extras): exactly what the script reads.
-#            AuditLog.Read.All              directoryAudits (PIM activity log)
-#                                           + the userRegistrationDetails
-#                                           report (MFA coverage)
+#            AuditLog.Read.All              directoryAudits (PIM activity log,
+#                                           and the PIM-for-roles activation
+#                                           history) + the
+#                                           userRegistrationDetails report
+#                                           (MFA coverage)
 #            AccessReview.Read.All          access-review definitions,
 #                                           instances, decisions
 #            Policy.Read.All                Conditional Access policies
 #            RoleManagement.Read.Directory  role definitions (beta
 #                                           isPrivileged), role assignments
 #            RoleAssignmentSchedule.Read.Directory
-#                                           PIM-for-roles schedule requests /
-#                                           instances (the 2026-11-05 run was
-#                                           refused them without it:
-#                                           PermissionScopeNotGranted)
+#                                           PIM-for-roles schedule INSTANCES
+#                                           (Learn's least-privileged read for
+#                                           them). Not the requests list: Learn
+#                                           names RoleAssignmentSchedule.
+#                                           ReadWrite.Directory as its least
+#                                           privileged permission, and a write
+#                                           role has no place here, so the
+#                                           activation history comes from the
+#                                           audit log instead (2026-11-05:
+#                                           still PermissionScopeNotGranted
+#                                           with this role)
 #            PrivilegedAssignmentSchedule.Read.AzureADGroup
 #                                           PIM-for-Groups schedule requests /
 #                                           instances
