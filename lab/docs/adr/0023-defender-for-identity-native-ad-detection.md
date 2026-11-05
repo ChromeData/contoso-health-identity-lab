@@ -146,10 +146,13 @@ Analytics read).
   (`SecurityEvent`, the risk tables and `VaultCheckout_CL` are not in Graph).
   Feeding the workspace rows gives both SIEMs identical input, so a difference
   in what fires is a difference in the rules, never in the data.
-- **Exactly once.** Watermark on `ingestion_time()` minus a 10-minute overlap,
+- **Each row once.** Watermark on `ingestion_time()` minus a 10-minute overlap,
   de-duplicated by the workspace's own record id (`_ItemId`); the state is
-  saved after every accepted HEC batch; an HEC refusal stops the run and keeps
-  the watermark at the last accepted batch.
+  saved after every accepted HEC batch; an HEC failure stops the run and keeps
+  the watermark at the last accepted batch. A batch Splunk may have indexed
+  (reply lost, error part-way) is never resent blindly: the next run asks
+  Splunk which of its record ids it holds and sends only the others. A Log
+  Analytics result marked partial is refused whole.
 - **Proven, not assumed.** A heartbeat event after every clean run;
   `lab/scripts/demo/preflight.sh` fails when the feed's newest event in Splunk
   is 15 minutes old or more.

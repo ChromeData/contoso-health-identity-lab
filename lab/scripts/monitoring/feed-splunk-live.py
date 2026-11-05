@@ -47,8 +47,16 @@ WATERMARK + DE-DUPLICATION (never sends a row twice)
   ingestion_time(), not TimeGenerated, because Entra rows reach the workspace
   2-15 min after they happen (TimeGenerated would skip late rows).
   The state is saved after EVERY accepted HEC batch (write-temp + fsync +
-  rename), so a crash can at most repeat the one batch that was in flight.
-  A run holds an exclusive lock: a second copy refuses to start.
+  rename). A batch whose fate is unknown (Splunk's reply lost, or a 4xx that
+  may have indexed the events before a bad one - HEC indexes a batch in order)
+  is NOT retried: its record ids are saved as "in doubt", the run fails, and
+  the next run asks Splunk which of them it already holds (tstats on the
+  indexed field feed_item_id, as the search-only user) before anything is sent
+  again. Only answers that mean "nothing was accepted" (HTTP 503 busy, or the
+  connection refused) are retried at once. A query result that Log Analytics
+  marks partial (HTTP 200 with an "error" object) is refused whole: nothing
+  sent, watermark unchanged. A run holds an exclusive lock: a second copy
+  refuses to start.
 
 HOW IT WRITES
   Splunk HTTP Event Collector, https://127.0.0.1:8088/services/collector/event
@@ -62,8 +70,8 @@ HOW IT WRITES
   alerts' -1h windows work exactly like Sentinel's), and the record id as the
   indexed field feed_item_id (so a duplicate is one search away).
   An HEC answer other than HTTP 200 + {"code":0} stops the run with a non-zero
-  exit (503/unreachable is retried twice first) and the watermark stays where
-  the last ACCEPTED batch left it.
+  exit and the watermark stays where the last ACCEPTED batch left it (see
+  "in doubt" above for the batch that failed).
 
 HEARTBEAT
   After a run in which every table succeeded, one event
@@ -183,6 +191,11 @@ class FeedError(Exception):
     """A failure that must stop the run loudly (exit 1)."""
 
 
+class HecInDoubt(FeedError):
+    """HEC may have indexed some or all of the batch (reply lost, or an error part-way
+    through it). Never retried blindly: the next run reconciles against Splunk."""
+
+
 def log(msg: str) -> None:
     print("[%s] %s" % (dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), msg), flush=True)
 
@@ -242,6 +255,14 @@ def timespan_for(since_iso: str, now: dt.datetime) -> str:
 def parse_rows(resp: dict, table: str) -> List[Tuple[str, str, dict]]:
     """Query API response -> [(item_id, ingestion_iso, row)], in the order returned.
     Fails on any shape it does not expect instead of dropping rows."""
+    if resp.get("error"):
+        # The query API answers HTTP 200 with an "error" object when the result is
+        # PARTIAL (Learn: "Azure Monitor Log Analytics API - errors"). Sending what
+        # did come back would advance the watermark past rows that never arrived.
+        err = resp["error"]
+        raise FeedError("%s: Log Analytics returned a partial result (%s: %s) - nothing sent, watermark unchanged"
+                        % (table, err.get("code", "?") if isinstance(err, dict) else "?",
+                           (err.get("message", "") if isinstance(err, dict) else str(err))[:200]))
     try:
         t = resp["tables"][0]
         cols = [c["name"] for c in t["columns"]]
@@ -366,21 +387,26 @@ class Hec:
             return False
 
     def post(self, events: List[dict]) -> None:
-        """POST newline-delimited envelopes. Success = HTTP 200 and {"code":0}. 503 or
-        unreachable: two retries with back-off. Anything else raises FeedError with
-        Splunk's own answer (it never echoes the token)."""
+        """POST newline-delimited envelopes. Success = HTTP 200 and {"code":0}.
+        Retried (twice, with back-off) ONLY when nothing can have been indexed: HTTP
+        503 (server busy) or the connection refused. Any other failure raises
+        HecInDoubt: a lost reply or a 4xx part-way through the batch may still have
+        indexed events, so a blind resend could count them twice. Splunk's own error
+        text is quoted; it never echoes the token."""
         body = "\n".join(json.dumps(e, separators=(",", ":")) for e in events).encode()
         last = ""
         for attempt in (1, 2, 3):
             req = urllib.request.Request(self.url + "/services/collector/event", data=body, method="POST",
                                          headers={"Authorization": self._auth, "Content-Type": "application/json"})
+            refused = False
             try:
                 with urllib.request.urlopen(req, context=self.ctx, timeout=120) as r:
                     code, text = r.status, r.read().decode("utf-8", "replace")
             except urllib.error.HTTPError as e:
                 code, text = e.code, e.read().decode("utf-8", "replace")
             except (urllib.error.URLError, OSError) as e:
-                code, text = 0, "unreachable (%s)" % type(e).__name__
+                refused = isinstance(getattr(e, "reason", e), ConnectionRefusedError)
+                code, text = 0, "%s (%s)" % ("connection refused" if refused else "no reply", type(getattr(e, "reason", e)).__name__)
             if code == 200:
                 try:
                     if json.loads(text).get("code") == 0:
@@ -388,24 +414,42 @@ class Hec:
                 except ValueError:
                     pass
             last = "HTTP %s %s" % (code, text[:300].replace("\n", " "))
-            if code in (0, 503) and attempt < 3:
-                log("WARN: HEC answered %s (attempt %d/3) - retrying" % (last, attempt))
-                self.sleep(5 * attempt)
-                continue
-            break
-        raise FeedError("HEC rejected the batch: " + last)
+            if code == 503 or refused:
+                if attempt < 3:
+                    log("WARN: HEC answered %s (attempt %d/3, nothing indexed) - retrying" % (last, attempt))
+                    self.sleep(5 * attempt)
+                    continue
+                raise FeedError("HEC did not accept the batch: " + last)
+            raise HecInDoubt("HEC failed part-way or the reply was lost (%s); the batch is in doubt and will be "
+                             "checked against Splunk before any resend" % last)
+        raise FeedError("HEC did not accept the batch: " + last)
 
 
 # --- the run ---------------------------------------------------------------------------------
 QueryFn = Callable[[str, str], dict]   # (kql, timespan) -> query API JSON
+LookupFn = Callable[[List[str]], set]   # record ids -> the ones Splunk already holds
 
 
 def feed_table(table: str, st: State, query: QueryFn, hec: Hec, host: str, now: dt.datetime,
                overlap_min: int = OVERLAP_MIN, backfill_h: int = BACKFILL_HOURS, batch: int = BATCH,
-               dry_run: bool = False) -> Tuple[int, int]:
+               dry_run: bool = False, lookup: Optional[LookupFn] = None) -> Tuple[int, int]:
     """Send one table's new rows. Returns (sent, duplicates_skipped). The watermark and
     id set advance after each ACCEPTED batch and are saved at once."""
     ts = st.table(table)
+    if ts.get("in_doubt") and not dry_run:
+        # A previous run lost track of a batch. Ask Splunk which of its rows it holds;
+        # those join the sent set, the rest are sent again below (their watermark was
+        # never advanced, so the query returns them). No answer = no send.
+        if lookup is None:
+            raise FeedError("%s: %d rows are in doubt and no Splunk lookup is available - nothing sent" % (table, len(ts["in_doubt"])))
+        found = lookup(sorted(ts["in_doubt"]))
+        for item_id in found:
+            if item_id in ts["in_doubt"]:
+                ts["seen"][item_id] = ts["in_doubt"][item_id]
+        log("%s: %d rows were in doubt; Splunk already holds %d, the other %d will be sent once"
+            % (table, len(ts["in_doubt"]), len(found & set(ts["in_doubt"])), len(set(ts["in_doubt"]) - found)))
+        ts["in_doubt"] = {}
+        st.save()
     since = iso_shift(ts["hwm"], -overlap_min) if ts.get("hwm") else utcnow_iso(now - dt.timedelta(hours=backfill_h))
     rows = parse_rows(query(build_kql(table, since), timespan_for(since, now)), table)
     if len(rows) >= MAX_ROWS:
@@ -422,7 +466,12 @@ def feed_table(table: str, st: State, query: QueryFn, hec: Hec, host: str, now: 
     sent = 0
     for i in range(0, len(fresh), batch):
         chunk = fresh[i:i + batch]
-        hec.post([ev for _, _, ev in chunk])
+        try:
+            hec.post([ev for _, _, ev in chunk])
+        except HecInDoubt:
+            ts.setdefault("in_doubt", {}).update({item_id: ing for item_id, ing, _ in chunk})
+            st.save()
+            raise
         for item_id, ing, _ in chunk:
             ts["seen"][item_id] = ing
             if not ts.get("hwm") or tkey(ing) > tkey(ts["hwm"]):
@@ -659,6 +708,30 @@ def reader_setup(admin: SplunkRest) -> None:
     log("Search-only user %s: signs in, roles = [%s], password in Keychain item %s" % (READER_USER, READER_ROLE, READER_KEYCHAIN[0]))
 
 
+def splunk_id_lookup(ids: List[str]) -> set:
+    """Which of these record ids does Splunk already hold? tstats on the indexed field
+    feed_item_id (a plain `feed_item_id=<guid>` search term does not match an indexed
+    field whose value contains hyphens; tstats does), as the search-only user, all time.
+    Any error or warning from the search raises: an unanswered question never becomes
+    "not there"."""
+    pw = keychain_get(*READER_KEYCHAIN)
+    if not pw:
+        raise FeedError("no search-only password in Keychain item %s - run setup" % READER_KEYCHAIN[0])
+    found = set()
+    for i in range(0, len(ids), 100):
+        chunk = ids[i:i + 100]
+        if not all(GUID_RE.match(x) for x in chunk):
+            raise FeedError("an in-doubt record id is not a GUID - refusing to build the lookup search")
+        q = "| tstats count where index=%s (%s) by feed_item_id" % (INDEX, " OR ".join('feed_item_id="%s"' % x for x in chunk))
+        res = SplunkRest(READER_USER, pw).call("POST", "/services/search/jobs", {
+            "search": q, "exec_mode": "oneshot", "count": "0", "earliest_time": "0", "latest_time": "+1d"})
+        bad = [m for m in res.get("messages", []) if str(m.get("type", "")).upper() in ("ERROR", "FATAL", "WARN")]
+        if bad:
+            raise FeedError("Splunk lookup of in-doubt rows failed: %s" % "; ".join(str(m.get("text", ""))[:200] for m in bad))
+        found |= {r["feed_item_id"] for r in res.get("results", []) if r.get("feed_item_id") in chunk}
+    return found
+
+
 def cmd_setup(a) -> int:
     envp = splunk_env_path(a.splunk_env)
     admin = SplunkRest("admin", read_env_value(envp, "SPLUNK_PASSWORD"))
@@ -693,8 +766,9 @@ def cmd_run(a) -> int:
         for t in tables:
             if t not in TABLES:
                 raise FeedError("unsupported table %r" % t)
-        run_once(st, make_la_query(op, wid), Hec(a.hec_url, token), DEFAULT_WS, tables,
-                 dry_run=a.dry_run, overlap_min=a.overlap_minutes, backfill_h=a.backfill_hours)
+            run_once(st, make_la_query(op, wid), Hec(a.hec_url, token), DEFAULT_WS, tables,
+                 dry_run=a.dry_run, overlap_min=a.overlap_minutes, backfill_h=a.backfill_hours,
+                 lookup=splunk_id_lookup)
     return 0
 
 

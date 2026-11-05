@@ -12,7 +12,10 @@ What they pin (each would fail against a feed without the behaviour):
     the watermark is the newest ingestion_time SENT, compared exactly (7 digits)
   * de-dup: a row returned again inside the overlap is never sent twice; old ids are pruned
   * HEC errors fail loudly: non-200, 200 without code 0, unreachable; the watermark only
-    covers ACCEPTED batches; no heartbeat after a failed table; 503 is retried
+    covers ACCEPTED batches; no heartbeat after a failed table; only 503 / refused is
+    retried; a batch whose fate is unknown (reply lost, 4xx part-way) is never resent
+    blindly: the next run asks Splunk which ids it holds and sends only the others
+  * a Log Analytics result marked partial is refused whole
   * the HEC token never appears in output or in an error
   * the row transform matches the replay (JSON-text columns parsed, "[EXT] ..." kept,
     system columns dropped, _time = TimeGenerated, detection columns first)
@@ -50,7 +53,8 @@ NOW = dt.datetime(2026, 11, 5, 16, 0, 0, tzinfo=dt.timezone.utc)
 # --- a scripted HEC on loopback ---------------------------------------------------------
 class FakeHec:
     def __init__(self):
-        self.answers = []          # queue of (status, body) for POSTs; default 200 {"code":0}
+        self.answers = []          # queue of (status, body) for POSTs; default 200 {"code":0};
+                                   # status None = index the events, then drop the reply
         self.posts = []            # list of [event dicts] per accepted-or-not POST
         self.auth = []
         self.health = 200
@@ -69,8 +73,11 @@ class FakeHec:
                 n = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(n).decode()
                 outer.auth.append(self.headers.get("Authorization"))
-                outer.posts.append([json.loads(l) for l in body.splitlines() if l.strip()])
+                outer.posts.append([json.loads(ln) for ln in body.splitlines() if ln.strip()])
                 status, text = outer.answers.pop(0) if outer.answers else (200, '{"text":"Success","code":0}')
+                if status is None:              # Splunk indexed it, the reply never arrives
+                    self.close_connection = True
+                    return
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
@@ -248,17 +255,68 @@ class HecFailures(Base):
     def test_rejected_batch_fails_and_watermark_covers_only_accepted_batches(self):
         la = FakeLA([la_row(str(i), "2026-11-05T15:5%d:00Z" % i) for i in range(4)])
         self.hec_srv.answers = [(200, '{"text":"Success","code":0}'), (400, '{"text":"Incorrect index","code":7}')]
-        with self.assertRaises(feed.FeedError) as cm:
+        with self.assertRaises(feed.HecInDoubt) as cm:                     # a 4xx may have indexed part of it
             feed.feed_table("SigninLogs", self.state(), la, self.hec, "loga-idlab", NOW, batch=2)
         self.assertIn("HTTP 400", str(cm.exception))
         self.assertIn("Incorrect index", str(cm.exception))
+        self.assertEqual(len(self.hec_srv.posts), 2)                       # not retried
         ts = self.state().table("SigninLogs")
         self.assertEqual(ts["hwm"], "2026-11-05T15:51:00Z")               # batch 1 only
         self.assertEqual(sorted(ts["seen"]), ["0", "1"])
-        # the next run resends exactly the rejected rows, nothing twice
-        feed.feed_table("SigninLogs", self.state(), la, self.hec, "loga-idlab", NOW, batch=2)
+        self.assertEqual(sorted(ts["in_doubt"]), ["2", "3"])
+        # next run: Splunk holds neither, so exactly those two are sent once
+        feed.feed_table("SigninLogs", self.state(), la, self.hec, "loga-idlab", NOW, batch=2, lookup=lambda ids: set())
         ids = [e["fields"]["feed_item_id"] for p in self.hec_srv.posts[:1] + self.hec_srv.posts[2:] for e in p]
         self.assertEqual(sorted(ids), ["0", "1", "2", "3"])
+        self.assertEqual(self.state().table("SigninLogs")["in_doubt"], {})
+
+    def test_accepted_batch_whose_reply_is_lost_is_never_sent_twice(self):
+        la = FakeLA([la_row("a", "2026-11-05T15:51:00Z"), la_row("b", "2026-11-05T15:52:00Z")])
+        self.hec_srv.answers = [(None, "")]
+        with self.assertRaises(feed.HecInDoubt):
+            feed.feed_table("SigninLogs", self.state(), la, self.hec, "loga-idlab", NOW)
+        self.assertEqual(len(self.hec_srv.posts), 1)                       # no blind retry
+        self.assertIsNone(self.state().table("SigninLogs")["hwm"])
+        asked = []
+
+        def splunk_has(ids):
+            asked.append(list(ids))
+            return {"a", "b"}
+        self.assertEqual(feed.feed_table("SigninLogs", self.state(), la, self.hec, "loga-idlab", NOW, lookup=splunk_has), (0, 2))
+        self.assertEqual(asked, [["a", "b"]])
+        self.assertEqual(sorted(e["fields"]["feed_item_id"] for e in self.hec_srv.events()), ["a", "b"])   # one copy each
+
+    def test_in_doubt_rows_splunk_lacks_are_sent_once(self):
+        la = FakeLA([la_row("a", "2026-11-05T15:51:00Z"), la_row("b", "2026-11-05T15:52:00Z")])
+        self.hec_srv.answers = [(None, "")]
+        with self.assertRaises(feed.HecInDoubt):
+            feed.feed_table("SigninLogs", self.state(), la, self.hec, "loga-idlab", NOW)
+        self.assertEqual(feed.feed_table("SigninLogs", self.state(), la, self.hec, "loga-idlab", NOW, lookup=lambda ids: {"a"}), (1, 1))
+        # first POST indexed a+b (reply lost); Splunk holds only "a" (a 4xx part-way would look like this)
+        self.assertEqual(sorted(e["fields"]["feed_item_id"] for e in self.hec_srv.posts[1]), ["b"])
+
+    def test_in_doubt_without_an_answer_from_splunk_sends_nothing(self):
+        la = FakeLA([la_row("a", "2026-11-05T15:51:00Z")])
+        self.hec_srv.answers = [(None, "")]
+        with self.assertRaises(feed.HecInDoubt):
+            feed.feed_table("SigninLogs", self.state(), la, self.hec, "loga-idlab", NOW)
+
+        def down(ids):
+            raise feed.FeedError("Splunk management API unreachable")
+        for lk in (None, down):
+            with self.assertRaises(feed.FeedError):
+                feed.feed_table("SigninLogs", self.state(), la, self.hec, "loga-idlab", NOW, lookup=lk)
+        self.assertEqual(len(self.hec_srv.posts), 1)
+        self.assertEqual(sorted(self.state().table("SigninLogs")["in_doubt"]), ["a"])
+
+    def test_partial_log_analytics_result_is_refused_whole(self):
+        resp = la_response([la_row("a", "2026-11-05T15:51:00Z")])
+        resp["error"] = {"code": "PartialError", "message": "There were some errors when processing your query."}
+        with self.assertRaises(feed.FeedError) as cm:
+            feed.feed_table("SigninLogs", self.state(), lambda k, t: resp, self.hec, "loga-idlab", NOW)
+        self.assertIn("partial result", str(cm.exception))
+        self.assertEqual(self.hec_srv.posts, [])
+        self.assertFalse(self.state_path.exists())
 
     def test_200_without_code_zero_is_a_failure(self):
         self.hec_srv.answers = [(200, '{"text":"Invalid data format","code":6}')]
@@ -270,11 +328,14 @@ class HecFailures(Base):
         self.hec.post([{"event": {}}])
         self.assertEqual(len(self.hec_srv.posts), 2)
 
-    def test_unreachable_hec_fails_after_retries(self):
-        dead = feed.Hec("http://127.0.0.1:9", TOKEN, sleep=lambda s: None)
+    def test_refused_connection_is_retried_then_fails_but_is_not_in_doubt(self):
+        sleeps = []
+        dead = feed.Hec("http://127.0.0.1:9", TOKEN, sleep=sleeps.append)
         with self.assertRaises(feed.FeedError) as cm:
             dead.post([{"event": {}}])
-        self.assertIn("unreachable", str(cm.exception))
+        self.assertNotIsInstance(cm.exception, feed.HecInDoubt)            # nothing can have been indexed
+        self.assertIn("connection refused", str(cm.exception))
+        self.assertEqual(sleeps, [5, 10])
 
     def test_failed_table_means_no_heartbeat_and_exit_path(self):
         good = FakeLA([la_row("a", "2026-11-05T15:51:00Z")])

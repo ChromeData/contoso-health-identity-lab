@@ -315,9 +315,15 @@ Event Hub -> Splunk Add-on for Microsoft Cloud Services (`lab/docs/STAND-INS.md`
 newest `ingestion_time()` sent and the record ids (`_ItemId`) sent in the last
 10 minutes. Each run re-reads from watermark - 10 min and drops ids it already
 sent; the state is saved after every accepted HEC batch. An HEC answer other
-than HTTP 200 + `{"code":0}` stops the run with exit 1 and no heartbeat (503 and
-"unreachable" are retried twice first); the next run resends exactly the rows
-that were not accepted. A second copy refuses to start while one runs (lock).
+than HTTP 200 + `{"code":0}` stops the run with exit 1 and no heartbeat. Only
+answers that mean nothing was indexed (HTTP 503, connection refused) are retried
+at once. Any other failure (a lost reply, a 4xx part-way through a batch: HEC
+indexes a batch in order) leaves the batch **in doubt**: its record ids go in
+the state file, and the next run asks Splunk which of them it already holds
+(`tstats` on the indexed field `feed_item_id`, as the search-only user) and
+sends only the rest. No answer from Splunk means nothing is sent. A Log
+Analytics result marked partial (HTTP 200 with an `error` object) is refused
+whole. A second copy refuses to start while one runs (lock).
 Residual: a row that becomes queryable more than 10 minutes after its
 `ingestion_time()` would be missed (`--overlap-minutes` widens the window).
 
