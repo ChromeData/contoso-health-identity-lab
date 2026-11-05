@@ -1,0 +1,41 @@
+{
+  "$comment": [
+    "Who answers for each robot account (non-human identity) in the lab tenant, and why (ADR 0018, nhi-standard N1: at least two human owners - a named owner plus a backup).",
+    "Owners are ADMIN accounts (lab/iga/admin-accounts.json), never a workforce account, never break-glass. An Entra owner can add a credential to the app and act AS it, so ownership is power, not a label: the rules below decide who may hold it.",
+    "Rule 1 (ADR 0018 Consequences): owners of a Tier-0 identity must be Tier-0 people. A standing owner of a Tier-0 identity holds Tier-0 power with no PIM activation, which contradicts ADR 0020's zero standing access ('no admin keeps power when they are not using it'). So the Tier-0 rows name no owner until the lead decides (the build account already holds standing Global Administrator, so it is the one owner that adds no new reach).",
+    "Rule 2 (SOD-08, lab/iga/sod-rules.json): the access governance lead certifies access, so she never owns an identity that can create, change or disable accounts.",
+    "Where each list lives: 'terraform' rows are set by code (envs/dev TF_APP_OWNER_OBJECT_IDS for modules/apps; envs/bootstrap pipeline_owner_object_ids; envs/operator operator_owner_object_ids) - an owner added in the portal is removed by the next apply. 'post-apply' rows are set once by the operator with the Graph calls in postApplyStep and read back.",
+    "Checked by lab/scripts/powershell/06-NHI-Inventory.ps1 (EnabledHumanOwners per row; OWNER-NONE / OWNER-NO-HUMAN / OWNER-SINGLE findings). Object ids are not kept here: resolve an admin account with GET /users/<upn>?$select=id."
+  ],
+  "schemaVersion": 1,
+  "owners": {
+    "named": { "account": "adm-mei.tanaka", "person": "Mei Tanaka", "function": "Access governance lead" },
+    "backup": { "account": "adm-ava.lin", "person": "Ava Lin", "function": "IAM engineer (Tier-0 eligible through PIM)" }
+  },
+  "identities": [
+    { "displayName": "AWS IAM Identity Center", "kind": "SAML + SCIM app", "tier": "standard", "managedBy": "terraform: modules/apps (envs/dev, TF_APP_OWNER_OBJECT_IDS)", "owners": ["adm-mei.tanaka", "adm-ava.lin"], "why": "Sign-in and account creation in AWS for staff; no Graph permission. Its owners can change its claims and assignments, which ADR 0018 accepts for a named owner." },
+    { "displayName": "ServiceNow", "kind": "SAML app", "tier": "standard", "managedBy": "terraform: modules/apps (envs/dev, TF_APP_OWNER_OBJECT_IDS)", "owners": ["adm-mei.tanaka", "adm-ava.lin"], "why": "Staff sign-in to the IT help desk; no Graph permission." },
+    { "displayName": "ServiceNow - Provisioning", "kind": "SCIM app", "tier": "standard", "managedBy": "terraform: modules/apps (envs/dev, TF_APP_OWNER_OBJECT_IDS)", "owners": ["adm-mei.tanaka", "adm-ava.lin"], "why": "Creates and switches off ServiceNow accounts from App-ServiceNow-Users; no Graph permission." },
+    { "displayName": "Contoso Clinical Portal", "kind": "OIDC app", "tier": "standard", "managedBy": "terraform: modules/apps (envs/dev, TF_APP_OWNER_OBJECT_IDS)", "owners": ["adm-mei.tanaka", "adm-ava.lin"], "why": "The clinical portal's sign-in and app roles; no Graph application permission." },
+    { "displayName": "okta-clinic-idp", "kind": "OIDC app", "tier": "standard", "managedBy": "terraform: modules/apps (envs/dev, TF_APP_OWNER_OBJECT_IDS)", "owners": ["adm-mei.tanaka", "adm-ava.lin"], "why": "Entra as the identity provider for the acquired clinic's Okta; delegated sign-in scopes only." },
+    { "displayName": "EVIDENCE (gh-oidc evidence pack)", "kind": "CI identity", "tier": "standard", "managedBy": "terraform: envs/bootstrap pipeline_owner_object_ids.evidence", "owners": ["adm-mei.tanaka", "adm-ava.lin"], "why": "Read-only Graph plus create-only writes to the WORM evidence container." },
+    { "displayName": "P2P Server", "kind": "app registration made by Entra device registration (2026-10-29, when vm-win11-01 joined)", "tier": "standard", "managedBy": "post-apply", "owners": ["adm-mei.tanaka", "adm-ava.lin"], "why": "Holds no permission and no credential; it lives in this tenant, so the inventory counts it, and someone must answer for it." },
+    { "displayName": "HR-SYNC (gh-oidc hr-feed upload)", "kind": "CI identity", "tier": "account lifecycle", "managedBy": "terraform: envs/bootstrap pipeline_owner_object_ids.hr_sync", "owners": ["adm-ava.lin"], "secondOwner": "lead to name", "why": "Uploads HR rows that create and disable workforce accounts. SOD-08 keeps the access governance lead off it; the only other human without a conflict is the build account (lead's decision)." },
+    { "displayName": "Contoso HR Inbound Provisioning", "kind": "API-driven inbound provisioning app", "tier": "account lifecycle", "managedBy": "terraform: envs/bootstrap pipeline_owner_object_ids.hr_provisioning (one azuread_application_owner per person; HR-SYNC stays an owner for .OwnedBy)", "owners": ["adm-ava.lin"], "secondOwner": "lead to name", "why": "Its job creates and disables workforce accounts in AD: same reasoning as HR-SYNC." },
+    { "displayName": "corp.contosohealthlab.com", "kind": "Cloud Sync configuration app (AD to Entra)", "tier": "account lifecycle", "managedBy": "post-apply", "owners": ["adm-ava.lin"], "secondOwner": "lead to name", "why": "Its sync job writes every synced workforce account into Entra (the work of the Tier-0 Hybrid Identity Administrator role): same reasoning as HR-SYNC." },
+    { "displayName": "gh-oidc-entra-apply (write)", "kind": "CI identity", "tier": "Tier 0", "managedBy": "terraform: envs/bootstrap pipeline_owner_object_ids.apply", "owners": [], "secondOwner": "lead to decide", "why": "RoleManagement.ReadWrite.Directory and AppRoleAssignment.ReadWrite.All (ADR 0005). Rule 1." },
+    { "displayName": "Contoso Lab Operator (local Mac, certificate)", "kind": "operator identity", "tier": "Tier 0", "managedBy": "terraform: envs/operator operator_owner_object_ids", "owners": [], "secondOwner": "lead to decide", "why": "AppRoleAssignment.ReadWrite.All, RoleManagement.ReadWrite.Directory, subscription Owner (ADR 0024). Rule 1." },
+    { "displayName": "gh-oidc-entra-plan (read-only)", "kind": "CI identity", "tier": "Tier 0 (by state access)", "managedBy": "terraform: envs/bootstrap pipeline_owner_object_ids.plan", "owners": [], "secondOwner": "lead to decide", "why": "Read-only Graph, but it reads the envs/dev Terraform state, which holds the generated break-glass passwords (envs/bootstrap main.tf, 'Remote state'): whoever can act as PLAN can sign in as a Global Administrator. Rule 1." }
+  ],
+  "outOfScope": [
+    { "what": "Managed identities: vm-win11-01, vm-dc01, id-kv-idlab-reader, pb-identity-contain, pb-identity-notify", "why": "Entra has no owners for a managed identity; it lives and dies with its Azure resource, and who controls it is Azure RBAC on that resource (the inventory's OwnerModel 'Azure RBAC on the resource')." },
+    { "what": "Vendor apps: Microsoft Graph Command Line Tools, O365 LinkedIn Connection", "why": "Multi-tenant apps registered in Microsoft's own tenants (publisher Microsoft): their owners are the publisher. This tenant governs them through consent (ADR 0018 consent policy), not ownership." },
+    { "what": "Microsoft first-party service principals (359 on 2026-11-05)", "why": "Owned and run by Microsoft; the inventory counts them and leaves them out." }
+  ],
+  "postApplyStep": {
+    "runAs": "the lab operator (Application.ReadWrite.All), lab/scripts/operator/op",
+    "add": "POST https://graph.microsoft.com/v1.0/applications/{app object id}/owners/$ref and, where the app has one, POST https://graph.microsoft.com/v1.0/servicePrincipals/{sp object id}/owners/$ref, body {\"@odata.id\": \"https://graph.microsoft.com/v1.0/directoryObjects/{admin account object id}\"}",
+    "readBack": "GET https://graph.microsoft.com/v1.0/applications/{app object id}/owners?$select=userPrincipalName, then re-run 06-NHI-Inventory.ps1 -UseAzureCliToken",
+    "docs": "https://learn.microsoft.com/en-us/graph/api/application-post-owners and .../serviceprincipal-post-owners: app-only needs Application.ReadWrite.All + Directory.Read.All (Learn: Application.ReadWrite.OwnedBy is not sufficient to add another owner)"
+  }
+}

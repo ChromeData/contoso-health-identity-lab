@@ -27,7 +27,8 @@ variable "app_owner_object_ids" {
     it is who the NHI inventory, credential-expiry mail and access reviews
     route to. The identity running Terraform is always added as well (it must
     stay an owner to manage the apps with Application.ReadWrite.OwnedBy).
-    Empty = only the Terraform identity owns them; a check warns on every plan.
+    ADR 0018 / nhi-standard N1: at least TWO people (a named owner plus a
+    backup); fewer and a check warns on every plan.
     Sensitive: these are named people's object ids, and the PR plan comment
     is public (GitHub masks a secret only as one whole string, never each id
     of a JSON list, and never in a comment).

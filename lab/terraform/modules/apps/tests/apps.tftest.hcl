@@ -73,7 +73,7 @@ mock_provider "azuread" {
 
 variables {
   aws_users_group_object_id = "55555555-5555-5555-5555-555555555555"
-  app_owner_object_ids      = ["66666666-6666-6666-6666-666666666666"]
+  app_owner_object_ids      = ["66666666-6666-6666-6666-666666666666", "ffffffff-ffff-ffff-ffff-ffffffffffff"] # a named owner + a backup (ADR 0018)
 }
 
 run "saml_app_assigned_only_to_the_app_group" {
@@ -102,8 +102,8 @@ run "saml_app_assigned_only_to_the_app_group" {
     error_message = "the adopted SP must keep the enterprise-app tag (the provider PATCHes tags from config)"
   }
   assert {
-    condition     = contains(tolist(azuread_service_principal.aws.owners), "66666666-6666-6666-6666-666666666666") && contains(tolist(azuread_service_principal.aws.owners), "44444444-4444-4444-4444-444444444444")
-    error_message = "owners must be the named human plus the Terraform identity"
+    condition     = contains(tolist(azuread_service_principal.aws.owners), "66666666-6666-6666-6666-666666666666") && contains(tolist(azuread_service_principal.aws.owners), "ffffffff-ffff-ffff-ffff-ffffffffffff") && contains(tolist(azuread_service_principal.aws.owners), "44444444-4444-4444-4444-444444444444")
+    error_message = "owners must be the two named humans plus the Terraform identity"
   }
   # Owner ids are named people: the plan (and the public PR plan comment) must
   # show them as (sensitive value), never as GUIDs.
@@ -325,6 +325,20 @@ run "gated_apply_refuses_an_empty_scim_credential" {
   }
 
   expect_failures = [azuread_synchronization_secret.aws]
+}
+
+# ADR 0018 / nhi-standard N1: one named person is not enough - the day they
+# leave, the app is an orphan. The plan still runs (a check warns, it never
+# blocks a deploy), but the warning is there on every plan until a backup is
+# named. The same id twice counts once.
+run "one_human_owner_warns" {
+  command = plan
+
+  variables {
+    app_owner_object_ids = ["66666666-6666-6666-6666-666666666666", "66666666-6666-6666-6666-666666666666"]
+  }
+
+  expect_failures = [check.apps_have_two_human_owners]
 }
 
 run "pr_plan_without_the_token_only_warns" {

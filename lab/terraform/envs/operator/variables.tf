@@ -155,3 +155,23 @@ variable "operator_directory_roles" {
   type        = list(string)
   default     = ["Security Reader"]
 }
+
+variable "operator_owner_object_ids" {
+  description = <<-EOT
+    Entra USER object ids recorded as owners of the operator's app
+    registration and service principal (ADR 0018: two accountable people).
+    EMPTY ON PURPOSE until the lead names them: the operator is Tier 0
+    (main.tf), an owner can add a credential and act as it, so its owners
+    must be Tier-0 people (ADR 0018 Consequences) - and a standing owner of a
+    Tier-0 identity holds Tier-0 power without a PIM activation, which the
+    lab's "no admin keeps power when not using it" rule forbids. Who and why:
+    lab/iga/nhi-owners.json. Empty = no owners change planned (null, not []).
+  EOT
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for id in var.operator_owner_object_ids : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))])
+    error_message = "operator_owner_object_ids: every entry must be an Entra object id (GUID)."
+  }
+}
