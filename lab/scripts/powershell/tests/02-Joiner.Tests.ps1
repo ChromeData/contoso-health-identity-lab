@@ -160,7 +160,7 @@ Describe '02-Joiner.ps1' {
         Set-JoinerMocks
         & $script:Joiner -UserPrincipalName 'dana.okafor@contoso.test' -LicenseSkuPartNumber 'SPE_E5' -UseAccessPackage:$false -WarningAction SilentlyContinue
         $LASTEXITCODE | Should -Be 0
-        Should -Invoke New-MgGroupMember -Times 1 -Exactly
+        Should -Invoke New-MgGroupMember -Times 2 -Exactly
         Should -Invoke New-MgGroupMember -ParameterFilter { $GroupId -eq 'g-app-servicenow-users' -and $DirectoryObjectId -eq 'u-dana' }
         Should -Invoke New-MgEntitlementManagementAssignmentRequest -Times 0
     }

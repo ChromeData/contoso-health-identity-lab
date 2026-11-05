@@ -25,15 +25,15 @@ BeforeAll {
     function Set-TenantMock {
         # In-memory tenant: packages by name, their policies, resource scopes,
         # groups (isAssignableToRole) and assignments. Writes are recorded.
-        param([hashtable]$Packages = @{ 'Nurse - Clinical Apps' = 'ap-nurse'; 'ICU - Critical Care Apps' = 'ap-icu'; 'IT - Cloud Engineering Apps' = 'ap-cloud'; 'Pharmacy - Controlled Substances Apps' = 'ap-pharm' },
+        param([hashtable]$Packages = @{ 'Nurse - Clinical Apps' = 'ap-nurse'; 'ICU - Critical Care Apps' = 'ap-icu'; 'Pharmacy - Controlled Substances Apps' = 'ap-pharm' },
             [hashtable]$Policies = @{},
             # Group scopes per package; the default matches access-catalog.json 'resources' (the guard compares the counts).
-            [hashtable]$Resources = @{ 'ap-nurse' = @('g-sn'); 'ap-icu' = @('g-sn', 'g-icu'); 'ap-cloud' = @('g-sn', 'g-aws'); 'ap-pharm' = @('g-pharm') },
+            [hashtable]$Resources = @{ 'ap-nurse' = @('g-sn', 'g-aws'); 'ap-icu' = @('g-sn', 'g-icu'); 'ap-pharm' = @('g-pharm') },
             [hashtable]$Groups = @{}, [object[]]$Assignments = @(), [string[]]$FailUris = @(),
             # pkgId -> the raw resourceRoleScopes response to return instead (shape tests).
             [hashtable]$RawScopes = @{},
             # Enabled Member users the hire-date preflight reads (department, employeeHireDate).
-            [object[]]$Users = @(@{ id = 'u-dana'; department = 'Nursing'; employeeHireDate = '2026-10-19T00:00:00Z' }, @{ id = 'u-ava'; department = 'ICU'; employeeHireDate = '2022-01-10T00:00:00Z' }, @{ id = 'u-sam'; department = 'Information Technology'; employeeHireDate = '2026-11-02T00:00:00Z' }))
+            [object[]]$Users = @(@{ id = 'u-dana'; department = 'Nursing'; employeeHireDate = '2026-10-19T00:00:00Z' }, @{ id = 'u-ava'; department = 'ICU'; employeeHireDate = '2022-01-10T00:00:00Z' }))
         $global:SaaTest = @{ Packages = $Packages; Policies = $Policies; Resources = $Resources; Groups = $Groups; Assignments = $Assignments; FailUris = $FailUris; RawScopes = $RawScopes; Users = $Users
             Writes = [System.Collections.Generic.List[object]]::new() }
         Mock Write-Host {}
@@ -141,11 +141,6 @@ Describe 'Membership rule rendering' {
             Should -BeExactly '(user.accountEnabled -eq true) -and (user.userType -eq "Member") -and (user.employeeHireDate -le system.now) -and ((user.department -eq "Nursing" -and user.jobTitle -in ["Nurse Manager","Registered Nurse"]))'
     }
 
-    It 'renders the Cloud Engineering rule: Information Technology + Cloud Engineer only' {
-        (Get-DesiredFor 'IT - Cloud Engineering Apps').MembershipRule |
-            Should -BeExactly '(user.accountEnabled -eq true) -and (user.userType -eq "Member") -and (user.employeeHireDate -le system.now) -and ((user.department -eq "Information Technology" -and user.jobTitle -in ["Cloud Engineer"]))'
-    }
-
     It 'uses the job-code attribute in jobCode mode' {
         $d = Get-DesiredAutoPolicy -Rules $script:Rules -MatchOn jobCode | Where-Object Package -eq 'ICU - Critical Care Apps'
         $d.MembershipRule | Should -Match 'user\.extensionAttribute1 -in \["NUR-MGR","NUR-RN"\]'
@@ -245,24 +240,23 @@ Describe 'Set-AutoAssignmentPolicies.ps1 - live path (mocked Graph)' {
         $out = @(& $script:Saa -Confirm:$false -WarningAction SilentlyContinue)
         $LASTEXITCODE | Should -Be 0
         $posts = @($global:SaaTest.Writes | Where-Object Method -eq 'POST')
-        $posts.Count | Should -Be 3
-        @($posts | ForEach-Object { $_.Body['accessPackage']['id'] } | Sort-Object) | Should -Be @('ap-cloud', 'ap-icu', 'ap-nurse')
+        $posts.Count | Should -Be 2
+        @($posts | ForEach-Object { $_.Body['accessPackage']['id'] } | Sort-Object) | Should -Be @('ap-icu', 'ap-nurse')
         foreach ($p in $posts) { $p.Uri | Should -BeLike '*/identityGovernance/entitlementManagement/assignmentPolicies'; $p.Body['allowedTargetScope'] | Should -Be 'specificDirectoryUsers' }
         @($out | Where-Object Action -eq 'skipped-planned' | ForEach-Object { $_.Package } | Sort-Object) | Should -Be @('Billing - Charge Entry & Coding Apps', 'Radiology - Imaging Apps')
         Should -Invoke Connect-MgGraph -Times 0
     }
 
     It 'is idempotent: an automatic policy that already matches gets no write' {
-        $nurse = Get-DesiredFor 'Nurse - Clinical Apps'; $icu = Get-DesiredFor 'ICU - Critical Care Apps'; $cloud = Get-DesiredFor 'IT - Cloud Engineering Apps'
+        $nurse = Get-DesiredFor 'Nurse - Clinical Apps'; $icu = Get-DesiredFor 'ICU - Critical Care Apps'
         Set-TenantMock -Policies @{
             'ap-nurse' = @((New-AutoPolicy 'pol-n' $nurse.MembershipRule), @{ id = 'pol-n-req'; displayName = 'Nurse - 180 day'; automaticRequestSettings = $null })
             'ap-icu'   = @((New-AutoPolicy 'pol-i' $icu.MembershipRule 'P3D' $icu.DisplayName))
-            'ap-cloud' = @((New-AutoPolicy 'pol-c' $cloud.MembershipRule 'P3D' $cloud.DisplayName))
         }
         $out = @(& $script:Saa -Confirm:$false -WarningAction SilentlyContinue)
         $LASTEXITCODE | Should -Be 0
         $global:SaaTest.Writes.Count | Should -Be 0
-        @($out | Where-Object Action -eq 'in-sync').Count | Should -Be 3
+        @($out | Where-Object Action -eq 'in-sync').Count | Should -Be 2
     }
 
     It 'drift: PUTs the merged policy to the existing automatic policy' {
@@ -282,7 +276,7 @@ Describe 'Set-AutoAssignmentPolicies.ps1 - live path (mocked Graph)' {
         $out = @(& $script:Saa -WhatIf -WarningAction SilentlyContinue)
         $LASTEXITCODE | Should -Be 0
         $global:SaaTest.Writes.Count | Should -Be 0
-        @($out | Where-Object Action -eq 'would-create').Count | Should -Be 3
+        @($out | Where-Object Action -eq 'would-create').Count | Should -Be 2
     }
 
     It 'refuses a package with two automatic policies (overlap unsupported), exit 1' {
@@ -295,7 +289,7 @@ Describe 'Set-AutoAssignmentPolicies.ps1 - live path (mocked Graph)' {
     }
 
     It 'fails closed when the package reaches a role-assignable group' {
-        Set-TenantMock -Resources @{ 'ap-nurse' = @('g-priv') } -Groups @{ 'g-priv' = @{ id = 'g-priv'; displayName = 'Some-Admins'; isAssignableToRole = $true } }
+        Set-TenantMock -Resources @{ 'ap-nurse' = @('g-priv', 'g-aws') } -Groups @{ 'g-priv' = @{ id = 'g-priv'; displayName = 'Some-Admins'; isAssignableToRole = $true } }
         $out = @(& $script:Saa -AccessPackage 'Nurse - Clinical Apps' -Confirm:$false -WarningAction SilentlyContinue)
         $LASTEXITCODE | Should -Be 1
         ($out | Where-Object Package -eq 'Nurse - Clinical Apps').Detail | Should -BeLike '*never birthright*'
@@ -303,17 +297,17 @@ Describe 'Set-AutoAssignmentPolicies.ps1 - live path (mocked Graph)' {
     }
 
     It 'fails closed when the privileged-resource response <Case>' -ForEach @(
-        @{ Case = 'has no resourceRoleScopes key'; Raw = @{ id = 'ap-cloud' } }
-        @{ Case = 'has a scope without originId'; Raw = @{ id = 'ap-cloud'; resourceRoleScopes = @(@{ scope = @{ originSystem = 'AadGroup' } }, @{ scope = @{ originSystem = 'AadGroup'; originId = 'g-aws' } }) } }
-        @{ Case = 'has a scope without originSystem'; Raw = @{ id = 'ap-cloud'; resourceRoleScopes = @(@{ scope = @{ originId = 'g-sn' } }, @{ scope = @{ originSystem = 'AadGroup'; originId = 'g-aws' } }) } }
-        @{ Case = 'is empty while the catalog lists two groups'; Raw = @{ id = 'ap-cloud'; resourceRoleScopes = @() } }
-        @{ Case = 'lists fewer group scopes than the catalog'; Raw = @{ id = 'ap-cloud'; resourceRoleScopes = @(@{ scope = @{ originSystem = 'AadGroup'; originId = 'g-sn' } }) } }
+        @{ Case = 'has no resourceRoleScopes key'; Raw = @{ id = 'ap-nurse' } }
+        @{ Case = 'has a scope without originId'; Raw = @{ id = 'ap-nurse'; resourceRoleScopes = @(@{ scope = @{ originSystem = 'AadGroup' } }, @{ scope = @{ originSystem = 'AadGroup'; originId = 'g-aws' } }) } }
+        @{ Case = 'has a scope without originSystem'; Raw = @{ id = 'ap-nurse'; resourceRoleScopes = @(@{ scope = @{ originId = 'g-sn' } }, @{ scope = @{ originSystem = 'AadGroup'; originId = 'g-aws' } }) } }
+        @{ Case = 'is empty while the catalog lists two groups'; Raw = @{ id = 'ap-nurse'; resourceRoleScopes = @() } }
+        @{ Case = 'lists fewer group scopes than the catalog'; Raw = @{ id = 'ap-nurse'; resourceRoleScopes = @(@{ scope = @{ originSystem = 'AadGroup'; originId = 'g-sn' } }) } }
     ) {
-        Set-TenantMock -RawScopes @{ 'ap-cloud' = $Raw }
-        $out = @(& $script:Saa -AccessPackage 'IT - Cloud Engineering Apps' -Confirm:$false -WarningAction SilentlyContinue)
+        Set-TenantMock -RawScopes @{ 'ap-nurse' = $Raw }
+        $out = @(& $script:Saa -AccessPackage 'Nurse - Clinical Apps' -Confirm:$false -WarningAction SilentlyContinue)
         $LASTEXITCODE | Should -Be 1
-        ($out | Where-Object Package -eq 'IT - Cloud Engineering Apps').Action | Should -Be 'failed'
-        ($out | Where-Object Package -eq 'IT - Cloud Engineering Apps').Detail | Should -BeLike '*failing closed*'
+        ($out | Where-Object Package -eq 'Nurse - Clinical Apps').Action | Should -Be 'failed'
+        ($out | Where-Object Package -eq 'Nurse - Clinical Apps').Detail | Should -BeLike '*failing closed*'
         $global:SaaTest.Writes.Count | Should -Be 0
     }
 
@@ -354,7 +348,7 @@ Describe 'Set-AutoAssignmentPolicies.ps1 -RenderOnly' {
         Mock Write-Host {}
         Mock Invoke-MgGraphRequest { throw 'no Graph in -RenderOnly' }
         $d = @(& $script:Saa -RenderOnly)
-        @($d.Package) | Should -Be @('Billing - Charge Entry & Coding Apps', 'ICU - Critical Care Apps', 'IT - Cloud Engineering Apps', 'Nurse - Clinical Apps', 'Radiology - Imaging Apps')
+        @($d.Package) | Should -Be @('Billing - Charge Entry & Coding Apps', 'ICU - Critical Care Apps', 'Nurse - Clinical Apps', 'Radiology - Imaging Apps')
         Should -Invoke Invoke-MgGraphRequest -Times 0
     }
 }
@@ -386,6 +380,6 @@ Describe 'Set-AutoAssignmentPolicies.ps1 - hire-date preflight' {
         & $script:Saa -Confirm:$false -WarningVariable wv -WarningAction SilentlyContinue | Out-Null
         $LASTEXITCODE | Should -Be 0
         ($wv -join "`n") | Should -Match '1 of 2 in-scope user\(s\) have no employeeHireDate'
-        @($global:SaaTest.Writes | Where-Object Method -eq 'POST').Count | Should -Be 3
+        @($global:SaaTest.Writes | Where-Object Method -eq 'POST').Count | Should -Be 2
     }
 }

@@ -15,18 +15,8 @@
       "flag": "enable_governance",
       "tier": "T3",
       "assignment": "automatic",
-      "resources": ["App-ServiceNow-Users"],
-      "note": "Birthright for nursing staff (ADR 0012 T3). Modelled assumption: the EHR role inside it carries break-the-glass (SOD-07)."
-    },
-    {
-      "name": "IT - Cloud Engineering Apps",
-      "status": "terraform",
-      "source": "modules/entitlement var.access_packages.cloud_engineering",
-      "flag": "enable_governance",
-      "tier": "T3",
-      "assignment": "automatic",
       "resources": ["App-ServiceNow-Users", "App-AWS-IdentityCenter-Users"],
-      "note": "Birthright for cloud engineers (ADR 0012 T3): they run the patient portal in AWS. The AWS grant is the ViewOnlyAccess permission set (lab/terraform/aws); anything stronger is privileged and goes through PIM, never birthright."
+      "note": "Birthright for nursing staff (ADR 0012 T3). Modelled assumption: the EHR role inside it carries break-the-glass (SOD-07)."
     },
     {
       "name": "ICU - Critical Care Apps",
