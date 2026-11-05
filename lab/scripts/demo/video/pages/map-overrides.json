@@ -242,7 +242,14 @@
   "OKTA": {
    "going.days.0.ids": [
     "E58"
-   ]
+   ],
+   "where.0.label": "Entra side: the okta-clinic-idp app (Terraform)"
+  },
+  "SPLUNK": {
+   "going.after": "RAN · harness (stays)"
+  },
+  "DYNGRP": {
+   "going.after": "RAN · tenant (no capture films it)"
   },
   "K8S": {
    "going.after": "RAN · harness (stays; CI green 2026-11-05)",
