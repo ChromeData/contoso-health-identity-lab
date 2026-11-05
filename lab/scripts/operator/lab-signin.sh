@@ -29,10 +29,16 @@ key_b64="$(security find-generic-password -s "$OP_KEYCHAIN_SERVICE" -w)" || op_d
 { printf '%s' "$key_b64" | base64 -d; cat "$OP_HOME/operator.crt"; } > "$OP_PEM"
 unset key_b64
 
-az login --service-principal --username "$OP_CLIENT_ID" --certificate "$OP_PEM" \
-  --tenant "$OP_TENANT_ID" --output none --only-show-errors
+# Retried: right after a grant, Azure can take a minute to list the
+# subscription for a new service principal ("No subscriptions found").
+for try in 1 2 3; do
+  az login --service-principal --username "$OP_CLIENT_ID" --certificate "$OP_PEM" \
+    --tenant "$OP_TENANT_ID" --output none --only-show-errors && break
+  [ "$try" -lt 3 ] || op_die "Azure sign-in failed"
+  sleep 20
+done
 az account set --subscription "$OP_SUBSCRIPTION_ID"
-who="$(az account show --query '[tenantId, user.type, user.name]' -o tsv | tr '\t' ' ')"
+who="$(az account show --query "join(' ', [tenantId, user.type, user.name])" -o tsv)"
 [ "$who" = "$OP_TENANT_ID servicePrincipal $OP_CLIENT_ID" ] || op_die "unexpected Azure caller: $who"
 echo "Azure: signed in as the lab operator (app $OP_CLIENT_ID) in tenant $OP_TENANT_ID"
 
