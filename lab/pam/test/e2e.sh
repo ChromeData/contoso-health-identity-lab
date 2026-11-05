@@ -487,6 +487,10 @@ rdp_conn_ok() { # CONNECTION-NAME SAM: rdp-target:3389, that account, TLS, no do
     && [[ "$(guac_conn_param_by_name "$1" security)|$(guac_conn_param_by_name "$1" domain)" == "tls|" ]] \
     && [[ "$(guac_conn_param_by_name "$1" recording-path)" == "\${HISTORY_PATH}/\${HISTORY_UUID}" ]]
 }
+guacd_rdp_close_reason() { # how guacd says the last RDP connection ended (its own log line; no credentials in it)
+  docker compose logs --no-log-prefix --since 5m guacd 2>/dev/null \
+    | grep -E 'RDP server closed/refused connection|Connection closed\.|Disconnect reason code' | tail -n 2 | tr '\n' ' ' | sed 's/ *$//'
+}
 rdp_proof_has() { rdpc exec -T rdp-target cat "/home/$1/rdp-proof" </dev/null 2>/dev/null | grep -qF -- "$2"; }   # SAM TEXT
 sesman_logged() { rdpc exec -T rdp-target cat /var/log/xrdp-sesman.log </dev/null 2>/dev/null | grep -qF -- "$1"; }
 history_last() { # history_last CONNECTION-NAME -> its newest history entry (JSON)
@@ -957,7 +961,11 @@ if LAST_OUT=$(printf '%s' "$sess" | python3 test/guac_tunnel.py --base "$GUAC_UR
   printf '%s\n' "$LAST_OUT" | indent
   pass "a real RDP session through Guacamole as ops-alice (HTTP tunnel, xrdp autologon with the injected credential, keys typed)"
 else
-  printf '%s\n' "$LAST_OUT" | indent; fail "a real RDP session through Guacamole as ops-alice"
+  # The client's own reason goes on the FAIL line itself: run-all prints FAIL
+  # lines to the console, but this indented output stays in e2e.log (never
+  # uploaded), so without it a nightly failure names the test and not the cause.
+  printf '%s\n' "$LAST_OUT" | indent
+  fail "a real RDP session through Guacamole as ops-alice ($(grep -m1 '^guac_tunnel:' <<<"$LAST_OUT" || tail -n 1 <<<"$LAST_OUT"); guacd: $(guacd_rdp_close_reason))"
 fi
 sess=""
 check "... and the server ended it when the typed 'exit' closed the session" said "the server ended it"

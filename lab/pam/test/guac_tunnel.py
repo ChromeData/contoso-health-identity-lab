@@ -40,6 +40,28 @@ import urllib.parse
 
 KEYSYM_RETURN = 0xFF0D
 
+# Guacamole protocol status codes (guacamole-server 1.6.0,
+# src/libguac/guacamole/protocol-types.h, enum guac_protocol_status), so an
+# "error" instruction is reported by name, not as a bare decimal.
+STATUS_NAMES = {
+    0x0000: "SUCCESS", 0x0100: "UNSUPPORTED", 0x0200: "SERVER_ERROR", 0x0201: "SERVER_BUSY",
+    0x0202: "UPSTREAM_TIMEOUT", 0x0203: "UPSTREAM_ERROR", 0x0204: "RESOURCE_NOT_FOUND",
+    0x0205: "RESOURCE_CONFLICT", 0x0206: "RESOURCE_CLOSED", 0x0207: "UPSTREAM_NOT_FOUND",
+    0x0208: "UPSTREAM_UNAVAILABLE", 0x0209: "SESSION_CONFLICT", 0x020A: "SESSION_TIMEOUT",
+    0x020B: "SESSION_CLOSED", 0x0300: "CLIENT_BAD_REQUEST", 0x0301: "CLIENT_UNAUTHORIZED",
+    0x0303: "CLIENT_FORBIDDEN", 0x0308: "CLIENT_TIMEOUT", 0x030D: "CLIENT_OVERRUN",
+    0x030F: "CLIENT_BAD_TYPE", 0x031D: "CLIENT_TOO_MANY",
+}
+
+
+def describe_status(code: str) -> str:
+    """'520' -> '0x0208 UPSTREAM_UNAVAILABLE' (the instruction carries the code in decimal)."""
+    try:
+        n = int(code)
+    except ValueError:
+        return f"status {code!r}"
+    return f"0x{n:04X} {STATUS_NAMES.get(n, 'UNKNOWN')}"
+
 
 def encode(*elements: str) -> str:
     # Guacamole instruction: LENGTH.VALUE elements, comma-separated, ";" ends it.
@@ -116,7 +138,7 @@ def main() -> int:
     uuid, tunnel_token = body, r.getheader("Guacamole-Tunnel-Token", "")
     hdrs = {"Guacamole-Tunnel-Token": tunnel_token} if tunnel_token else {}
 
-    state = {"error": None, "closed": False, "instructions": 0, "first": None}
+    state = {"error": None, "error_at": None, "closed": False, "instructions": 0, "first": None, "typed_at": None}
     lock = threading.Lock()
     writer = conn()
 
@@ -149,7 +171,9 @@ def main() -> int:
                     except OSError:
                         pass
                 elif op == "error":
-                    state["error"] = " ".join(ins[1:])
+                    msg, code = (ins[1] if len(ins) > 1 else ""), (ins[2] if len(ins) > 2 else "")
+                    state["error"] = f"{msg!r} {describe_status(code)}"
+                    state["error_at"] = time.time()
                 elif op == "disconnect":
                     state["closed"] = True
         state["closed"] = True
@@ -179,6 +203,7 @@ def main() -> int:
         write(encode("key", str(KEYSYM_RETURN), "1") + encode("key", str(KEYSYM_RETURN), "0"))
 
     typed_at = time.time()
+    state["typed_at"] = typed_at
     client_disconnect = False
     while not state["closed"] and time.time() < deadline:
         if args.disconnect_after and time.time() - typed_at > args.disconnect_after:
@@ -191,7 +216,9 @@ def main() -> int:
             break
         time.sleep(0.2)
     if state["error"]:
-        print(f"guac_tunnel: Guacamole error: {state['error']}", file=sys.stderr)
+        when = ("before the keys were typed" if state["error_at"] < typed_at
+                else f"{state['error_at'] - typed_at:.1f}s after the keys were typed")
+        print(f"guac_tunnel: Guacamole error {when}: {state['error']}", file=sys.stderr)
         return 2
     if not state["closed"]:
         print("guac_tunnel: session did not end before the timeout", file=sys.stderr)
