@@ -1,6 +1,6 @@
 # ADR 0012: Risk-tiered certification, reviewer non-response and clinical lockout
 
-- **Status:** Accepted (lab). Mostly built as code with offline tests; no Entra review has run. The per-package tiers, the per-tier review flags and the T3 automatic assignment script are built; the T3 drift report and exception review are not (see Consequences). A T2 campaign ran in the midPoint stand-in (ADR 0008).
+- **Status:** Accepted (lab). RAN · tenant: the T1 privileged review series since 2026-10-28 (capture-log E53); from 2026-11-05 all three tier flags are on in `lab.tfvars` - the inactive-user review of the clinic's Okta-federated staff is created by the post-apply step (E110), and the two T2 packages stay certified by their 180-day expiry and manager re-approval, so no T2 campaign is rendered for them (by design, below). The T3 automatic assignment script is built and run; the T3 drift report and exception review are not (see Consequences). A T2 campaign ran in the midPoint stand-in (ADR 0008).
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
