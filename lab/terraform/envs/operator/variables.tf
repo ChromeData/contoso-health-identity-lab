@@ -88,6 +88,32 @@ variable "operator_graph_roles" {
                                           No new reach: RoleManagement.ReadWrite.Directory
                                           and AppRoleAssignment.ReadWrite.All
                                           already make the operator Tier 0.
+    Added 2026-11-05 to close the last two stated gaps (gap closer):
+      SecurityEvents.Read.All             READ the tenant's Microsoft Secure
+                                          Score history (GET /security/secureScores
+                                          and /security/secureScoreControlProfiles),
+                                          the "after" security scan for the KPI
+                                          one-pager. Microsoft Learn lists
+                                          SecurityEvents.Read.All as the least
+                                          privileged application permission for
+                                          both (secureScore-list,
+                                          securescorecontrolprofile-list). Read
+                                          only: it cannot change an alert or an
+                                          incident (that is .ReadWrite.All).
+      AccessReview.ReadWrite.All          CREATE the review series Terraform
+                                          renders (post-apply/
+                                          New-AccessReviewDefinitions.ps1, stage 12
+                                          of Invoke-PostApply.ps1), the step a
+                                          Global Admin used to run delegated.
+                                          AccessReview.Read.All stays as well: the
+                                          read-only report scripts check their
+                                          Graph context for that exact name.
+                                          No new reach: the operator is Tier 0
+                                          already (AppRoleAssignment.ReadWrite.All
+                                          could grant this one), and every review
+                                          body it sends is the Terraform-rendered,
+                                          contract-checked one (deny on silence
+                                          needs a reviewer AND a fallback).
   EOT
   type        = list(string)
   default = [
@@ -116,6 +142,8 @@ variable "operator_graph_roles" {
     "Team.Create",
     "TeamMember.ReadWrite.All",
     "DelegatedPermissionGrant.ReadWrite.All",
+    "SecurityEvents.Read.All",
+    "AccessReview.ReadWrite.All",
   ]
 }
 
