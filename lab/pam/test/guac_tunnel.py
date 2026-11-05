@@ -296,6 +296,8 @@ def main() -> int:
         write(encode("mouse", x, y, "0"))
         time.sleep(0.3)
     for ch in args.text:
+        if state["error"] or state["closed"]:
+            break                                # the session is gone: no keys into the void (reported below)
         ks = ord(ch)                             # Latin-1 printable: keysym == code point
         write(encode("key", str(ks), "1") + encode("key", str(ks), "0"))
         time.sleep(0.02)
@@ -304,7 +306,7 @@ def main() -> int:
     # response does (a quick `exit`), and that is still "after the keys were
     # typed". Every error is a failure either way - this only words the report.
     typed_at = time.time()
-    if args.text:
+    if args.text and not (state["error"] or state["closed"]):
         write(encode("key", str(KEYSYM_RETURN), "1") + encode("key", str(KEYSYM_RETURN), "0"))
 
     client_disconnect = False

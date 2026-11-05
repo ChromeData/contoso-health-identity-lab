@@ -54,8 +54,9 @@ class Fake:
     end="never"  - the stream stays open.
     """
 
-    def __init__(self, up_front="", on_return="", end="close", user_timeout=8.0):
+    def __init__(self, up_front="", on_return="", end="close", user_timeout=8.0, up_front_delay=0.0):
         self.up_front, self.on_return, self.end, self.user_timeout = up_front, on_return, end, user_timeout
+        self.up_front_delay = up_front_delay     # seconds between the first instructions and up_front
         self.writes = []                     # (time, body) of every ?write
         self.returned = threading.Event()
         self.stop = threading.Event()
@@ -106,8 +107,12 @@ def serve(fake: Fake):
             self.send_response(200)
             self.send_header("Content-Type", "application/octet-stream")
             self.end_headers()
-            self.wfile.write((ins("size", "0", "1024", "768") + ins("sync", "1000") + fake.up_front).encode())
+            self.wfile.write((ins("size", "0", "1024", "768") + ins("sync", "1000")).encode())
             self.wfile.flush()
+            if fake.up_front:
+                time.sleep(fake.up_front_delay)
+                self.wfile.write(fake.up_front.encode())
+                self.wfile.flush()
             if fake.up_front and "5.error" in fake.up_front:
                 self.wfile.write(b"0.;")     # guacd stopped: the servlet ends the stream
                 return
@@ -183,10 +188,17 @@ case("an error after the Return (0x0308 CLIENT_TIMEOUT) -> exit 2, status named,
      rc == 2 and "0x0308 CLIENT_TIMEOUT" in out and "after the keys were typed" in out
      and "the server ended it" not in out, out)
 
-f = Fake(up_front=CLIENT_TIMEOUT)
-rc, out = run(f)
+# The error arrives 0.3 s after the first instructions and the client would
+# type at 1 s: deterministic, unlike an error in the very first chunk.
+f = Fake(up_front=CLIENT_TIMEOUT, up_front_delay=0.3)
+rc, out = run(f, "--settle", "1")
 case("an error BEFORE the keys were typed -> exit 2 and nothing typed (a session that never ran)",
      rc == 2 and "before the keys were typed" in out and not f.keys(), out)
+
+f = Fake(up_front=CLIENT_TIMEOUT, up_front_delay=0.4)
+rc, out = run(f, "--type", "x" * 200)
+case("an error while typing -> typing stops at once (no keys into a dead session), exit 2",
+     rc == 2 and "while the keys were being typed" in out and 0 < f.keys().count("3.key,") < 2 * 200, out)
 
 f = Fake(end="never")
 rc, out = run(f, timeout="3")

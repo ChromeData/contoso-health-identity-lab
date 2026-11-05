@@ -116,8 +116,12 @@ run_suite() {
   if [[ $verdict == FAIL ]]; then
     # Real failures first: the e2e suite prints ~20 EXPECTED "ERROR:" lines
     # (refusal tests), which used to fill this window and hide the FAIL names.
-    { grep -E '^FAIL|ABORTED' "$RUN_DIR/$name.log"; grep -E 'ERROR' "$RUN_DIR/$name.log" | grep -vE '^FAIL|ABORTED'; } | head -n 20 | sed 's/^/      /'
-    grep -qE '^FAIL|ABORTED|ERROR' "$RUN_DIR/$name.log" || tail -n 15 "$RUN_DIR/$name.log" | sed 's/^/      /'
+    # Every grep here may legitimately match nothing (a failure with no ERROR
+    # line): under lib.sh's `set -euo pipefail` that used to end run-all right
+    # here, so every suite after the failing one silently never ran.
+    { grep -E '^FAIL|ABORTED' "$RUN_DIR/$name.log" || true
+      grep -E 'ERROR' "$RUN_DIR/$name.log" | grep -vE '^FAIL|ABORTED' || true; } | head -n 20 | sed 's/^/      /' || true
+    grep -qE '^FAIL|ABORTED|ERROR' "$RUN_DIR/$name.log" || tail -n 15 "$RUN_DIR/$name.log" | sed 's/^/      /' || true
   fi
   return 0
 }
