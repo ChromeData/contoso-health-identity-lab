@@ -739,3 +739,71 @@ variable "azure_pim_require_approval" {
   description = "Require approval (PIM-Approvers-Tier0) to activate the Azure role (default true: Contributor over the DC's RG is Tier 0)."
   default     = true
 }
+
+# =============================================================================
+# AWS administration through PIM for Groups (aws.tf) - OPTIONAL, off by default
+# =============================================================================
+
+variable "enable_pim_aws_admin" {
+  type        = bool
+  description = <<-EOT
+    Create PIM-AWS-Lab-Admins: a role-assignable group whose ELIGIBLE-only
+    membership is administrator of the lab AWS account (envs/dev assigns it
+    to the AWS IAM Identity Center app; lab/terraform/aws gives the
+    SCIM-created copy the LabAdministrator permission set). Activation: MFA +
+    justification, aws_admin_activation_max_duration, mailed to
+    pim_alert_mailbox. ADR 0025.
+  EOT
+  default     = false
+}
+
+variable "aws_admin_group_name" {
+  type        = string
+  description = "Display name of the AWS admin PIM group. lab/terraform/aws looks the SCIM-created copy up by this exact name (var.lab_admin_group_display_name there)."
+  default     = "PIM-AWS-Lab-Admins"
+}
+
+variable "aws_admin_group_mail_nickname" {
+  type        = string
+  description = "mail_nickname (stable lookup key for scripts, e.g. Set-PimGroupEligibility.ps1 -GroupMailNickname) of the AWS admin PIM group."
+  default     = "pim-aws-lab-admins"
+}
+
+variable "aws_admin_activation_max_duration" {
+  type        = string
+  description = <<-EOT
+    How long one activation of PIM-AWS-Lab-Admins lasts. Default PT2H: long
+    enough for one change and its check, short enough that nobody keeps AWS
+    admin "for the day". Capped at PT4H. The AWS permission set's session
+    (lab/terraform/aws, PT1H) must stay shorter than this.
+  EOT
+  default     = "PT2H"
+
+  validation {
+    condition     = contains(["PT30M", "PT1H", "PT1H30M", "PT2H", "PT3H", "PT4H"], var.aws_admin_activation_max_duration)
+    error_message = "aws_admin_activation_max_duration must be PT30M, PT1H, PT1H30M, PT2H, PT3H or PT4H (AWS admin is never a shift-length activation)."
+  }
+}
+
+variable "aws_admin_require_approval" {
+  type        = bool
+  description = <<-EOT
+    Require approval (PIM-Approvers-Tier0) to activate PIM-AWS-Lab-Admins.
+    Default false while the lab has ONE human admin: PIM never lets a
+    requester approve their own request, so approval would need a second
+    person. Every activation is mailed to pim_alert_mailbox instead
+    (ADR 0025). Turn on when a second admin exists.
+  EOT
+  default     = false
+}
+
+variable "aws_admin_eligible_assignment_duration" {
+  type        = string
+  description = "How long an ELIGIBLE membership of PIM-AWS-Lab-Admins lives before renewal. Admin of the AWS management account is Tier 0 for AWS: 180 days at most."
+  default     = "P180D"
+
+  validation {
+    condition     = contains(["P15D", "P30D", "P90D", "P180D"], var.aws_admin_eligible_assignment_duration)
+    error_message = "AWS admin eligibility must expire within 180 days: P15D, P30D, P90D or P180D."
+  }
+}

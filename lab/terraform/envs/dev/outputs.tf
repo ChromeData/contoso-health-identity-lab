@@ -111,6 +111,16 @@ output "pim_tier_activation_policies" {
   value       = one(module.pim[*].tier_activation_policies)
 }
 
+output "aws_admin_group_object_id" {
+  description = "PIM-AWS-Lab-Admins - eligible-only AWS admin group, assigned to the AWS IAM Identity Center app (ADR 0025); null while enable_pim_aws_admin is off. lab/terraform/aws var lab_admin_entra_group_object_id pins its SCIM copy to this id."
+  value       = one(module.pim[*].aws_admin_group_object_id)
+}
+
+output "aws_admin_activation_policy" {
+  description = "Evidence summary of the PIM-AWS-Lab-Admins activation policy (null while off)."
+  value       = one(module.pim[*].aws_admin_activation_policy)
+}
+
 output "azure_pim_group_object_id" {
   description = "PIM-Azure-RG-Contributors - eligible for Contributor on the lab RG (add members post-apply); null while off."
   value       = one(module.pim[*].azure_pim_group_object_id)

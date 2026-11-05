@@ -22,6 +22,7 @@ P2); *verify:* items are checked in that window.
 | `directory-roles.tf` | `enable_global_admin_pim_policy` (false) | Global Administrator's own PIM policy, **rendered** (output `directory_role_pim_policies`) for `post-apply/Set-DirectoryRolePimPolicies.ps1`: approval by `PIM-Approvers-Tier0`, MFA or the `c1` context, justification + ticket, 2h, named eligibility for 180 days. Break-glass keeps its standing assignment |
 | `reviews.tf` | `enable_access_reviews_privileged` (false) | Rendered bodies (output `pim_eligible_review_bodies`) for quarterly, default-deny reviews of every PIM-governed group (eligible + active members), created by `post-apply/New-AccessReviewDefinitions.ps1` |
 | `azure.tf` | `enable_pim_azure_resources` (false) | `PIM-Azure-RG-Contributors` is **eligible** for Contributor on the lab RG, with an Azure PIM activation policy (MFA + justification + approval by `PIM-Approvers-Tier0`, approver type Group, 4h) |
+| `aws.tf` | `enable_pim_aws_admin` (false) | `PIM-AWS-Lab-Admins`, role-assignable, **eligible-only** membership = administrator of the lab AWS account ([ADR 0025](../../../docs/adr/0025-aws-admin-just-in-time-through-entra.md)). envs/dev assigns it to the AWS IAM Identity Center app (modules/apps); `lab/terraform/aws` gives its SCIM copy the `LabAdministrator` permission set. Activation: MFA + justification, 2h, no approval while the lab has one human admin (`aws_admin_require_approval`), every activation mailed to `pim_alert_mailbox`; eligibility expires after 180 days; reviewed quarterly, but **not** in `privileged_review_targets` (the CA002 / CA020 scope) |
 
 ## Tier model
 
@@ -124,6 +125,7 @@ records both exceptions, with User Administrator. Contributor on the RG is Tier 
 | Tier and approver groups, role binding, PIM-for-Groups policies | `Group.ReadWrite.All`, `RoleManagement.ReadWrite.Directory`, `RoleManagementPolicy.ReadWrite.AzureADGroup` | Yes (envs/bootstrap `apply_graph_roles`) |
 | `AU-Workforce-Standard` and its scoped assignments | `AdministrativeUnit.ReadWrite.All` in addition to the above (APPLY); `AdministrativeUnit.Read.All` for PLAN (confirmed 2026-10-27: the plan lists AUs) | verify against `apply_graph_roles` before flipping `enable_helpdesk_au_scoping` |
 | Global Administrator policy + eligibility | `RoleManagementPolicy.ReadWrite.Directory`, `RoleEligibilitySchedule.ReadWrite.Directory` | Not used: `Set-DirectoryRolePimPolicies.ps1` runs as a human |
+| `PIM-AWS-Lab-Admins` and its PIM-for-Groups policy | same as the tier groups | Yes |
 | Azure eligible assignment + Azure PIM policy | `Microsoft.Authorization/roleEligibilityScheduleRequests/write`, `roleManagementPolicies/write` on the RG (Owner / User Access Administrator) | **No.** It holds Contributor plus an ABAC-limited RBAC Administrator (*verify:* RBAC Administrator lacks these actions). The first apply of `enable_pim_azure_resources` is a **human apply**. Do not hand CI Owner. |
 
 ## Post-apply
@@ -148,6 +150,15 @@ Global Administrator policy and before the access reviews, together with
 `New-RestrictedAdminUnit.ps1` and, last and opt-in,
 `Convert-BuildAccountToEligible.ps1`
 ([`lab/scripts/powershell/README.md`](../../../scripts/powershell/README.md)).
+
+For **AWS** (`aws.tf`), eligibility is granted like a tier group's, with the
+Tier-0 duration the policy allows (the nickname is not `pim-tier0-*`, so pass
+it explicitly):
+
+```powershell
+./Set-PimGroupEligibility.ps1 -GroupMailNickname pim-aws-lab-admins `
+    -UserPrincipalNames 'adm-labops@<tenant>.onmicrosoft.com' -EligibilityDuration P180D
+```
 
 For **Azure**, membership of `PIM-Azure-RG-Contributors` is ordinary (active)
 membership. The *role* is what gets activated. The group is role-assignable,

@@ -602,6 +602,12 @@ variable "enable_pim_azure_resources" {
   default     = false
 }
 
+variable "enable_pim_aws_admin" {
+  type        = bool
+  description = "AWS admin without root (ADR 0025): create PIM-AWS-Lab-Admins (modules/pim aws.tf; eligible-only, 2-hour MFA + justification activation, every activation mailed) and assign it to the AWS IAM Identity Center app as its second principal (modules/apps), so SCIM copies only ACTIVE members to AWS. lab/terraform/aws grants the SCIM copy the LabAdministrator permission set. Needs enable_premium and enable_sso_apps; eligibility is a post-apply step."
+  default     = false
+}
+
 variable "enable_b2b_governance" {
   type        = bool
   description = "Create the Affiliated Partners catalog + Affiliated Physicians guest package (connected-org requestors, sponsor approval, 90-day expiry, monthly sponsor review). Needs enable_premium + enable_governance; post-apply/New-B2BConnectedOrganization.ps1 creates the connected organization."

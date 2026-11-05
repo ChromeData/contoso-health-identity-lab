@@ -8,7 +8,9 @@
 #        instantiate gallery template -> enterprise app settings (SAML mode,
 #        assignment required, owners, sign-on URL) -> Identifier + Reply URL
 #        -> Entra-minted signing certificate -> claims-mapping policy (NameID +
-#        ABAC session tags) -> ONE assignment: App-AWS-IdentityCenter-Users.
+#        ABAC session tags) -> the staff assignment App-AWS-IdentityCenter-Users,
+#        plus (enable_aws_admins_assignment) the PIM admin group
+#        PIM-AWS-Lab-Admins, ADR 0025.
 #   2. AWS IAM Identity Center (SCIM, staged, off by default)
 #        provisioning job (created STOPPED) + its credential (from Key Vault,
 #        written once, then ignored).
@@ -42,8 +44,9 @@
 # WHO OWNS WHAT (the boundary, mirrored in lab/terraform/aws):
 #   Entra (this module) decides WHO reaches AWS: the app assignment is both the
 #   SSO gate and the SCIM scope. AWS (lab/terraform/aws) decides WHAT they get:
-#   permission sets on the SCIM-created group. Terraform never creates an
-#   AWS-local group, and never adds a second principal to the AWS app.
+#   permission sets on the SCIM-created groups. Terraform never creates an
+#   AWS-local group. The AWS app has exactly two principals, each its own
+#   resource: the staff group and the PIM admin group (ADR 0025).
 #
 # LICENSING: gallery SAML SSO and app registrations are Entra ID Free; GROUP
 # assignment to an enterprise app needs Entra ID P1 (inside the M365 E5
@@ -231,10 +234,11 @@ resource "azuread_service_principal_claims_mapping_policy_assignment" "aws" {
   service_principal_id     = azuread_service_principal.aws.id
 }
 
-# The single assignment. Not a for_each over a list on purpose: a second
-# principal on this app is a design change (a new group = a new SCIM scope
-# and a new AWS principal), so it should be a code change a reviewer sees,
-# not one more list element.
+# The staff assignment. Not a for_each over a list on purpose: a principal
+# on this app is a design change (a new group = a new SCIM scope and a new
+# AWS principal), so each one is its own named resource a reviewer sees,
+# never one more list element. There are exactly two: this one, and the PIM
+# admin group below.
 resource "azuread_app_role_assignment" "aws_users" {
   # Prefer the role the instantiated app actually carries; fall back to the
   # id Graph documents for this template.
@@ -244,6 +248,45 @@ resource "azuread_app_role_assignment" "aws_users" {
   )
   principal_object_id = var.aws_users_group_object_id
   resource_object_id  = azuread_service_principal.aws.object_id
+}
+
+# The SECOND principal, added deliberately (ADR 0025): PIM-AWS-Lab-Admins.
+# Why a second group on the same app, and not something else:
+#   * Not a member of App-AWS-IdentityCenter-Users: that group is the staff
+#     path (access package -> ViewOnlyAccess); an admin inside it would also
+#     be granted whatever staff get, and its membership is not PIM-governed.
+#   * Not a nested group: provisioning does not expand nested groups (Learn,
+#     "Privileged Identity Management (PIM) for Groups" and the app
+#     provisioning scoping docs), so AWS would never see the members.
+#   * Microsoft's own recommendation for PIM + app provisioning (Learn,
+#     concept-pim-for-groups, "Privileged Identity Management and app
+#     provisioning", checked 2026-11-05): "at least two groups assigned to
+#     the application" - an always-active all-users group with a low role and
+#     an ELIGIBLE privileged group with the privileged role. That is this
+#     pair; activating membership triggers SCIM within 2-10 minutes.
+#   * Not a direct USER assignment of the admin account: that would keep the
+#     account provisioned in AWS, and signed-in-able, all the time. Through
+#     the PIM group the account is in scope only while an activation lasts,
+#     so at rest it cannot even complete the SAML sign-in to AWS.
+# Same app role as the staff group; AWS tells the two apart by which
+# Identity Store group the user lands in (lab/terraform/aws assigns
+# LabAdministrator to this one only).
+resource "azuread_app_role_assignment" "aws_admins" {
+  count = var.enable_aws_admins_assignment ? 1 : 0
+
+  app_role_id = coalesce(
+    try(one([for r in azuread_service_principal.aws.app_roles : r.id if r.display_name == "User" && r.enabled]), null),
+    local.aws_gallery_user_role_id,
+  )
+  principal_object_id = var.aws_admins_group_object_id
+  resource_object_id  = azuread_service_principal.aws.object_id
+
+  lifecycle {
+    precondition {
+      condition     = var.aws_admins_group_object_id != "" && lower(var.aws_admins_group_object_id) != lower(var.aws_users_group_object_id)
+      error_message = "enable_aws_admins_assignment = true needs aws_admins_group_object_id (modules/pim output aws_admin_group_object_id), and it must not be App-AWS-IdentityCenter-Users."
+    }
+  }
 }
 
 # =============================================================================
