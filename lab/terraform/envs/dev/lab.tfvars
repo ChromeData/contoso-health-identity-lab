@@ -43,6 +43,12 @@ enable_pim_azure_resources     = false
 enable_helpdesk_au_scoping     = true
 enable_global_admin_pim_policy = true
 
+# AWS admin without root (ADR 0025): PIM-AWS-Lab-Admins, eligible-only, 2-hour
+# activation (MFA + justification, mailed to the security mailbox), assigned to
+# the AWS IAM Identity Center app so SCIM copies only ACTIVE members to AWS,
+# where lab/terraform/aws gives them the LabAdministrator permission set.
+enable_pim_aws_admin = true
+
 # Tier-0 PIM activation step-up on auth context c1 (CA021). The plan refuses
 # the context unless CA021 is DECLARED "enabled" (ca_policy_states) AND
 # ca021_enforced_in_tenant = true. Terraform cannot see whether
@@ -107,6 +113,10 @@ enable_shared_clinical_ca     = false
 # clinical_portal_preauthorize_azure_cli: E25 token demo only; off again after.
 # enable_servicenow_sso adds the ServiceNow PDI SAML app (its instance URL
 # goes in terraform.tfvars / TF_VAR_, never here).
+# enable_servicenow_provisioning adds the ServiceNow provisioning app (gallery,
+# hidden, same group) with its job STOPPED; its credential is written by the
+# LOCAL seeding apply (modules/apps/README.md "ServiceNow provisioning"), so a
+# CI apply that runs before it fails closed and passes on a re-run after.
 # enable_okta_federation adds okta-clinic-idp, Entra as the IdP for the acquired
 # clinic's Okta org (runbook Phase 1, ADR 0022; the org host goes in
 # terraform.tfvars / TF_VAR_, never here). The Okta side is the separate,
@@ -122,6 +132,8 @@ aws_scim_job_enabled                   = true
 enable_pam_oidc_app                    = false
 clinical_portal_preauthorize_azure_cli = false
 enable_servicenow_sso                  = true
+enable_servicenow_provisioning         = true
+servicenow_provisioning_job_enabled    = false
 enable_okta_federation                 = true
 
 # Non-human identity governance: App-Consent-Reviewers group (premium) for the

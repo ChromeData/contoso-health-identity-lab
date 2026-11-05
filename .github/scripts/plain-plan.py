@@ -60,6 +60,7 @@ NOUNS = {
     "azuread_application_from_template": ("app registration", "from the app gallery"),
     "azuread_application_identifier_uri": ("app identifier", "identifier URI"),
     "azuread_application_redirect_uris": ("app sign-in return address", "redirect URIs"),
+    "azuread_application_owner": ("app owner", None),
     "azuread_application_pre_authorized": ("pre-approved app access", None),
     "azuread_application_federated_identity_credential": ("keyless login trust", "federated credential"),
     "azuread_application_password": ("app password", None),

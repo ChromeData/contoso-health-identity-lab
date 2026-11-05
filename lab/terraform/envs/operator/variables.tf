@@ -50,6 +50,7 @@ variable "operator_graph_roles" {
       RoleManagementPolicy.Read.Directory     PIM activation rules, directory roles
       RoleManagementPolicy.Read.AzureADGroup  PIM activation rules, PIM groups
       PrivilegedEligibilitySchedule.Read.AzureADGroup  PIM-for-Groups eligibility
+                                          (now ReadWrite, below)
       DeviceManagementManagedDevices.Read.All  the Intune pilot device (INTUNE)
       DeviceManagementConfiguration.Read.All   its compliance policy
       User.DeleteRestore.All              empty a demo hire from Deleted users
@@ -70,6 +71,18 @@ variable "operator_graph_roles" {
                                           staff sign-in tests
       Team.Create, TeamMember.ReadWrite.All  the SOC team the alert and
                                           containment playbooks post to
+    Changed 2026-11-05 for AWS admin without root (ADR 0025):
+      PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup  replaces the Read
+                                          role: make adm-labops ELIGIBLE (never
+                                          active) for PIM-AWS-Lab-Admins, the
+                                          step post-apply/Set-PimGroupEligibility.ps1
+                                          does for people. Eligibility only:
+                                          activation stays the user's own,
+                                          MFA-backed request (no
+                                          PrivilegedAssignmentSchedule.ReadWrite).
+                                          No new reach: RoleManagement.ReadWrite.Directory
+                                          and AppRoleAssignment.ReadWrite.All
+                                          already make the operator Tier 0.
   EOT
   type        = list(string)
   default = [
@@ -85,7 +98,7 @@ variable "operator_graph_roles" {
     "RoleEligibilitySchedule.Read.Directory",
     "RoleManagementPolicy.Read.Directory",
     "RoleManagementPolicy.Read.AzureADGroup",
-    "PrivilegedEligibilitySchedule.Read.AzureADGroup",
+    "PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup",
     "DeviceManagementManagedDevices.Read.All",
     "DeviceManagementConfiguration.Read.All",
     "User.DeleteRestore.All",
@@ -112,10 +125,15 @@ variable "operator_azure_roles" {
                                     scope because the state account's ReadOnly
                                     lock blocks account- and container-scoped
                                     role assignments
-      Key Vault Secrets User        read lab secrets (e.g. the AWS SCIM token)
+      Key Vault Secrets Officer     read AND write lab secrets: the AWS SCIM
+                                    token, the ServiceNow provisioning and
+                                    Sentinel integration passwords (written
+                                    once by the operator, read by the deploy
+                                    and seeding steps). Was Secrets User until
+                                    2026-11-05; the finishing work needs writes.
   EOT
   type        = list(string)
-  default     = ["Owner", "Storage Blob Data Contributor", "Key Vault Secrets User"]
+  default     = ["Owner", "Storage Blob Data Contributor", "Key Vault Secrets Officer"]
 }
 
 variable "operator_directory_roles" {

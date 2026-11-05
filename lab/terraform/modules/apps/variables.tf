@@ -8,11 +8,13 @@
 #   4. guacamole-psm            - PSM stand-in OIDC sign-in (off by default)
 #   5. ServiceNow               - SAML enterprise app (off by default)
 #   6. okta-clinic-idp          - Entra as OIDC IdP for the clinic Okta org (off by default)
+#   7. ServiceNow provisioning  - gallery app + sync job + credential (off by default)
 # plus ownership inputs shared by every app.
 #
 # Nothing here is committed with a real value. Tenant identifiers come from
-# terraform.tfvars / TF_VAR_* (never lab.tfvars), and the SCIM credential comes
-# from Key Vault at apply time (README "SCIM credential").
+# terraform.tfvars / TF_VAR_* (never lab.tfvars), and the provisioning
+# credentials (AWS SCIM token, ServiceNow integration user) come from Key Vault
+# at apply time (README "SCIM credential", "ServiceNow provisioning").
 # =============================================================================
 
 # ---- Ownership (both apps) --------------------------------------------------
@@ -72,10 +74,11 @@ variable "aws_users_group_object_id" {
   type        = string
   description = <<-EOT
     Object id of App-AWS-IdentityCenter-Users (modules/groups output
-    app_access_group_object_ids["aws"]). The ONLY principal assigned to the
-    AWS enterprise app. Assignment is the access decision AND the SCIM scope:
-    the provisioning service syncs assigned users/groups only, so this one
-    group is everything AWS will ever see.
+    app_access_group_object_ids["aws"]). The STAFF principal on the AWS
+    enterprise app (ViewOnlyAccess in AWS). Assignment is the access decision
+    AND the SCIM scope: the provisioning service syncs assigned users/groups
+    only. The one other principal the module allows is the PIM admin group
+    (enable_aws_admins_assignment, ADR 0025); there is no list of extras.
   EOT
 
   validation {
@@ -83,6 +86,36 @@ variable "aws_users_group_object_id" {
     # then runs at apply.
     condition     = can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.aws_users_group_object_id))
     error_message = "aws_users_group_object_id must be a group object id (GUID)."
+  }
+}
+
+variable "enable_aws_admins_assignment" {
+  type        = bool
+  description = <<-EOT
+    Assign a SECOND principal to the AWS app: the PIM-for-Groups admin group
+    (modules/pim output aws_admin_group_object_id, PIM-AWS-Lab-Admins). A
+    plain bool, not "is the id set", because the group id is unknown at plan
+    when the group is created in the same apply (count needs a known value).
+    ADR 0025.
+  EOT
+  default     = false
+}
+
+variable "aws_admins_group_object_id" {
+  type        = string
+  description = <<-EOT
+    Object id of PIM-AWS-Lab-Admins (modules/pim output
+    aws_admin_group_object_id). Only read when enable_aws_admins_assignment.
+    Its members are ELIGIBLE-only, so at rest it holds nobody: SCIM creates
+    the group in AWS empty, and copies a member only while their PIM
+    activation lasts. It must never be App-AWS-IdentityCenter-Users (that
+    would hand the staff group the admin permission set).
+  EOT
+  default     = ""
+
+  validation {
+    condition     = var.aws_admins_group_object_id == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.aws_admins_group_object_id))
+    error_message = "aws_admins_group_object_id must be empty or a group object id (GUID)."
   }
 }
 
@@ -141,10 +174,16 @@ variable "aws_saml_entity_id" {
 variable "aws_saml_acs_urls" {
   type        = list(string)
   description = <<-EOT
-    Reply URL(s) (Assertion Consumer Service) from the same AWS page, pattern
-    https://<region>.signin.aws.amazon.com/platform/saml/acs/<id>. One per
-    enabled Identity Center region (IPv4 and dual-stack variants are separate
-    URLs). Replaces the gallery template's wildcard reply URL, so assertions
+    Reply URL(s) (Assertion Consumer Service) for THIS Identity Center
+    instance, pattern https://<host>/platform/saml/acs/<id>. List every ACS
+    URL AWS uses, not only the first one its console shows: the same <id>
+    appears on more than one host (IPv4 and dual-stack variants are separate
+    URLs), and Entra refuses a sign-in whose AuthnRequest names an ACS URL
+    that is not listed (AADSTS50011). Read live on 2026-11-05: the console
+    panel showed https://us-east-1.sso.signin.aws/platform/saml/acs/<id>, but
+    the AuthnRequest the access portal sends names
+    https://us-east-1.signin.aws/platform/saml/acs/<id> - so the lab lists
+    both. Replaces the gallery template's wildcard reply URL, so assertions
     can only be posted to THIS instance. Empty = not managed yet.
   EOT
   default     = []
@@ -320,11 +359,13 @@ variable "aws_scim_credentials" {
 variable "require_scim_credentials" {
   type        = bool
   description = <<-EOT
-    Fail closed instead of warning when this run would CREATE the SCIM
-    credential without aws_scim_credentials. Set true in the reviewer-gated
+    Fail closed instead of warning when this run would CREATE a provisioning
+    credential without its value: the AWS SCIM credential without
+    aws_scim_credentials, or the ServiceNow connector credential without
+    servicenow_provisioning_credentials. Set true in the reviewer-gated
     apply (and in a local seeding run); leave false for PR plans, which by
-    design can never read the token. Once the credential exists this has no
-    effect (the stored value satisfies it).
+    design can never read the vault. Once a credential exists this has no
+    effect on it (the stored value satisfies it).
   EOT
   default     = false
 }
@@ -432,9 +473,9 @@ variable "enable_servicenow_sso" {
     from the Learn ServiceNow SSO tutorial): assignment required, ONE
     assignment (App-ServiceNow-Users), Entra-minted signing certificate,
     NameID = userPrincipalName. Needs servicenow_instance_url and
-    servicenow_users_group_object_id. Provisioning to ServiceNow is designed,
-    not built (servicenow.tf header). envs/dev flag: enable_servicenow_sso.
-    Off by default.
+    servicenow_users_group_object_id. Provisioning to ServiceNow is the
+    separate enable_servicenow_provisioning (servicenow_provisioning.tf).
+    envs/dev flag: enable_servicenow_sso. Off by default.
   EOT
   default     = false
 }
@@ -462,8 +503,9 @@ variable "servicenow_users_group_object_id" {
   description = <<-EOT
     Object id of App-ServiceNow-Users (modules/groups output
     app_access_group_object_ids["servicenow"]) - the ONLY principal assigned
-    to the ServiceNow app, and the scope a future provisioning job would use.
-    Required when enable_servicenow_sso = true.
+    to the ServiceNow app, and the ONLY principal assigned to the ServiceNow
+    provisioning app (the provisioning scope). Required when
+    enable_servicenow_sso or enable_servicenow_provisioning is true.
   EOT
   default     = ""
 
@@ -620,5 +662,72 @@ variable "okta_idp_secret_lifetime_days" {
   validation {
     condition     = var.okta_idp_secret_lifetime_days >= 1 && var.okta_idp_secret_lifetime_days <= 180 && floor(var.okta_idp_secret_lifetime_days) == var.okta_idp_secret_lifetime_days
     error_message = "okta_idp_secret_lifetime_days must be a whole number of days from 1 to 180 (the register's P180D rotation is the ceiling)."
+  }
+}
+
+# ---- 7. ServiceNow provisioning (servicenow_provisioning.tf) -------------------
+
+variable "enable_servicenow_provisioning" {
+  type        = bool
+  description = <<-EOT
+    Create the ServiceNow PROVISIONING app (gallery template "ServiceNow",
+    hidden from My Apps, assignment required, ONE assignment:
+    App-ServiceNow-Users - the SSO app's group), its synchronization job
+    (ServiceNowOutDelta, STOPPED unless servicenow_provisioning_job_enabled)
+    and its credential (InstanceName from servicenow_instance_url + the
+    integration user from servicenow_provisioning_credentials). Needs
+    servicenow_instance_url and servicenow_users_group_object_id. The run
+    that creates the credential is a LOCAL seeding apply (README "ServiceNow
+    provisioning"). envs/dev flag: enable_servicenow_provisioning. Off by
+    default.
+  EOT
+  default     = false
+}
+
+variable "servicenow_provisioning_job_enabled" {
+  type        = bool
+  description = <<-EOT
+    Start the ServiceNow provisioning job (Entra's ~40-minute cycle). false
+    (default) = created STOPPED: Test Connection and one provision-on-demand
+    first, then flip this in its own PR (the AWS order).
+  EOT
+  default     = false
+}
+
+variable "servicenow_provisioning_credentials" {
+  type = object({
+    user_name = string # the ServiceNow integration user (admin role, web-service access only)
+    password  = string
+  })
+  description = <<-EOT
+    The ServiceNow integration user the connector signs in as (Basic auth;
+    keys UserName / Password). SOURCE: Key Vault secrets
+    servicenow-provisioning-username / servicenow-provisioning-password,
+    exported as TF_VAR_ only in the run that CREATES (or deliberately
+    replaces) the credential - README "ServiceNow provisioning". Never
+    committed, never in lab.tfvars, never available to PR plans or CI.
+    null (default) = not supplied; once the credential exists Terraform
+    ignores it (ignore_changes).
+  EOT
+  default     = null
+  sensitive   = true
+
+  validation {
+    condition = var.servicenow_provisioning_credentials == null || (
+      can(regex("^[A-Za-z0-9._-]+$", var.servicenow_provisioning_credentials.user_name))
+      && length(var.servicenow_provisioning_credentials.password) >= 16
+    )
+    error_message = "servicenow_provisioning_credentials must be null, or a ServiceNow user_name (letters, digits, . _ -) and a password of at least 16 characters."
+  }
+}
+
+variable "servicenow_provisioning_app_display_name" {
+  type        = string
+  description = "Display name of the ServiceNow provisioning app (Enterprise applications, provisioning logs). Hidden from My Apps."
+  default     = "ServiceNow - Provisioning"
+
+  validation {
+    condition     = length(trimspace(var.servicenow_provisioning_app_display_name)) > 0
+    error_message = "servicenow_provisioning_app_display_name must not be empty."
   }
 }

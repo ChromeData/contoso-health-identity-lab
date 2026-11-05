@@ -11,6 +11,9 @@
 #   * help-desk AU scoping, the Global Administrator rule bodies and the
 #     PIM-eligible review bodies (rendered JSON, decoded and checked);
 #   * Azure-resource PIM: a GROUP eligible (never active), Tier-0 approvers;
+#   * AWS admin (aws.tf): a role-assignable PIM group, eligible-only, 2-hour
+#     MFA + justification activation, every activation mailed, reviewed
+#     quarterly but outside the CA002 / CA020 scope;
 #   * every feature defaults OFF.
 #
 # Mocked ids are GUID-shaped because the providers still validate arguments
@@ -68,6 +71,10 @@ run "defaults_only_the_original_binding" {
   assert {
     condition     = length(azurerm_pim_eligible_role_assignment.azure_pim) == 0 && length(azurerm_role_management_policy.azure_pim) == 0
     error_message = "No Azure PIM resource may be planned while enable_pim_azure_resources = false."
+  }
+  assert {
+    condition     = length(azuread_group.aws_admin) == 0 && length(azuread_group_role_management_policy.aws_admin_member) == 0 && output.aws_admin_group_object_id == null
+    error_message = "No AWS admin PIM group may exist while enable_pim_aws_admin = false."
   }
   assert {
     condition     = keys(output.privileged_review_targets) == ["Privileged-IAM-Admins"]
@@ -850,4 +857,128 @@ run "priv_iam_admins_cannot_hold_a_tier0_role" {
   }
 
   expect_failures = [var.role_template_id]
+}
+
+# =============================================================================
+# AWS administration through PIM for Groups (aws.tf, ADR 0025)
+# =============================================================================
+
+run "aws_admin_group" {
+  command = apply
+
+  variables {
+    enable_pim_aws_admin = true
+    pim_alert_mailbox    = "security@contosohealthlab.onmicrosoft.com"
+  }
+
+  assert {
+    condition = (
+      azuread_group.aws_admin[0].display_name == "PIM-AWS-Lab-Admins" &&
+      azuread_group.aws_admin[0].mail_nickname == "pim-aws-lab-admins" &&
+      azuread_group.aws_admin[0].assignable_to_role &&
+      azuread_group.aws_admin[0].security_enabled &&
+      !azuread_group.aws_admin[0].mail_enabled
+    )
+    error_message = "PIM-AWS-Lab-Admins: role-assignable security group (only Privileged Role Administrators change who can become AWS admin), no mailbox."
+  }
+  assert {
+    condition = (
+      azuread_group_role_management_policy.aws_admin_member[0].group_id == azuread_group.aws_admin[0].object_id &&
+      azuread_group_role_management_policy.aws_admin_member[0].role_id == "member" &&
+      azuread_group_role_management_policy.aws_admin_member[0].activation_rules[0].maximum_duration == "PT2H" &&
+      azuread_group_role_management_policy.aws_admin_member[0].activation_rules[0].require_multifactor_authentication &&
+      azuread_group_role_management_policy.aws_admin_member[0].activation_rules[0].require_justification &&
+      !azuread_group_role_management_policy.aws_admin_member[0].activation_rules[0].require_approval
+    )
+    error_message = "Activation of MEMBERSHIP: 2 hours, MFA, justification; no approval by default (one human admin, ADR 0025)."
+  }
+  assert {
+    condition = (
+      azuread_group_role_management_policy.aws_admin_member[0].eligible_assignment_rules[0].expiration_required &&
+      azuread_group_role_management_policy.aws_admin_member[0].eligible_assignment_rules[0].expire_after == "P180D" &&
+      azuread_group_role_management_policy.aws_admin_member[0].active_assignment_rules[0].expiration_required &&
+      azuread_group_role_management_policy.aws_admin_member[0].active_assignment_rules[0].expire_after == "P15D" &&
+      azuread_group_role_management_policy.aws_admin_member[0].active_assignment_rules[0].require_justification &&
+      azuread_group_role_management_policy.aws_admin_member[0].active_assignment_rules[0].require_multifactor_authentication
+    )
+    error_message = "Eligibility expires at the Tier-0 cap (P180D); a direct ACTIVE member expires too and needs justification + MFA."
+  }
+  assert {
+    condition = (
+      length(azuread_group_role_management_policy.aws_admin_member[0].notification_rules[0].eligible_activations) == 1 &&
+      contains(azuread_group_role_management_policy.aws_admin_member[0].notification_rules[0].eligible_activations[0].admin_notifications[0].additional_recipients, "security@contosohealthlab.onmicrosoft.com") &&
+      contains(azuread_group_role_management_policy.aws_admin_member[0].notification_rules[0].eligible_assignments[0].admin_notifications[0].additional_recipients, "security@contosohealthlab.onmicrosoft.com") &&
+      contains(azuread_group_role_management_policy.aws_admin_member[0].notification_rules[0].active_assignments[0].admin_notifications[0].additional_recipients, "security@contosohealthlab.onmicrosoft.com")
+    )
+    error_message = "With approval off, EVERY activation (and every eligibility / direct active change) is mailed to the security mailbox."
+  }
+  assert {
+    condition     = !contains(keys(output.privileged_review_targets), "PIM-AWS-Lab-Admins")
+    error_message = "PIM-AWS-Lab-Admins must stay out of privileged_review_targets: that output is the CA002 / CA020 group scope, changed only on purpose."
+  }
+  assert {
+    condition     = jsondecode(output.pim_eligible_review_bodies["privileged:PIM-AWS-Lab-Admins"]).scope.query == "/groups/${azuread_group.aws_admin[0].object_id}/transitiveMembers"
+    error_message = "PIM-AWS-Lab-Admins must be in the quarterly privileged review (eligible + active members)."
+  }
+  assert {
+    condition     = !contains(keys(azuread_group.pim_approvers), "tier0")
+    error_message = "With approval off nothing routes to PIM-Approvers-Tier0, so the module must not create it for this group."
+  }
+  assert {
+    condition     = output.aws_admin_group_mail_nickname == "pim-aws-lab-admins" && output.aws_admin_activation_policy.maximum_duration == "PT2H" && output.aws_admin_activation_policy.in_ca_admin_scope == false
+    error_message = "Outputs: the mail nickname for Set-PimGroupEligibility.ps1 and the evidence summary."
+  }
+}
+
+run "aws_admin_approval_routes_to_tier0" {
+  command = apply
+
+  variables {
+    enable_pim_aws_admin       = true
+    aws_admin_require_approval = true
+    pim_alert_mailbox          = "security@contosohealthlab.onmicrosoft.com"
+  }
+
+  assert {
+    condition = (
+      azuread_group_role_management_policy.aws_admin_member[0].activation_rules[0].require_approval &&
+      one(azuread_group_role_management_policy.aws_admin_member[0].activation_rules[0].approval_stage[0].primary_approver).type == "groupMembers" &&
+      one(azuread_group_role_management_policy.aws_admin_member[0].activation_rules[0].approval_stage[0].primary_approver).object_id == azuread_group.pim_approvers["tier0"].object_id
+    )
+    error_message = "When approval is on it routes to the PIM-Approvers-Tier0 GROUP (AWS management-account admin is Tier 0)."
+  }
+}
+
+run "aws_admin_without_mailbox_warns" {
+  command = plan
+
+  variables {
+    enable_pim_aws_admin = true
+  }
+
+  expect_failures = [check.aws_admin_activations_are_seen]
+}
+
+run "aws_admin_activation_capped" {
+  command = plan
+
+  variables {
+    enable_pim_aws_admin              = true
+    aws_admin_activation_max_duration = "PT8H"
+    pim_alert_mailbox                 = "security@contosohealthlab.onmicrosoft.com"
+  }
+
+  expect_failures = [var.aws_admin_activation_max_duration]
+}
+
+run "aws_admin_eligibility_capped_at_180_days" {
+  command = plan
+
+  variables {
+    enable_pim_aws_admin                   = true
+    aws_admin_eligible_assignment_duration = "P365D"
+    pim_alert_mailbox                      = "security@contosohealthlab.onmicrosoft.com"
+  }
+
+  expect_failures = [var.aws_admin_eligible_assignment_duration]
 }

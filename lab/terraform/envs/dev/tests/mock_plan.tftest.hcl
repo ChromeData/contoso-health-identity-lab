@@ -36,6 +36,7 @@ variables {
   aws_scim_template_id                   = "aWSSingleSignon"                                                                                                             # synthetic: enable_scim_provisioning precondition (lab.tfvars stage)
   okta_org_domain                        = "integrator-0000000.okta.com"                                                                                                 # synthetic org host: enable_okta_federation precondition (lab.tfvars stage)
   servicenow_instance_url                = "https://dev00000.service-now.com"                                                                                            # synthetic PDI: enable_servicenow_sso precondition (lab.tfvars stage)
+  servicenow_provisioning_credentials    = { user_name = "svc-entra-provisioning", password = "dummy-password-for-mocked-tests" }                                        # lab.tfvars turns ServiceNow provisioning on; the creating run reads the real values from Key Vault
   app_owner_object_ids                   = ["cccccccc-cccc-cccc-cccc-cccccccccccc"]                                                                                      # the apps module's human-owner check
   onmicrosoft_domain                     = "contosohealthlab.onmicrosoft.com"
   pim_approver_object_ids                = ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "ffffffff-ffff-ffff-ffff-ffffffffffff"]
@@ -113,6 +114,10 @@ run "plan_lab_tfvars" {
     error_message = "Day 1 + apps: CA001-CA010 and CA020 exist (enable_premium + the CA flags); enable_sso_apps plans the AWS IAM Identity Center and Clinical Portal apps; the PAM app (enable_pam_oidc_app) is still off"
   }
   assert {
+    condition     = nonsensitive(output.apps_nhi_inventory).servicenow_provisioning != null && output.servicenow_provisioning_job_enabled == false
+    error_message = "lab.tfvars: enable_servicenow_provisioning plans the ServiceNow provisioning app with its job STOPPED (servicenow_provisioning_job_enabled = false until Test Connection + one on-demand)"
+  }
+  assert {
     condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003", "CA004", "CA020", "CA010", "CA001", "CA009", "CA006", "CA007", "CA005"], k) ? "enabled" : "enabledForReportingButNotEnforced")])
     error_message = "every CA policy in lab.tfvars is report-only except the graduated list; one graduation per PR, with its checklist"
   }
@@ -135,6 +140,11 @@ run "plan_lab_tfvars" {
   assert {
     condition     = output.pim_privileged_role_template_ids != null && nonsensitive(output.directory_role_pim_policies) != null
     error_message = "Day 1: modules/pim renders the tier map and the Global Administrator policy body with enable_premium; they are APPLIED only on Day 2 (enable_pim_tiers, Set-DirectoryRolePimPolicies.ps1)"
+  }
+  # ADR 0025: AWS admin is a PIM-for-Groups activation, not the root user.
+  assert {
+    condition     = output.aws_admin_activation_policy != null && output.aws_admin_activation_policy.maximum_duration == "PT2H" && output.aws_admin_activation_policy.mfa && output.aws_admin_activation_policy.in_ca_admin_scope == false
+    error_message = "enable_pim_aws_admin (lab.tfvars): PIM-AWS-Lab-Admins with a 2-hour MFA activation, kept out of the CA002/CA020 group scope"
   }
 }
 
@@ -230,6 +240,7 @@ run "plan_legacy_flags_on_new_flags_off" {
     # The new flags, explicitly off (lab.tfvars says the same).
     enable_registration_ca                  = false
     enable_servicenow_sso                   = false
+    enable_servicenow_provisioning          = false
     enable_okta_federation                  = false
     enable_device_code_block                = false
     enable_admin_session_controls           = false
@@ -237,6 +248,7 @@ run "plan_legacy_flags_on_new_flags_off" {
     enable_shared_clinical_ca               = false
     enable_helpdesk_au_scoping              = false
     enable_global_admin_pim_policy          = false
+    enable_pim_aws_admin                    = false
     enable_itdr_detections_v2               = false
     vault_feed_v2_columns                   = false
     pim_tier0_activation_auth_context_id    = ""
@@ -296,8 +308,12 @@ run "plan_legacy_flags_on_new_flags_off" {
     error_message = "expected 18 privileged group reviews + 1 inactive-user review and no GA eligibility review"
   }
   assert {
-    condition     = output.apps_nhi_inventory.servicenow == null
-    error_message = "the ServiceNow SAML app must not be planned while enable_servicenow_sso is off"
+    condition     = output.apps_nhi_inventory.servicenow == null && output.apps_nhi_inventory.servicenow_provisioning == null && output.servicenow_provisioning_job_id == null
+    error_message = "neither the ServiceNow SAML app nor the provisioning app may be planned while their flags are off"
+  }
+  assert {
+    condition     = output.aws_admin_activation_policy == null
+    error_message = "no AWS admin PIM group (and no second AWS app principal) while enable_pim_aws_admin is off"
   }
   assert {
     condition     = output.apps_nhi_inventory.okta_clinic_idp == null && output.okta_idp_client_id == null
@@ -335,6 +351,7 @@ run "plan_all_flags_on_sentinel" {
     enable_shared_clinical_ca           = true
     enable_sso_apps                     = true
     enable_servicenow_sso               = true
+    enable_servicenow_provisioning      = true
     enable_okta_federation              = true
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
@@ -342,6 +359,7 @@ run "plan_all_flags_on_sentinel" {
     enable_helpdesk_au_scoping          = true
     enable_global_admin_pim_policy      = true
     enable_pim_azure_resources          = true
+    enable_pim_aws_admin                = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
     enable_agent_identity               = true
@@ -407,9 +425,14 @@ run "plan_all_flags_on_sentinel" {
     error_message = "enable_protected_actions_ca must render CA023 on auth context c2, report-only"
   }
   assert {
-    # 18 group reviews (IAM + 16 tiers + Azure), GA eligibility, inactive users.
-    condition     = length(output.access_review_definitions) == 20 && contains(keys(output.access_review_definitions), "privileged:Global Administrator (eligible)")
-    error_message = "expected 18 privileged group reviews + the GA eligibility review + 1 inactive-user review"
+    # 19 group reviews (IAM + 16 tiers + Azure + AWS admin), GA eligibility,
+    # inactive users.
+    condition     = length(output.access_review_definitions) == 21 && contains(keys(output.access_review_definitions), "privileged:Global Administrator (eligible)") && contains(keys(output.access_review_definitions), "privileged:PIM-AWS-Lab-Admins")
+    error_message = "expected 19 privileged group reviews (incl. PIM-AWS-Lab-Admins) + the GA eligibility review + 1 inactive-user review"
+  }
+  assert {
+    condition     = output.aws_admin_activation_policy != null && output.aws_admin_activation_policy.approval == false && output.aws_admin_activation_policy.activation_mail
+    error_message = "enable_pim_aws_admin: no approval (one human admin, ADR 0025), so every activation must be mailed to pim_alert_mailbox"
   }
   assert {
     condition     = output.b2b_post_apply != null
@@ -435,6 +458,10 @@ run "plan_all_flags_on_sentinel" {
   assert {
     condition     = output.apps_nhi_inventory.servicenow != null
     error_message = "enable_servicenow_sso must plan the ServiceNow SAML app (modules/apps servicenow.tf)"
+  }
+  assert {
+    condition     = output.apps_nhi_inventory.servicenow_provisioning != null
+    error_message = "enable_servicenow_provisioning must plan the ServiceNow provisioning app (modules/apps servicenow_provisioning.tf)"
   }
   assert {
     condition     = output.apps_nhi_inventory.okta_clinic_idp != null && output.okta_idp_redirect_uri == "https://integrator-1234567.okta.com/oauth2/v1/authorize/callback"
@@ -469,6 +496,7 @@ run "plan_all_flags_on_la_alerts" {
     enable_shared_clinical_ca           = true
     enable_sso_apps                     = true
     enable_servicenow_sso               = true
+    enable_servicenow_provisioning      = true
     enable_okta_federation              = true
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
@@ -476,6 +504,7 @@ run "plan_all_flags_on_la_alerts" {
     enable_helpdesk_au_scoping          = true
     enable_global_admin_pim_policy      = true
     enable_pim_azure_resources          = true
+    enable_pim_aws_admin                = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
     enable_agent_identity               = true
@@ -529,12 +558,16 @@ run "plan_all_flags_on_la_alerts" {
     error_message = "all seventeen ITDR rules are selected on the Log Analytics path, and the two Sentinel-only ones must be reported as such"
   }
   assert {
-    condition     = length(nonsensitive(output.directory_role_pim_policies)) == 1 && length(output.access_review_definitions) == 20
+    condition     = length(nonsensitive(output.directory_role_pim_policies)) == 1 && length(output.access_review_definitions) == 21
     error_message = "the PIM and review bodies do not depend on the detection path"
   }
   assert {
     condition     = output.apps_nhi_inventory.servicenow != null
     error_message = "enable_servicenow_sso must plan the ServiceNow SAML app (modules/apps servicenow.tf)"
+  }
+  assert {
+    condition     = output.apps_nhi_inventory.servicenow_provisioning != null
+    error_message = "enable_servicenow_provisioning must plan the ServiceNow provisioning app (modules/apps servicenow_provisioning.tf)"
   }
   assert {
     condition     = output.apps_nhi_inventory.okta_clinic_idp != null && output.okta_idp_redirect_uri == "https://integrator-1234567.okta.com/oauth2/v1/authorize/callback"
@@ -732,10 +765,12 @@ run "flags_without_premium_warn" {
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
     enable_servicenow_sso               = true
+    enable_servicenow_provisioning      = true
     enable_okta_federation              = true
     enable_pim_tiers                    = true
     enable_helpdesk_au_scoping          = true
     enable_global_admin_pim_policy      = true
+    enable_pim_aws_admin                = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
     enable_access_reviews_privileged    = true
@@ -750,8 +785,10 @@ run "flags_without_premium_warn" {
     check.scim_requires_sso_apps,
     check.pam_oidc_app_requires_sso_apps,
     check.servicenow_sso_requires_sso_apps,
+    check.servicenow_provisioning_requires_sso_apps,
     check.okta_federation_requires_sso_apps,
     check.pim_extensions_require_premium,
+    check.pim_aws_admin_requires_sso_apps,
     check.b2b_requires_governance,
     check.nhi_governance_requires_premium,
     check.access_reviews_require_governance,

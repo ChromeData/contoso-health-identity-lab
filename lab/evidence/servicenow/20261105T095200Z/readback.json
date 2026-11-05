@@ -1,0 +1,130 @@
+{
+  "read_at_utc": "2026-11-05T10:20:46Z",
+  "instance": "https://dev459905.service-now.com",
+  "sys_properties": {
+    "glide.authenticate.multisso.user.autoprovision": "false",
+    "glide.authenticate.multisso.login_locate.user_field": "user_name",
+    "glide.authenticate.multisso.enabled": "true",
+    "glide.sso.acr.enabled": "true",
+    "glide.authenticate.multifactor.for_integrations": "true"
+  },
+  "entra_idp_record": {
+    "user_field": "user_name",
+    "sys_id": "c5d8b9d49354571025167bfdfaba10b0",
+    "service_url": "https://dev459905.service-now.com/navpage.do",
+    "nameid_policy": "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified",
+    "default": "true",
+    "idp": "https://sts.windows.net/86a2e327-4951-4348-a3c4-6f4b79ffd8f2/",
+    "name": "Microsoft Entra ID (Contoso Health Lab)",
+    "sso_script": "48d518ff73022300ec77bd49faf6a7f6",
+    "active": "true",
+    "sys_updated_on": "2026-11-05 09:59:19",
+    "auto_provision": "false",
+    "issuer": "https://dev459905.service-now.com",
+    "sso_script_name": "MultiSSOv2_SAML2_custom (sys_script_include 48d518ff73022300ec77bd49faf6a7f6)"
+  },
+  "acr_users": [
+    {
+      "sys_created_on": "2026-11-05 10:06:09",
+      "account_recovery_enabled": "true",
+      "acr_user": "d352dcb69310d75025167bfdfaba1004"
+    }
+  ],
+  "local_accounts_created_2026_11_05": {
+    "acr.breakglass": {
+      "sys_id": "d352dcb69310d75025167bfdfaba1004",
+      "user_name": "acr.breakglass",
+      "sys_created_on": "2026-11-05 10:02:41",
+      "active": "true",
+      "web_service_access_only": "false",
+      "roles": [
+        "admin",
+        "sso_config_admin"
+      ]
+    },
+    "svc-entra-provisioning": {
+      "sys_id": "5a211cf29310d75025167bfdfaba10c9",
+      "user_name": "svc-entra-provisioning",
+      "sys_created_on": "2026-11-05 09:57:25",
+      "active": "true",
+      "web_service_access_only": "true",
+      "roles": [
+        "admin"
+      ]
+    }
+  },
+  "graph_probe_2026_11_05": {
+    "applicationTemplate": {
+      "id": "0919fd62-4056-4151-83f7-7cfd3fade8e3",
+      "displayName": "ServiceNow",
+      "supportedProvisioningTypes": [
+        "sync"
+      ]
+    },
+    "synchronization_templates": {
+      "ServiceNowOutDelta": {
+        "default": true,
+        "basic_credential_keys": [
+          {
+            "name": "InstanceName"
+          },
+          {
+            "name": "UserName"
+          },
+          {
+            "name": "Password",
+            "secret": true
+          }
+        ],
+        "user_mapping_subset": [
+          {
+            "target": "active",
+            "source": "Switch([IsSoftDeleted], , \"False\", \"1\", \"True\", \"0\")",
+            "matchingPriority": 0
+          },
+          {
+            "target": "user_name",
+            "source": "[userPrincipalName]",
+            "matchingPriority": 1
+          }
+        ]
+      },
+      "serviceNowScim": {
+        "default": false,
+        "basic_credential_keys": [
+          {
+            "name": "InstanceName"
+          },
+          {
+            "name": "UserName"
+          },
+          {
+            "name": "Password",
+            "secret": true
+          }
+        ],
+        "user_mapping_subset": [
+          {
+            "target": "active",
+            "source": "Not([IsSoftDeleted])",
+            "matchingPriority": 0
+          },
+          {
+            "target": "userName",
+            "source": "[userPrincipalName]",
+            "matchingPriority": 1
+          }
+        ]
+      }
+    },
+    "validateCredentials_with_integration_user": "HTTP 204 (2026-11-05T09:58Z, useSavedCredentials=true)",
+    "probe": "instance 'zz-slice2-servicenow-probe (delete me)' created 09:52Z, deleted and purged from deleted items 09:59Z (GET servicePrincipals/<id> = 404)"
+  },
+  "browser_checks_2026_11_05": {
+    "sso_on_admin_login_do": "User name or password invalid (local UI login refused: not an Account Recovery user)",
+    "sso_off_admin_login_do": "signed in (same password) - SSO switched back on straight after",
+    "sso_on_acr_breakglass": "login.do -> validate_multifactor_auth_code.do -> authenticator code -> signed in (screenshot acr-side-door-signed-in.png)",
+    "sso_on_admin_table_api_basic_auth": "HTTP 200",
+    "mfa_user_table_api_basic_auth": "HTTP 401 for acr.breakglass (glide.authenticate.multifactor.for_integrations = true)"
+  }
+}

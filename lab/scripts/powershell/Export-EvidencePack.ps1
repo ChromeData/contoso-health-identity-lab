@@ -17,11 +17,15 @@
     control it evidences, so the pack is self-explaining to a non-engineer.
 
     ARTIFACTS
-      pim_activation_history.json     selfActivate requests from BOTH PIM for
-                                      Groups (the lab's elevation path:
-                                      Privileged-IAM-Admins membership) and PIM
-                                      for directory roles: who elevated, when,
-                                      with justification = the JIT audit trail.
+      pim_activation_history.json     every just-in-time elevation: PIM for
+                                      Groups selfActivate requests (the lab's
+                                      elevation path: Privileged-IAM-Admins and
+                                      the tier groups) plus PIM for directory
+                                      roles, read from the directory audit log
+                                      (completed activations, last 30 days; the
+                                      requests list needs a ReadWrite role - see
+                                      ARTIFACT 1): who elevated, when, for how
+                                      long, with justification.
       pim_active_assignments.json     what is live right now: directory role
                                       assignment instances (the group's standing
                                       binding to User Administrator shows here)
@@ -66,12 +70,16 @@
 
 .GRAPH SCOPES  (delegated; admin-consent -- all READ-ONLY)
     RoleManagement.Read.Directory     role definitions + role assignments
-    RoleAssignmentSchedule.Read.Directory  PIM-for-roles schedule requests/instances
+    RoleAssignmentSchedule.Read.Directory  PIM-for-roles schedule instances (the
+                                      requests list is NOT read: Learn's least
+                                      privileged permission for it is
+                                      RoleAssignmentSchedule.ReadWrite.Directory)
     RoleEligibilitySchedule.Read.Directory  (read eligible assignments)
     PrivilegedAssignmentSchedule.Read.AzureADGroup  PIM-for-Groups requests/instances
     AccessReview.Read.All             access-review definitions/instances/decisions
     Policy.Read.All                   Conditional Access policy inventory
-    AuditLog.Read.All                 directoryAudits (PIM activities) + MFA report
+    AuditLog.Read.All                 directoryAudits (PIM activities and the
+                                      directory-role activation history) + MFA report
     Directory.Read.All                principal/role lookups
 
     APP-ONLY (-UseAzureCliToken, the pipeline path): the same reads as
@@ -365,16 +373,26 @@ function Export-Artifact {
 # ARTIFACT 1 -- PIM activation history (the elevation audit trail)
 # ===========================================================================
 Export-Artifact -Name 'pim_activation_history.json' -Control 'SOX access control / HIPAA 164.312(a)(1)' -Collector {
+    $rows = [System.Collections.Generic.List[object]]::new()
+    # requestId -> its row from the requests API, so the audit log can add
+    # what that API does not carry (whether MFA was used) instead of a duplicate.
+    $requestRows = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $selectedGroupIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($g in $pimGroups) { if ($g.id) { $null = $selectedGroupIds.Add([string]$g.id) } }
     # (a) PIM for Groups - the lab's elevation path. selfActivate requests on
-    # the member role of each PIM-governed group.
+    # the member role of each PIM-governed group (PrivilegedAssignmentSchedule.
+    # Read.AzureADGroup). The requests API also carries what the audit log
+    # does not: the ticket number, and requests still pending or denied.
     foreach ($g in $pimGroups) {
         $uri = "$graphV1/identityGovernance/privilegedAccess/group/assignmentScheduleRequests?`$filter=groupId eq '$($g.id)'&`$expand=principal"
         do {
             $page = Invoke-MgGraphRequest -Method GET -Uri $uri
             foreach ($r in @(@(Get-Field $page 'value') | Where-Object { (Get-Field $_ 'action') -eq 'selfActivate' })) {
-                [pscustomobject]@{
+                $id = [string](Get-Field $r 'id')
+                $row = [pscustomobject]@{
                     elevationType   = 'PIM for Groups'
-                    requestId       = Get-Field $r 'id'
+                    source          = 'PIM requests API'
+                    requestId       = $id
                     role            = "$($g.displayName) ($(Get-Field $r 'accessId'))"
                     principalId     = Get-Field $r 'principalId'
                     principal       = Get-Field $r 'principal', 'displayName'
@@ -385,31 +403,87 @@ Export-Artifact -Name 'pim_activation_history.json' -Control 'SOX access control
                     startDateTime   = Get-Field $r 'scheduleInfo', 'startDateTime'
                     expiration      = Get-Field $r 'scheduleInfo', 'expiration', 'endDateTime'
                     ticketNumber    = Get-Field $r 'ticketInfo', 'ticketNumber'
+                    mfa             = $null
                 }
+                $rows.Add($row)
+                if ($id) { $requestRows[$id] = $row }
             }
             $uri = $page['@odata.nextLink']
         } while ($uri)
     }
-    # (b) PIM for directory roles - selfActivate requests = JIT role elevations.
-    Get-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -All `
-        -Filter "action eq 'selfActivate'" `
-        -ExpandProperty 'principal,roleDefinition' |
+    # (b) Every COMPLETED activation in the directory audit log (AuditLog.Read.All):
+    # PIM for directory roles always comes from here, and a PIM-for-Groups
+    # activation the requests API no longer returns is added from here too
+    # (its RoleAssignmentRequestId is the requests API's id, so nothing is
+    # counted twice).
+    #
+    # WHY not roleManagement/directory/roleAssignmentScheduleRequests: Microsoft
+    # Learn's permissions table for "List roleAssignmentScheduleRequests" names
+    # RoleAssignmentSchedule.ReadWrite.Directory as the LEAST privileged
+    # permission (there is no Read permission for the requests list), and the
+    # service enforces it: EVIDENCE, holding RoleAssignmentSchedule.Read.Directory
+    # and RoleManagement.Read.Directory, was refused with PermissionScopeNotGranted
+    # (evidence-pack runs 41998984309 and 42002625567). The $expand was not the
+    # cause: the same two-property expand on roleAssignmentScheduleInstances
+    # succeeded under the same token (pim_active_assignments.json, 29 records).
+    # The old server-side filter "action eq 'selfActivate'" is also rejected
+    # with InvalidFilter, even for an identity that holds the ReadWrite role
+    # (checked 2026-11-05). A ReadWrite PIM role would let the evidence
+    # collector create role assignments; the audit log carries the same facts
+    # read-only: who (initiatedBy), which role (targetResources), StartTime,
+    # ExpirationTime, Justification, whether MFA was used, the request id.
+    # Limit: Entra keeps directory audits for 30 days (P1/P2), so each pack
+    # covers the last 30 days; the WORM store keeps every pack, so the history
+    # builds up there. verify: a directory-role activation is logged with
+    # category RoleManagement (none happened in the lab's 30-day window on
+    # 2026-11-05; any category other than GroupManagement is kept as a role).
+    Get-MgAuditLogDirectoryAudit -All -Filter "loggedByService eq 'PIM' and activityDisplayName eq 'Add member to role completed (PIM activation)'" |
         ForEach-Object {
-            [pscustomobject]@{
-                elevationType  = 'PIM for roles'
-                requestId      = $_.Id
-                role           = $_.RoleDefinition.DisplayName
-                principalId    = $_.PrincipalId
-                principal      = $_.Principal.AdditionalProperties['displayName']
-                action         = $_.Action
-                status         = $_.Status
-                justification  = $_.Justification
-                createdDateTime = $_.CreatedDateTime
-                startDateTime  = $_.ScheduleInfo.StartDateTime
-                expiration     = $_.ScheduleInfo.Expiration.EndDateTime
-                ticketNumber   = $_.TicketInfo.TicketNumber
+            $details = @{}
+            foreach ($kv in @($_.AdditionalDetails)) { if ($kv -and $kv.Key) { $details[[string]$kv.Key] = [string]$kv.Value } }
+            $requestId = $details['RoleAssignmentRequestId']
+            if ($requestId -and $requestRows.ContainsKey($requestId)) {
+                # Already listed from the requests API: keep that row (it has
+                # the ticket) and add the audit log's MFA answer to it.
+                $requestRows[$requestId].mfa = $details['IsAuthenticatedWithMfa']
+                return
             }
+            $roleName = (@($_.TargetResources | Where-Object { $_.Type -eq 'Role' } | ForEach-Object { $_.DisplayName }) | Select-Object -First 1)
+            $isGroup = $_.Category -eq 'GroupManagement'
+            if ($isGroup) {
+                # Only the groups this pack covers ($pimGroups: -PimGroupMailNicknames,
+                # plus the tier groups unless -SkipPimTierGroups). PIM puts the
+                # group's object id in ResourceOriginId (checked live on the six
+                # 2026-10-27 activations); the 'Other' targets are the fallback
+                # only when it is missing, since they also carry other ids.
+                $groupIds = if ($details['ResourceOriginId']) { @($details['ResourceOriginId']) }
+                else { @($_.TargetResources | Where-Object { $_.Type -eq 'Other' -and $_.Id } | ForEach-Object { $_.Id }) }
+                if (-not @($groupIds | Where-Object { $selectedGroupIds.Contains([string]$_) }).Count) { return }
+            }
+            $role = if ($isGroup) {
+                # The group is the first 'Other' target; the Role target is the access (Member/Owner).
+                $groupName = (@($_.TargetResources | Where-Object { $_.Type -eq 'Other' -and $_.DisplayName } | ForEach-Object { $_.DisplayName }) | Select-Object -First 1)
+                "$groupName ($("$roleName".ToLowerInvariant()))"
+            }
+            elseif ($roleName) { $roleName } else { $details['RoleDefinitionOriginId'] }
+            $rows.Add([pscustomobject]@{
+                elevationType   = if ($isGroup) { 'PIM for Groups' } else { 'PIM for roles' }
+                source          = 'directory audit log'
+                requestId       = $requestId
+                role            = $role
+                principalId     = $_.InitiatedBy.User.Id
+                principal       = $_.InitiatedBy.User.DisplayName
+                action          = 'selfActivate'
+                status          = "$($_.Result) ($($_.ActivityDisplayName))"
+                justification   = $details['Justification']
+                createdDateTime = $_.ActivityDateTime
+                startDateTime   = $details['StartTime']
+                expiration      = $details['ExpirationTime']
+                ticketNumber    = $details['TicketNumber']
+                mfa             = $details['IsAuthenticatedWithMfa']
+            })
         }
+    $rows.ToArray()
 }
 
 # ===========================================================================

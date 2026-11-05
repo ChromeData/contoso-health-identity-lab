@@ -152,6 +152,16 @@ aws_scim_template_id = ""
 servicenow_instance_url = "" # https://devNNNNN.service-now.com
 servicenow_sso_sys_id   = "" # 32 hex characters
 
+# NEVER put servicenow_provisioning_credentials in this file. The one seeding
+# apply exports it from Key Vault for that run only (modules/apps/README.md
+# "ServiceNow provisioning"):
+#   export TF_VAR_servicenow_provisioning_credentials="$(
+#     { az keyvault secret show --vault-name <kv> -n servicenow-provisioning-username -o json
+#       az keyvault secret show --vault-name <kv> -n servicenow-provisioning-password -o json; } \
+#       | jq -cs '{user_name: .[0].value, password: .[1].value}')"
+# (a pipe, so the password is never a command-line argument; the README
+# recipe then checks both values arrived before applying)
+
 # Okta coexistence (enable_okta_federation): the Okta org HOST, the host of
 # okta-clinic-idp's one redirect URI. Same string as lab/terraform/okta
 # output okta_org_domain. No scheme, no path.

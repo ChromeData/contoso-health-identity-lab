@@ -458,7 +458,7 @@ variable "aws_saml_entity_id" {
 
 variable "aws_saml_acs_urls" {
   type        = list(string)
-  description = "IAM Identity Center ACS URL(s), one per enabled region. Empty = not managed yet (no wildcard reply URL is ever kept). Tenant-specific."
+  description = "IAM Identity Center ACS URL(s): every host AWS uses for this instance (the console panel's and the one in the access portal's AuthnRequest - they differ; modules/apps variables.tf). Empty = not managed yet (no wildcard reply URL is ever kept). Tenant-specific: TF_AWS_SAML_ACS_URLS."
   default     = []
 }
 
@@ -492,7 +492,7 @@ variable "aws_scim_credentials" {
 
 variable "require_scim_credentials" {
   type        = bool
-  description = "Fail closed (instead of warning) when this run would CREATE the SCIM credential without aws_scim_credentials. true in terraform-apply.yml and the local seeding apply; false for PR plans, which can never hold the token."
+  description = "Fail closed (instead of warning) when this run would CREATE a provisioning credential without its value: the AWS SCIM credential without aws_scim_credentials, or the ServiceNow connector credential without servicenow_provisioning_credentials. true in terraform-apply.yml and the local seeding apply; false for PR plans, which can never read the vault."
   default     = false
 }
 
@@ -548,8 +548,8 @@ variable "enable_servicenow_sso" {
     non-gallery SAML app with the Learn tutorial's ServiceNow settings,
     assignment required, ONE assignment (App-ServiceNow-Users), Entra-minted
     signing certificate, NameID = UPN. Needs enable_sso_apps and
-    servicenow_instance_url (the plan fails without it). Provisioning to
-    ServiceNow is designed, not built. Off by default.
+    servicenow_instance_url (the plan fails without it). Accounts come from
+    enable_servicenow_provisioning. Off by default.
   EOT
   default     = false
 }
@@ -564,6 +564,44 @@ variable "servicenow_sso_sys_id" {
   type        = string
   description = "sys_id of the SAML identity provider record created in ServiceNow (Multi-Provider SSO) - makes the My Apps sign-on URL login_with_sso.do?glide_sso_id=<sys_id>. Empty = <instance>/navpage.do; set in a second apply once the record exists."
   default     = ""
+}
+
+variable "enable_servicenow_provisioning" {
+  type        = bool
+  description = <<-EOT
+    Create the ServiceNow provisioning app (modules/apps
+    servicenow_provisioning.tf): gallery "ServiceNow" app, hidden from My
+    Apps, assigned only to App-ServiceNow-Users (the SSO app's group), its
+    ServiceNowOutDelta job created STOPPED, and its credential (InstanceName
+    from servicenow_instance_url + the integration user). The run that creates
+    the credential must be the LOCAL seeding apply with
+    TF_VAR_servicenow_provisioning_credentials from Key Vault (CI cannot reach
+    the vault and fails closed). Needs enable_sso_apps. Off by default.
+  EOT
+  default     = false
+}
+
+variable "servicenow_provisioning_job_enabled" {
+  type        = bool
+  description = "Start the ServiceNow provisioning job (~40-minute cycle). Flip in its own PR only after Test Connection + one provision-on-demand succeeded."
+  default     = false
+}
+
+variable "servicenow_provisioning_credentials" {
+  type = object({
+    user_name = string
+    password  = string
+  })
+  description = <<-EOT
+    The ServiceNow integration user for the provisioning connector, ONLY for
+    the run that creates (or deliberately replaces) the credential: export
+    from Key Vault secrets servicenow-provisioning-username /
+    servicenow-provisioning-password as TF_VAR_servicenow_provisioning_credentials.
+    null (default) = not supplied; afterwards Terraform ignores it. Never
+    committed, never in lab.tfvars, never passed by CI.
+  EOT
+  default     = null
+  sensitive   = true
 }
 
 variable "enable_okta_federation" {
@@ -599,6 +637,12 @@ variable "enable_pim_tiers" {
 variable "enable_pim_azure_resources" {
   type        = bool
   description = "Make PIM-Azure-RG-Contributors ELIGIBLE for Contributor on the lab RG (Azure PIM, MFA + justification + approval, 4h). Needs enable_premium and a HUMAN applier with Owner / User Access Administrator on the RG - the CI APPLY identity cannot write PIM role-management policies (modules/pim/README.md)."
+  default     = false
+}
+
+variable "enable_pim_aws_admin" {
+  type        = bool
+  description = "AWS admin without root (ADR 0025): create PIM-AWS-Lab-Admins (modules/pim aws.tf; eligible-only, 2-hour MFA + justification activation, every activation mailed) and assign it to the AWS IAM Identity Center app as its second principal (modules/apps), so SCIM copies only ACTIVE members to AWS. lab/terraform/aws grants the SCIM copy the LabAdministrator permission set. Needs enable_premium and enable_sso_apps; eligibility is a post-apply step."
   default     = false
 }
 
