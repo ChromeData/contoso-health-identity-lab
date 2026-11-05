@@ -116,9 +116,11 @@ year (*verify:*). It is handled like this:
      --arg t "$(az keyvault secret show --vault-name <kv> --name aws-scim-token     --query value -o tsv)" \
      '{tenant_url:$u, secret_token:$t}')"
    export TF_VAR_require_scim_credentials=true
-   # Keeps APPLY as the apps' Terraform owner during a local apply:
-   export TF_VAR_apply_client_id="$(terraform -chdir=../bootstrap output -raw github_oidc_apply_client_id)"
-   terraform apply -var-file=lab.tfvars     # in envs/dev, as the documented local deployment
+   # Keeps APPLY as the apps' Terraform owner during a local apply. Read it
+   # first and stop if it is missing; -var wins over any value in tfvars.
+   apply_id="$(terraform -chdir=../bootstrap output -raw github_oidc_apply_client_id)" && [ -n "$apply_id" ] \
+     || { echo "no APPLY client id: init envs/bootstrap first" >&2; return 1 2>/dev/null || exit 1; }
+   terraform apply -var-file=lab.tfvars -var="apply_client_id=$apply_id"   # in envs/dev, as the documented local deployment
    unset TF_VAR_aws_scim_credentials
    ```
    It runs locally because the Key Vault firewall admits only the operator IP
