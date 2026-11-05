@@ -374,7 +374,11 @@ function Export-Artifact {
 # ===========================================================================
 Export-Artifact -Name 'pim_activation_history.json' -Control 'SOX access control / HIPAA 164.312(a)(1)' -Collector {
     $rows = [System.Collections.Generic.List[object]]::new()
-    $seenRequestIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    # requestId -> its row from the requests API, so the audit log can add
+    # what that API does not carry (whether MFA was used) instead of a duplicate.
+    $requestRows = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $selectedGroupIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($g in $pimGroups) { if ($g.id) { $null = $selectedGroupIds.Add([string]$g.id) } }
     # (a) PIM for Groups - the lab's elevation path. selfActivate requests on
     # the member role of each PIM-governed group (PrivilegedAssignmentSchedule.
     # Read.AzureADGroup). The requests API also carries what the audit log
@@ -385,8 +389,7 @@ Export-Artifact -Name 'pim_activation_history.json' -Control 'SOX access control
             $page = Invoke-MgGraphRequest -Method GET -Uri $uri
             foreach ($r in @(@(Get-Field $page 'value') | Where-Object { (Get-Field $_ 'action') -eq 'selfActivate' })) {
                 $id = [string](Get-Field $r 'id')
-                if ($id) { $null = $seenRequestIds.Add($id) }
-                $rows.Add([pscustomobject]@{
+                $row = [pscustomobject]@{
                     elevationType   = 'PIM for Groups'
                     source          = 'PIM requests API'
                     requestId       = $id
@@ -401,7 +404,9 @@ Export-Artifact -Name 'pim_activation_history.json' -Control 'SOX access control
                     expiration      = Get-Field $r 'scheduleInfo', 'expiration', 'endDateTime'
                     ticketNumber    = Get-Field $r 'ticketInfo', 'ticketNumber'
                     mfa             = $null
-                })
+                }
+                $rows.Add($row)
+                if ($id) { $requestRows[$id] = $row }
             }
             $uri = $page['@odata.nextLink']
         } while ($uri)
@@ -437,9 +442,24 @@ Export-Artifact -Name 'pim_activation_history.json' -Control 'SOX access control
             $details = @{}
             foreach ($kv in @($_.AdditionalDetails)) { if ($kv -and $kv.Key) { $details[[string]$kv.Key] = [string]$kv.Value } }
             $requestId = $details['RoleAssignmentRequestId']
-            if ($requestId -and $seenRequestIds.Contains($requestId)) { return }
+            if ($requestId -and $requestRows.ContainsKey($requestId)) {
+                # Already listed from the requests API: keep that row (it has
+                # the ticket) and add the audit log's MFA answer to it.
+                $requestRows[$requestId].mfa = $details['IsAuthenticatedWithMfa']
+                return
+            }
             $roleName = (@($_.TargetResources | Where-Object { $_.Type -eq 'Role' } | ForEach-Object { $_.DisplayName }) | Select-Object -First 1)
             $isGroup = $_.Category -eq 'GroupManagement'
+            if ($isGroup) {
+                # Only the groups this pack covers ($pimGroups: -PimGroupMailNicknames,
+                # plus the tier groups unless -SkipPimTierGroups). PIM puts the
+                # group's object id in ResourceOriginId (checked live on the six
+                # 2026-10-27 activations); the 'Other' targets are the fallback
+                # only when it is missing, since they also carry other ids.
+                $groupIds = if ($details['ResourceOriginId']) { @($details['ResourceOriginId']) }
+                else { @($_.TargetResources | Where-Object { $_.Type -eq 'Other' -and $_.Id } | ForEach-Object { $_.Id }) }
+                if (-not @($groupIds | Where-Object { $selectedGroupIds.Contains([string]$_) }).Count) { return }
+            }
             $role = if ($isGroup) {
                 # The group is the first 'Other' target; the Role target is the access (Member/Owner).
                 $groupName = (@($_.TargetResources | Where-Object { $_.Type -eq 'Other' -and $_.DisplayName } | ForEach-Object { $_.DisplayName }) | Select-Object -First 1)

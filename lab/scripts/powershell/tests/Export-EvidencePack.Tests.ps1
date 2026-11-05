@@ -111,7 +111,7 @@ Describe 'Export-EvidencePack.ps1 - PIM activation history (read-only: PIM-for-G
         Set-PackMocks
         function New-AuditRow([string]$Category, [string]$Role, [string]$Group, [string]$User, [string]$Why, [string]$RequestId) {
             $targets = @([pscustomobject]@{ Type = 'Role'; DisplayName = $Role })
-            if ($Group) { $targets += [pscustomobject]@{ Type = 'Other'; DisplayName = $Group } }
+            if ($Group) { $targets += [pscustomobject]@{ Type = 'Other'; DisplayName = $Group; Id = "gid-$Group" } }
             $targets += [pscustomobject]@{ Type = 'User'; DisplayName = $User }
             [pscustomobject]@{
                 Id = [guid]::NewGuid().ToString(); Category = $Category; Result = 'success'
@@ -121,7 +121,7 @@ Describe 'Export-EvidencePack.ps1 - PIM activation history (read-only: PIM-for-G
                 AdditionalDetails = @(
                     [pscustomobject]@{ Key = 'RoleAssignmentRequestId'; Value = $RequestId }, [pscustomobject]@{ Key = 'Justification'; Value = $Why },
                     [pscustomobject]@{ Key = 'StartTime'; Value = '2026-11-01T10:00:00Z' }, [pscustomobject]@{ Key = 'ExpirationTime'; Value = '2026-11-01T12:00:00Z' },
-                    [pscustomobject]@{ Key = 'IsAuthenticatedWithMfa'; Value = 'True' })
+                    [pscustomobject]@{ Key = 'IsAuthenticatedWithMfa'; Value = 'True' }) + @(if ($Group) { [pscustomobject]@{ Key = 'ResourceOriginId'; Value = "gid-$Group" } })
             }
         }
         Mock Get-MgAuditLogDirectoryAudit -ParameterFilter { $Filter -like "*Add member to role completed (PIM activation)*" } {
@@ -130,12 +130,21 @@ Describe 'Export-EvidencePack.ps1 - PIM activation history (read-only: PIM-for-G
             New-AuditRow -Category 'GroupManagement' -Role 'Member' -Group 'privileged-iam-admins' -User 'adm-other' -Why 'INC-2' -RequestId 'req-grp-1'
             # No longer in the requests API: added from the audit log.
             New-AuditRow -Category 'GroupManagement' -Role 'Member' -Group 'privileged-iam-admins' -User 'adm-third' -Why 'INC-3' -RequestId 'req-grp-old'
+            # A group this pack does not cover (-SkipPimTierGroups): never added.
+            New-AuditRow -Category 'GroupManagement' -Role 'Member' -Group 'pim-tier1-helpdesk' -User 'adm-fourth' -Why 'INC-4' -RequestId 'req-grp-tier'
         }
         Mock Invoke-MgGraphRequest -ParameterFilter { "$Uri" -like '*privilegedAccess/group/assignmentScheduleRequests*' } {
             @{ value = @(@{ id = 'req-grp-1'; action = 'selfActivate'; accessId = 'member'; principalId = 'uid-adm-other'; principal = @{ displayName = 'adm-other' }
                         status = 'Provisioned'; justification = 'INC-2'; createdDateTime = '2026-11-01T09:00:00Z'
                         scheduleInfo = @{ startDateTime = '2026-11-01T09:00:00Z'; expiration = @{ endDateTime = '2026-11-01T13:00:00Z' } }; ticketInfo = @{ ticketNumber = 'INC-2' } }) }
         }
+    }
+
+    It 'adds a tier group''s audit-log activation when the pack covers the tier groups' {
+        Set-PackMocks -TierGroups @('pim-tier1-helpdesk')
+        $null = & $Pack -OutputDirectory $out -EvidenceRoot $out
+        $rows = @(Get-Content (Join-Path $out 'pim_activation_history.json') -Raw | ConvertFrom-Json)
+        ($rows | Where-Object requestId -eq 'req-grp-tier').role | Should -Be 'pim-tier1-helpdesk (member)'
     }
 
     It 'never lists roleAssignmentScheduleRequests (its least-privileged permission is ReadWrite)' {
@@ -153,6 +162,9 @@ Describe 'Export-EvidencePack.ps1 - PIM activation history (read-only: PIM-for-G
         @($rows | Where-Object requestId -eq 'req-grp-1').Count | Should -Be 1
         ($rows | Where-Object requestId -eq 'req-grp-1').source | Should -Be 'PIM requests API'
         ($rows | Where-Object requestId -eq 'req-grp-1').ticketNumber | Should -Be 'INC-2'
+        # The kept requests-API row takes the audit log's MFA answer (not lost in the de-duplication).
+        ($rows | Where-Object requestId -eq 'req-grp-1').mfa | Should -Be 'True'
+        @($rows | Where-Object requestId -eq 'req-grp-tier').Count | Should -Be 0
         $old = $rows | Where-Object requestId -eq 'req-grp-old'
         $old.elevationType | Should -Be 'PIM for Groups'
         $old.role | Should -Be 'privileged-iam-admins (member)'
