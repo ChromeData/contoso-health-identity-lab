@@ -185,6 +185,50 @@ wait for one Cloud Sync cycle plus delivery.
 
 License: Entra ID Governance for the access-package part (same as 02/03/04).
 
+## Admin and break-glass passkeys: `signin/passkey.mjs`
+
+```bash
+node lab/scripts/demo/signin/passkey.mjs status   adm-ava.lin@contosohealthlab.onmicrosoft.com
+node lab/scripts/demo/signin/passkey.mjs register adm-ava.lin@contosohealthlab.onmicrosoft.com
+node lab/scripts/demo/signin/passkey.mjs prove    adm-ava.lin@contosohealthlab.onmicrosoft.com
+node lab/scripts/demo/signin/passkey.mjs prove    bg-admin-01@ContosoHealthLab.onmicrosoft.com --break-glass
+```
+
+Gives a lab admin or break-glass account a phishing-resistant sign-in, so
+CA002 and CA021 can be switched on without locking anyone out, and so the
+break-glass drill has a key to sign in with. Runs as the lab operator.
+
+- **register**, lab admins (`adm-*`): a one-time Temporary Access Pass,
+  then headless Chromium signs in at Security info and adds a passkey with
+  Chromium's virtual WebAuthn authenticator, as the user would with a
+  security key. **Break-glass** accounts get no TAP (the TAP policy excludes
+  them, ADR 0016): the operator provisions the passkey through Graph
+  (`fido2Methods/creationOptions` + `POST fido2Methods`, beta), the key
+  still made by the virtual authenticator.
+- The credential (id, private key, user handle, counter) goes to the login
+  Keychain, written over stdin, never printed: first as
+  `contoso-lab-passkey-<local-part>-pending`, and as
+  `contoso-lab-passkey-<local-part>` once Graph lists the new method.
+- `--replace` registers the new key next to the old one, signs in with it,
+  and only then swaps the Keychain item and deletes the old method: an
+  account is never left without a working key (break-glass has one).
+- **prove**: a fresh browser loads the key from the Keychain and signs in
+  to My Account with the passkey only. It fails unless the key's counter
+  rose, the browser went through Entra's sign-in, and My Account shows the
+  account. Screenshot to `$PASSKEY_SHOTS_DIR`.
+  Every break-glass `prove` is a real break-glass sign-in: the Sentinel rule
+  raises a High incident, on purpose (run it as part of the drill,
+  `lab/docs/runbooks/break-glass-drill.md`).
+- `PASSKEY_DEBUG=1` adds a screenshot (inputs blurred) and the on-screen
+  labels for every step, for when Microsoft changes the wizard.
+
+**Lab deviation.** Production: two attested FIDO2 hardware keys per admin
+and break-glass account, in separate safes. Lab: one software passkey per
+account in this Mac's Keychain, `notAttested`. Entra accepts it because the
+all-users passkey target carries the unattested Default profile, and any one
+profile in scope is enough (Learn, passkey profiles). The Keychain item is
+the key: for `bg-admin-NN` it is a Global Administrator credential.
+
 ## Before every recording or rehearsal: `preflight.sh`
 
 ```bash

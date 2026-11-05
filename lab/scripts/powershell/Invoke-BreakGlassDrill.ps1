@@ -63,6 +63,20 @@
 .GRAPH SCOPES  (delegated, READ-ONLY)
     User.Read.All, GroupMember.Read.All, Policy.Read.All, UserAuthenticationMethod.Read.All
 
+    APP-ONLY (-UseAzureCliToken): the Graph token is taken from the Azure CLI
+    session, which is already signed in as an app - in the lab, the lab
+    operator through `lab/scripts/operator/op pwsh ...` (ADR 0024). The app's
+    APPLICATION permissions must cover the four above: a ReadWrite role covers
+    its Read, and Directory.Read.All covers User.Read.All and
+    GroupMember.Read.All (Get-MissingGraphScope; the operator holds
+    User.ReadWrite.All, GroupMember.ReadWrite.All, Directory.Read.All,
+    Policy.Read.All and UserAuthenticationMethod.ReadWrite.All). The script
+    still only READS. App-only refuses -Phase All, which prompts a person
+    through each sign-in: run Preflight, do the sign-ins, then Verify.
+    (Learn, permissions reference: the Read.All application permissions are
+    included in their ReadWrite.All counterparts; Directory.Read.All reads
+    users, groups and memberships.)
+
 .PARAMETER Phase
     Preflight | Verify | All (default).
 
@@ -79,6 +93,12 @@
 
 .EXAMPLE
     ./Invoke-BreakGlassDrill.ps1 -OnMicrosoftDomain 'contosohealthlab.onmicrosoft.com' -ChangeTicket 'CHG0001234' -Operator 'MW' -Reviewer 'GM'
+
+.EXAMPLE
+    lab/scripts/operator/op pwsh -NoProfile -File lab/scripts/powershell/Invoke-BreakGlassDrill.ps1 -Phase Preflight -UseAzureCliToken -ExpectedKeysPerAccount 1
+    # Lab, app-only as the lab operator. The lab holds ONE software passkey per
+    # break-glass account (lab/docs/runbooks/break-glass-drill.md, lab deviation),
+    # hence -ExpectedKeysPerAccount 1.
 
 .EXAMPLE
     ./Invoke-BreakGlassDrill.ps1 -Phase Preflight
@@ -175,7 +195,11 @@ param(
 
     [Parameter()]
     [ValidateNotNullOrEmpty()]
-    [string]$PrivateDirectory = (Join-Path $PSScriptRoot '..' '..' 'evidence' 'out' 'drills')
+    [string]$PrivateDirectory = (Join-Path $PSScriptRoot '..' '..' 'evidence' 'out' 'drills'),
+
+    [Parameter()]
+    # App-only: Microsoft Graph token from the Azure CLI session (see .GRAPH SCOPES).
+    [switch]$UseAzureCliToken
 )
 
 # Operator console output. Write-Host on purpose (colour, -NoNewline); every
@@ -283,6 +307,14 @@ function Get-DrillAssessment {
     return [pscustomobject]@{ Result = $result; Reasons = $reasons; SignIns = $rows }
 }
 
+function Get-PendingIncident {
+    # Sentinel path only: the accounts whose sign-in was alerted but has no
+    # incident number yet (Log Analytics alerts raise no incident). Pure.
+    param($Assessment, [string]$AlertPath)
+    if ($AlertPath -ne 'sentinel' -or -not $Assessment) { return @() }
+    return @(@($Assessment.SignIns) | Where-Object { $_.alertObserved -and -not $_.incidentNumber } | ForEach-Object { [string]$_.account })
+}
+
 function Test-PublicRecordSafe {
     # The public drill log must not carry an email/UPN, IP address, GUID or
     # onmicrosoft domain (lab/evidence/drills/README.md). Emits the offending
@@ -293,6 +325,28 @@ function Test-PublicRecordSafe {
         foreach ($m in [regex]::Matches($Json, $p)) { $bad += $m.Value }
     }
     return @($bad | Sort-Object -Unique)
+}
+
+function Get-MissingGraphScope {
+    # Required Graph permissions the current context does not cover, for the
+    # "does not list" warning. An app-only identity (-UseAzureCliToken, e.g.
+    # the lab operator) often holds the ReadWrite role, not the Read one a
+    # delegated admin consents to. Microsoft Learn's permission tables list
+    # X.ReadWrite.Y as a higher-privileged permission wherever X.Read.Y is the
+    # least privileged one, and Directory.Read.All for the user, group,
+    # membership and application reads (checked 2026-11-05 on "List
+    # applications" and "List group transitive members"). Empty -Have
+    # (unknown context) = no warning. Identical in 06-NHI-Inventory.ps1,
+    # 08-Measure-KPIs.ps1, 09-SoD-Report.ps1 and Invoke-BreakGlassDrill.ps1
+    # (parity test in tests/EvidencePackPipeline.Tests.ps1).
+    param([AllowEmptyCollection()][string[]]$Have = @(), [Parameter(Mandatory)][string[]]$Required)
+    if (-not @($Have | Where-Object { $_ })) { return @() }
+    $directoryCovers = @('User.Read.All', 'Group.Read.All', 'GroupMember.Read.All', 'Application.Read.All')
+    $hasDirectory = ('Directory.Read.All' -in $Have) -or ('Directory.ReadWrite.All' -in $Have)
+    return @($Required | Where-Object {
+            ($_ -notin $Have) -and (($_ -replace '\.Read\.', '.ReadWrite.') -notin $Have) -and
+            -not ($hasDirectory -and $_ -in $directoryCovers)
+        })
 }
 
 # =============================================================================
@@ -351,6 +405,27 @@ function Test-PasskeyCoverage {
     return [pscustomobject]$r
 }
 
+function Connect-GraphFromAzureCli {
+    # App-only: the Azure CLI is already signed in as an app (azure/login over
+    # GitHub OIDC, or the lab operator's certificate through
+    # lab/scripts/operator/op). The token never leaves this process: masked in
+    # Actions, handed to Connect-MgGraph as a SecureString, then dropped. Same
+    # as mock-hr/Invoke-InboundProvisioning.ps1, through Write-Console for the
+    # analyzer; every lab/scripts/powershell copy is identical (parity test in
+    # tests/EvidencePackPipeline.Tests.ps1).
+    $global:LASTEXITCODE = 0
+    $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {
+        throw 'No Microsoft Graph token from the Azure CLI. Sign it in first (azure/login with OIDC in GitHub Actions, or az login locally).'
+    }
+    $token = ([string]$token).Trim()
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Console "::add-mask::$token" }
+    # NetworkCredential.SecurePassword: the same SecureString as
+    # ConvertTo-SecureString -AsPlainText, without the analyzer error rule.
+    Connect-MgGraph -AccessToken ([System.Net.NetworkCredential]::new('', $token).SecurePassword) -NoWelcome | Out-Null
+    Remove-Variable -Name token
+}
+
 function Get-GraphCollection {
     param([Parameter(Mandatory)][string]$Uri)
     $items = [System.Collections.Generic.List[object]]::new(); $next = $Uri
@@ -404,10 +479,21 @@ function Add-Check {
 # CONNECT (Graph + az)
 # =============================================================================
 $requiredScopes = @('User.Read.All', 'GroupMember.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.Read.All')
+if ($UseAzureCliToken) {
+    # -Phase All stops at Read-Host for each sign-in: a person's flow, not an
+    # app's. App-only runs Preflight, then the sign-ins, then Verify.
+    if ($Phase -eq 'All') { throw '-UseAzureCliToken runs -Phase Preflight or -Phase Verify only (-Phase All prompts a person through each sign-in).' }
+    # Always this identity, never a leftover delegated context.
+    Write-Console 'Signing in to Microsoft Graph app-only (token from the Azure CLI session)...' -ForegroundColor Yellow
+    Connect-GraphFromAzureCli
+}
 $ctx = $null; try { $ctx = Get-MgContext } catch { Write-Verbose "Get-MgContext failed: $($_.Exception.Message)"; $ctx = $null }
-if (-not $ctx) { Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes -NoWelcome; $ctx = Get-MgContext }
-$missingScopes = @($requiredScopes | Where-Object { $ctx.Scopes -and $_ -notin $ctx.Scopes })
-if ($missingScopes) { Write-Warning "Current Graph context does not list: $($missingScopes -join ', '). Checks needing them will FAIL." }
+if (-not $ctx) {
+    if ($UseAzureCliToken) { throw 'No Microsoft Graph context after the app-only sign-in.' }
+    Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes -NoWelcome; $ctx = Get-MgContext
+}
+$missingScopes = @(Get-MissingGraphScope -Have @($ctx.Scopes) -Required $requiredScopes)
+if ($missingScopes) { Write-Warning "Current Graph context does not cover: $($missingScopes -join ', '). Checks needing them will FAIL." }
 if (-not (Get-Command az -ErrorAction SilentlyContinue)) { throw 'az CLI not found; the alert checks need it (az login first).' }
 $subId = [string](Invoke-AzJson -Arguments @('account', 'show', '--query', 'id'))
 $ws = Invoke-AzJson -Arguments @('monitor', 'log-analytics', 'workspace', 'show', '-g', $ResourceGroup, '-n', $WorkspaceName)
@@ -595,10 +681,23 @@ $deadline = (Get-Date).AddMinutes($WaitMinutes)
 do {
     $obs = Get-DrillObservation -StartUtc $DrillStartUtc -AlertPath $alertPath -RuleName $RuleDisplayName
     $assess = Get-DrillAssessment -Declared $declared -SignIns $obs.SignIns -Alerts $obs.Alerts -Incidents $obs.Incidents -AlertsCarryAccounts $obs.AlertsCarryAccounts
-    if ($assess.Result -eq 'Pass' -or (Get-Date) -ge $deadline) { break }
+    # A Pass is final only once each alerted sign-in also has its incident on
+    # the Sentinel path: the incident is created seconds after the alert and
+    # reaches SecurityIncident later still (first lab drill, 2026-11-05: alert
+    # 10:52:45Z, incident 10:52:55Z; stopping at the alert left the incident
+    # number out of the record).
+    $pending = @(Get-PendingIncident -Assessment $assess -AlertPath $alertPath)
+    if (($assess.Result -eq 'Pass' -and -not $pending.Count) -or (Get-Date) -ge $deadline) { break }
+    if ($assess.Result -eq 'Pass') { Write-Console ("  {0:HH:mm:ss} Pass; waiting for the incident of: {1}" -f (Get-Date), ($pending -join ', ')) -ForegroundColor DarkGray; Start-Sleep -Seconds $PollSeconds; continue }
     Write-Console ("  {0:HH:mm:ss} {1}: {2}" -f (Get-Date), $assess.Result, ($assess.Reasons -join '; ')) -ForegroundColor DarkGray
     Start-Sleep -Seconds $PollSeconds
 } while ($true)
+# The wait ran out with an alert but no incident (Sentinel path): not a Pass.
+$pending = @(Get-PendingIncident -Assessment $assess -AlertPath $alertPath)
+if ($pending.Count) {
+    if ($assess.Result -eq 'Pass') { $assess.Result = 'Partial' }
+    $assess.Reasons = @($assess.Reasons) + "alerted but no Sentinel incident within $WaitMinutes min for: $($pending -join ', ')"
+}
 
 Write-Console "`nPost-drill re-check (runbook step 7)" -ForegroundColor Cyan
 $null = Invoke-Preflight -GroupMailNickname $BreakGlassGroupMailNickname -Domain $OnMicrosoftDomain -KeysPerAccount $ExpectedKeysPerAccount

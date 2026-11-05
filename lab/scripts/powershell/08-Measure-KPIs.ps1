@@ -333,8 +333,8 @@ function Get-MissingGraphScope {
     # membership and application reads (checked 2026-11-05 on "List
     # applications" and "List group transitive members"). Empty -Have
     # (unknown context) = no warning. Identical in 06-NHI-Inventory.ps1,
-    # 08-Measure-KPIs.ps1 and 09-SoD-Report.ps1 (parity test in
-    # tests/EvidencePackPipeline.Tests.ps1).
+    # 08-Measure-KPIs.ps1, 09-SoD-Report.ps1 and Invoke-BreakGlassDrill.ps1
+    # (parity test in tests/EvidencePackPipeline.Tests.ps1).
     param([AllowEmptyCollection()][string[]]$Have = @(), [Parameter(Mandatory)][string[]]$Required)
     if (-not @($Have | Where-Object { $_ })) { return @() }
     $directoryCovers = @('User.Read.All', 'Group.Read.All', 'GroupMember.Read.All', 'Application.Read.All')

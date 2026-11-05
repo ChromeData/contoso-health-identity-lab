@@ -1,0 +1,88 @@
+{
+  "schema": "contoso-breakglass-drill/v1",
+  "drillDateUtc": "2026-11-05",
+  "startedAtUtc": "2026-11-05T10:41:09.0000000Z",
+  "verifiedAtUtc": "2026-11-05T10:55:51.3177300Z",
+  "generator": "lab/scripts/powershell/Invoke-BreakGlassDrill.ps1",
+  "operator": "lab-operator",
+  "reviewer": null,
+  "changeTicket": null,
+  "alertPath": "sentinel",
+  "preflight": [],
+  "postDrillChecks": [
+    {
+      "check": "Account count",
+      "status": "PASS"
+    },
+    {
+      "check": "Account bg-admin-01",
+      "status": "PASS"
+    },
+    {
+      "check": "Account bg-admin-02",
+      "status": "PASS"
+    },
+    {
+      "check": "CA exclusion",
+      "status": "PASS"
+    },
+    {
+      "check": "Passkey policy",
+      "status": "PASS"
+    },
+    {
+      "check": "Keys bg-admin-01",
+      "status": "PASS"
+    },
+    {
+      "check": "Keys bg-admin-02",
+      "status": "PASS"
+    },
+    {
+      "check": "Alert rule",
+      "status": "PASS"
+    },
+    {
+      "check": "SigninLogs ingestion",
+      "status": "PASS"
+    }
+  ],
+  "signIns": [
+    {
+      "account": "bg-admin-01",
+      "keyLabel": "key 1",
+      "keyLabelSource": "operator-declared",
+      "observedInLogs": true,
+      "signInUtc": "2026-11-05T10:42:41.9802841Z",
+      "signInResultType": "0",
+      "signInMethods": "",
+      "alertObserved": true,
+      "alertUtc": "2026-11-05T10:52:45.4150750Z",
+      "signInToAlertMinutes": 10.1,
+      "incidentNumber": "42",
+      "signInToIncidentMinutes": 10.2
+    },
+    {
+      "account": "bg-admin-02",
+      "keyLabel": "key 1",
+      "keyLabelSource": "operator-declared",
+      "observedInLogs": true,
+      "signInUtc": "2026-11-05T10:42:42.8990974Z",
+      "signInResultType": "50140",
+      "signInMethods": "Passkey (device-bound)",
+      "alertObserved": true,
+      "alertUtc": "2026-11-05T10:52:45.4150750Z",
+      "signInToAlertMinutes": 10.0,
+      "incidentNumber": "42",
+      "signInToIncidentMinutes": 10.2
+    }
+  ],
+  "auditOperationsByBreakGlass": 0,
+  "notCheckedByScript": [
+    "Teams card",
+    "ServiceNow INC",
+    "Splunk alert"
+  ],
+  "result": "Pass",
+  "resultReasons": []
+}

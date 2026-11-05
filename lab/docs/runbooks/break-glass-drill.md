@@ -2,17 +2,26 @@
 
 **Scenario:** Contoso Health lab (fictional 5,000-user hospital).
 
-> **Status: this drill has NOT been run.** The tenant exists (2026-10-27), but
-> the drill has not run in it yet. The drill log, [`../../evidence/drills/README.md`](../../evidence/drills/README.md),
-> is an empty template until the first real run. Don't cite a drill result
-> anywhere until a row exists there. The drill script,
-> `lab/scripts/powershell/Invoke-BreakGlassDrill.ps1`, has never run either.
+> **Status: RAN · tenant once, 2026-11-05, in the lab form** (one software
+> passkey per account, app-only checks; see [Lab deviation](#lab-deviation-software-passkeys-in-the-operators-keychain)).
+> Preflight passed; both accounts signed in to My Account with the passkey
+> only; Sentinel raised High incident #42 for both, 10.2 minutes after the
+> sign-ins reached the workspace; no audit operation by either account.
+> Result Pass. The Teams card and ServiceNow INC did not happen then (no
+> automation rule ran the notify playbook until 11:00Z); a re-drill with
+> bg-admin-01 at 11:34Z raised #48, which posted the Teams card and opened
+> ServiceNow INC0010007. Not done: Splunk leg, a change ticket, a second
+> reviewer. Record: [`../../evidence/drills/`](../../evidence/drills/README.md)
+> (`2026-11-05T1041Z-break-glass-drill.json`), capture log E49, E49a.
 
 ## Tooling
 
 `Invoke-BreakGlassDrill.ps1` automates the checking parts of this runbook.
-The sign-ins stay manual: a script that could sign in as a standing Global
-Administrator would be the most dangerous file in the repo.
+In production the sign-ins stay manual: a script that could sign in as a
+standing Global Administrator would be the most dangerous file in the repo.
+The lab is the exception, and says so: its keys are software passkeys in the
+operator Mac's Keychain, signed in with by `passkey.mjs prove` (see
+[Lab deviation](#lab-deviation-software-passkeys-in-the-operators-keychain)).
 
 - `-Phase Preflight` is read-only and refuses to start the drill on any
   FAIL: both accounts exist, are enabled and are in Break-Glass-Admins;
@@ -29,6 +38,49 @@ Administrator would be the most dangerous file in the repo.
 - It needs Global Reader and Authentication Administrator (to read FIDO2
   methods), read-only Graph scopes, and Reader plus Log Analytics Reader
   (plus Microsoft Sentinel Reader on the Sentinel path) through `az`.
+- `-UseAzureCliToken` runs it **app-only**, with the Graph token of the app
+  the Azure CLI is signed in as. In the lab that is the lab operator
+  (`lab/scripts/operator/op pwsh ...`), whose application roles cover the
+  read scopes above. App-only refuses `-Phase All` (it prompts a person
+  through each sign-in): run Preflight, the sign-ins, then Verify. Pass the
+  sign-in list through `pwsh -Command`, not `-File` (with `-File` the comma
+  list arrives as one string and fails validation).
+
+## Lab deviation: software passkeys in the operator's Keychain
+
+| | Production standard | This lab (since 2026-11-05) |
+|---|---|---|
+| Keys per account | Two FIDO2 hardware keys, attested, in separate safes | One software passkey (Chromium's virtual authenticator), `notAttested` |
+| Where the key lives | The safe; only the key holder opens it | The operator Mac's login Keychain, `contoso-lab-passkey-bg-admin-NN` |
+| How it was registered | In person at Security info, never with a TAP | The operator provisioned it through Graph (`fido2Methods/creationOptions` + `POST fido2Methods`, beta): the TAP policy excludes Break-Glass-Admins (ADR 0016) |
+| Who signs in during the drill | The key holder, by hand, watched by a second admin | `node lab/scripts/demo/signin/passkey.mjs prove bg-admin-NN@... --break-glass` (My Account, look only) |
+| Drill preflight | `-ExpectedKeysPerAccount 2` (default) | `-ExpectedKeysPerAccount 1` |
+
+Why: the lab has no hardware keys, and the break-glass accounts had no
+working method at all (password only, never signed in), so in a real
+lockout they could not have reached the admin portals, where Microsoft
+enforces MFA. A software passkey is still phishing-resistant and satisfies
+that MFA.
+
+What it costs: **the Keychain item is the key.** Anyone who can read
+`contoso-lab-passkey-bg-admin-01` from the operator's login Keychain can sign
+in as a Global Administrator, with no Conditional Access in the way. It is
+never printed, logged or committed, and every `prove` raises the Sentinel
+break-glass incident. Entra accepts the key only because the `all_users`
+passkey target still carries the unattested Default profile (ADR 0016,
+Consequences): enforcing an AAGUID allow-list on the admin profile without
+the virtual authenticator's AAGUID would lock both accounts out (the
+preflight fails first). Re-key with `passkey.mjs register ... --replace`.
+
+Lab drill, in order:
+
+```bash
+op=lab/scripts/operator/op
+$op pwsh -NoProfile -File lab/scripts/powershell/Invoke-BreakGlassDrill.ps1 -Phase Preflight -UseAzureCliToken -ExpectedKeysPerAccount 1 -OnMicrosoftDomain contosohealthlab.onmicrosoft.com
+node lab/scripts/demo/signin/passkey.mjs prove bg-admin-01@ContosoHealthLab.onmicrosoft.com --break-glass
+node lab/scripts/demo/signin/passkey.mjs prove bg-admin-02@ContosoHealthLab.onmicrosoft.com --break-glass
+$op pwsh -NoProfile -Command "& ./lab/scripts/powershell/Invoke-BreakGlassDrill.ps1 -Phase Verify -UseAzureCliToken -ExpectedKeysPerAccount 1 -OnMicrosoftDomain contosohealthlab.onmicrosoft.com -DrillStartUtc '<start printed by Preflight>' -DeclaredSignIns 'bg-admin-01:key 1','bg-admin-02:key 1' -Operator lab-operator"
+```
 
 ## Why
 
@@ -87,7 +139,15 @@ Record every time in UTC.
    <CHG>`. It counts any `AuditLogs` operation initiated by
    `bg-admin-01`/`02` in the drill window; expect none. The second admin
    reviews that result.
-7. **Close out.** Keys back in their safes. The Verify phase re-runs the
+7. **Close out.** Keys back in their safes. Close the Sentinel incident
+   only **after the rule's 1 h lookback has passed the last drill sign-in**:
+   the rule re-alerts every 5 minutes on every sign-in still in its window
+   (suppression off) and groups those alerts into the open incident, so an
+   incident closed earlier is followed by a new one, with a new Teams card
+   and ServiceNow ticket each time (seen 2026-11-05). For the same reason,
+   a second drill sign-in while the first incident is open is grouped into
+   it and sends no new card or ticket: close the previous drill's incident
+   (after its hour) before a re-drill. The Verify phase re-runs the
    preflight; re-run `01-Verify-Baseline.ps1` too. Link the Sentinel
    incident(s) and INC number(s) to the change ticket and close them as
    "drill".
