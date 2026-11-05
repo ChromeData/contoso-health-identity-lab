@@ -25,6 +25,13 @@
 #   * a second disarm is idempotent, and arm right after it (a re-take) uses
 #     a fresh rule id (Sentinel refuses a recently deleted one);
 #   * --with-notify starts pb-identity-notify before the containment playbook;
+#   * every list is followed across pages, and drill incidents are filtered
+#     by title on the server: an older drill behind 60 newer incidents is
+#     still found and closed;
+#   * an interrupted arm's run (card not posted yet) is reused, not doubled;
+#   * a waiting run whose trigger cannot be read is left alone, fails the
+#     disarm read-back (NOT CLEAN) and makes arm refuse;
+#   * an arm that fails after switching the rule on switches it off again;
 #   * disarm never touches an itdr-drill user without the marker, and then
 #     reports NOT CLEAN instead of success.
 # Prints PASS/FAIL per assertion; exits 1 if anything failed.
@@ -50,6 +57,12 @@ st = json.load(open(S))
 argv = sys.argv[1:]
 st["calls"].append(" ".join(argv[:6]))
 def save(): json.dump(st, open(S, "w"))
+def paged(items, key="nextLink"):
+    # Two items per page, like a real API that pages: callers must follow the link.
+    m_ = re.search(r"[?&]skip=(\d+)", u); off = int(m_.group(1)) if m_ else 0
+    o = {"value": items[off:off + 2]}
+    if off + 2 < len(items): o[key] = re.sub(r"([?&])skip=\d+", "", u) + "&skip=%d" % (off + 2)
+    return o
 def out(o): save(); print(json.dumps(o)); sys.exit(0)
 def notfound(): save(); sys.stderr.write('ERROR: Not Found({"error":{"code":"Request_ResourceNotFound"}})\n'); sys.exit(1)
 if argv[:3] == ["az", "account", "show"]:
@@ -75,7 +88,7 @@ if "graph.microsoft.com" in u:
         st["users"][body["userPrincipalName"].lower()] = user
         out({"id": uid, "userPrincipalName": body["userPrincipalName"], "jobTitle": body["jobTitle"]})
     if m == "GET" and path.startswith("users?"):
-        out({"value": [{"id": x["id"], "userPrincipalName": x["userPrincipalName"], "jobTitle": x.get("jobTitle"), "onPremisesSyncEnabled": x.get("onPremisesSyncEnabled")} for k, x in st["users"].items() if k.startswith("itdr-drill-")]})
+        out(paged([{"id": x["id"], "userPrincipalName": x["userPrincipalName"], "jobTitle": x.get("jobTitle"), "onPremisesSyncEnabled": x.get("onPremisesSyncEnabled")} for k, x in st["users"].items() if k.startswith("itdr-drill-")], "@odata.nextLink"))
     if m == "DELETE" and path.startswith("users/"):
         uid = path[6:]
         for k, x in list(st["users"].items()):
@@ -84,7 +97,7 @@ if "graph.microsoft.com" in u:
                 st["deleted"][uid] = d; del st["users"][k]; out({})
         notfound()
     if m == "GET" and path.startswith("directory/deletedItems/microsoft.graph.user"):
-        out({"value": list(st["deleted"].values())})
+        out(paged(list(st["deleted"].values()), "@odata.nextLink"))
     if m == "DELETE" and path.startswith("directory/deletedItems/"):
         uid = path.split("/")[-1]
         if uid not in st["deleted"]: notfound()
@@ -97,12 +110,13 @@ def inc_by_name(n):
 if "/alertRules" in u:
     tail = u.split("/alertRules", 1)[1]
     if tail.startswith("?"):
-        out({"value": [{"name": k, "properties": v} for k, v in st["rules"].items()] + [{"name": "contoso-role-assigned-outside-pim", "properties": {"displayName": "Contoso ITDR - Directory role assigned outside PIM"}}]})
+        out(paged([{"name": "contoso-%d" % k, "properties": {"displayName": "Contoso rule %d" % k}} for k in range(5)] + [{"name": k, "properties": v} for k, v in st["rules"].items()]))
     rid = tail.lstrip("/").split("?")[0]
     if m == "PUT":
         if rid in st["rule_deleted"]:
             save(); sys.stderr.write("ERROR: Conflict({\"error\":{\"code\":\"Conflict\",\"message\":\"The rule with id was recently deleted\"}})\n"); sys.exit(1)
         st["rules"][rid] = body["properties"]
+        if body["properties"]["enabled"] and st.get("fail_incidents_after_rule_on"): st["incidents_broken"] = True
         if body["properties"]["enabled"] and not any(i["status"] != "Closed" and i["rule"] == rid for i in st["incidents"]):
             oid = re.search(r'AadUserId = "([^"]+)"', body["properties"]["query"]).group(1)
             st["n"] += 1
@@ -114,7 +128,11 @@ if "/alertRules" in u:
 if "/incidents" in u and "Microsoft.SecurityInsights" in u:
     tail = u.split("/incidents", 1)[1]
     if tail.startswith("?"):
-        out({"value": [{"name": i["name"], "properties": {"incidentNumber": i["number"], "status": i["status"], "title": i["title"]}} for i in st["incidents"]]})
+        if st.get("incidents_broken"):
+            save(); sys.stderr.write("ERROR: (InternalServerError) boom\n"); sys.exit(1)
+        f = re.search(r"properties/title eq '([^']*)'", u)
+        rows = [i for i in st["incidents"] if not f or i["title"] == f.group(1)]
+        out(paged([{"name": i["name"], "properties": {"incidentNumber": i["number"], "status": i["status"], "title": i["title"]}} for i in rows]))
     name = tail.lstrip("/").split("/")[0].split("?")[0]
     i = inc_by_name(name)
     if i is None: notfound()
@@ -139,7 +157,7 @@ if "/incidents" in u and "Microsoft.SecurityInsights" in u:
 if "/workflows/pb-identity-contain/runs" in u:
     tail = u.split("/runs", 1)[1]
     if tail.startswith("?"):
-        out({"value": [{"name": r["name"]} for r in st["runs"] if r["status"] == "Running"]})
+        out(paged([{"name": r["name"]} for r in st["runs"] if r["status"] == "Running"]))
     rn = tail.lstrip("/").split("/")[0].split("?")[0]
     r = next(x for x in st["runs"] if x["name"] == rn)
     if tail.endswith("/cancel?api-version=2019-05-01"):
@@ -147,6 +165,10 @@ if "/workflows/pb-identity-contain/runs" in u:
         inc_by_name("inc-%d" % r["incident"])["comments"].append("<p><b>ITDR containment - playbook pb-identity-contain run %s</b></p><p>NO DECISION (cancelled)</p>" % rn)
         out({})
     if "/actions/Post_approval_card_and_wait/repetitions" in tail:
+        if r["card"] == "none":              # the run has not reached the card yet
+            r["card_after"] = r.get("card_after", 0) - 1
+            if r["card_after"] <= 0: r["card"] = "Waiting"
+            notfound()
         out({"value": [{"name": "000000", "properties": {"status": r["card"]}}]})
     out({"properties": {"trigger": {"outputsLink": {"uri": "https://stub/trigger/" + rn}}}})
 raise SystemExit("stub: unhandled %s %s" % (m, u))
@@ -160,6 +182,7 @@ assert "-K" in sys.argv and "-" in sys.argv, "the SAS link must come on stdin, n
 url = re.search(r'url = "([^"]+)"', cfg).group(1)
 kind, rn = url.split("/")[-2:]
 r = next(x for x in st["runs"] if x["name"] == rn)
+if r.get("trigger") == "bad": print("<html>expired</html>"); sys.exit(0)
 i = next(x for x in st["incidents"] if x["number"] == r["incident"])
 ents = [{"kind": "Account", "properties": ({"aadUserId": o} if o != "none" else {"accountName": "ad-only"})} for o in i["oids"]]
 print(json.dumps({"body": {"object": {"properties": {"incidentNumber": r["incident"], "relatedEntities": ents}}}}))
@@ -217,6 +240,44 @@ fresh; run arm --with-notify
 pb="$(q '",".join(b["logicAppsResourceId"].split("/")[-1] for b in d["bodies"] if "logicAppsResourceId" in b)')"
 [ $rc -eq 0 ] && [ "$pb" = "pb-identity-notify,pb-identity-contain" ] && pass "--with-notify runs notify, then contain" || fail "--with-notify: rc=$rc playbooks=$pb $out"
 run disarm
+
+# --- 4d. an older drill incident behind many newer ones is still found, and an
+#     interrupted arm's run (card not posted yet) is reused, not doubled --------
+fresh; run arm
+python3 - <<'PY'
+import json,os
+p=os.environ["STUB_STATE"]; d=json.load(open(p))
+for k in range(60):
+    d["incidents"].insert(0,{"name":"noise-%d"%k,"number":200+k,"status":"New","title":"Contoso - PIM activation (just-in-time elevation)","rule":"contoso-pim-activation","oids":[],"comments":[]})
+d["runs"][0]["card"]="none"; d["runs"][0]["card_after"]=3   # the card is posted a few polls later
+json.dump(d,open(p,"w"))
+PY
+run arm
+[ $rc -eq 0 ] && grep -q "already working on incident #101" <<<"$out" && pass "arm reuses a running run whose card is not posted yet" || fail "running run reuse: rc=$rc $out"
+[ "$(q 'sum(1 for c in d["calls"] if "runPlaybook" in c)')" = 1 ] && pass "...and starts no second containment run" || fail "second runPlaybook: $(q 'sum(1 for c in d["calls"] if "runPlaybook" in c)')"
+run disarm
+[ $rc -eq 0 ] && [ "$(q '[i["status"] for i in d["incidents"] if i["number"]==101][0]')" = Closed ] && pass "disarm finds the drill incident behind 60 newer ones (paged, filtered by title)" || fail "older drill incident: rc=$rc $out"
+
+# --- 4e. a waiting run whose trigger cannot be read is never "clean" -----------------
+fresh; run arm
+python3 - <<'PY'
+import json,os
+p=os.environ["STUB_STATE"]; d=json.load(open(p)); d["runs"][0]["trigger"]="bad"; json.dump(d,open(p,"w"))
+PY
+run disarm
+[ $rc -ne 0 ] && grep -q "NOT CLEAN: waiting run run-1 cannot be tied" <<<"$out" && pass "disarm fails NOT CLEAN on an unidentifiable waiting run" || fail "unreadable run: rc=$rc $out"
+[ "$(q 'd["runs"][0]["status"]')" = Running ] && pass "...and leaves that run alone" || fail "cancelled an unidentified run"
+run arm
+[ $rc -eq 3 ] && pass "arm refuses while a waiting card's trigger is unreadable" || fail "arm with unreadable run: rc=$rc $out"
+
+# --- 4f. a failure after the rule is switched on switches it off again ---------------
+fresh; python3 - <<'PY'
+import json,os
+p=os.environ["STUB_STATE"]; d=json.load(open(p)); d["fail_incidents_after_rule_on"]=True; json.dump(d,open(p,"w"))
+PY
+run arm
+[ $rc -ne 0 ] && grep -q "temporary rule .* was switched off" <<<"$out" && pass "arm failing mid-way reports the rule switched off" || fail "trap: rc=$rc $out"
+[ "$(q 'list(d["rules"].values())[0]["enabled"]')" = False ] && pass "...and the rule really is disabled" || fail "rule still enabled after a failed arm"
 
 # --- 5. refuse while a card waits about a real account ----------------------------
 fresh; python3 - <<'PY'

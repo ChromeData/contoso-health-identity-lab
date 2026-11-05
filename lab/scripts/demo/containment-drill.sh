@@ -101,7 +101,24 @@ UPN="itdr-drill-$DATE@$DOMAIN"
 
 # ---- az as the lab operator ---------------------------------------------------
 ERR="$(mktemp "${TMPDIR:-/tmp}/drill-err.XXXXXX")"
-trap 'rm -f "$ERR"' EXIT
+PAGES="$(mktemp -d "${TMPDIR:-/tmp}/drill-pages.XXXXXX")"
+# The temporary rule this run switched ON, until it is switched off again: a
+# failure or Ctrl-C in between must not leave a `print` rule raising a High
+# alert every five minutes. cleanup() makes one best-effort attempt.
+RULE_ON=""; RULE_OID=""
+cleanup() {
+  if [ -n "$RULE_ON" ]; then
+    local rid="$RULE_ON"; RULE_ON=""
+    if rule_body false "$RULE_OID" | rest PUT "$SI/alertRules/$rid?$SENTINEL_API" --stdin >/dev/null 2>&1; then
+      printf 'containment-drill: stopped early - the temporary rule %s was switched off\n' "$rid" >&2
+    else
+      printf 'containment-drill: stopped early - could NOT switch off the temporary rule %s: run disarm now\n' "$rid" >&2
+    fi
+  fi
+  rm -rf "$ERR" "$PAGES"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
 # rest METHOD URL [body-on-stdin]: JSON on stdout. Exit 0 ok, 4 not found,
 # 1 anything else (never read as "not there").
 rest() {
@@ -120,6 +137,24 @@ d=json.loads(_t) if _t.strip() else None
 $1"; }
 # A run-history SAS link: URL to curl through a config on stdin.
 sas_get() { printf 'url = "%s"\n' "$1" | "$CURL" -sS -m 60 -K -; }
+# rest_all URL: GET every page (ARM nextLink / Graph @odata.nextLink) and
+# print {"value": [...all pages...]}. A list that stops after the first page
+# would let an older drill incident or run escape disarm.
+rest_all() {
+  local url="$1" n=0 page
+  rm -f "$PAGES"/*
+  while [ -n "$url" ]; do
+    n=$((n + 1)); [ $n -le 200 ] || { printf 'containment-drill: more than 200 pages at %s\n' "$1" >&2; return 1; }
+    page="$(rest GET "$url")" || return $?
+    printf '%s' "$page" >"$PAGES/$(printf '%05d' $n).json"
+    url="$(printf '%s' "$page" | py 'print((d or {}).get("nextLink") or (d or {}).get("@odata.nextLink") or "")')"
+  done
+  python3 -c 'import glob,json,sys
+v=[]
+for f in sorted(glob.glob(sys.argv[1]+"/*.json")):
+    v+=json.load(open(f)).get("value") or []
+print(json.dumps({"value":v}))' "$PAGES"
+}
 
 SUB="$("$OP" az account show --query '{s:id,t:tenantId}' -o json --only-show-errors)"
 SUB_ID="$(printf '%s' "$SUB" | py 'print(d["s"])')"
@@ -130,24 +165,25 @@ WF="$ARM/subscriptions/$SUB_ID/resourceGroups/$RG/providers/Microsoft.Logic/work
 CONTAIN_ID="/subscriptions/$SUB_ID/resourceGroups/$RG/providers/Microsoft.Logic/workflows/pb-identity-contain"
 NOTIFY_ID="/subscriptions/$SUB_ID/resourceGroups/$RG/providers/Microsoft.Logic/workflows/pb-identity-notify"
 
-# ---- what is waiting ------------------------------------------------------------
-# One line per open containment card: "<run> <incident number> <subject UPN or ?>",
-# one line for EVERY Account entity of the incident that run is about (a card
-# could be about any of them, so all must pass). The subject comes from the
-# run's trigger (the incident's relatedEntities, an aadUserId) and its UPN
-# from Graph by that id - not from the nested Get_user output, whose SAS link
-# answers WorkflowRunActionNotFound while the run is still waiting (seen live
-# 2026-11-05). An entity without an Entra id, or an id Graph cannot resolve,
-# prints "?".
-waiting_cards() {
-  local runs r reps link trig inc oids oid upn rc
-  runs="$(rest GET "$WF/pb-identity-contain/runs?$LOGIC_API&\$filter=status eq 'Running'")" || return 1
+# ---- what is running --------------------------------------------------------------
+# One line per Running containment run and Account entity of its incident:
+#   "<run> <incident number or ?> <waiting 1|0> <subject UPN or ?>"
+# waiting = its card is open in Teams (Post_approval_card_and_wait Waiting).
+# The incident and subject come from the run's TRIGGER (the incident and its
+# relatedEntities, an aadUserId), the UPN from Graph by that id - not from
+# the nested Get_user output, whose SAS link answers WorkflowRunActionNotFound
+# while the run is still waiting (seen live 2026-11-05). Anything unreadable
+# prints "?", which every caller treats as "not provably a drill" (fail closed).
+running_runs() {
+  local runs r reps rc waiting link trig inc oids oid upn
+  runs="$(rest_all "$WF/pb-identity-contain/runs?$LOGIC_API&\$filter=status eq 'Running'")" || return 1
   for r in $(printf '%s' "$runs" | py 'print("\n".join(x["name"] for x in d.get("value",[])))'); do
+    waiting=0
     rc=0; reps="$(rest GET "$WF/pb-identity-contain/runs/$r/actions/Post_approval_card_and_wait/repetitions?$LOGIC_API")" || rc=$?
-    [ $rc -eq 4 ] && continue
-    [ $rc -eq 0 ] || return 1
-    printf '%s' "$reps" | py 'import sys
-sys.exit(0 if any(x["properties"].get("status")=="Waiting" for x in d.get("value",[])) else 1)' || continue
+    if [ $rc -eq 0 ]; then
+      printf '%s' "$reps" | py 'import sys
+sys.exit(0 if any(x["properties"].get("status")=="Waiting" for x in d.get("value",[])) else 1)' && waiting=1
+    elif [ $rc -ne 4 ]; then return 1; fi
     link="$(rest GET "$WF/pb-identity-contain/runs/$r?$LOGIC_API" | py 'print(((d["properties"].get("trigger") or {}).get("outputsLink") or {}).get("uri",""))')" || return 1
     trig=""; [ -n "$link" ] && trig="$(sas_get "$link" 2>/dev/null || true)"
     inc="$(printf '%s' "$trig" | py 'print(d["body"]["object"]["properties"]["incidentNumber"])' 2>/dev/null || echo '?')"
@@ -159,9 +195,15 @@ print("\n".join((e.get("properties") or {}).get("aadUserId") or "none" for e in 
       if [[ "$oid" =~ ^[0-9a-fA-F-]{36}$ ]]; then
         upn="$(rest GET "$GRAPH/users/$oid?\$select=userPrincipalName" 2>/dev/null | py 'print(d.get("userPrincipalName") or "?")' 2>/dev/null || echo '?')"
       fi
-      printf '%s %s %s\n' "$r" "$inc" "$upn"
+      printf '%s %s %s %s\n' "$r" "$inc" "$waiting" "$upn"
     done
   done
+}
+# Open cards only: "<run> <incident number or ?> <subject UPN or ?>".
+waiting_cards() {
+  local all
+  all="$(running_runs)" || return 1
+  printf '%s\n' "$all" | awk 'NF && $3 == 1 { print $1, $2, $4 }'
 }
 is_drill_subject() { [[ "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" =~ $SUBJECT_RE ]]; }
 
@@ -169,7 +211,7 @@ is_drill_subject() { [[ "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" =~ $S
 # rule's incident takes the rule's display name as its title (read live on
 # the E41 drill), and that name is this script's own.
 drill_incidents() {
-  rest GET "$SI/incidents?$SENTINEL_API&\$orderby=properties/createdTimeUtc desc&\$top=50" | NAME="$RULE_NAME" py '
+  rest_all "$SI/incidents?$SENTINEL_API&\$filter=properties/title eq '$RULE_NAME'&\$orderby=properties/createdTimeUtc desc" | NAME="$RULE_NAME" py '
 import os
 for i in d.get("value",[]):
     p=i["properties"]
@@ -178,7 +220,7 @@ for i in d.get("value",[]):
 }
 # Ids of the temporary rule(s), by name.
 drill_rule_ids() {
-  rest GET "$SI/alertRules?$SENTINEL_API" | NAME="$RULE_NAME" py '
+  rest_all "$SI/alertRules?$SENTINEL_API" | NAME="$RULE_NAME" py '
 import os
 for r in d.get("value",[]):
     if (r.get("properties") or {}).get("displayName")==os.environ["NAME"]: print(r["name"])'
@@ -193,12 +235,12 @@ for e in (d or {}).get("entities",[]):
 
 # Live itdr-drill-* users (any date), "<id> <upn>" lines, marker or not.
 live_drill_users() {
-  rest GET "$GRAPH/users?\$filter=startswith(userPrincipalName,'itdr-drill-')&\$select=id,userPrincipalName" | py '
+  rest_all "$GRAPH/users?\$filter=startswith(userPrincipalName,'itdr-drill-')&\$select=id,userPrincipalName" | py '
 for u in d.get("value",[]): print(u["id"], u["userPrincipalName"])'
 }
 # Soft-deleted users this script made (marker kept on the deleted object).
 deleted_drill_users() {
-  rest GET "$GRAPH/directory/deletedItems/microsoft.graph.user?\$select=id,userPrincipalName,jobTitle" | M="$MARKER" py '
+  rest_all "$GRAPH/directory/deletedItems/microsoft.graph.user?\$select=id,userPrincipalName,jobTitle" | M="$MARKER" py '
 import os
 for u in d.get("value",[]):
     if u.get("jobTitle")==os.environ["M"] and "itdr-drill-" in (u.get("userPrincipalName") or ""): print(u["id"])'
@@ -302,6 +344,7 @@ print(json.dumps({"accountEnabled":True,"displayName":"ITDR Drill %s (throwaway)
   if [ -z "$inc" ]; then
     rid="$(drill_rule_ids | head -1)" || die "could not list the analytics rules"
     [ -n "$rid" ] || rid="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+    RULE_ON="$rid"; RULE_OID="$oid"
     rule_body true "$oid" | rest PUT "$SI/alertRules/$rid?$SENTINEL_API" --stdin >/dev/null || die "could not create the temporary rule"
     say "temporary rule enabled; waiting for the incident"
     waited=0; inc=""
@@ -311,6 +354,7 @@ print(json.dumps({"accountEnabled":True,"displayName":"ITDR Drill %s (throwaway)
     done
     # The rule has done its job either way: switch it off (disarm deletes it).
     rule_body false "$oid" | rest PUT "$SI/alertRules/$rid?$SENTINEL_API" --stdin >/dev/null || die "could not disable the temporary rule"
+    RULE_ON=""
     [ -n "$inc" ] || die "no incident from the temporary rule within ${WAIT}s (rule now disabled; re-run arm)"
     read -r name num status <<<"$inc"
     say "incident #$num raised; temporary rule disabled"
@@ -325,9 +369,22 @@ print(json.dumps({"accountEnabled":True,"displayName":"ITDR Drill %s (throwaway)
     [ $waited -le "$WAIT" ] || die "incident #$num never showed $UPN as its Account entity"
     sleep "$POLL"; waited=$((waited + POLL)); [ "$POLL" -gt 0 ] || waited=$((waited + 1))
   done
-  if [ "$with_notify" = 1 ]; then run_playbook "$name" "$NOTIFY_ID" || die "could not start pb-identity-notify"; say "pb-identity-notify started (alert card + ServiceNow ticket)"; fi
-  run_playbook "$name" "$CONTAIN_ID" || die "could not start pb-identity-contain"
-  say "pb-identity-contain started; waiting for its approval card"
+  # A run already going for this incident (an earlier arm was interrupted
+  # before its card appeared) is reused, never doubled. A running run that
+  # cannot be tied to an incident stops arm: it might be this one.
+  local running mine
+  running="$(running_runs)" || die "could not read the running containment runs"
+  if printf '%s\n' "$running" | awk 'NF && $2 == "?"' | grep -q .; then
+    die "a running containment run cannot be tied to an incident (trigger unreadable): check it by hand before arming" 3
+  fi
+  mine="$(printf '%s\n' "$running" | awk -v n="$num" 'NF && $2 == n { print $1 }' | sort -u | head -1)"
+  if [ -n "$mine" ]; then
+    say "pb-identity-contain run $mine is already working on incident #$num: waiting for its card"
+  else
+    if [ "$with_notify" = 1 ]; then run_playbook "$name" "$NOTIFY_ID" || die "could not start pb-identity-notify"; say "pb-identity-notify started (alert card + ServiceNow ticket)"; fi
+    run_playbook "$name" "$CONTAIN_ID" || die "could not start pb-identity-contain"
+    say "pb-identity-contain started; waiting for its approval card"
+  fi
   waited=0
   while [ $waited -le "$WAIT" ]; do
     cards="$(waiting_cards)" || die "could not read the waiting cards"
@@ -346,9 +403,12 @@ cmd_disarm() {
   incs="$(drill_incidents)" || die "could not read the incidents"
   cards="$(waiting_cards)" || die "could not read the waiting cards"
 
-  # 1. no approval left pending on a drill incident
+  # 1. no approval left pending on a drill incident. A waiting run whose
+  # incident cannot be read is left alone (it might be a real approval) and
+  # makes the read-back below fail: never reported clean.
   while read -r run inc upn; do
     [ -z "$run" ] && continue
+    if [ "$inc" = "?" ]; then say "cannot tell which incident waiting run $run belongs to: left alone"; continue; fi
     if printf '%s\n' "$incs" | awk -v n="$inc" '$2 == n' | grep -q .; then
       rest POST "$WF/pb-identity-contain/runs/$run/cancel?$LOGIC_API" >/dev/null || die "could not cancel run $run"
       say "cancelled the waiting containment run $run (incident #$inc)"
@@ -356,7 +416,7 @@ cmd_disarm() {
   done <<<"$cards"
 
   # 2. drill users: delete and purge (marker required)
-  ids="$(rest GET "$GRAPH/users?\$filter=startswith(userPrincipalName,'itdr-drill-')&\$select=id,userPrincipalName,jobTitle,onPremisesSyncEnabled" | M="$MARKER" py '
+  ids="$(rest_all "$GRAPH/users?\$filter=startswith(userPrincipalName,'itdr-drill-')&\$select=id,userPrincipalName,jobTitle,onPremisesSyncEnabled" | M="$MARKER" py '
 import os,re
 for u in d.get("value",[]):
     if re.match(r"^itdr-drill-[0-9]{8}@", u["userPrincipalName"], re.I) and u.get("jobTitle")==os.environ["M"] and not u.get("onPremisesSyncEnabled"):
@@ -425,6 +485,7 @@ print(json.dumps({"etag":d.get("etag"),"properties":{"title":p["title"],"severit
   incs="$(drill_incidents)" || die "could not re-read the incidents"
   while read -r run inc upn; do
     [ -z "$run" ] && continue
+    if [ "$inc" = "?" ]; then say "NOT CLEAN: waiting run $run cannot be tied to an incident (trigger unreadable): check it by hand"; ok=0; continue; fi
     if printf '%s\n' "$incs" | awk -v n="$inc" '$2 == n' | grep -q .; then say "NOT CLEAN: card still pending for drill incident #$inc (run $run)"; ok=0; fi
   done <<<"$cards"
   if printf '%s\n' "$incs" | awk 'NF && $3 != "Closed"' | grep -q .; then say "NOT CLEAN: a drill incident is still open"; ok=0; fi
