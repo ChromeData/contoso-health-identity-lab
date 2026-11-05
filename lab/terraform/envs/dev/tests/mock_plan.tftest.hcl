@@ -122,8 +122,8 @@ run "plan_lab_tfvars" {
     error_message = "Day 1 + apps: CA001-CA010 and CA020 exist (enable_premium + the CA flags); enable_sso_apps plans the AWS IAM Identity Center and Clinical Portal apps; the PAM app (enable_pam_oidc_app) is still off"
   }
   assert {
-    condition     = nonsensitive(output.apps_nhi_inventory).servicenow_provisioning != null && output.servicenow_provisioning_job_enabled == false
-    error_message = "lab.tfvars: enable_servicenow_provisioning plans the ServiceNow provisioning app with its job STOPPED (servicenow_provisioning_job_enabled = false until Test Connection + one on-demand)"
+    condition     = nonsensitive(output.apps_nhi_inventory).servicenow_provisioning != null && output.servicenow_provisioning_job_enabled == true
+    error_message = "lab.tfvars: enable_servicenow_provisioning plans the ServiceNow provisioning app and servicenow_provisioning_job_enabled starts its cycle (started after Test Connection + on-demand + sign-in, capture-log E82/E83)"
   }
   assert {
     condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003", "CA004", "CA020", "CA010", "CA001", "CA009", "CA006", "CA007", "CA005"], k) ? "enabled" : "enabledForReportingButNotEnforced")])

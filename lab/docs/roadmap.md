@@ -108,7 +108,7 @@ waves, and move every department onto HR-driven access.
 | Birthright for every clinical department; HR job codes replace job titles in the rules | BUILT for title rules (`lab/iga/birthright-rules.json`); job codes DESIGNED |
 | Joiner and leaver Lifecycle Workflows for all departments | BUILT: `post-apply/New-LifecycleWorkflows.ps1`, `04-Leaver.ps1` |
 | Okta coexistence Phases 0–2: Okta trusts Entra, apps move one at a time | Phase 1 BUILT: `modules/apps/okta.tf` (`enable_okta_federation`), `lab/terraform/okta/` (human-applied), ADR 0022; Phase 2 (each app moves) DESIGNED: `lab/docs/okta-migration-runbook.md` |
-| SSO and SCIM for ServiceNow | AWS IAM Identity Center is BUILT (`modules/apps`, `lab/terraform/aws/`); ServiceNow SAML SSO is BUILT (`modules/apps/servicenow.tf`, `enable_servicenow_sso`, off); provisioning to ServiceNow is DESIGNED |
+| SSO and SCIM for ServiceNow | AWS IAM Identity Center is BUILT (`modules/apps`, `lab/terraform/aws/`); ServiceNow SAML SSO and provisioning RAN in the tenant (`modules/apps/servicenow.tf`, `servicenow_provisioning.tf`; capture-log E57, E80-E83) |
 | Production PAM for Tier-0 AD accounts | Proposed: SaaS PAM after a two-vendor POC (`vendor-evaluation.md`). The POC acceptance tests come from the local harness (RAN · harness, `lab/pam/test/e2e.sh`): per-person, ticket-gated sessions under dual control, HA failover and a timed DR drill (R06, R09) |
 | Split APPLY: a Tier-0-only pipeline identity with two reviewers for role-bearing resources; alert on APPLY used outside a workflow | Not built; ADR 0005 (option 3), R01 |
 
