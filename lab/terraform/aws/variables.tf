@@ -299,3 +299,59 @@ variable "entra_operator_role_name" {
     error_message = "entra_operator_role_name must be a valid IAM role name."
   }
 }
+
+# ---- AWS admin without root (lab-admin.tf, ADR 0025) --------------------------
+
+variable "enable_lab_admin_jit" {
+  type        = bool
+  description = <<-EOT
+    Create the LabAdministrator permission set (AWS managed
+    AdministratorAccess) and assign it in the target account to the
+    SCIM-created copy of the Entra PIM group PIM-AWS-Lab-Admins - the only
+    AWS admin path (ADR 0025). Needs envs/dev enable_pim_aws_admin applied
+    and the group provisioned by SCIM first (the lookup fails until then).
+  EOT
+  default     = false
+}
+
+variable "lab_admin_group_display_name" {
+  type        = string
+  description = "DisplayName of the PIM admin group as SCIM created it in the Identity Store. Contract name from modules/pim: PIM-AWS-Lab-Admins. Read only - Entra, PIM and SCIM own it and its members."
+  default     = "PIM-AWS-Lab-Admins"
+
+  validation {
+    condition     = length(trimspace(var.lab_admin_group_display_name)) > 0
+    error_message = "lab_admin_group_display_name must not be empty."
+  }
+}
+
+variable "lab_admin_entra_group_object_id" {
+  type        = string
+  description = <<-EOT
+    OPTIONAL lineage pin: the Entra object id of PIM-AWS-Lab-Admins
+    (envs/dev output aws_admin_group_object_id). When set, plan FAILS unless
+    the Identity Store group carries it as an external id, so
+    AdministratorAccess can only reach the SCIM copy of the PIM-governed
+    group. Empty = no pin.
+  EOT
+  default     = ""
+
+  validation {
+    condition     = var.lab_admin_entra_group_object_id == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.lab_admin_entra_group_object_id))
+    error_message = "lab_admin_entra_group_object_id must be empty or an Entra object id (GUID)."
+  }
+}
+
+variable "lab_admin_session_duration" {
+  type        = string
+  description = <<-EOT
+    LabAdministrator session length. PT1H (default) or PT2H: never longer
+    than the 2-hour PIM activation that puts someone in the group.
+  EOT
+  default     = "PT1H"
+
+  validation {
+    condition     = contains(["PT1H", "PT2H"], var.lab_admin_session_duration)
+    error_message = "lab_admin_session_duration must be PT1H or PT2H (no longer than the PIM activation, modules/pim aws_admin_activation_max_duration)."
+  }
+}

@@ -66,3 +66,12 @@ enable_entra_operator    = false
 entra_tenant_id          = "00000000-0000-0000-0000-000000000000"
 entra_operator_client_id = "00000000-0000-0000-0000-000000000000"
 entra_operator_object_id = "00000000-0000-0000-0000-000000000000"
+
+# ---- AWS admin without root (optional, off by default - lab-admin.tf) -------
+# LabAdministrator (AdministratorAccess, 1 h) for the SCIM copy of the Entra
+# PIM group PIM-AWS-Lab-Admins (ADR 0025). Needs envs/dev enable_pim_aws_admin.
+enable_lab_admin_jit         = false
+lab_admin_group_display_name = "PIM-AWS-Lab-Admins"
+# Optional lineage pin: envs/dev output aws_admin_group_object_id
+lab_admin_entra_group_object_id = ""
+lab_admin_session_duration      = "PT1H"
