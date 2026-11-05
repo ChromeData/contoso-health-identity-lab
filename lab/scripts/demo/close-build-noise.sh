@@ -68,12 +68,15 @@ die() { printf 'close-build-noise: %s\n' "$1" >&2; exit "${2:-1}"; }
 say() { printf '%s\n' "$*"; }
 
 NUMBERS=""; SINCE=""; UNTIL=""; LEAD_OK=""; APPLY=0
+# A flag given with an empty value is refused: `--numbers "$UNSET_VAR"` must
+# never silently widen the scope to the whole workspace.
+val() { [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value" 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --numbers) NUMBERS="${2:-}"; shift 2 ;;
-    --since) SINCE="${2:-}"; shift 2 ;;
-    --until) UNTIL="${2:-}"; shift 2 ;;
-    --lead-ok) LEAD_OK="${2:-}"; shift 2 ;;
+    --numbers) val "$@"; NUMBERS="$2"; shift 2 ;;
+    --since) val "$@"; SINCE="$2"; shift 2 ;;
+    --until) val "$@"; UNTIL="$2"; shift 2 ;;
+    --lead-ok) val "$@"; LEAD_OK="$2"; shift 2 ;;
     --apply) APPLY=1; shift ;;
     -h|--help) usage 0 ;;
     *) die "unknown argument: $1" 2 ;;
@@ -85,6 +88,17 @@ for t in "$SINCE" "$UNTIL"; do
   [ -z "$t" ] || [[ "$t" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z$ ]] || die "--since / --until take UTC times like 2026-11-05T09:00Z" 2
 done
 [ -n "$SINCE" ] || [ -z "$UNTIL" ] || die "--until needs --since" 2
+# Real calendar dates, and since <= until: checked once, before any call
+# (a bad date must never read as "outside the window").
+utc() {  # utc ISO -> seconds since epoch; exit 2 on an impossible date
+  T="$1" python3 -c 'import os,re,sys
+from datetime import datetime, timezone
+try:
+    t=datetime.fromisoformat(re.sub(r"\.\d+","",os.environ["T"]).replace("Z","+00:00"))
+except ValueError:
+    sys.exit(2)
+print(int((t if t.tzinfo else t.replace(tzinfo=timezone.utc)).timestamp()))'
+}
 
 ERR="$(mktemp "${TMPDIR:-/tmp}/noise-err.XXXXXX")"
 PAGES="$(mktemp -d "${TMPDIR:-/tmp}/noise-pages.XXXXXX")"
@@ -132,13 +146,22 @@ SUB_ID="$("$OP" az account show --query id -o tsv --only-show-errors)"
 SI="$ARM/subscriptions/$SUB_ID/resourceGroups/$RG/providers/Microsoft.OperationalInsights/workspaces/$WS_NAME/providers/Microsoft.SecurityInsights"
 NOW="${NOISE_NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 [ -z "$SINCE" ] || [ -n "$UNTIL" ] || UNTIL="$NOW"
+SINCE_S=""; UNTIL_S=""
+if [ -n "$SINCE" ]; then
+  SINCE_S="$(utc "$SINCE")" || die "--since $SINCE is not a real UTC time" 2
+  UNTIL_S="$(utc "$UNTIL")" || die "--until $UNTIL is not a real UTC time" 2
+  [ "$SINCE_S" -le "$UNTIL_S" ] || die "--since $SINCE is after --until $UNTIL" 2
+fi
 
 # ---- ServiceNow, as svc.sentinel ------------------------------------------------
 # The password goes to curl in a config on a file descriptor, never in argv.
 SN_PW=""
 sn() {
   [ -n "$SN_PW" ] || SN_PW="$("$SECURITY" find-generic-password -s "$SN_KEYCHAIN" -w 2>/dev/null)" || die "no ServiceNow password in Keychain item $SN_KEYCHAIN"
-  "$CURL" -sS -m 60 -K <(printf 'user = "%s:%s"\n' "$SN_USER" "$SN_PW") -H 'Accept: application/json' -H 'Content-Type: application/json' -w '\n%{http_code}' "$@"
+  # curl config strings treat \ and " as escapes: escape both, or a password
+  # holding them would be changed and authentication would fail.
+  local esc="${SN_PW//\\/\\\\}"; esc="${esc//\"/\\\"}"
+  "$CURL" -sS -m 60 -K <(printf 'user = "%s:%s"\n' "$SN_USER" "$esc") -H 'Accept: application/json' -H 'Content-Type: application/json' -w '\n%{http_code}' "$@"
 }
 SN="https://$SN_INSTANCE.service-now.com/api/now/table/incident"
 # Open tickets for an incident name: "<sys_id> <number>" lines; exit 1 on any
@@ -166,6 +189,13 @@ while read -r name num created sev title; do
   [ -z "$name" ] && continue
   if [ -n "$NUMBERS" ] && ! in_list "$num" "$NUMBERS"; then continue; fi
   ents="$(rest POST "$SI/incidents/$name/entities?$API")" || die "could not read the entities of incident #$num"
+  alist="$(printf '%s' "$ents" | py '
+for e in (d or {}).get("entities",[]):
+    if e.get("kind")!="Account": continue
+    p=e.get("properties") or {}
+    n=p.get("friendlyName") or ""
+    if "@" not in n and p.get("accountName") and p.get("upnSuffix"): n=p["accountName"]+"@"+p["upnSuffix"]
+    print(n if "@" in n else "-", p.get("aadUserId") or "-")')" || die "could not parse the entities of incident #$num"
   accts=""
   while read -r upn oid; do
     [ -z "$upn" ] && continue
@@ -173,13 +203,7 @@ while read -r name num created sev title; do
       upn="$(rest GET "$GRAPH/users/$oid?\$select=userPrincipalName" 2>/dev/null | py 'print(d.get("userPrincipalName") or "-")' || echo -)"
     fi
     accts="$accts $upn"
-  done <<<"$(printf '%s' "$ents" | py '
-for e in (d or {}).get("entities",[]):
-    if e.get("kind")!="Account": continue
-    p=e.get("properties") or {}
-    n=p.get("friendlyName") or ""
-    if "@" not in n and p.get("accountName") and p.get("upnSuffix"): n=p["accountName"]+"@"+p["upnSuffix"]
-    print(n if "@" in n else "-", p.get("aadUserId") or "-")')"
+  done <<<"$alist"
   accts="${accts# }"
   lab=0; lead=""
   if [ -n "$accts" ]; then
@@ -194,12 +218,8 @@ for e in (d or {}).get("entities",[]):
   fi
   inwin=0
   if [ -n "$SINCE" ]; then
-    if C="$created" A="$SINCE" B="$UNTIL" python3 -c 'import os,re,sys
-from datetime import datetime, timezone
-def f(s):
-    t=datetime.fromisoformat(re.sub(r"\.\d+","",s).replace("Z","+00:00"))
-    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
-sys.exit(0 if f(os.environ["A"]) <= f(os.environ["C"]) <= f(os.environ["B"]) else 1)'; then inwin=1; fi
+    c_s="$(utc "$created")" || die "incident #$num has an unreadable creation time ($created)"
+    if [ "$SINCE_S" -le "$c_s" ] && [ "$c_s" -le "$UNTIL_S" ]; then inwin=1; fi
   fi
   why=""
   if [ $lab -eq 1 ]; then why="entities are lab test/admin accounts ($accts)"; fi
@@ -255,6 +275,7 @@ if [ $APPLY -eq 0 ]; then say "DRY RUN: nothing changed. Re-run with --apply (an
 
 # ---- 3. apply -----------------------------------------------------------------------
 bad=0
+CLOSED_OK=" "
 for item in ${PLAN[@]+"${PLAN[@]}"}; do
   IFS='|' read -r name num why <<<"$item"
   reason="Build/test noise before recording: $why. Closed by lab/scripts/demo/close-build-noise.sh."
@@ -267,10 +288,15 @@ p=d["properties"]
 print(json.dumps({"etag":d.get("etag"),"properties":{"title":p["title"],"severity":p["severity"],"status":"Closed","classification":"BenignPositive","classificationReason":"SuspiciousButExpected","classificationComment":os.environ["R"][:1000]}}))' |
     rest PUT "$SI/incidents/$name?$API" --stdin >/dev/null || die "could not close incident #$num"
   st="$(rest GET "$SI/incidents/$name?$API" | py 'print(d["properties"]["status"])')" || st="?"
-  if [ "$st" = Closed ]; then say "closed #$num"; else say "NOT CLOSED: #$num reads $st"; bad=1; fi
+  if [ "$st" = Closed ]; then say "closed #$num"; CLOSED_OK="$CLOSED_OK$num "; else say "NOT CLOSED: #$num reads $st"; bad=1; fi
 done
 for item in ${TICKETS[@]+"${TICKETS[@]}"}; do
   IFS='|' read -r sid tnum num why <<<"$item"
+  # A ticket follows its incident: resolved only once the incident's Closed
+  # state was read back (or it was closed before this run).
+  if [ "$why" != "the Sentinel incident was already closed" ]; then
+    case "$CLOSED_OK" in *" $num "*) ;; *) say "NOT RESOLVED: $tnum kept open - incident #$num was not confirmed closed"; bad=1; continue ;; esac
+  fi
   body="$(R="Sentinel incident #$num closed before recording: $why. Resolved by lab/scripts/demo/close-build-noise.sh." CC="$CLOSE_CODE_JSON" py 'import os
 print(json.dumps({"state":"6","close_code":json.loads(os.environ["CC"]),"close_notes":os.environ["R"][:4000]}))' </dev/null)"
   out="$(printf '%s' "$body" | sn -X PATCH "$SN/$sid?sysparm_fields=number,state" --data-binary @-)" || die "ServiceNow call failed for $tnum"

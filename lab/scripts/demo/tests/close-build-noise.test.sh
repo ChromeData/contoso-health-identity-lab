@@ -19,7 +19,11 @@
 #   * --numbers narrows the set; bad arguments exit 2;
 #   * an entities read error stops the run before anything is closed;
 #   * ServiceNow answering 403 stops the run and names the role (itil);
-#   * the ServiceNow password reaches curl only through -K (never argv).
+#   * the ServiceNow password reaches curl only through -K (never argv), escaped
+#     so a backslash or double quote in it survives the curl config;
+#   * an explicitly empty value, an impossible date or a reversed window exits 2;
+#   * an unparsable entity answer stops the run;
+#   * a ticket is resolved only after its incident reads back Closed.
 # Prints PASS/FAIL per assertion; exits 1 if anything failed.
 # =============================================================================
 # pass/fail always return 0, so `cond && pass ... || fail ...` cannot run both.
@@ -61,10 +65,13 @@ if name not in inc: notfound()
 i = inc[name]
 if "/entities" in tail:
     if st.get("entities_fail"): save(); sys.stderr.write("ERROR: (InternalServerError) boom\n"); sys.exit(1)
+    if st.get("entities_garbage"): save(); print("{not json"); sys.exit(0)
     out({"entities": [{"kind": "Account", "properties": a} for a in i["accounts"]] + [{"kind": "Ip", "properties": {"address": "198.51.100.7"}}]})
 if "/comments/" in tail and m == "PUT": i["comments"].append(body["properties"]["message"]); out({})
 if m == "GET": out({"etag": "e", "properties": {"incidentNumber": i["number"], "title": i["title"], "severity": i["sev"], "status": i["status"]}})
-if m == "PUT": i["status"] = body["properties"]["status"]; i["classification"] = body["properties"]["classification"]; out({})
+if m == "PUT":
+    if not st.get("close_noop"): i["status"] = body["properties"]["status"]; i["classification"] = body["properties"]["classification"]
+    out({})
 raise SystemExit("stub op: unhandled %s %s" % (m, u))
 PY
 cat >"$WORK/curl" <<'PY'
@@ -72,8 +79,12 @@ cat >"$WORK/curl" <<'PY'
 import json, os, re, sys, urllib.parse
 S = os.environ["STUB_STATE"]; st = json.load(open(S)); a = sys.argv[1:]
 assert "-K" in a, "credentials must come through -K"
-assert not any("sn-secret" in x for x in a), "the ServiceNow password reached argv"
-cfg = open(a[a.index("-K") + 1]).read(); assert "svc.sentinel:sn-secret" in cfg
+pw = os.environ["STUB_PW"]
+assert not any(pw in x for x in a), "the ServiceNow password reached argv"
+cfg = open(a[a.index("-K") + 1]).read()
+# curl config: a quoted value takes \\ and \" escapes.
+mu = re.search(r'user = "((?:[^"\\]|\\.)*)"', cfg)
+assert mu and re.sub(r'\\(.)', r'\1', mu.group(1)) == "svc.sentinel:" + pw, "credentials garbled in the curl config"
 m = a[a.index("-X") + 1] if "-X" in a else "GET"
 url = [x for x in a if x.startswith("https://")][0]
 body = json.loads(sys.stdin.read()) if "--data-binary" in a else None
@@ -95,10 +106,12 @@ out({"result": [{"sys_id": t["sys_id"], "number": t["number"], "correlation_id":
 PY
 cat >"$WORK/security" <<'SH'
 #!/usr/bin/env bash
-[ "$1 $2 $3" = "find-generic-password -s contoso-lab-servicenow-sentinel" ] && printf 'sn-secret\n' || exit 44
+[ "$1 $2 $3" = "find-generic-password -s contoso-lab-servicenow-sentinel" ] && printf '%s\n' "$STUB_PW" || exit 44
 SH
 chmod +x "$WORK/op" "$WORK/curl" "$WORK/security"
 export CONTOSO_OP="$WORK/op" NOISE_CURL="$WORK/curl" NOISE_SECURITY="$WORK/security" STUB_STATE="$WORK/state.json" NOISE_NOW=2026-11-05T14:00:00Z
+# A password with the two characters a curl config treats as escapes.
+export STUB_PW='sn-se\cr"et'
 
 fresh() {
   python3 - <<'PY'
@@ -173,6 +186,18 @@ run --since 2026-11-05T09:00Z --apply
 fresh; python3 -c "import json,os; p=os.environ['STUB_STATE']; d=json.load(open(p)); d['sn_forbidden']=True; json.dump(d,open(p,'w'))"
 run --numbers 43 --apply
 [ $rc -ne 0 ] && grep -q "needs the itil role" <<<"$out" && pass "ServiceNow 403 stops and names the role" || fail "403: rc=$rc $out"
+
+# --- 6. review fixes (#171): empty values, real dates, parse errors, close-first ---------
+fresh
+run --numbers "" --apply; [ $rc -eq 2 ] && pass "an explicitly empty --numbers exits 2 (never widens the scope)" || fail "empty numbers rc=$rc"
+run --since 2026-11-31T09:00Z; [ $rc -eq 2 ] && pass "an impossible date exits 2" || fail "impossible date rc=$rc $out"
+run --since 2026-11-05T12:00Z --until 2026-11-05T09:00Z; [ $rc -eq 2 ] && pass "a reversed window exits 2" || fail "reversed window rc=$rc"
+python3 -c "import json,os; p=os.environ['STUB_STATE']; d=json.load(open(p)); d['entities_garbage']=True; json.dump(d,open(p,'w'))"
+run --since 2026-11-05T09:00Z --apply
+[ $rc -ne 0 ] && [ "$(q 'sum(1 for n in I if I[n]["status"]=="Closed")')" = 1 ] && pass "an unparsable entity answer stops the run (nothing closed)" || fail "garbage entities: rc=$rc $out"
+fresh; python3 -c "import json,os; p=os.environ['STUB_STATE']; d=json.load(open(p)); d['close_noop']=True; json.dump(d,open(p,'w'))"
+run --numbers 43 --apply
+[ $rc -ne 0 ] && grep -q "NOT CLOSED: #43" <<<"$out" && [ "$(q 'T["INC0010002"]["state"]')" = 1 ] && pass "a ticket stays open when its incident does not read back Closed" || fail "close-first: rc=$rc $(q 'T["INC0010002"]["state"]') $out"
 
 printf '\n%s\n' "$([ $FAILS -eq 0 ] && echo 'ALL PASS' || echo "$FAILS FAILED")"
 [ $FAILS -eq 0 ]
