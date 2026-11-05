@@ -127,7 +127,7 @@ Describe 'Export-EvidencePack.ps1 -UseAzureCliToken (app-only as EVIDENCE, evide
         $line = (Get-Content -LiteralPath $script:Pack -Raw) -replace '\r', ''
         $req = [regex]::Match($line, "(?s)\`$requiredScopes = @\((?<l>.*?)\)").Groups['l'].Value
         $required = @([regex]::Matches($req, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
-        $required.Count | Should -Be 6
+        $required.Count | Should -Be 7
         @($required | Sort-Object) | Should -Be @($global:PackEvidenceRoles | Sort-Object)
         foreach ($r in $global:PackEvidenceRoles) { $r | Should -Match '\.Read(\.|$)' }
     }

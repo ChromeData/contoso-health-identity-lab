@@ -337,9 +337,12 @@ resource "azuread_application_owner" "hr_sync_owns_provisioning_app" {
 #                                           instances, decisions
 #            Policy.Read.All                Conditional Access policies
 #            RoleManagement.Read.Directory  role definitions (beta
-#                                           isPrivileged), role assignments,
+#                                           isPrivileged), role assignments
+#            RoleAssignmentSchedule.Read.Directory
 #                                           PIM-for-roles schedule requests /
-#                                           instances
+#                                           instances (the 2026-11-05 run was
+#                                           refused them without it:
+#                                           PermissionScopeNotGranted)
 #            PrivilegedAssignmentSchedule.Read.AzureADGroup
 #                                           PIM-for-Groups schedule requests /
 #                                           instances

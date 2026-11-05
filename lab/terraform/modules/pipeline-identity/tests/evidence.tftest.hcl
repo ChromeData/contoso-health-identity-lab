@@ -33,6 +33,7 @@ mock_provider "azuread" {
         "AuditLog.Read.All"                              = "a0a0a0a0-0000-4000-8000-00000000000c"
         "AccessReview.Read.All"                          = "88888888-8888-8888-8888-888888888888"
         "PrivilegedAssignmentSchedule.Read.AzureADGroup" = "99999999-9999-9999-9999-999999999999"
+        "RoleAssignmentSchedule.Read.Directory"          = "9a9a9a9a-0000-4000-8000-00000000009a"
         "Directory.Read.All"                             = "77777777-7777-7777-7777-777777777777"
       }
     }
@@ -71,11 +72,11 @@ run "evidence_enabled" {
     error_message = "EVIDENCE must trust exactly the main-branch ref (immutable owner/repo form)"
   }
   assert {
-    condition     = output.evidence_graph_roles == tolist(["AccessReview.Read.All", "AuditLog.Read.All", "Directory.Read.All", "Policy.Read.All", "PrivilegedAssignmentSchedule.Read.AzureADGroup", "RoleManagement.Read.Directory"])
+    condition     = output.evidence_graph_roles == tolist(["AccessReview.Read.All", "AuditLog.Read.All", "Directory.Read.All", "Policy.Read.All", "PrivilegedAssignmentSchedule.Read.AzureADGroup", "RoleAssignmentSchedule.Read.Directory", "RoleManagement.Read.Directory"])
     error_message = "EVIDENCE = the six reads Export-EvidencePack.ps1 makes, nothing else"
   }
   assert {
-    condition     = length(azuread_app_role_assignment.evidence) == 6
+    condition     = length(azuread_app_role_assignment.evidence) == 7
     error_message = "every EVIDENCE role must be granted (app role assignment)"
   }
   assert {

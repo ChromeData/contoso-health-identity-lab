@@ -246,13 +246,14 @@ variable "evidence_app_display_name" {
 
 variable "evidence_graph_roles" {
   type        = list(string)
-  description = "Read-only Graph APPLICATION roles EVIDENCE exports the evidence pack with: the six Export-EvidencePack.ps1 reads (main.tf lists what each covers). Read roles only (validated)."
+  description = "Read-only Graph APPLICATION roles EVIDENCE exports the evidence pack with: the Export-EvidencePack.ps1 reads (main.tf lists what each covers). Read roles only (validated)."
   default = [
     "AuditLog.Read.All",
     "AccessReview.Read.All",
     "Policy.Read.All",
     "RoleManagement.Read.Directory",
     "PrivilegedAssignmentSchedule.Read.AzureADGroup",
+    "RoleAssignmentSchedule.Read.Directory",
     "Directory.Read.All",
   ]
 

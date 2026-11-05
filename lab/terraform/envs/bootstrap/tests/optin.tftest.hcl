@@ -44,6 +44,7 @@ mock_provider "azuread" {
         # EVIDENCE's other reads (repeated ids: the plan keys on role names).
         "AccessReview.Read.All"                          = "11111111-1111-1111-1111-111111111111"
         "PrivilegedAssignmentSchedule.Read.AzureADGroup" = "66666666-6666-6666-6666-666666666666"
+        "RoleAssignmentSchedule.Read.Directory"          = "9a9a9a9a-0000-4000-8000-00000000009a"
         "Directory.Read.All"                             = "77777777-7777-7777-7777-777777777777"
       }
     }
@@ -188,7 +189,7 @@ run "evidence_pack_opt_in" {
     error_message = "EVIDENCE must trust exactly the main-branch ref"
   }
   assert {
-    condition     = output.pipeline_graph_roles.evidence == tolist(["AccessReview.Read.All", "AuditLog.Read.All", "Directory.Read.All", "Policy.Read.All", "PrivilegedAssignmentSchedule.Read.AzureADGroup", "RoleManagement.Read.Directory"])
+    condition     = output.pipeline_graph_roles.evidence == tolist(["AccessReview.Read.All", "AuditLog.Read.All", "Directory.Read.All", "Policy.Read.All", "PrivilegedAssignmentSchedule.Read.AzureADGroup", "RoleAssignmentSchedule.Read.Directory", "RoleManagement.Read.Directory"])
     error_message = "EVIDENCE = the six read-only Graph roles the evidence pack needs"
   }
   assert {
