@@ -135,7 +135,7 @@ lab=_re.sub(lambda m: m.group(1)+json.dumps(_d,ensure_ascii=False).replace('<','
 lab=lab.replace('offline-tests/20261021T074732Z/','offline-tests/20261020T235044Z/')
 # The lab overview's four rules: name every account that still holds standing admin power.
 lab=lab.replace("'Nobody keeps admin power when they\\'re not using it. The exceptions are two emergency accounts and the build account, which is flagged and next to go.'",
-                "'No admin keeps power when they\\'re not using it. The exceptions are the build account, which is next to go, the Cloud Sync service account and two locked emergency accounts.'")
+                "'No admin keeps power when they\\'re not using it. The exceptions are the build account, which is next to go, and two locked emergency accounts.'")
 lab=lab.replace('<title>Contoso Health Lab Map</title>','').replace('<meta name="claude:viewport-fit-sides" content="cover">','')
 def rep(a,b_,n=1):
     # Tolerate already-numbered input: director.mjs numbers the map before saving, so a
