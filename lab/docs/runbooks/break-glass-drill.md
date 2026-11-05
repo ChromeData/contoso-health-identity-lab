@@ -7,10 +7,12 @@
 > Preflight passed; both accounts signed in to My Account with the passkey
 > only; Sentinel raised High incident #42 for both, 10.2 minutes after the
 > sign-ins reached the workspace; no audit operation by either account.
-> Result Pass. Not done: Teams card and ServiceNow INC (the notify playbook
-> is not triggered by any automation rule yet), Splunk leg, a change ticket
-> and a second reviewer. Record: [`../../evidence/drills/`](../../evidence/drills/README.md)
-> (`2026-11-05T1041Z-break-glass-drill.json`), capture log E49.
+> Result Pass. The Teams card and ServiceNow INC did not happen then (no
+> automation rule ran the notify playbook until 11:00Z); a re-drill with
+> bg-admin-01 at 11:34Z raised #48, which posted the Teams card and opened
+> ServiceNow INC0010007. Not done: Splunk leg, a change ticket, a second
+> reviewer. Record: [`../../evidence/drills/`](../../evidence/drills/README.md)
+> (`2026-11-05T1041Z-break-glass-drill.json`), capture log E49, E49a.
 
 ## Tooling
 
@@ -137,7 +139,15 @@ Record every time in UTC.
    <CHG>`. It counts any `AuditLogs` operation initiated by
    `bg-admin-01`/`02` in the drill window; expect none. The second admin
    reviews that result.
-7. **Close out.** Keys back in their safes. The Verify phase re-runs the
+7. **Close out.** Keys back in their safes. Close the Sentinel incident
+   only **after the rule's 1 h lookback has passed the last drill sign-in**:
+   the rule re-alerts every 5 minutes on every sign-in still in its window
+   (suppression off) and groups those alerts into the open incident, so an
+   incident closed earlier is followed by a new one, with a new Teams card
+   and ServiceNow ticket each time (seen 2026-11-05). For the same reason,
+   a second drill sign-in while the first incident is open is grouped into
+   it and sends no new card or ticket: close the previous drill's incident
+   (after its hour) before a re-drill. The Verify phase re-runs the
    preflight; re-run `01-Verify-Baseline.ps1` too. Link the Sentinel
    incident(s) and INC number(s) to the change ticket and close them as
    "drill".
