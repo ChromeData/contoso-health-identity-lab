@@ -121,7 +121,7 @@ await activatePim('adm-presenter', 'PIM-Demo-Readers', 8, 'INC-1234: demo, read-
   an expired session, CA020's 4-hour re-authentication, ServiceNow's or
   Splunk's login form. This was seen live after wiping the session.
   "Stay signed in?" is answered yes.
-- **`activatePim(id, group, hours, reason)`** (**BUILT**, not yet run live: its first live run is adm-presenter → PIM-Demo-Readers after that group's apply). The duration must be set and read back. Success means the group's row under *Active assignments* with Deactivate; otherwise it throws and records nothing. It goes through Entra admin center →
+- **`activatePim(id, group, hours, reason)`** (**RAN · tenant**, capture-log E104: adm-raj.patel → PIM-Tier1-Helpdesk, 1 hour, then deactivated; adm-presenter → PIM-Demo-Readers follows once a Privileged Role Administrator grants its eligibility). The duration must be set and read back. Success means the group's row under *Active assignments* with Deactivate; otherwise it throws and records nothing. It goes through Entra admin center →
   PIM → My roles → Groups → Activate, with duration and justification. If the
   blade asks for a fresh MFA, the identity's own method answers it in place.
   The end time is recorded in `~/.contoso-operator/session/browser/<id>.pim.json`
