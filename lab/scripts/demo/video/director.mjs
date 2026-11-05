@@ -44,7 +44,7 @@ function ids() {
 
 // The Whisperglass lab map, with the tiles that now run in the tenant marked
 // "RAN · tenant" (blue) and the "nothing in a tenant yet" copy updated.
-const RAN_HARNESS = ['SPLUNK']; // proven on this machine's Splunk replay, not a tenant (E61)
+const RAN_HARNESS = ['SPLUNK']; // E61 replay; pages/map-overrides.json status raises it to RAN · tenant since the live feed (E113)
 // pages/map-overrides.json "status" is applied after these (injectSheet) and wins: it holds the
 // corrections from the 2026-11-05 readiness check (e.g. LCW back to BUILT: built in the tenant, never run).
 const RAN_TENANT = ['HR', 'AGENT', 'AD', 'SYNC', 'ENTRA', 'LCW', 'DYNGRP', 'BIRTH', 'AP', 'SOD', 'CABASE', 'CARISK', 'CASESS', 'BG', 'PIM', 'HDAU', 'KV', 'LA', 'LEAVER', 'NHI', 'EVID', 'WORM', 'KPI'];
