@@ -869,7 +869,13 @@ def headline(items, past):
         word = noun if n == 1 else plural(noun)
         if act == "import":
             word = "existing " + word
-        clauses.append(f"{verb} {n}" if noun == prev and act != "import" else f"{verb} {n} {word}")
+        if noun == prev and act != "import":
+            # Same kind of thing as the clause before: say "existing one(s)"
+            # rather than a bare number ("adds 1 access package and changes 1."
+            # read as unfinished on screen).
+            clauses.append(f"{verb} {n} existing {'one' if n == 1 else 'ones'}")
+        else:
+            clauses.append(f"{verb} {n} {word}")
         prev = noun
     lead = "**Applied:**" if past else "**What this change does:**"
     text = f"{lead} {join_and(clauses)}."
