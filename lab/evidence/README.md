@@ -18,10 +18,15 @@ every record folder. They are not all the same kind of evidence:
   row in each of its records, `pam-run-all` (the PAM runner's default suites
   on local Docker), is **RAN · harness**.
 
-**RAN · tenant: none.** No Microsoft tenant exists yet, so nothing here is
-evidence of Entra, Azure or Sentinel behaviour. The Kusto record shows how
-the KQL engine evaluates the rules, not how Sentinel schedules them or what
-a tenant's logs contain.
+**RAN · tenant** records sit next to them since the tenant run (from
+2026-10-27): `kpis/` (KPI snapshots and one-pagers), `assessments/` (the
+Zero Trust Assessment "before"), `access-reviews/`, `config-snapshots/`,
+`nhi/` (robot-account inventory, counts only) and `sod/` (blocked
+combinations, pseudonymised). Each is listed in
+[`capture-log.csv`](capture-log.csv) with its E-row; the tenant captures
+that name people stay in the private WORM store. The harness records above
+are still harness evidence: the Kusto record shows how the KQL engine
+evaluates the rules, not how Sentinel schedules them.
 
 Status words are the ones the repository uses everywhere: RAN · tenant,
 RAN · harness, BUILT, DESIGNED (see the [README](../../README.md)).
@@ -48,6 +53,20 @@ started at 00:12 UTC. Each folder name is the run's UTC start time.
 
 [`drills/`](drills/README.md) is the break-glass drill log. It is an empty
 template: no drill has been run, because no tenant exists.
+
+## Tenant reports (`kpis/`, `nhi/`, `sod/`)
+
+Run read-only against the tenant, app-only as the lab operator
+(`lab/scripts/operator/op pwsh <script> -UseAzureCliToken`), each with a
+hash file beside it:
+
+| Folder | Script | What is public | Re-check |
+|---|---|---|---|
+| `kpis/<UTC>.json` (+ `-onepager.md`) | `08-Measure-KPIs.ps1`, `New-KpiOnePager.ps1` | KPI values and counts; per-object detail stays in `out/kpis/` | `shasum -a 256 -c <UTC>.json.sha256` |
+| `nhi/<UTC>/nhi-summary.json` | `06-NHI-Inventory.ps1 -PublicSummaryDirectory` | counts by kind, severity, OWASP NHI id and finding id; the SHA-256 of each private `out/nhi_*` file | `shasum -a 256 -c SHA256SUMS` |
+| `sod/<UTC>/` | `09-SoD-Report.ps1` | rule status and violations under pseudonyms (`U-` + hash prefix) | `shasum -a 256 -c manifest.sha256` |
+
+The 2026-11-05 runs are capture-log E70 (NHI), E71 (SoD) and E72 (KPIs); the first evidence pack with all 7 records is E74.
 
 ## Re-checking a record
 
@@ -136,7 +155,9 @@ reviewed first export is also committed as the baseline in
 are run artifacts (30 days), not commits: a snapshot lands here only when a
 person reviews it, normally in the same PR that updates the baseline.
 
-**Empty until the tenant run.** A fixture replay (`-Offline`) is refused in
+Two reviewed exports are here (2026-10-29, the first baseline, and
+2026-11-05, the baseline refresh after Microsoft's schema change, #113). A
+fixture replay (`-Offline`) is refused in
 this folder and goes to `out/config-snapshots/`; a snapshot without
 `-Public` (object ids) is refused here too.
 
@@ -238,10 +259,8 @@ principals on the role rows: a 403 shows as a failed record in the manifest.
 - Sentinel evidence for the detections: a rule deployed to a workspace,
   scheduled, and firing an incident on real tenant data. The Kusto record
   above stops at the engine.
-- Tenant evidence (`kpis/`, `assessments/`, `sod/`, drill rows): written
-  during the tenant run, as planned in
-  [`../docs/evidence-capture-plan.md`](../docs/evidence-capture-plan.md).
-- `config-snapshots/` (above) and the baseline it feeds: no tenant has
-  been exported.
+- Drill rows (`drills/`) and a Zero Trust Assessment "after" (the
+  assessment needs an interactive admin sign-in; see
+  [`../docs/evidence-capture-plan.md`](../docs/evidence-capture-plan.md) E55).
 - `out/` is gitignored. Anything with identity detail (names, UPNs, object
   ids, raw tenant exports) goes there and never into a record.

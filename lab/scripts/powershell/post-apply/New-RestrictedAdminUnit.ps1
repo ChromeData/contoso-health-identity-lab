@@ -306,11 +306,12 @@ $responderRoles = [ordered]@{
 
 function Connect-GraphFromAzureCli {
     # App-only: the Azure CLI is already signed in as an app (azure/login over
-    # GitHub OIDC). The token never leaves this process: masked in Actions,
-    # handed to Connect-MgGraph as a SecureString, then dropped. Same as
-    # mock-hr/Invoke-InboundProvisioning.ps1, through Write-Console for the
-    # analyzer; one copy each in Set-AutoAssignmentPolicies.ps1,
-    # Export-EvidencePack.ps1 and New-RestrictedAdminUnit.ps1 (parity-tested).
+    # GitHub OIDC, or the lab operator's certificate through
+    # lab/scripts/operator/op). The token never leaves this process: masked in
+    # Actions, handed to Connect-MgGraph as a SecureString, then dropped. Same
+    # as mock-hr/Invoke-InboundProvisioning.ps1, through Write-Console for the
+    # analyzer; every lab/scripts/powershell copy is identical (parity test in
+    # tests/EvidencePackPipeline.Tests.ps1).
     $global:LASTEXITCODE = 0
     $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {
