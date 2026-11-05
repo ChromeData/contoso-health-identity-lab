@@ -158,6 +158,9 @@ PARENT_ATTRS = (
 )
 
 # Changed-field labels for "updates its ...". Default: "its <field words>".
+# Field names that ARE credentials: a hidden change to one is "a secret value".
+SECRET_FIELD = re.compile(r"(password|secret|token|key|credential|certificate|connection_string|sas|value)", re.I)
+
 FIELD_LABELS = {
     "display_name": "its name",
     "name": "its name",
@@ -622,7 +625,7 @@ def update_details(rc, change):
     bsens, asens = change.get("before_sensitive"), change.get("after_sensitive")
     unknown = change.get("after_unknown")
     rtype = rc.get("type") or ""
-    details, changed, secret = [], [], 0
+    details, changed, secret, hidden = [], [], 0, []
     keys = sorted(set(before) | set(after) | set(as_dict(unknown)))
     for k in keys:
         if k in NOISE_FIELDS:
@@ -630,7 +633,15 @@ def update_details(rc, change):
         if before.get(k) == after.get(k) and not flag(unknown, k):
             continue
         if bsens is True or asens is True or flag(bsens, k) or flag(asens, k):
-            secret += 1
+            # Terraform hides the VALUE, not the setting's name. Only a field
+            # that is itself a credential is called a secret; owners or an
+            # email list hidden because they came from a sensitive variable
+            # are named, so a viewer is not told a secret changed when it
+            # was who owns the app.
+            if SECRET_FIELD.search(str(k)):
+                secret += 1
+            else:
+                hidden.append(k)
             continue
         changed.append(k)
 
@@ -657,6 +668,13 @@ def update_details(rc, change):
         if more:
             labels.append(f"{more} other setting" + ("s" if more > 1 else ""))
         details.append(lambda t, labels=labels: f"{SMALL['updates'][t]} {join_and(labels)}")
+    if hidden:
+        labels = [field_label(k) for k in hidden[:3]]
+        more = len(hidden) - len(labels)
+        if more:
+            labels.append(f"{more} other setting" + ("s" if more > 1 else ""))
+        tail = " (value hidden)" if len(labels) == 1 else " (values hidden)"
+        details.append(lambda t, labels=labels, tail=tail: f"{SMALL['updates'][t]} {join_and(labels)}{tail}")
     if secret:
         details.append(lambda t, n=secret: f"{SMALL['updates'][t]} "
                        + ("a secret value" if n == 1 else f"{n} secret values") + " (not shown)")

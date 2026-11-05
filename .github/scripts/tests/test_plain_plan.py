@@ -82,7 +82,7 @@ class FixtureOutput(unittest.TestCase):
             "\n"
             "- Changes sign-in rule **CA003 - Block legacy authentication** (Conditional Access): "
             "turns it on (it was report-only, which logs but does not block)\n"
-            "- Changes alert contact list **ag-identity-secops** (action group): updates a secret value (not shown)\n"
+            "- Changes alert contact list **ag-identity-secops** (action group): updates who it emails (value hidden)\n"
             "- Replaces SAML signing certificate **CN=Contoso Health - ServiceNow SAML signing**: "
             "removes it and creates a new one, because its end date changes\n"
             "- Removes app access for **App-ServiceNow-Users** to **Contoso Health - ServiceNow**\n"
@@ -144,6 +144,23 @@ class EdgeCases(unittest.TestCase):
         self.assertNotIn("Nightingale", out)
         self.assertNotIn("Jane Roe", out)
         self.assertIn("`azuread_group.secret`", out)
+
+    def test_hidden_setting_is_named_secret_field_is_not(self):
+        # owners hidden because they came from a sensitive variable: say WHAT
+        # changed (its owners), never the ids; a client secret stays "a secret".
+        out = pp.summarize({"resource_changes": [
+            rc("azuread_service_principal.aws", "azuread_service_principal", ["update"],
+               before={"display_name": "AWS IAM Identity Center", "owners": ["owner-id-old"]},
+               after={"display_name": "AWS IAM Identity Center", "owners": ["owner-id-old", "owner-id-apply"]},
+               before_sensitive={"owners": True}, after_sensitive={"owners": True}),
+            rc("azuread_application_password.p", "azuread_application_password", ["update"],
+               before={"display_name": "ci", "value": "old-secret-xyz"}, after={"display_name": "ci", "value": "new-secret-xyz"},
+               before_sensitive={"value": True}, after_sensitive={"value": True}),
+        ]})
+        self.assertIn("- Changes enterprise app **AWS IAM Identity Center**: updates its owners (value hidden)\n", out)
+        self.assertIn("- Changes app password **ci**: updates a secret value (not shown)\n", out)
+        for leaked in ("owner-id-old", "owner-id-apply", "old-secret-xyz", "new-secret-xyz"):
+            self.assertNotIn(leaked, out)
 
     def test_rename_and_fields(self):
         out = pp.summarize({"resource_changes": [
