@@ -110,9 +110,11 @@
     records who should be eligible for what, e.g.
     @{ 'pim-tier0-ca-admins' = @('adm-ava.lin@<tenant>.onmicrosoft.com')
        'pim-tier1-helpdesk'  = @('adm-raj.patel@<tenant>.onmicrosoft.com') }
-    Only privileged-iam-admins and the PIM tier groups (output
-    pim_tier_group_mail_nicknames) are accepted. Empty = step skipped (the
-    adm- accounts must exist first: step admin-accounts).
+    Only privileged-iam-admins, the PIM tier groups (output
+    pim_tier_group_mail_nicknames) and PIM-Demo-Readers (output
+    pim_demo_readers_group_mail_nickname, when enable_pim_demo_readers) are
+    accepted. Empty = step skipped (the adm- accounts must exist first: step
+    admin-accounts).
 
 .PARAMETER AgentSponsorUserPrincipalName
     Accountable human for the Agent ID (New-AgentIdentity.ps1 default if empty).
@@ -367,7 +369,12 @@ function Get-PostApplyPlan {
                 -Script 'post-apply/Set-DirectoryRolePimPolicies.ps1' -Params $dp))
 
     # 9. PIM eligibility, one invocation per group.
-    $allowed = @('privileged-iam-admins') + @((Get-TfValue -Outputs $Outputs -Name 'pim_tier_group_mail_nicknames') | ForEach-Object { if ($_ -is [System.Collections.IDictionary]) { $_.Values } })
+    # PIM-Demo-Readers (read-only presenter, modules/pim demo-readers.tf) is
+    # PIM-governed but not a tier group: its own output, null while its flag
+    # is off, so it is accepted only once Terraform has created it.
+    $demoReaders = Get-TfValue -Outputs $Outputs -Name 'pim_demo_readers_group_mail_nickname'
+    $allowed = @('privileged-iam-admins') + @((Get-TfValue -Outputs $Outputs -Name 'pim_tier_group_mail_nicknames') | ForEach-Object { if ($_ -is [System.Collections.IDictionary]) { $_.Values } }) +
+        @(if ($demoReaders -is [string] -and $demoReaders -ne '') { $demoReaders })
     if ($PimEligibility.Count -eq 0) {
         $steps.Add((ConvertTo-PlanStep -Id 'pim-eligibility' -Name 'PIM-for-Groups eligibility' -Applies $false -Reason 'no -PimEligibility given (the adm- admin accounts must exist first: step admin-accounts, lab/iga/admin-accounts.json)'))
     }

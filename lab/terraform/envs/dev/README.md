@@ -67,6 +67,7 @@ when its prerequisite is off):
 | `enable_pim_tiers` | PIM-Tier0-Security-Admins, PIM-Tier0-CA-Admins (approval, 4h), PIM-Tier1-Intune-Admins, PIM-Tier1-Helpdesk (8h) | P2 |
 | `enable_pim_azure_resources` | PIM-Azure-RG-Contributors eligible for Contributor on the RG | P2; **human** applier with Owner/UAA |
 | `enable_pim_aws_admin` | PIM-AWS-Lab-Admins (eligible-only, 2h MFA + justification activation) assigned to the AWS IAM Identity Center app as its second principal: AWS admin without root, ADR 0025 | P2; `enable_sso_apps`; eligibility post-apply; `lab/terraform/aws` permission set |
+| `enable_pim_demo_readers` | PIM-Demo-Readers: actively holds Global Reader + Security Reader; eligible-only membership (8h MFA + justification, no approval, every activation mailed); reviewed quarterly and watched by the ITDR group rule, outside the CA002 / CA020 scope | P2; Azure Reader / Microsoft Sentinel Reader / Log Analytics Reader come from envs/bootstrap `enable_pim_demo_readers_azure_rbac` (human-applied, output `pim_demo_readers_group_object_id`); eligibility (adm-presenter) post-apply |
 | `enable_sso_apps` | AWS IAM Identity Center SAML app + Contoso Clinical Portal OIDC app | P1 (group assignment); bootstrap `enable_app_management_roles` first |
 | `enable_scim_provisioning` / `aws_scim_job_enabled` | AWS provisioning job (created stopped) / start it | needs `enable_sso_apps`; first apply is a local seeding run with the token from Key Vault |
 | `enable_pam_oidc_app` | guacamole-psm + PAM-Operators | needs `enable_sso_apps` |

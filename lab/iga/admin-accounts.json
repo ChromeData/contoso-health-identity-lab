@@ -1,8 +1,9 @@
 {
   "$comment": [
     "Admin accounts (iam-standard: adm-first.last@<tenant>.onmicrosoft.com, cloud-only). One row per person who does admin work; the person's WORKFORCE account comes from HR (lab/scripts/mock-hr/hr_feed.csv, ownerEmployeeId) and never holds a privileged role.",
-    "Created by lab/scripts/powershell/post-apply/New-AdminAccounts.ps1: cloud-only, no known password (a random one is generated and discarded; first sign-in is a one-time TAP, then an issued passkey), no licence or mailbox, manager = the owner's workforce account, member of the standing role-assignable group Admin-Accounts (the admin passkey target). It refuses a synced account and an owner who is missing, disabled or a leaver.",
-    "eligibleFor is what the person SHOULD be eligible for (PIM for Groups, Set-PimGroupEligibility.ps1; Global Administrator, Set-DirectoryRolePimPolicies.ps1). New-AdminAccounts.ps1 does not grant it; Invoke-PostApply.ps1 -PimEligibility does, after review. The three adm- accounts were created in the lab tenant on 2026-10-27."
+    "A row with NO HR owner names a sponsorUpn instead (the person who answers for it, ADR 0018's owner/sponsor split): it is a function account (adm-<word>, never first.last), carries its own displayName, has no manager, and may only be eligible for read-only groups (pim-demo-readers) - with no HR record, no leaver event ever ends it. Only adm-presenter is such a row.",
+    "Created by lab/scripts/powershell/post-apply/New-AdminAccounts.ps1: cloud-only, no known password (a random one is generated and discarded; first sign-in is a one-time TAP, then an issued passkey), no licence or mailbox, manager = the owner's workforce account (sponsor row: the sponsors relationship instead), member of the standing role-assignable group Admin-Accounts (the admin passkey target). It refuses a synced account and an owner or sponsor who is missing, disabled or a leaver.",
+    "eligibleFor is what the account SHOULD be eligible for (PIM for Groups, Set-PimGroupEligibility.ps1; Global Administrator, Set-DirectoryRolePimPolicies.ps1). New-AdminAccounts.ps1 does not grant it; Invoke-PostApply.ps1 -PimEligibility does, after review. The three owned adm- accounts were created in the lab tenant on 2026-10-27; adm-presenter is added by the PIM-Demo-Readers change."
   ],
   "schemaVersion": 1,
   "accounts": [
@@ -37,6 +38,17 @@
       "eligibleFor": [],
       "globalAdminEligible": false,
       "note": "Reviewer of record and PIM approver, acting from her workforce account; this admin account holds no eligibility so she never certifies or approves access she could activate herself (SOD-08). Kept for read-only governance tooling (Global Reader via a later eligibility, if needed)."
+    },
+    {
+      "adminAccount": "adm-presenter",
+      "sponsorUpn": "MichaelWilliams@ContosoHealthLab.onmicrosoft.com",
+      "displayName": "Demo presenter (read-only)",
+      "function": "Live demo presenter (read-only)",
+      "eligibleFor": [
+        "pim-demo-readers"
+      ],
+      "globalAdminEligible": false,
+      "note": "No HR owner: the lab owner is its sponsor. Used only to present the lab live: one 8-hour PIM-Demo-Readers activation (MFA + reason, no approval, mailed to the security mailbox) gives Global Reader + Security Reader and, through envs/bootstrap, Azure Reader / Microsoft Sentinel Reader / Log Analytics Reader. Nothing it holds can change the tenant; Global Reader and Security Reader can read BitLocker recovery keys (modules/pim demo-readers.tf). Signs in with a passkey."
     }
   ]
 }

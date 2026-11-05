@@ -6,8 +6,9 @@
 # join the Entra diagnostic setting only when enable_identity_protection_logs
 # is set; HR-SYNC (hr-feed.yml's identity) exists only with enable_hr_sync,
 # EVIDENCE (evidence-pack.yml's) only with enable_evidence_pack, with ONE
-# create-only grant on the evidence container, and the PLAN main-ref
-# credential (config-drift) is always there.
+# create-only grant on the evidence container, PIM-Demo-Readers' three
+# read-only subscription roles only with enable_pim_demo_readers_azure_rbac,
+# and the PLAN main-ref credential (config-drift) is always there.
 # Run with HashiCorp Terraform 1.16.5 (lab/terraform/README.md).
 
 mock_provider "azuread" {
@@ -53,6 +54,10 @@ mock_provider "azuread" {
   mock_data "azuread_application" {
     defaults = { object_id = "a0a0a0a0-0000-4000-8000-00000000000e" }
   }
+  # PIM-Demo-Readers, looked up by the object id envs/dev printed.
+  mock_data "azuread_group" {
+    defaults = { object_id = "d0d0d0d0-0000-4000-8000-00000000000d", display_name = "PIM-Demo-Readers", assignable_to_role = true }
+  }
 }
 mock_provider "azurerm" {
   mock_data "azurerm_subscription" {
@@ -96,6 +101,10 @@ run "defaults_add_nothing" {
   assert {
     condition     = output.github_oidc_evidence_client_id == null && output.github_oidc_subjects.evidence == null && length(output.pipeline_graph_roles.evidence) == 0 && length(azurerm_role_assignment.evidence_writer) == 0
     error_message = "EVIDENCE (identity and storage grant) must not exist by default"
+  }
+  assert {
+    condition     = length(azurerm_role_assignment.pim_demo_readers) == 0 && length(output.pim_demo_readers_azure_role_assignment_ids) == 0
+    error_message = "PIM-Demo-Readers gets no Azure role by default"
   }
   # config-drift.yml (schedule on main) signs in as PLAN: the main-ref
   # subject must be in every bootstrap apply, or it fails with AADSTS700213.
@@ -227,4 +236,82 @@ run "evidence_pack_needs_the_storage_account" {
   }
 
   expect_failures = [data.azurerm_storage_account.evidence]
+}
+
+run "pim_demo_readers_azure_rbac_opt_in" {
+  command = plan
+
+  variables {
+    enable_pim_demo_readers_azure_rbac = true
+    pim_demo_readers_group_object_id   = "d0d0d0d0-0000-4000-8000-00000000000d"
+  }
+
+  assert {
+    condition = (
+      length(azurerm_role_assignment.pim_demo_readers) == 3 &&
+      azurerm_role_assignment.pim_demo_readers["reader"].role_definition_id == "/subscriptions/22222222-2222-2222-2222-222222222222/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7" &&
+      azurerm_role_assignment.pim_demo_readers["sentinel_reader"].role_definition_id == "/subscriptions/22222222-2222-2222-2222-222222222222/providers/Microsoft.Authorization/roleDefinitions/8d289c81-5878-46d4-8554-54e1e3d8b5cb" &&
+      azurerm_role_assignment.pim_demo_readers["log_analytics_reader"].role_definition_id == "/subscriptions/22222222-2222-2222-2222-222222222222/providers/Microsoft.Authorization/roleDefinitions/73c42c96-874c-492b-b04d-ab87d138a893"
+    )
+    error_message = "exactly Reader, Microsoft Sentinel Reader and Log Analytics Reader, pinned by built-in role id (Learn, Azure built-in roles)"
+  }
+  assert {
+    condition = alltrue([for a in values(azurerm_role_assignment.pim_demo_readers) :
+      a.scope == "/subscriptions/22222222-2222-2222-2222-222222222222" &&
+      a.principal_id == "d0d0d0d0-0000-4000-8000-00000000000d" &&
+      a.principal_type == "Group" &&
+      a.condition == null
+    ])
+    error_message = "subscription scope, the PIM GROUP as principal (never a person)"
+  }
+  assert {
+    condition = alltrue([for a in values(azurerm_role_assignment.pim_demo_readers) : !contains([
+      "8e3af657-a8ff-443c-a75c-2fe8c4bcb635", # Owner
+      "b24988ac-6180-42a0-ab88-20f7382dd24c", # Contributor
+      "18d7d88d-d35e-4fb5-a5c3-7773c20a72d9", # User Access Administrator
+      "f58310d9-a9f6-439a-9e8d-f62e7b41a168", # Role Based Access Control Administrator
+    ], reverse(split("/", a.role_definition_id))[0])])
+    error_message = "nothing that can write or grant access"
+  }
+  assert {
+    condition     = !strcontains(local.delegable_role_ids, "acdd72a7-3385-48ef-bd42-f606fba81ae7") && !strcontains(local.delegable_role_ids, "73c42c96-874c-492b-b04d-ab87d138a893") && !strcontains(local.delegable_role_ids, "8d289c81-5878-46d4-8554-54e1e3d8b5cb")
+    error_message = "the APPLY identity's delegable roles must not be widened to the read roles (the grant is made here, by a human)"
+  }
+}
+
+run "pim_demo_readers_azure_rbac_needs_the_group" {
+  command = plan
+
+  variables {
+    enable_pim_demo_readers_azure_rbac = true
+  }
+
+  expect_failures = [data.azuread_group.pim_demo_readers]
+}
+
+run "pim_demo_readers_azure_rbac_refuses_an_ordinary_group" {
+  command = plan
+
+  variables {
+    enable_pim_demo_readers_azure_rbac = true
+    pim_demo_readers_group_object_id   = "d0d0d0d0-0000-4000-8000-00000000000d"
+  }
+
+  override_data {
+    target = data.azuread_group.pim_demo_readers
+    values = { object_id = "d0d0d0d0-0000-4000-8000-00000000000d", display_name = "PIM-Demo-Readers", assignable_to_role = false }
+  }
+
+  expect_failures = [data.azuread_group.pim_demo_readers]
+}
+
+run "pim_demo_readers_group_id_must_be_a_guid" {
+  command = plan
+
+  variables {
+    enable_pim_demo_readers_azure_rbac = true
+    pim_demo_readers_group_object_id   = "PIM-Demo-Readers"
+  }
+
+  expect_failures = [var.pim_demo_readers_group_object_id]
 }

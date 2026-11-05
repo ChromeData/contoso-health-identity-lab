@@ -831,3 +831,49 @@ variable "aws_admin_eligible_assignment_duration" {
     error_message = "AWS admin eligibility must expire within 180 days: P15D, P30D, P90D or P180D."
   }
 }
+
+# =============================================================================
+# Read-only presenter access through PIM for Groups (demo-readers.tf) - OFF
+# =============================================================================
+
+variable "enable_pim_demo_readers" {
+  type        = bool
+  description = <<-EOT
+    Create PIM-Demo-Readers: a role-assignable group that ACTIVELY holds
+    Global Reader + Security Reader tenant-wide, whose membership is
+    ELIGIBLE-only (MFA + justification, demo_readers_activation_max_duration,
+    no approval, every activation mailed to pim_alert_mailbox; eligibility
+    expires after tier1_eligible_assignment_duration). Reviewed quarterly,
+    NOT in privileged_review_targets (the CA002 / CA020 group scope). The
+    group's Azure RBAC (Reader, Microsoft Sentinel Reader, Log Analytics
+    Reader on the subscription) is granted by envs/bootstrap, human-applied.
+  EOT
+  default     = false
+}
+
+variable "demo_readers_group_name" {
+  type        = string
+  description = "Display name of the read-only presenter PIM group."
+  default     = "PIM-Demo-Readers"
+}
+
+variable "demo_readers_group_mail_nickname" {
+  type        = string
+  description = "mail_nickname (stable lookup key: Set-PimGroupEligibility.ps1 -GroupMailNickname, admin-accounts.json eligibleFor) of the read-only presenter PIM group."
+  default     = "pim-demo-readers"
+}
+
+variable "demo_readers_activation_max_duration" {
+  type        = string
+  description = <<-EOT
+    How long one activation of PIM-Demo-Readers lasts. Default PT8H: one
+    working day of demo and rehearsal, the Tier-1 shift. Never longer than
+    PT8H (validation) or tier1_activation_max_duration (precondition).
+  EOT
+  default     = "PT8H"
+
+  validation {
+    condition     = can(regex("^(PT30M|PT[1-7]H(30M)?|PT8H)$", var.demo_readers_activation_max_duration))
+    error_message = "demo_readers_activation_max_duration must be PT30M..PT8H in 30-minute steps (read-only access is never longer than a shift)."
+  }
+}

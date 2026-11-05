@@ -8,8 +8,8 @@ recorded. Decisions: [ADR 0002](../../../docs/adr/0002-pim-for-groups-vs-direct-
 eligibility expiry, activation caps, step-up, direct Global Administrator
 eligibility, AU-scoped help desk).
 
-**Status: BUILT.** `validate` and 32 mocked `terraform test` runs pass
-(HashiCorp Terraform 1.16.5, 2026-10-20). **Nothing has been applied: no
+**Status: BUILT.** `validate` and 46 mocked `terraform test` runs pass
+(HashiCorp Terraform 1.16.5, 2026-11-05). **Nothing has been applied: no
 tenant exists yet.** **TENANT-TIME** steps need the M365 E5 trial (Entra ID
 P2); *verify:* items are checked in that window.
 
@@ -23,6 +23,7 @@ P2); *verify:* items are checked in that window.
 | `reviews.tf` | `enable_access_reviews_privileged` (false) | Rendered bodies (output `pim_eligible_review_bodies`) for quarterly, default-deny reviews of every PIM-governed group (eligible + active members), created by `post-apply/New-AccessReviewDefinitions.ps1` |
 | `azure.tf` | `enable_pim_azure_resources` (false) | `PIM-Azure-RG-Contributors` is **eligible** for Contributor on the lab RG, with an Azure PIM activation policy (MFA + justification + approval by `PIM-Approvers-Tier0`, approver type Group, 4h) |
 | `aws.tf` | `enable_pim_aws_admin` (false) | `PIM-AWS-Lab-Admins`, role-assignable, **eligible-only** membership = administrator of the lab AWS account ([ADR 0025](../../../docs/adr/0025-aws-admin-just-in-time-through-entra.md)). envs/dev assigns it to the AWS IAM Identity Center app (modules/apps); `lab/terraform/aws` gives its SCIM copy the `LabAdministrator` permission set. Activation: MFA + justification, 2h, no approval while the lab has one human admin (`aws_admin_require_approval`), every activation mailed to `pim_alert_mailbox`; eligibility expires after 180 days; reviewed quarterly, but **not** in `privileged_review_targets` (the CA002 / CA020 scope) |
+| `demo-readers.tf` | `enable_pim_demo_readers` (false) | `PIM-Demo-Readers`, role-assignable, **eligible-only** membership; the group actively holds **Global Reader** + **Security Reader** tenant-wide (read-only presenter access). Activation: MFA + justification, 8h, **no approval**, every activation mailed to `pim_alert_mailbox`; eligibility expires after 365 days (Tier-1 duration). Reviewed quarterly, but **not** in `privileged_review_targets` (the CA002 / CA020 scope) and its roles are not in `privileged_role_template_ids` (CA020's role list). Its Azure **Reader**, **Microsoft Sentinel Reader** and **Log Analytics Reader** on the subscription are granted by `envs/bootstrap` (`enable_pim_demo_readers_azure_rbac`, human-applied), because the APPLY identity may not create them |
 
 ## Tier model
 
@@ -51,6 +52,18 @@ ordinary users or one workload.
 | Privileged-IAM-Admins (`main.tf`) | User Administrator (`fe930be7-…`) | 1 | MFA + justification + **approval**, 4h | 365 days |
 | Global Administrator (`directory-roles.tf`, named people, no group) | Global Administrator | 0 | MFA (or `c1`) + justification + ticket + **approval**, 2h | 180 days |
 | PIM-Azure-RG-Contributors (`azure.tf`) | Azure **Contributor** on rg-identity-lab | 0 | MFA + justification + **approval**, 4h | permanent eligibility, reviewed quarterly |
+| PIM-Demo-Readers (`demo-readers.tf`, not a tier group) | Global Reader (`f2ef992c-…`) + Security Reader (`5d6b6bb7-…`); Azure Reader, Microsoft Sentinel Reader, Log Analytics Reader on the subscription (`envs/bootstrap`) | read-only | MFA + justification, 8h, **no approval**, every activation mailed | 365 days |
+
+**PIM-Demo-Readers and approval.** Microsoft recommends approval for groups
+that elevate into Entra roles. This group has none on purpose: the presenter
+activates alone, on camera, and the group is role-assignable, so nobody below
+Privileged Authentication Administrator can reset the presenter's credentials
+and activate on their behalf. Nothing it holds can change the tenant, but both
+roles are labelled privileged by Microsoft and both can read BitLocker
+recovery keys (`microsoft.directory/bitlockerKeys/key/read`), which is part of
+why `PIM-Tier1-Intune-Admins` needs approval. Compensating controls: MFA and a
+reason on every activation, 8 hours at most, every activation mailed, the
+quarterly review, and the ITDR rule for members added outside PIM.
 
 Template ids are in `variables.tf` (`pim_tier_groups`) and were checked
 against Microsoft's built-in roles reference on 2026-10-20.
@@ -133,6 +146,8 @@ records both exceptions, with User Administrator. Contributor on the RG is Tier 
 | `AU-Workforce-Standard` and its scoped assignments | `AdministrativeUnit.ReadWrite.All` in addition to the above (APPLY); `AdministrativeUnit.Read.All` for PLAN (confirmed 2026-10-27: the plan lists AUs) | verify against `apply_graph_roles` before flipping `enable_helpdesk_au_scoping` |
 | Global Administrator policy + eligibility | `RoleManagementPolicy.ReadWrite.Directory`, `RoleEligibilitySchedule.ReadWrite.Directory` | Not used: `Set-DirectoryRolePimPolicies.ps1` runs as a human |
 | `PIM-AWS-Lab-Admins` and its PIM-for-Groups policy | same as the tier groups | Yes |
+| `PIM-Demo-Readers`, its two directory role assignments and its PIM-for-Groups policy | same as the tier groups | Yes |
+| `PIM-Demo-Readers`' Azure Reader / Microsoft Sentinel Reader / Log Analytics Reader on the subscription | `Microsoft.Authorization/roleAssignments/write` for those role ids (Owner / User Access Administrator) | **No.** Its RBAC Administrator grant is ABAC-limited to three delegable roles (`envs/bootstrap` `delegable_role_ids`), so the grants are in `envs/bootstrap` (`enable_pim_demo_readers_azure_rbac`), human-applied. Do not widen the delegable list |
 | Azure eligible assignment + Azure PIM policy | `Microsoft.Authorization/roleEligibilityScheduleRequests/write`, `roleManagementPolicies/write` on the RG (Owner / User Access Administrator) | **No.** It holds Contributor plus an ABAC-limited RBAC Administrator (*verify:* RBAC Administrator lacks these actions). The first apply of `enable_pim_azure_resources` is a **human apply**. Do not hand CI Owner. |
 
 ## Post-apply
@@ -165,6 +180,17 @@ it explicitly):
 ```powershell
 ./Set-PimGroupEligibility.ps1 -GroupMailNickname pim-aws-lab-admins `
     -UserPrincipalNames 'adm-labops@<tenant>.onmicrosoft.com' -EligibilityDuration P180D
+```
+
+For the **read-only presenter** (`demo-readers.tf`), the admin account is the
+sponsored `adm-presenter` row in `lab/iga/admin-accounts.json` (no HR owner).
+The nickname is not `pim-tier0-*`, so the script requests the Tier-1 365 days
+the policy allows; `Invoke-PostApply.ps1 -PimEligibility` accepts the group
+once output `pim_demo_readers_group_mail_nickname` names it:
+
+```powershell
+./Set-PimGroupEligibility.ps1 -GroupMailNickname pim-demo-readers `
+    -UserPrincipalNames 'adm-presenter@<tenant>.onmicrosoft.com'
 ```
 
 For **Azure**, membership of `PIM-Azure-RG-Contributors` is ordinary (active)
@@ -224,8 +250,8 @@ cd lab/terraform/modules/pim
 terraform init -backend=false && terraform test   # HashiCorp Terraform 1.16.5
 ```
 
-`tests/pim.tftest.hcl` (mock azuread + azurerm, **32 runs, all passing on
-2026-10-20**) covers:
+`tests/pim.tftest.hcl` (mock azuread + azurerm, **46 runs, all passing on
+2026-11-05**) covers:
 
 - every feature off: only the original binding exists;
 - the tier map, per-tier activation strength, ticket, expiry and
@@ -242,6 +268,12 @@ terraform init -backend=false && terraform test   # HashiCorp Terraform 1.16.5
   required);
 - the PIM-eligible review bodies; none without a fallback reviewer; the
   reviewer group can never be a reviewed group;
+- the read-only presenter group: off by default; exactly Global Reader +
+  Security Reader, tenant-wide; PT8H, MFA + justification, no approval and no
+  approval stage; 365-day eligibility; every activation mailed (a check warns
+  without a mailbox); in the quarterly review but not in
+  `privileged_review_targets` or `privileged_role_template_ids`; the tier map
+  stays 16 groups; longer than PT8H or than the Tier-1 cap is refused;
 - Azure PIM: Contributor role id form, RG scope, the *group* as principal,
   Tier-0 policy and approvers; a missing scope fails and Owner eligibility is
   rejected.

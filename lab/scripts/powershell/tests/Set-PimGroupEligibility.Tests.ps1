@@ -59,6 +59,7 @@ Describe 'Set-PimGroupEligibility.ps1 - helpers' {
         Get-PimGroupTier -MailNickname 'pim-tier0-privileged-auth-admins' | Should -Be 0
         Get-PimGroupTier -MailNickname 'pim-tier1-helpdesk' | Should -Be 1
         Get-PimGroupTier -MailNickname 'privileged-iam-admins' | Should -Be 1
+        Get-PimGroupTier -MailNickname 'pim-demo-readers' | Should -Be 1
     }
 
     It 'defaults to the tier maximum and refuses anything longer' {
@@ -114,6 +115,17 @@ Describe 'Set-PimGroupEligibility.ps1 - against a mocked tenant' {
         $p.Body.principalId | Should -Be 'u-ava'
         $p.Body.scheduleInfo.expiration.type | Should -Be 'afterDuration'
         $p.Body.scheduleInfo.expiration.duration | Should -Be 'P180D'
+    }
+
+    It 'PIM-Demo-Readers (read-only presenter): Tier-1 rules, 365 days - the expiry modules/pim demo-readers.tf allows' {
+        Set-PgeMock -Groups @{ 'pim-demo-readers' = 'g-demo'; 'pim-approvers-tier1' = 'g-appr1' } -Users @{ 'adm-presenter@contosohealthlab.onmicrosoft.com' = 'u-presenter' }
+        & $Pge -GroupMailNickname 'pim-demo-readers' -UserPrincipalNames 'adm-presenter@contosohealthlab.onmicrosoft.com'
+        $LASTEXITCODE | Should -Be 0
+        $global:PgeTest.Posts.Count | Should -Be 1
+        $global:PgeTest.Posts[0].Body.groupId | Should -Be 'g-demo'
+        $global:PgeTest.Posts[0].Body.principalId | Should -Be 'u-presenter'
+        $global:PgeTest.Posts[0].Body.accessId | Should -Be 'member'
+        $global:PgeTest.Posts[0].Body.scheduleInfo.expiration.duration | Should -Be 'P365D'
     }
 
     It 'Tier 1 / Privileged-IAM-Admins: 365 days by default' {

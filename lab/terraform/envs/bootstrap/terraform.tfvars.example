@@ -57,6 +57,13 @@ enable_evidence_pack          = false
 evidence_storage_account_name = "stidlabevidence7f3a"
 evidence_resource_group_name  = "rg-identity-lab"
 
+# PIM-Demo-Readers' Azure half (read-only presenter): Reader, Microsoft
+# Sentinel Reader and Log Analytics Reader on this subscription, for a group
+# whose members are eligible-only. After the envs/dev apply that creates it:
+#   terraform -chdir=../dev output -raw pim_demo_readers_group_object_id
+enable_pim_demo_readers_azure_rbac = false
+pim_demo_readers_group_object_id   = ""
+
 # Human owners of the HR provisioning app's registration (ADR 0018, two
 # people from the adm- admin accounts; never the access governance lead,
 # SOD-08). The CI identities (PLAN, APPLY, HR-SYNC, EVIDENCE) never get an

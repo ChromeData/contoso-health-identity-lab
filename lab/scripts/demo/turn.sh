@@ -115,15 +115,15 @@ case "$cmd" in
     extra=""
     if [ "$stage" = "eligibility" ]; then
       # PIM-for-Groups eligibility for the adm- accounts, built from the
-      # register lab/iga/admin-accounts.json (owner -> eligibleFor).
+      # register lab/iga/admin-accounts.json (adminAccount -> eligibleFor;
+      # a sponsored row such as adm-presenter has no "owner" to derive it from).
       dom=$(ghvar TF_ONMICROSOFT_DOMAIN | tr '[:upper:]' '[:lower:]')
       map=$(python3 - "$dom" <<'PY'
 import json, sys
 dom = sys.argv[1]
 m = {}
 for a in json.load(open("lab/iga/admin-accounts.json")).get("accounts", []):
-    first, last = a["owner"].lower().split(" ", 1)
-    upn = f"adm-{first}.{last.replace(' ', '')}@{dom}"
+    upn = f"{a['adminAccount']}@{dom}"
     for g in a.get("eligibleFor", []):
         m.setdefault(g, []).append(upn)
 print("@{ " + "; ".join(f"'{g}' = @(" + ",".join(f"'{u}'" for u in us) + ")" for g, us in m.items()) + " }")

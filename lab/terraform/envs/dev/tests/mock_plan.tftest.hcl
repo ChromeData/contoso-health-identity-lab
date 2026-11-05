@@ -166,6 +166,32 @@ run "plan_lab_tfvars" {
     condition     = output.aws_admin_activation_policy != null && output.aws_admin_activation_policy.maximum_duration == "PT2H" && output.aws_admin_activation_policy.mfa && output.aws_admin_activation_policy.in_ca_admin_scope == false
     error_message = "enable_pim_aws_admin (lab.tfvars): PIM-AWS-Lab-Admins with a 2-hour MFA activation, kept out of the CA002/CA020 group scope"
   }
+  # Read-only presenter access: PIM-Demo-Readers, eligible-only, 8-hour MFA +
+  # justification activation without approval, reviewed quarterly, outside
+  # the CA002 / CA020 group scope and CA020's role list.
+  assert {
+    condition = alltrue([
+      output.pim_demo_readers_activation_policy != null,
+      output.pim_demo_readers_activation_policy.maximum_duration == "PT8H",
+      output.pim_demo_readers_activation_policy.mfa,
+      output.pim_demo_readers_activation_policy.approval == false,
+      output.pim_demo_readers_activation_policy.in_ca_admin_scope == false,
+      output.pim_demo_readers_group_mail_nickname == "pim-demo-readers",
+      toset(values(output.pim_demo_readers_activation_policy.directory_roles)) == toset(["f2ef992c-3afb-46b9-b7cf-a126ee74c451", "5d6b6bb7-de71-4623-b4af-96380a352509"]),
+    ])
+    error_message = "enable_pim_demo_readers (lab.tfvars): PIM-Demo-Readers holds exactly Global Reader + Security Reader, 8-hour MFA activation, no approval"
+  }
+  assert {
+    condition = alltrue([
+      !contains(keys(module.pim[0].privileged_review_targets), "PIM-Demo-Readers"),
+      !contains(output.pim_privileged_role_template_ids["tier0"], "f2ef992c-3afb-46b9-b7cf-a126ee74c451"),
+      !contains(output.pim_privileged_role_template_ids["tier1"], "f2ef992c-3afb-46b9-b7cf-a126ee74c451"),
+      !contains(output.pim_privileged_role_template_ids["tier0"], "5d6b6bb7-de71-4623-b4af-96380a352509"),
+      !contains(output.pim_privileged_role_template_ids["tier1"], "5d6b6bb7-de71-4623-b4af-96380a352509"),
+      contains(keys(output.access_review_definitions), "privileged:PIM-Demo-Readers"),
+    ])
+    error_message = "PIM-Demo-Readers must not reach Conditional Access (not in admin_scope_group_object_ids = privileged_review_targets, its roles not in CA020's list) but must be in the quarterly privileged review"
+  }
 }
 
 # The committed lab.tfvars hold-back list, with the ITDR flags flipped on (as
@@ -270,6 +296,7 @@ run "plan_legacy_flags_on_new_flags_off" {
     enable_helpdesk_au_scoping              = false
     enable_global_admin_pim_policy          = false
     enable_pim_aws_admin                    = false
+    enable_pim_demo_readers                 = false
     enable_itdr_detections_v2               = false
     vault_feed_v2_columns                   = false
     pim_tier0_activation_auth_context_id    = ""
@@ -337,6 +364,10 @@ run "plan_legacy_flags_on_new_flags_off" {
     error_message = "no AWS admin PIM group (and no second AWS app principal) while enable_pim_aws_admin is off"
   }
   assert {
+    condition     = output.pim_demo_readers_group_object_id == null && output.pim_demo_readers_activation_policy == null && !contains(keys(output.access_review_definitions), "privileged:PIM-Demo-Readers")
+    error_message = "no read-only presenter PIM group (and no review of it) while enable_pim_demo_readers is off"
+  }
+  assert {
     condition     = output.apps_nhi_inventory.okta_clinic_idp == null && output.okta_idp_client_id == null
     error_message = "okta-clinic-idp must not be planned while enable_okta_federation is off"
   }
@@ -381,6 +412,7 @@ run "plan_all_flags_on_sentinel" {
     enable_global_admin_pim_policy      = true
     enable_pim_azure_resources          = true
     enable_pim_aws_admin                = true
+    enable_pim_demo_readers             = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
     enable_agent_identity               = true
@@ -446,10 +478,10 @@ run "plan_all_flags_on_sentinel" {
     error_message = "enable_protected_actions_ca must render CA023 on auth context c2, report-only"
   }
   assert {
-    # 19 group reviews (IAM + 16 tiers + Azure + AWS admin), GA eligibility,
-    # inactive users.
-    condition     = length(output.access_review_definitions) == 21 && contains(keys(output.access_review_definitions), "privileged:Global Administrator (eligible)") && contains(keys(output.access_review_definitions), "privileged:PIM-AWS-Lab-Admins")
-    error_message = "expected 19 privileged group reviews (incl. PIM-AWS-Lab-Admins) + the GA eligibility review + 1 inactive-user review"
+    # 20 group reviews (IAM + 16 tiers + Azure + AWS admin + demo readers),
+    # GA eligibility, inactive users.
+    condition     = length(output.access_review_definitions) == 22 && contains(keys(output.access_review_definitions), "privileged:Global Administrator (eligible)") && contains(keys(output.access_review_definitions), "privileged:PIM-AWS-Lab-Admins") && contains(keys(output.access_review_definitions), "privileged:PIM-Demo-Readers")
+    error_message = "expected 20 privileged group reviews (incl. PIM-AWS-Lab-Admins and PIM-Demo-Readers) + the GA eligibility review + 1 inactive-user review"
   }
   assert {
     condition     = output.aws_admin_activation_policy != null && output.aws_admin_activation_policy.approval == false && output.aws_admin_activation_policy.activation_mail
@@ -527,6 +559,7 @@ run "plan_all_flags_on_la_alerts" {
     enable_global_admin_pim_policy      = true
     enable_pim_azure_resources          = true
     enable_pim_aws_admin                = true
+    enable_pim_demo_readers             = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
     enable_agent_identity               = true
@@ -580,7 +613,7 @@ run "plan_all_flags_on_la_alerts" {
     error_message = "all seventeen ITDR rules are selected on the Log Analytics path, and the two Sentinel-only ones must be reported as such"
   }
   assert {
-    condition     = length(nonsensitive(output.directory_role_pim_policies)) == 1 && length(output.access_review_definitions) == 21
+    condition     = length(nonsensitive(output.directory_role_pim_policies)) == 1 && length(output.access_review_definitions) == 22
     error_message = "the PIM and review bodies do not depend on the detection path"
   }
   assert {
@@ -794,6 +827,7 @@ run "flags_without_premium_warn" {
     enable_helpdesk_au_scoping          = true
     enable_global_admin_pim_policy      = true
     enable_pim_aws_admin                = true
+    enable_pim_demo_readers             = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
     enable_access_reviews_privileged    = true

@@ -387,6 +387,19 @@ Describe 'Invoke-PostApply.ps1 - plan' {
         ($ok | Where-Object Id -eq 'agent-identity').Params['ManagedIdentityPrincipalId'] | Should -Be 'mi-1'
     }
 
+    It 'accepts PIM-Demo-Readers eligibility only once its output names the group' {
+        $o = New-Outputs -AllOn
+        $before = Get-PostApplyPlan -Outputs $o -PimEligibility @{ 'pim-demo-readers' = @('adm-presenter@contoso.test') }
+        ($before | Where-Object { $_.Id -eq 'pim-eligibility' }).Applies | Should -BeFalse -Because 'enable_pim_demo_readers off = no output = not a PIM-governed group yet'
+        $o['pim_demo_readers_group_mail_nickname'] = @{ value = 'pim-demo-readers' }
+        $after = Get-PostApplyPlan -Outputs $o -PimEligibility @{ 'pim-demo-readers' = @('adm-presenter@contoso.test') }
+        $s = $after | Where-Object { $_.Id -eq 'pim-eligibility' }
+        $s.Applies | Should -BeTrue
+        $s.Params['GroupMailNickname'] | Should -Be 'pim-demo-readers'
+        $s.Params['UserPrincipalNames'] | Should -Be @('adm-presenter@contoso.test')
+        $s.Script | Should -Be 'post-apply/Set-PimGroupEligibility.ps1'
+    }
+
     It 'refuses PIM eligibility for a group that is not PIM-governed in the outputs' {
         $plan = Get-PostApplyPlan -Outputs (New-Outputs -AllOn) -PimEligibility @{ 'app-servicenow-users' = @('x@contoso.test') }
         $s = $plan | Where-Object { $_.Id -eq 'pim-eligibility' }

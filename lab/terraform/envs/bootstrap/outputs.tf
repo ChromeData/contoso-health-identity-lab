@@ -93,3 +93,8 @@ output "pipeline_graph_roles" {
     evidence = module.pipeline_identity.evidence_graph_roles
   }
 }
+
+output "pim_demo_readers_azure_role_assignment_ids" {
+  description = "Role => assignment id of PIM-Demo-Readers' read-only Azure roles on the subscription ({} unless enable_pim_demo_readers_azure_rbac)."
+  value       = { for k, a in azurerm_role_assignment.pim_demo_readers : k => a.id }
+}

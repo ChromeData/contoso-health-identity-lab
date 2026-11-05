@@ -61,7 +61,11 @@ directory-role settings, or restricted-management administrative units
   of them outside PIM alerts as High (`role-assigned-outside-pim.kql`); an
   eligible one made directly in PIM shows only at its first activation
   (`pim-activation.kql`). If one is ever needed, it goes into a Tier-0
-  group first.
+  group first. One read-only exception (2026-11-05): `PIM-Demo-Readers`
+  (`modules/pim/demo-readers.tf`) holds Global Reader and Security Reader,
+  both labelled privileged, for the demo presenter: eligible-only, 8 h,
+  MFA + reason, no approval, every activation mailed, outside the tier map
+  and the CA002 / CA020 scope.
 - **Standing directory roles have two exceptions:** break-glass (ADR
   0003), and the containment identity's Authentication Administrator, only
   if it is ever turned on (ADR 0017, a recorded risk acceptance). Every

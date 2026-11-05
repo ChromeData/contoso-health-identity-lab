@@ -196,3 +196,32 @@ output "aws_admin_activation_policy" {
     in_quarterly_review = local.review_enabled
   } : null
 }
+
+# ---- Read-only presenter access through PIM for Groups (demo-readers.tf) ------
+
+output "demo_readers_group_object_id" {
+  description = "Object id of PIM-Demo-Readers (null unless enable_pim_demo_readers). envs/bootstrap pim_demo_readers_group_object_id takes it for the subscription-scope Azure read roles (human-applied)."
+  value       = one(azuread_group.demo_readers[*].object_id)
+}
+
+output "demo_readers_group_mail_nickname" {
+  description = "mail_nickname of PIM-Demo-Readers for Set-PimGroupEligibility.ps1 -GroupMailNickname (null unless enable_pim_demo_readers)."
+  value       = local.demo_readers_enabled ? var.demo_readers_group_mail_nickname : null
+}
+
+output "demo_readers_activation_policy" {
+  description = "Evidence summary of the PIM-Demo-Readers activation policy and the directory roles the group holds (null unless enable_pim_demo_readers)."
+  value = local.demo_readers_enabled ? {
+    group                 = var.demo_readers_group_name
+    directory_roles       = local.demo_readers_directory_roles
+    maximum_duration      = var.demo_readers_activation_max_duration
+    mfa                   = true
+    justification         = true
+    approval              = false
+    eligible_expire_after = var.tier1_eligible_assignment_duration
+    activation_mail       = local.pim_notifications_enabled
+    in_ca_admin_scope     = false
+    in_quarterly_review   = local.review_enabled
+    azure_rbac            = "envs/bootstrap enable_pim_demo_readers_azure_rbac (human-applied)"
+  } : null
+}
