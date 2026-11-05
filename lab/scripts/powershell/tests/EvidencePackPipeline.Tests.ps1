@@ -416,7 +416,7 @@ Describe 'Connect-GraphFromAzureCli parity' {
     It 'is identical in every lab/scripts/powershell script that carries a copy' {
         $canonical = (Get-ScriptFunctionBlock -Path (Get-LabScriptPath 'post-apply/Set-AutoAssignmentPolicies.ps1') -Name 'Connect-GraphFromAzureCli').ToString()
         $canonical | Should -Match 'get-access-token --resource-type ms-graph'
-        foreach ($s in 'Export-EvidencePack.ps1', 'post-apply/New-RestrictedAdminUnit.ps1', '06-NHI-Inventory.ps1', '08-Measure-KPIs.ps1', '09-SoD-Report.ps1') {
+        foreach ($s in 'Export-EvidencePack.ps1', 'post-apply/New-RestrictedAdminUnit.ps1', '06-NHI-Inventory.ps1', '08-Measure-KPIs.ps1', '09-SoD-Report.ps1', 'Invoke-BreakGlassDrill.ps1') {
             (Get-ScriptFunctionBlock -Path (Get-LabScriptPath $s) -Name 'Connect-GraphFromAzureCli').ToString() | Should -Be $canonical -Because $s
         }
     }

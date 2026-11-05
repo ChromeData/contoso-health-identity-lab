@@ -134,6 +134,18 @@ Describe 'Assessment and record guards' {
         $r.SignIns[0].signInToAlertMinutes | Should -Be 7
     }
 
+    It 'app roles cover the read scopes they include (ReadWrite covers Read, Directory.Read.All covers users and members)' {
+        $req = @('User.Read.All', 'GroupMember.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.Read.All')
+        # The lab operator's application roles (AGENT-RULES access list).
+        @(Get-UncoveredGraphPermission -Have @('User.ReadWrite.All', 'GroupMember.ReadWrite.All', 'Directory.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.ReadWrite.All') -Required $req) | Should -BeNullOrEmpty
+        @(Get-UncoveredGraphPermission -Have @('Directory.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.Read.All') -Required $req) | Should -BeNullOrEmpty
+        @(Get-UncoveredGraphPermission -Have $req -Required $req) | Should -BeNullOrEmpty
+        @(Get-UncoveredGraphPermission -Have @('User.ReadWrite.All', 'GroupMember.ReadWrite.All', 'UserAuthenticationMethod.ReadWrite.All') -Required $req) | Should -Be @('Policy.Read.All')
+        # Directory.Read.All does not read authentication methods.
+        @(Get-UncoveredGraphPermission -Have @('Directory.Read.All', 'Policy.Read.All') -Required $req) | Should -Be @('UserAuthenticationMethod.Read.All')
+        @(Get-UncoveredGraphPermission -Have @() -Required $req) | Should -BeNullOrEmpty
+    }
+
     It 'catches identifiers before a public record is written' {
         @(Test-PublicRecordSafe -Json '{"account":"bg-admin-01","signInUtc":"2026-11-02T14:00:00.0000000Z","incidentNumber":"42"}').Count | Should -Be 0
         @(Test-PublicRecordSafe -Json '{"upn":"bg-admin-01@contoso.onmicrosoft.com"}').Count | Should -Be 2   # the address and the domain
@@ -173,6 +185,47 @@ Describe 'Invoke-BreakGlassDrill.ps1 (mocked Graph, az and Log Analytics)' {
         & $script:Drill -Phase Preflight -WarningAction SilentlyContinue
         $LASTEXITCODE | Should -Be 0
         Should -Invoke Write-Host -ParameterFilter { "$Object" -match '\[PASS\] Keys bg-admin-01 - 2 usable FIDO2 key' }
+    }
+
+    It 'App-only: refuses -Phase All (it prompts a person) before any sign-in' {
+        Set-DrillMocks
+        Mock az { throw 'tests must not call az' }
+        { & $script:Drill -Phase All -UseAzureCliToken -WarningAction SilentlyContinue } | Should -Throw '*Preflight or -Phase Verify only*'
+        Should -Invoke az -Times 0
+        Should -Invoke Connect-MgGraph -Times 0
+    }
+
+    It 'App-only Preflight (lab: one software passkey each): token from the Azure CLI, app roles accepted, passes' {
+        Set-DrillMocks -KeysPerAccount 1
+        Mock az { $global:LASTEXITCODE = 0; 'eyJ0ZXN0IjoidG9rZW4ifQ' } -ParameterFilter { "$args" -match 'get-access-token' }
+        Mock Connect-MgGraph {}
+        Mock Get-MgContext { New-MgContextStub -Scopes @('User.ReadWrite.All', 'GroupMember.ReadWrite.All', 'Directory.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.ReadWrite.All') }
+        Mock Write-Warning {}
+        $global:LASTEXITCODE = 0
+        & $script:Drill -Phase Preflight -UseAzureCliToken -ExpectedKeysPerAccount 1
+        $LASTEXITCODE | Should -Be 0
+        Should -Invoke Connect-MgGraph -Times 1 -Exactly -ParameterFilter { $null -ne $AccessToken -and -not $Scopes }
+        Should -Invoke Write-Warning -Times 0 -ParameterFilter { "$Message" -match 'does not cover' }
+        Should -Invoke Write-Host -ParameterFilter { "$Object" -match '\[PASS\] Keys bg-admin-01 - 1 usable FIDO2 key' }
+    }
+
+    It 'App-only: an app missing a read permission is named in a warning' {
+        Set-DrillMocks
+        Mock az { $global:LASTEXITCODE = 0; 'eyJ0ZXN0IjoidG9rZW4ifQ' } -ParameterFilter { "$args" -match 'get-access-token' }
+        Mock Connect-MgGraph {}
+        Mock Get-MgContext { New-MgContextStub -Scopes @('Directory.Read.All', 'Policy.Read.All') }
+        Mock Write-Warning {}
+        $global:LASTEXITCODE = 0
+        & $script:Drill -Phase Preflight -UseAzureCliToken
+        Should -Invoke Write-Warning -Times 1 -ParameterFilter { "$Message" -match 'does not cover: UserAuthenticationMethod\.Read\.All' }
+    }
+
+    It 'App-only: no token from the Azure CLI stops the run before Graph' {
+        Set-DrillMocks
+        Mock az { $global:LASTEXITCODE = 1; '' } -ParameterFilter { "$args" -match 'get-access-token' }
+        Mock Connect-MgGraph {}
+        { & $script:Drill -Phase Preflight -UseAzureCliToken -WarningAction SilentlyContinue } | Should -Throw '*No Microsoft Graph token from the Azure CLI*'
+        Should -Invoke Connect-MgGraph -Times 0
     }
 
     It 'Verify: both sign-ins alerted -> Pass, with incident number and latency, exit 0' {

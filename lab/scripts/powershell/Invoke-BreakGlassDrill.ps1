@@ -63,6 +63,20 @@
 .GRAPH SCOPES  (delegated, READ-ONLY)
     User.Read.All, GroupMember.Read.All, Policy.Read.All, UserAuthenticationMethod.Read.All
 
+    APP-ONLY (-UseAzureCliToken): the Graph token is taken from the Azure CLI
+    session, which is already signed in as an app - in the lab, the lab
+    operator through `lab/scripts/operator/op pwsh ...` (ADR 0024). The app's
+    APPLICATION permissions must cover the four above: a ReadWrite role covers
+    its Read, and Directory.Read.All covers User.Read.All and
+    GroupMember.Read.All (Get-UncoveredGraphPermission; the operator holds
+    User.ReadWrite.All, GroupMember.ReadWrite.All, Directory.Read.All,
+    Policy.Read.All and UserAuthenticationMethod.ReadWrite.All). The script
+    still only READS. App-only refuses -Phase All, which prompts a person
+    through each sign-in: run Preflight, do the sign-ins, then Verify.
+    (Learn, permissions reference: the Read.All application permissions are
+    included in their ReadWrite.All counterparts; Directory.Read.All reads
+    users, groups and memberships.)
+
 .PARAMETER Phase
     Preflight | Verify | All (default).
 
@@ -79,6 +93,12 @@
 
 .EXAMPLE
     ./Invoke-BreakGlassDrill.ps1 -OnMicrosoftDomain 'contosohealthlab.onmicrosoft.com' -ChangeTicket 'CHG0001234' -Operator 'MW' -Reviewer 'GM'
+
+.EXAMPLE
+    lab/scripts/operator/op pwsh -NoProfile -File lab/scripts/powershell/Invoke-BreakGlassDrill.ps1 -Phase Preflight -UseAzureCliToken -ExpectedKeysPerAccount 1
+    # Lab, app-only as the lab operator. The lab holds ONE software passkey per
+    # break-glass account (lab/docs/runbooks/break-glass-drill.md, lab deviation),
+    # hence -ExpectedKeysPerAccount 1.
 
 .EXAMPLE
     ./Invoke-BreakGlassDrill.ps1 -Phase Preflight
@@ -175,7 +195,11 @@ param(
 
     [Parameter()]
     [ValidateNotNullOrEmpty()]
-    [string]$PrivateDirectory = (Join-Path $PSScriptRoot '..' '..' 'evidence' 'out' 'drills')
+    [string]$PrivateDirectory = (Join-Path $PSScriptRoot '..' '..' 'evidence' 'out' 'drills'),
+
+    [Parameter()]
+    # App-only: Microsoft Graph token from the Azure CLI session (see .GRAPH SCOPES).
+    [switch]$UseAzureCliToken
 )
 
 # Operator console output. Write-Host on purpose (colour, -NoNewline); every
@@ -295,6 +319,23 @@ function Test-PublicRecordSafe {
     return @($bad | Sort-Object -Unique)
 }
 
+function Get-UncoveredGraphPermission {
+    # Required read permissions the Graph context does not cover. Delegated
+    # contexts list the consented scopes, app-only contexts the app's roles;
+    # a ReadWrite permission covers its Read counterpart and Directory.Read.All
+    # (or ReadWrite) covers reading users and group members. Empty -Have =
+    # unknown (nothing reported). Pure.
+    param([AllowEmptyCollection()][string[]]$Have = @(), [Parameter(Mandatory)][string[]]$Required)
+    $have = @(@($Have) | Where-Object { $_ })
+    if (-not $have) { return @() }
+    $directory = @('Directory.Read.All', 'Directory.ReadWrite.All')
+    return @($Required | Where-Object {
+            $ok = @($_, ($_ -replace '\.Read\.', '.ReadWrite.'))
+            if ($_ -in 'User.Read.All', 'GroupMember.Read.All') { $ok += $directory }
+            -not @($have | Where-Object { $_ -in $ok })
+        })
+}
+
 # =============================================================================
 # I/O HELPERS
 # =============================================================================
@@ -351,6 +392,26 @@ function Test-PasskeyCoverage {
     return [pscustomobject]$r
 }
 
+function Connect-GraphFromAzureCli {
+    # App-only: the Azure CLI is already signed in as an app (azure/login over
+    # GitHub OIDC). The token never leaves this process: masked in Actions,
+    # handed to Connect-MgGraph as a SecureString, then dropped. Same as
+    # mock-hr/Invoke-InboundProvisioning.ps1, through Write-Console for the
+    # analyzer; one copy each in Set-AutoAssignmentPolicies.ps1 and
+    # Export-EvidencePack.ps1 (parity-tested).
+    $global:LASTEXITCODE = 0
+    $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$token)) {
+        throw 'No Microsoft Graph token from the Azure CLI. Sign it in first (azure/login with OIDC in GitHub Actions, or az login locally).'
+    }
+    $token = ([string]$token).Trim()
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Console "::add-mask::$token" }
+    # NetworkCredential.SecurePassword: the same SecureString as
+    # ConvertTo-SecureString -AsPlainText, without the analyzer error rule.
+    Connect-MgGraph -AccessToken ([System.Net.NetworkCredential]::new('', $token).SecurePassword) -NoWelcome | Out-Null
+    Remove-Variable -Name token
+}
+
 function Get-GraphCollection {
     param([Parameter(Mandatory)][string]$Uri)
     $items = [System.Collections.Generic.List[object]]::new(); $next = $Uri
@@ -404,10 +465,21 @@ function Add-Check {
 # CONNECT (Graph + az)
 # =============================================================================
 $requiredScopes = @('User.Read.All', 'GroupMember.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.Read.All')
+if ($UseAzureCliToken) {
+    # -Phase All stops at Read-Host for each sign-in: a person's flow, not an
+    # app's. App-only runs Preflight, then the sign-ins, then Verify.
+    if ($Phase -eq 'All') { throw '-UseAzureCliToken runs -Phase Preflight or -Phase Verify only (-Phase All prompts a person through each sign-in).' }
+    # Always this identity, never a leftover delegated context.
+    Write-Console 'Signing in to Microsoft Graph app-only (token from the Azure CLI session)...' -ForegroundColor Yellow
+    Connect-GraphFromAzureCli
+}
 $ctx = $null; try { $ctx = Get-MgContext } catch { Write-Verbose "Get-MgContext failed: $($_.Exception.Message)"; $ctx = $null }
-if (-not $ctx) { Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes -NoWelcome; $ctx = Get-MgContext }
-$missingScopes = @($requiredScopes | Where-Object { $ctx.Scopes -and $_ -notin $ctx.Scopes })
-if ($missingScopes) { Write-Warning "Current Graph context does not list: $($missingScopes -join ', '). Checks needing them will FAIL." }
+if (-not $ctx) {
+    if ($UseAzureCliToken) { throw 'No Microsoft Graph context after the app-only sign-in.' }
+    Write-Console 'Connecting to Microsoft Graph...' -ForegroundColor Yellow; Connect-MgGraph -Scopes $requiredScopes -NoWelcome; $ctx = Get-MgContext
+}
+$missingScopes = @(Get-UncoveredGraphPermission -Have @($ctx.Scopes) -Required $requiredScopes)
+if ($missingScopes) { Write-Warning "Current Graph context does not cover: $($missingScopes -join ', '). Checks needing them will FAIL." }
 if (-not (Get-Command az -ErrorAction SilentlyContinue)) { throw 'az CLI not found; the alert checks need it (az login first).' }
 $subId = [string](Invoke-AzJson -Arguments @('account', 'show', '--query', 'id'))
 $ws = Invoke-AzJson -Arguments @('monitor', 'log-analytics', 'workspace', 'show', '-g', $ResourceGroup, '-n', $WorkspaceName)
