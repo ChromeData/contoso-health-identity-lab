@@ -66,10 +66,26 @@ caller closes it), `timeoutMs`.
   (class `moveOffScreen`, opacity 0, `aria-hidden`); the driver acts only on
   what is really on screen.
 
+## Known limits (seen live)
+
+- **`--force` on an account that already has an authenticator** stops at
+  *Security info*: after the one-time pass sign-in, My Signins cannot get its
+  Graph token (AADSTS90202, *A transient error has occurred*; sign-in log row
+  *My Signins -> Microsoft Graph*, 2026-11-05, twice in a row on test-user-b).
+  The run fails in seconds and leaves the account exactly as it was: the old
+  method stays registered, the old seed stays in the Keychain (checked: it
+  still signs in), no `-pending` item is left and the pass is deleted. To
+  replace a seed the Keychain has lost, an operator removes the old method
+  first (`DELETE .../softwareOathMethods/<id>`, see *Undo*) and runs
+  `enroll.mjs` without `--force`: a first-time enrollment works (E71's runs).
+- The Okta and AWS demo runs need the user to have a first and last name in
+  Entra: both AWS IAM Identity Center (SCIM) and Okta (JIT) refuse to create a
+  user without them.
+
 ## Tests
 
 ```bash
-node --test lab/scripts/demo/signin/tests/lib.test.mjs   # offline: no tenant, browser or Keychain
+node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs   # offline: no tenant, browser or Keychain
 ```
 
 CI runs them in `lab-tests.yml` (*Shell tests (no containers)*).

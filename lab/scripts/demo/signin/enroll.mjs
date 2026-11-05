@@ -43,13 +43,16 @@
 // Graph lists the new one, so a failed run never leaves the account without
 // working MFA. Without --force such an account is left alone. Nothing changes
 // on the account until Playwright, Chromium and the password check pass, and
-// the pass is deleted in a `finally`, whatever happens. The owner's and break-glass accounts are refused (lib.mjs).
+// the pass is deleted in a `finally`, whatever happens (a failed deletion is
+// an error that names the pass, never silent). A new password and a new seed
+// each wait in a "-pending" Keychain item until the account / Entra has
+// accepted them, so the real items always hold what works. The owner's and break-glass accounts are refused (lib.mjs).
 // Failure screenshots (seed, QR and inputs blurred) go to $SIGNIN_SHOTS_DIR.
 // =============================================================================
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  checkUpn, localPart, graph, keychainRead, keychainWrite, passwordFor, pwService, totpService,
+  checkUpn, localPart, graph, keychain, keychainRead, passwordFor, pwService, pendingService, totpService,
   randomPassword, totp, markTotpStep, playwright, shot, pageText, sleep, log,
 } from './lib.mjs';
 import { drive, signIn } from './signin.mjs';
@@ -89,6 +92,60 @@ async function waitText(page, re, timeout = 30000) {
   throw new Error(`"${re.source}" never appeared. On screen: ${await ui(page)}`);
 }
 
+// ---- the three steps that touch secrets, each keeping the Keychain true ------
+// Exported with injectable Graph / Keychain so tests/enroll.test.mjs can make
+// every step fail and check what is left behind.
+
+// A new random password is stored (pending item) and READ BACK before the
+// account changes, so a Keychain failure can never leave the account with a
+// password nobody holds. Only after Graph accepts it is it promoted to the
+// real item; if promotion fails, the error names the pending item that holds it.
+export function setRandomPassword({ upn, uid, g = graph, kc = keychain, gen = randomPassword }) {
+  const final = pwService(upn), pending = pendingService(final);
+  const value = gen();
+  kc.write(pending, upn, `Contoso lab password for ${upn} (pending)`, value);
+  if (kc.read(pending) !== value) throw new Error(`Keychain item ${pending} did not read back: the account was not changed`);
+  try { g('PATCH', `users/${uid}`, { passwordProfile: { password: value, forceChangePasswordNextSignIn: false } }); }
+  catch (e) { kc.del(pending); throw e; } // the account kept its old password; the unused one goes
+  try { kc.write(final, upn, `Contoso lab password for ${upn}`, value); }
+  catch (e) { throw new Error(`the account's new password is in force and saved ONLY in Keychain item ${pending} (promoting it to ${final} failed: ${e.message})`); }
+  kc.del(pending);
+  return { service: final, value };
+}
+
+// The authenticator seed waits in a pending item while Entra checks the code;
+// the real item (what sign-ins use) is replaced only after Entra confirmed
+// the registration and Graph lists the new method. A failed --force run so
+// keeps the working seed of the method that is still registered.
+export function stageSeed({ upn, seed, kc = keychain }) {
+  const p = pendingService(totpService(upn));
+  kc.write(p, upn, `Contoso lab authenticator seed for ${upn} (pending)`, seed);
+  return p;
+}
+export function promoteSeed({ upn, seed, kc = keychain }) {
+  kc.write(totpService(upn), upn, `Contoso lab authenticator seed for ${upn}`, seed);
+  kc.del(pendingService(totpService(upn)));
+}
+
+// The pass we issued, and its removal. Only a pass that is confirmed gone (404)
+// counts as removed; any other failure keeps its id (so a later call retries)
+// and throws, naming the pass and the command that deletes it.
+export function tapCleaner({ upn, uid, g = graph }) {
+  let id = null;
+  const notFound = (e) => /\b404\b|Not ?Found|ResourceNotFound|does not exist/i.test(String(e && e.message));
+  return {
+    get id() { return id; },
+    set(v) { id = v; },
+    remove() {
+      if (!id) return;
+      try { g('DELETE', `users/${uid}/authentication/temporaryAccessPassMethods/${id}`); id = null; } catch (e) {
+        if (notFound(e)) { id = null; return; }
+        throw new Error(`could not delete the Temporary Access Pass ${id} on ${upn} - it stays valid until it expires (${String(e.message).split('\n').filter(Boolean).slice(-1)[0].slice(0, 200)}). Delete it: lab/scripts/operator/op az rest --method DELETE --url "https://graph.microsoft.com/v1.0/users/${uid}/authentication/temporaryAccessPassMethods/${id}"`);
+      }
+    },
+  };
+}
+
 export async function enroll(upn, { force = false, headless = true, verify = true } = {}) {
   upn = checkUpn(upn);
   const local = localPart(upn);
@@ -111,16 +168,13 @@ export async function enroll(upn, { force = false, headless = true, verify = tru
   if (!pw && user.onPremisesSyncEnabled) throw new Error(`${upn} is synced from AD and has no Keychain password: its password belongs to AD, not Graph`);
   const browser = await pwLib.chromium.launch({ headless });
 
-  let tapId = null, page = null, context = null;
-  const removeOurTap = () => { if (tapId) { try { graph('DELETE', `users/${uid}/authentication/temporaryAccessPassMethods/${tapId}`); } catch { /* already used up or gone */ } tapId = null; } };
+  const tapc = tapCleaner({ upn, uid });
+  let page = null, context = null, failed = null;
   try {
     if (pw) log(`${local}: keeping the password in Keychain item ${pw.service}`);
     else {
-      const value = randomPassword();
-      graph('PATCH', `users/${uid}`, { passwordProfile: { password: value, forceChangePasswordNextSignIn: false } });
-      keychainWrite(pwService(upn), upn, `Contoso lab password for ${upn}`, value);
-      pw = { service: pwService(upn), value };
-      log(`${local}: set a new random password (Keychain ${pw.service})`);
+      pw = setRandomPassword({ upn, uid });
+      log(`${local}: set a new random password (saved and read back first; Keychain ${pw.service})`);
     }
 
     // ---- 2. one-time Temporary Access Pass ----------------------------------------
@@ -130,7 +184,7 @@ export async function enroll(upn, { force = false, headless = true, verify = tru
       log(`${local}: removed an existing Temporary Access Pass (created ${m.createdDateTime})`);
     }
     const issued = graph('POST', `users/${uid}/authentication/temporaryAccessPassMethods`, { lifetimeInMinutes: 60, isUsableOnce: true });
-    tapId = issued.id;
+    tapc.set(issued.id);
     let tap = issued.temporaryAccessPass;
     if (!tap) throw new Error('the Temporary Access Pass was not issued');
     log(`${local}: one-time Temporary Access Pass issued (60 min, single use; held in memory)`);
@@ -139,8 +193,17 @@ export async function enroll(upn, { force = false, headless = true, verify = tru
     page = await context.newPage();
 
     // ---- 3. sign in with the pass and register the authenticator app -----------
+    // My Signins reports one failure only in its console: AADSTS90202 on its
+    // Graph token, seen live (2026-11-05) on an account that ALREADY has an
+    // authenticator and signs in with a one-time pass. It is turned into an
+    // immediate error (other AADSTS codes in the console are normal silent-SSO
+    // noise and are ignored).
+    let failSecurityInfo;
+    const securityInfoFailed = new Promise((_, rej) => { failSecurityInfo = rej; });
+    securityInfoFailed.catch(() => {});
+    page.on('console', (m) => { const x = m.text().match(/AADSTS90202[^\n]*/); if (x) failSecurityInfo(new Error(`Security info did not load: ${x[0].slice(0, 160)} - My Signins could not get its Graph token after the one-time pass sign-in (seen when the account already has an authenticator; README "Known limits")`)); });
     await page.goto(SECURITY_INFO, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await drive(page, upn, { tap, kmsi: false, until: async (p) => /mysignins\.microsoft\.com/.test(p.url()) && /Security info/i.test(await pageText(p)) });
+    await Promise.race([securityInfoFailed, drive(page, upn, { tap, kmsi: false, until: async (p) => /mysignins\.microsoft\.com/.test(p.url()) && /Security info/i.test(await pageText(p)) })]);
     tap = null;
     log(`${local}: on Security info`);
     await sleep(2500);
@@ -170,8 +233,8 @@ export async function enroll(upn, { force = false, headless = true, verify = tru
     if (!m) throw new Error(`no secret key on the page. On screen: ${await ui(page)}`);
     const seed = m[1].replace(/\s+/g, '').toUpperCase();
     totp(seed); // throws if it is not base32
-    keychainWrite(totpService(upn), upn, `Contoso lab authenticator seed for ${upn}`, seed);
-    log(`${local}: secret key read and stored in Keychain ${totpService(upn)}`);
+    const pendingItem = stageSeed({ upn, seed });
+    log(`${local}: secret key read; held in Keychain ${pendingItem} until Entra accepts it`);
     await clickText(page, /^Next$/i);
     await sleep(1500);
 
@@ -187,10 +250,13 @@ export async function enroll(upn, { force = false, headless = true, verify = tru
     const done = await shot(page, `enroll-ok-${local}`);
 
     // ---- 4. clean-up and proof -------------------------------------------------
-    removeOurTap();
     const now = (graph('GET', `users/${uid}/authentication/softwareOathMethods`).value || []).map((x) => x.id);
     const added = now.filter((id) => !oldOath.includes(id));
-    if (!added.length) throw new Error('Graph lists no NEW authenticator-app method after registration');
+    if (!added.length) throw new Error(`Graph lists no NEW authenticator-app method after registration (the seed stays in Keychain ${pendingItem})`);
+    // Entra confirmed and Graph lists it: now the seed sign-ins use is replaced.
+    promoteSeed({ upn, seed });
+    log(`${local}: seed promoted to Keychain ${totpService(upn)}`);
+    tapc.remove();
     // --force: the old method(s) go only now, after the new one is in place,
     // so a failed run never leaves the account without its working MFA.
     for (const id of oldOath) { graph('DELETE', `users/${uid}/authentication/softwareOathMethods/${id}`); log(`${local}: removed the replaced authenticator-app method`); }
@@ -206,13 +272,16 @@ export async function enroll(upn, { force = false, headless = true, verify = tru
     }
     return { upn, enrolled: true, passwordItem: pw.service, seedItem: totpService(upn), screenshot: done, verified };
   } catch (e) {
+    failed = e;
     const f = page ? await shot(page, `enroll-fail-${local}`) : null;
     if (f) e.message += ` [screenshot: ${f}]`;
     throw e;
   } finally {
-    // Whatever happened, no pass of ours outlives the run.
-    removeOurTap();
-    await browser.close().catch(() => {});
+    // Whatever happened, no pass of ours outlives the run - or the run says so, loudly.
+    try { tapc.remove(); } catch (ce) {
+      console.error(`[signin] ${local}: ERROR ${ce.message}`);
+      if (failed) failed.message += ` | ALSO: ${ce.message}`; else throw ce; // eslint-disable-line no-unsafe-finally
+    } finally { await browser.close().catch(() => {}); }
   }
 }
 

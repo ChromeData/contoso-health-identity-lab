@@ -243,3 +243,9 @@ test('a holder never removes a lock it does not own', async () => {
   assert.equal(fs.readFileSync(lock, 'utf8'), 'someone-else');
   fs.rmSync(lock);
 });
+
+test('keychainDelete: missing (exit 44) is false, other failures throw', async () => {
+  await withFake(fakeSecurity(44), (l) => assert.equal(l.keychainDelete('contoso-lab-x'), false));
+  await withFake(fakeSecurity(36), (l) => assert.throws(() => l.keychainDelete('contoso-lab-x'), /Keychain delete failed \(security exit 36\)/));
+  await withFake(fakeSecurity(0), (l) => assert.equal(l.keychainDelete('contoso-lab-x'), true));
+});

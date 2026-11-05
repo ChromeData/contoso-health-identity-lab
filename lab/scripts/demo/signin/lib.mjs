@@ -103,9 +103,23 @@ export function keychainWrite(service, account, label, secret) {
   if (keychainRead(service) !== secret) throw new Error(`Keychain write to ${service} did not read back`);
 }
 
+// Delete an item (no secret in argv). Missing (exit 44) is fine; anything
+// else throws.
+export function keychainDelete(service) {
+  try { execFileSync(SECURITY, ['delete-generic-password', '-s', service], { stdio: ['ignore', 'ignore', 'ignore'] }); return true; } catch (e) {
+    if (e.status === ITEM_NOT_FOUND) return false;
+    throw new Error(`Keychain delete failed (security exit ${e.status}) for ${service}`);
+  }
+}
+// The default Keychain, as one object, so steps can be tested with a fake.
+export const keychain = { read: (s) => keychainRead(s), write: (s, a, l, v) => keychainWrite(s, a, l, v), del: (s) => keychainDelete(s) };
+
 // Names used for a user's secrets.
 export const totpService = (upn) => `contoso-lab-totp-${localPart(upn)}`;
 export const pwService = (upn) => `contoso-lab-pw-${localPart(upn)}`;
+// A secret that is not yet in force on the account waits here, so the item
+// above always holds what Entra accepts (see enroll.mjs).
+export const pendingService = (svc) => `${svc}-pending`;
 // The user's password: contoso-lab-pw-<local> (set by enroll.mjs), else the
 // older contoso-lab-<local> items (the test users' contoso-lab-test-user-a/b/c),
 // accepted only when the item's account attribute is this UPN.

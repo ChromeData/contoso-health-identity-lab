@@ -165,7 +165,7 @@ jobs:
           set -euo pipefail
           bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
           bash lab/scripts/demo/tests/reset-demo-hire.test.sh
-          node --test lab/scripts/demo/signin/tests/lib.test.mjs
+          node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs
           (cd lab/splunk && ./render-savedsearches.sh --check)
 
       # The plain-English plan/apply summaries run with continue-on-error in
