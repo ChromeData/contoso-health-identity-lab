@@ -152,7 +152,7 @@
    "A ten-minute visitor pass."
   ],
   "PB": [
-   "Built as code, not switched on yet: it would push each alert to a Teams channel and open a ServiceNow ticket.",
+   "Each alert is posted to the security team's Teams channel and opened as a ServiceNow ticket, automatically.",
    "The phone tree."
   ],
   "CONTAIN": [
@@ -237,7 +237,8 @@
   "REVIEW": "RAN · tenant",
   "DRIFT": "RAN · tenant",
   "LCW": "RAN · tenant",
-  "CONTAIN": "RAN · tenant"
+  "CONTAIN": "RAN · tenant",
+  "PB": "RAN · tenant"
  },
  "fields": {
   "OKTA": {
