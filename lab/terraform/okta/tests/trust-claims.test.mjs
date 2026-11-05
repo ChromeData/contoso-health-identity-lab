@@ -2,7 +2,10 @@
 // token. Run: node --test lab/terraform/okta/tests/trust-claims.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planTrust, putBody, readBackProblems, run } from '../trust-claims.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { planTrust, putBody, readBackProblems, run, defaultIdpName, sameJson } from '../trust-claims.mjs';
 
 const V1 = 'https://sts.windows.net/11111111-1111-1111-1111-111111111111/';
 const V2 = 'https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0';
@@ -81,4 +84,20 @@ test('run: the IdP is found by exact name; zero or several matches stop the run'
 test('readBackProblems: identical apart from the flag = no problems', () => {
   const before = idp(V1), after = { ...idp(V1), policy: { ...idp(V1).policy, trustClaims: true } };
   assert.deepEqual(readBackProblems(before, after, true), []);
+});
+
+test('readBackProblems ignores key order: the same values in another order are not a change', () => {
+  const before = idp(V1);
+  const after = structuredClone(before);
+  after.policy = { trustClaims: true, subject: after.policy.subject, provisioning: after.policy.provisioning, maxClockSkew: 0 };
+  after.protocol = { credentials: after.protocol.credentials, algorithms: after.protocol.algorithms, endpoints: { token: after.protocol.endpoints.token, authorization: after.protocol.endpoints.authorization }, issuer: after.protocol.issuer, scopes: after.protocol.scopes, type: 'OIDC' };
+  assert.deepEqual(readBackProblems(before, after, true), []);
+  assert.equal(sameJson({ a: 1, b: { c: 2, d: 3 } }, { b: { d: 3, c: 2 }, a: 1 }), true);
+  assert.equal(sameJson({ a: [1, 2] }, { a: [2, 1] }), false, 'array order still matters');
+});
+
+test('defaultIdpName reads the default from this root\'s variables.tf (no tfvars needed)', () => {
+  const tf = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'variables.tf'), 'utf8');
+  assert.equal(defaultIdpName(tf), 'Microsoft Entra ID (Contoso Health)');
+  assert.equal(defaultIdpName('variable "other" { default = "x" }'), null);
 });

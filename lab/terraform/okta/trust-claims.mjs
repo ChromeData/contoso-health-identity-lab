@@ -48,6 +48,22 @@ export function readTfvars(file) {
   return out;
 }
 
+// The IdP name Terraform uses when terraform.tfvars does not set one: the
+// `default` of variable "entra_idp_name" in this root's variables.tf, read
+// from the file so the two can never disagree.
+export function defaultIdpName(variablesTf) {
+  const m = variablesTf.match(/variable\s+"entra_idp_name"\s*\{[\s\S]*?\n\s*default\s*=\s*"([^"]+)"/);
+  return m ? m[1] : null;
+}
+
+// Key-order-independent equality for the read-back: Okta may return the same
+// fields in another order.
+export function sameJson(a, b) {
+  const canon = (v) => Array.isArray(v) ? v.map(canon)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v;
+  return JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+}
+
 // What would change: pure, so it is unit-tested (tests/trust-claims.test.mjs).
 export function planTrust(idp, desired) {
   const issuer = (idp.protocol && idp.protocol.issuer && idp.protocol.issuer.url) || '';
@@ -71,7 +87,7 @@ export function putBody(idp, desired) {
 // After the PUT: trustClaims is what was asked, and nothing else moved.
 export function readBackProblems(before, after, desired) {
   const p = [];
-  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const same = sameJson;
   if (!!(after.policy && after.policy.trustClaims) !== desired) p.push('policy.trustClaims');
   if (!same(before.protocol.endpoints, after.protocol.endpoints)) p.push('protocol.endpoints');
   if (!same(before.protocol.issuer, after.protocol.issuer)) p.push('protocol.issuer');
@@ -127,7 +143,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(proces
     const tfv = path.join(HERE, 'terraform.tfvars');
     const t = fs.existsSync(tfv) ? readTfvars(tfv) : {};
     org = org || (t.okta_org_name ? `${t.okta_org_name}.${t.okta_base_url || 'okta.com'}` : null);
-    idpName = idpName || t.entra_idp_name;
+    idpName = idpName || t.entra_idp_name || defaultIdpName(fs.readFileSync(path.join(HERE, 'variables.tf'), 'utf8'));
     if (!org || (!idpName && !idpId)) throw new Error('no org / IdP: pass --org and --idp-name (or --idp-id), or run next to this root\'s terraform.tfvars');
     const token = process.env.OKTA_API_TOKEN || execFileSync('security', ['find-generic-password', '-s', 'contoso-lab-okta-token', '-w'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     if (!token) throw new Error('no Okta API token (OKTA_API_TOKEN or Keychain contoso-lab-okta-token)');
