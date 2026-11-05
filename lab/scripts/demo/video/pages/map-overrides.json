@@ -48,7 +48,7 @@
    "The front desk and badge office."
   ],
   "CABASE": [
-   "The core sign-in rules: everyone proves it is them with more than a password, and old insecure sign-in methods are blocked. The phishing-proof rule for admins is only watching for now, until their security keys are issued.",
+   "The core sign-in rules: everyone proves it is them with more than a password, and old insecure sign-in methods are blocked. Admins now have phishing-proof passkeys; the rule that demands them is still only watching.",
    "The guard at every door."
   ],
   "PIM": [
@@ -68,7 +68,7 @@
    "Collecting every badge at the exit."
   ],
   "NHI": [
-   "Robot accounts: the identities apps use to talk to each other. The rule is two human owners each and no stored passwords. Today none has two owners and most have none; that is the list being worked.",
+   "Robot accounts: the identities apps use to talk to each other. The rule is two human owners each and no stored passwords. Today none has two owners and many have none; that is the list being worked.",
    "The machine badge register."
   ],
   "EVID": [
