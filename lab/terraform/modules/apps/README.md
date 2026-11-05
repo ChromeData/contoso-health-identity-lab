@@ -501,7 +501,7 @@ org exist.**
 | API permissions (declared, consent is human) | Microsoft Graph delegated `openid`, `profile`, `email`, `User.Read` (*verify:* Okta's current list for a generic OIDC IdP) |
 | Enterprise app | assignment required; **one** assignment: `App-Okta-Federation-Users` (`okta_federation_users_group_object_id`, from `modules/groups`) |
 | Client secret | **not created by Terraform.** Output `okta_idp_client_secret_command` mints one with `Add-MgApplicationPassword`, bounded to `okta_idp_secret_lifetime_days` (default and maximum 180: the `P180D` rotation in `lab/iga/nhi-secrets-register.json`), and prints it once for `TF_VAR_entra_client_secret` in the Okta root |
-| Hand-off to the Okta root | outputs `okta_idp_client_id` and `okta_idp_endpoints` (the tenant's v2.0 issuer, authorize, token, JWKS and userinfo URLs) |
+| Hand-off to the Okta root | outputs `okta_idp_client_id` and `okta_idp_endpoints` (the tenant's v1.0 issuer, authorize, token and JWKS - v1.0 because only its ID token carries the `amr` Okta's trust claims reads; no userinfo, which refuses v1.0 tokens; the app adds the `email` optional claim to that ID token) |
 | NHI inventory row | `okta_clinic_idp`: credential type *client-secret, human-minted, bounded*, no outbound secret |
 
 **Why there is no `okta_idp_secret_mode = "keyvault"`.** It was considered and

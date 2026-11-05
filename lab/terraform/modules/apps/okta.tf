@@ -78,16 +78,19 @@ locals {
     "User.Read" = "e1fe6dd8-ba31-4d61-89e7-88639da4683d"
   }
 
-  # The tenant's v2.0 endpoints the Okta root's okta_idp_oidc needs as plain
-  # inputs (the Okta provider has no discovery-URL field, provider 4.20).
+  # The tenant's v1.0 endpoints the Okta root's okta_idp_oidc uses (the Okta
+  # provider has no discovery-URL field, provider 4.20). v1.0, not v2.0:
+  # only the v1.0 ID token carries the `amr` claim Okta's "trust claims"
+  # reads to count the MFA Entra enforced (lab/terraform/okta main.tf locals,
+  # read live 2026-11-05). No userinfo URL: Graph's userinfo refuses the
+  # v1.0 access token (401); the ID token carries the profile instead.
   # Output as a map so the human copies values, not a URL they typed.
-  entra_v2_authority = "https://login.microsoftonline.com/${data.azuread_client_config.current.tenant_id}"
+  entra_authority = "https://login.microsoftonline.com/${data.azuread_client_config.current.tenant_id}"
   okta_idp_endpoints = {
-    issuer_url        = "${local.entra_v2_authority}/v2.0"
-    authorization_url = "${local.entra_v2_authority}/oauth2/v2.0/authorize"
-    token_url         = "${local.entra_v2_authority}/oauth2/v2.0/token"
-    jwks_url          = "${local.entra_v2_authority}/discovery/v2.0/keys"
-    user_info_url     = "https://graph.microsoft.com/oidc/userinfo"
+    issuer_url        = "https://sts.windows.net/${data.azuread_client_config.current.tenant_id}/"
+    authorization_url = "${local.entra_authority}/oauth2/authorize"
+    token_url         = "${local.entra_authority}/oauth2/token"
+    jwks_url          = "${local.entra_authority}/discovery/keys"
   }
 }
 
@@ -114,6 +117,18 @@ resource "azuread_application" "okta_idp" {
     implicit_grant {
       access_token_issuance_enabled = false
       id_token_issuance_enabled     = false # Okta uses the authorization code flow
+    }
+  }
+
+  # The v1.0 ID token Okta now reads carries given_name, family_name and upn
+  # but NOT email for members of the tenant (Microsoft Learn, "ID token claims
+  # reference": email is "present by default for guest accounts"; managed
+  # users get it through the `email` optional claim). Okta needs it: JIT
+  # names the new Okta user after idpuser.email and links accounts by email.
+  # Emitted only for users with a mail attribute on a verified domain.
+  optional_claims {
+    id_token {
+      name = "email"
     }
   }
 

@@ -17,7 +17,8 @@
 #
 #   WITH enable_entra_federation (Phase 1):
 #   * the Microsoft Entra ID identity provider, generic OIDC (okta_idp_oidc,
-#     protocol OIDC) against the tenant's v2.0 endpoints, authorization code
+#     protocol OIDC) against the tenant's v1.0 endpoints (their ID token
+#     carries amr, which Okta's trust claims reads - see locals), authorization code
 #     + client secret, scopes openid profile email; account link by EMAIL
 #     (runbook: "Account link: match on email"), JIT on in the lab;
 #   * ONE IdP discovery routing rule, priority 1: username SUFFIX =
@@ -58,16 +59,28 @@ locals {
   # two outputs.
   okta_callback_uri = "https://${local.okta_org_domain}/oauth2/v1/authorize/callback"
 
-  # The tenant's v2.0 endpoints (the same values envs/dev prints as
-  # okta_idp_endpoints; built here from the tenant id so a typo in a pasted
-  # URL cannot point the IdP at another tenant).
+  # The tenant's v1.0 endpoints - on purpose, not v2.0. Okta can honour the
+  # MFA Entra already enforced (CA001) only if the ID token carries an `amr`
+  # claim (Okta developer docs, "Configure claims sharing" > third-party OIDC
+  # IdP: the IdP "must send an amr array with AMR claims in the OpenID Connect
+  # ID token"; the access-token fallback needs a JWT signed with the same keys
+  # as the ID token). Read live 2026-11-05 for okta-clinic-idp:
+  #   * v2.0 ID token: NO amr (Microsoft Learn "ID token claims reference" does
+  #     not list amr either); its access token is a Microsoft Graph token with
+  #     amr ["pwd","mfa"] but a `nonce` header, which third parties cannot
+  #     verify - so Okta's fallback cannot use it;
+  #   * v1.0 ID token: amr ["pwd","mfa"], given_name, family_name, upn - and
+  #     the same `sub`, so users Okta already linked stay linked.
+  # Okta's docs: the `mfa` AMR value "is defined to satisfy the app sign-in
+  # policy Any two factors configuration" (with no further constraints).
+  # The issuer is built from the tenant id, so a typo cannot point the IdP
+  # at another tenant (the same values envs/dev prints as okta_idp_endpoints).
   entra_authority = "https://login.microsoftonline.com/${var.entra_tenant_id}"
   entra_endpoints = {
-    issuer_url        = "${local.entra_authority}/v2.0"
-    authorization_url = "${local.entra_authority}/oauth2/v2.0/authorize"
-    token_url         = "${local.entra_authority}/oauth2/v2.0/token"
-    jwks_url          = "${local.entra_authority}/discovery/v2.0/keys"
-    user_info_url     = "https://graph.microsoft.com/oidc/userinfo"
+    issuer_url        = "https://sts.windows.net/${var.entra_tenant_id}/"
+    authorization_url = "${local.entra_authority}/oauth2/authorize"
+    token_url         = "${local.entra_authority}/oauth2/token"
+    jwks_url          = "${local.entra_authority}/discovery/keys"
   }
 
   federation_enabled = var.enable_entra_federation
@@ -143,8 +156,11 @@ resource "okta_idp_oidc" "entra" {
   token_binding         = "HTTP-POST"
   jwks_url              = local.entra_endpoints.jwks_url
   jwks_binding          = "HTTP-REDIRECT"
-  user_info_url         = local.entra_endpoints.user_info_url
-  user_info_binding     = "HTTP-REDIRECT"
+  # No userinfo endpoint: the v1.0 access token is not accepted by
+  # https://graph.microsoft.com/oidc/userinfo (HTTP 401, read live), and the
+  # v1.0 ID token already carries the profile Okta maps (given_name,
+  # family_name; email via the app's `email` optional claim, modules/apps
+  # okta.tf).
 
   # Okta identifies itself to Entra by the org URL, which is the host of the
   # callback registered on the Entra app. A custom domain would be
