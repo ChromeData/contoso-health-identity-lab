@@ -6,7 +6,7 @@
   "apps": "The places staff actually go after they sign in. AWS: Amazon's cloud, where hospitals run their own apps. ServiceNow: the help desk where staff raise IT tickets. Okta: a partner clinic's own login system. AWS and Okta trust the hospital login instead of keeping their own passwords; ServiceNow's is wired and switched off for now. For AWS the account is created and switched off automatically from HR. Why one login: one place to turn a person off, one set of sign-in rules, no forgotten passwords in each app.",
   "signin": "The checks at the door, every time someone signs in. Where you are, what device, how risky this looks, and whether you proved it is you with more than a password. New rules start in report-only mode (it watches and logs, blocks nothing) so a mistake cannot lock a nurse out mid-shift. Why watch-only first: a bad rule in a hospital locks out clinicians mid-shift, so rules prove themselves before they enforce.",
   "privileged": "No admin keeps power day to day. Admins ask for it, say why, get it for a few hours, and it switches off again. The exceptions are the build account and two locked emergency accounts. Shared passwords for servers live in a vault (a local stand-in for CyberArk) that rotates them and records who used them. Why: a stolen admin account that holds power all day is the worst case. Power that switches off limits the damage to hours.",
-  "detect": "The alarm system. Sign-in and change records flow into one place, and rules written as code spot trouble such as a sign-in from a blocked country. A lockout playbook that asks a person first is built, not switched on yet. Why a human approves lockouts: an automatic lockout of the wrong clinician is itself a patient-safety incident.",
+  "detect": "The alarm system. Sign-in and change records flow into one place, and rules written as code spot trouble such as a sign-in from a blocked country. Before any lockout, a playbook asks a person in Teams to approve. Why a human approves lockouts: an automatic lockout of the wrong clinician is itself a patient-safety incident.",
   "leaver": "When someone leaves, HR flips one field and everything closes: account off, sessions cut, app access gone, each step timed. Robot accounts the person owned are meant to be handed to a named successor; today the inventory lists the ones with no owner. Why timed: the gap between someone leaving and losing access is the number an auditor asks for.",
   "proof": "Showing an auditor it works, on demand. Regular reviews of who has what, an evidence binder where every page is fingerprinted and stored where nobody can edit it, and a nightly check that nothing has drifted from the approved setup. Why: a control nobody can prove is a control nobody can trust. Evidence is produced by the system, not assembled by hand before an audit."
  },
@@ -156,7 +156,7 @@
    "The phone tree."
   ],
   "CONTAIN": [
-   "Built as code, not switched on yet: a person approves in Teams, then sessions are cut and the account disabled or flagged.",
+   "A person approves in Teams; only then are sessions cut and the account disabled or flagged.",
    "The supervisor's yes."
   ],
   "FEED": [
@@ -236,7 +236,8 @@
   "INTUNE": "RAN · tenant",
   "REVIEW": "RAN · tenant",
   "DRIFT": "RAN · tenant",
-  "LCW": "RAN · tenant"
+  "LCW": "RAN · tenant",
+  "CONTAIN": "RAN · tenant"
  },
  "fields": {
   "OKTA": {
