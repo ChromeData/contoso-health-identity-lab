@@ -1,0 +1,107 @@
+{
+  "record": "containment-drill.sh arm / answer / disarm cycle in the lab tenant (RAN - tenant), 2026-11-05",
+  "script": "lab/scripts/demo/containment-drill.sh",
+  "operator": "lab operator (certificate service principal) through lab/scripts/operator/op",
+  "steps": [
+    {
+      "utc": "2026-11-05T12:53:02Z",
+      "command": "containment-drill.sh arm",
+      "exit": 0,
+      "took": "2 min 08 s",
+      "output": [
+        "temporary rule enabled; waiting for the incident",
+        "incident #51 raised; temporary rule disabled",
+        "pb-identity-contain started; waiting for its approval card",
+        "approval card waiting in Contoso SOC / Identity-SecOps for incident #51 (about itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com)",
+        "DRILL_INCIDENT=51"
+      ]
+    },
+    {
+      "utc": "about 12:55Z (between the arm and the answer)",
+      "command": "containment-drill.sh arm (again)",
+      "exit": 0,
+      "output": [
+        "already armed: incident #51, approval card waiting in Contoso SOC / Identity-SecOps",
+        "DRILL_INCIDENT=51"
+      ],
+      "note": "idempotent: nothing created"
+    },
+    {
+      "utc": "2026-11-05T12:56:18Z",
+      "command": "answer-teams-card.mjs --as test-user-a@contosohealthlab.com --incident 51 --choice contain",
+      "result": {
+        "ok": true,
+        "clicked": "Contain (revoke + disable)",
+        "subjects": [
+          "itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com"
+        ],
+        "cardUpdated": true
+      },
+      "note": "a first try at 12:55:25Z was refused before any sign-in: the entities read returned no Account for the brand-new incident (fail closed); the helper now retries that read"
+    },
+    {
+      "utc": "2026-11-05T12:56:45Z",
+      "playbookRun": "08584077235929535047895555375CU40",
+      "responder": "test-user-a@contosohealthlab.com (f0fae691-4751-416b-9535-4756ee7c3fa6)",
+      "decision": "contain",
+      "revokeSignInSessions": 200,
+      "confirmCompromised": 204,
+      "disable": 204,
+      "subjectAfter": {
+        "accountEnabled": false,
+        "signInSessionsValidFromDateTime": "2026-11-05T12:56:45Z"
+      }
+    },
+    {
+      "utc": "about 12:57Z (just before the disarm)",
+      "command": "containment-drill.sh arm (after the Contain)",
+      "exit": 4,
+      "output": [
+        "itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com is disabled (an earlier take was contained): run disarm, then arm"
+      ]
+    },
+    {
+      "utc": "2026-11-05T12:57:30Z",
+      "command": "containment-drill.sh disarm",
+      "exit": 0,
+      "output": [
+        "deleted itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com",
+        "purged itdr-drill-20261105@ContosoHealthLab.onmicrosoft.com",
+        "temporary rule 0ec34a77-ed63-472b-af25-5a1fee6aa117 deleted",
+        "closed incident #51 (BenignPositive) with the drill summary",
+        "disarmed: no drill user, no temporary rule, every drill incident closed, no card pending for it"
+      ]
+    },
+    {
+      "command": "containment-drill.sh disarm (again)",
+      "exit": 0,
+      "output": [
+        "disarmed: no drill user, no temporary rule, every drill incident closed, no card pending for it"
+      ],
+      "note": "idempotent"
+    }
+  ],
+  "incident51": {
+    "severity": "High",
+    "status": "Closed",
+    "classification": "BenignPositive",
+    "created": "2026-11-05T12:54:16Z",
+    "comments": [
+      "12:56:49Z ITDR containment - playbook pb-identity-contain run 08584077235929535047895555375CU40 CONTAIN approved by test-user-a@contosohealthlab.com ... revokeSignInSessions HTTP 200, confirmCompromised HTTP 204, disable HTTP 204",
+      "12:57:55Z Drill closed by lab/scripts/demo/containment-drill.sh disarm: the throwaway drill user is deleted and purged, the temporary rule is deleted, no approval is left pending. Outcomes on this incident: ..."
+    ]
+  },
+  "entraAudit": [
+    "12:56:45Z UserManagement Update StsRefreshTokenValidFrom Timestamp success - pb-identity-contain",
+    "12:56:46Z IdentityProtection ConfirmAccountCompromised success",
+    "12:56:46Z UserManagement Disable account success - pb-identity-contain",
+    "12:57:48Z UserManagement Hard Delete user success - Contoso Lab Operator (local Mac, certificate)"
+  ],
+  "foundOnTheWay": [
+    "A run started 17 s after the incident was created saw no Account entity (incident #49, 'No account entities on this incident'): arm now waits for the drill user's entity before it starts the playbook.",
+    "A new user can answer 404 for a few seconds: arm retries that read only.",
+    "Sentinel refuses to re-create a deleted rule id for a while ('was recently deleted'): the rule id is new for every arm; the rule is found by its name.",
+    "The SAS link of a nested action's output (Get_user) answers WorkflowRunActionNotFound while the run waits: a waiting card's subject is read from the run trigger's incident entities and resolved in Graph by object id."
+  ],
+  "notTheOwner": "No step used the owner's account; the approver was test-user-a."
+}

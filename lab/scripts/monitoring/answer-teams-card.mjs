@@ -101,7 +101,14 @@ try {
   const upn = checkUpn(upnArg);
   let subjects = null;
   if (choice !== 'reject') {
-    subjects = incidentSubjects();
+    // A brand-new incident can answer the entities read with no Account for
+    // a moment (seen 2026-11-05 on drill incident #51): retry an EMPTY answer
+    // only, a few times; anything still empty is refused below.
+    for (let i = 0; i < 4; i++) {
+      subjects = incidentSubjects();
+      if (subjects.length) break;
+      await sleep(5000);
+    }
     if (!drillOnly(subjects)) throw new Error(`refused: incident #${incident} names ${JSON.stringify(subjects)}; --choice ${choice} is only for incidents whose every account is a lab test or drill account (reject is always allowed)`);
   }
   const params = az(['resource', 'show', '-g', rg, '-n', playbook, '--resource-type', 'Microsoft.Logic/workflows', '--query', 'properties.parameters']);
