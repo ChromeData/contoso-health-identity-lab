@@ -564,6 +564,21 @@ Describe 'Measure-SecureScore (baseline day vs today, from Microsoft''s daily hi
         $dup = @($script:History) + @(New-ScoreDay '2026-11-05T20:00:00Z' 130 200 @{ AdminMFAV2 = 10 })
         (Measure-SecureScore -History $dup).Latest.score | Should -Be 130
     }
+    It 'fails on a record whose current score is missing, instead of reading it as 0' {
+        $noCur = New-ScoreDay '2026-11-06T02:00:00Z' 0 200 @{}
+        $noCur.Remove('currentScore')
+        { Measure-SecureScore -History (@($script:History) + @($noCur)) } | Should -Throw '*no currentScore*'
+    }
+    It 'keeps an unknown control score as null (a change it cannot see is not a change to 0)' {
+        $day = New-ScoreDay '2026-11-06T02:00:00Z' 120 200 @{ AdminMFAV2 = 10 }
+        $day['controlScores'] = @(@{ controlName = 'AdminMFAV2'; controlCategory = 'Identity'; score = $null })
+        $r = Measure-SecureScore -History (@($script:History) + @($day)) -BaselineDate '2026-11-05'
+        $m = @($r.ControlsMoved | Where-Object { $_['control'] -eq 'AdminMFAV2' })
+        $m.Count | Should -Be 1
+        $m[0]['before'] | Should -Be 10
+        $m[0]['after'] | Should -BeNullOrEmpty
+        $m[0]['delta'] | Should -BeNullOrEmpty
+    }
     It 'fails on an empty history or a record without a maximum (never reports 0)' {
         { Measure-SecureScore -History @() } | Should -Throw '*empty*'
         { Measure-SecureScore -History @(New-ScoreDay '2026-11-05T02:00:00Z' 10 0 @{}) } | Should -Throw '*no maxScore*'

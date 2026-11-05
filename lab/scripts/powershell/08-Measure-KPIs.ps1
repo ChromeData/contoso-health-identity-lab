@@ -889,8 +889,8 @@ function Measure-SecureScore {
     # One record per day (createdDateTime); if a day appears twice the later
     # record wins. The baseline is the first day on or after -BaselineDate (or
     # the oldest day kept). A control counts as "moved" when its score differs
-    # between the two days; a control present on only one day is reported
-    # with $null on the other side, never as 0.
+    # between the two days; a control present on only one day, or whose score
+    # Microsoft left out, is reported with $null on that side, never as 0.
     param(
         [AllowEmptyCollection()][object[]]$History,
         [string]$BaselineDate = ''
@@ -915,8 +915,12 @@ function Measure-SecureScore {
     $point = {
         param([string]$Key)
         $rec = $days[$Key].Record
-        $cur = [double](Get-Field $rec @('currentScore')); $max = [double](Get-Field $rec @('maxScore'))
-        if ($max -le 0) { throw "Secure Score record for $Key has no maxScore." }
+        # Check for $null BEFORE casting: [double]$null is 0, and an unknown
+        # score must fail the KPI, not read as a measured 0.
+        $curRaw = Get-Field $rec @('currentScore'); $maxRaw = Get-Field $rec @('maxScore')
+        if ($null -eq $curRaw) { throw "Secure Score record for $Key has no currentScore." }
+        if ($null -eq $maxRaw -or [double]$maxRaw -le 0) { throw "Secure Score record for $Key has no maxScore." }
+        $cur = [double]$curRaw; $max = [double]$maxRaw
         [ordered]@{ date = $Key; score = [math]::Round($cur, 2); maxScore = [math]::Round($max, 2); pct = [math]::Round(100 * $cur / $max, 1) }
     }
     $base = & $point $baseKey
@@ -927,7 +931,9 @@ function Measure-SecureScore {
         foreach ($c in @(Get-Field $days[$Key].Record @('controlScores'))) {
             if ($null -eq $c) { continue }
             $n = [string](Get-Field $c @('controlName')); if (-not $n) { continue }
-            $m[$n] = @{ Category = [string](Get-Field $c @('controlCategory')); Score = [double](Get-Field $c @('score')) }
+            # An unknown score stays $null (never 0), like a control missing that day.
+            $sc = Get-Field $c @('score')
+            $m[$n] = @{ Category = [string](Get-Field $c @('controlCategory')); Score = $(if ($null -ne $sc) { [double]$sc } else { $null }) }
         }
         $m
     }
@@ -935,6 +941,7 @@ function Measure-SecureScore {
     $moved = foreach ($n in @(@($cb.Keys) + @($cl.Keys) | Sort-Object -Unique)) {
         $b = if ($cb.ContainsKey($n)) { $cb[$n].Score } else { $null }
         $a = if ($cl.ContainsKey($n)) { $cl[$n].Score } else { $null }
+        if ($null -eq $b -and $null -eq $a) { continue }   # unknown on both days: nothing to compare
         if ($null -ne $b -and $null -ne $a -and [math]::Abs($a - $b) -lt 0.005) { continue }
         $cat = if ($cl.ContainsKey($n)) { $cl[$n].Category } else { $cb[$n].Category }
         [ordered]@{ control = $n; category = $cat; before = $b; after = $a; delta = $(if ($null -ne $b -and $null -ne $a) { [math]::Round($a - $b, 2) } else { $null }) }
