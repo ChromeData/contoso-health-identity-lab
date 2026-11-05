@@ -216,6 +216,11 @@ the group, its members, or the SAML/SCIM configuration.
 
 ## AWS admin without root (`lab-admin.tf`, `entra-operator.tf` v2; ADR 0025)
 
+**Status: RAN · tenant (2026-11-05, capture log E95-E99).** The steps
+below ran in this order; the guardrails v2 apply and the removal of the
+leftover `idlab-admin` were made with `adm-labops`'s LabAdministrator
+session, not root.
+
 **Nobody administers this account as root, and the operator can't make
 itself an admin path.** AWS administration is borrowed for at most two hours
 through the same Entra admin-power rules as every other admin role
@@ -256,13 +261,13 @@ credentials are short-lived and fetched by the CLI from its SSO cache (no key
 is ever written down):
 
 ```ini
-[sso-session contoso-idc]
+[sso-session idlab]
 sso_start_url = https://d-90666212c7.awsapps.com/start
 sso_region = us-east-1
 sso_registration_scopes = sso:account:access
 
 [profile idlab-labadmin]
-sso_session = contoso-idc
+sso_session = idlab
 sso_account_id = 182002546409
 sso_role_name = LabAdministrator
 region = us-east-1
@@ -283,7 +288,12 @@ without root:
    `terraform apply -var enable_lab_admin_jit=true -target=aws_ssoadmin_permission_set.lab_admin -target=aws_ssoadmin_account_assignment.lab_admins -target=aws_ssoadmin_managed_policy_attachment.lab_admin`
    (targeted: the console-made ViewOnlyAccess set and the bucket are not
    touched).
-3. Make the admin account eligible, activate, `aws sso login --profile idlab-labadmin`.
+3. Make the admin account eligible (operator, `eligibilityScheduleRequests`
+   `adminAssign`, `afterDuration P180D`), then, as that account: Entra admin
+   center > Privileged Identity Management > My roles > Groups >
+   `PIM-AWS-Lab-Admins` > Activate (reason; 2 hours), wait for SCIM (2-10
+   minutes; the account needs a given name and surname or AWS refuses it),
+   `aws sso login --profile idlab-labadmin`.
 4. With that session: `terraform apply -var aws_profile=idlab-labadmin -target=aws_iam_role_policy.entra_operator_guardrails`
    (guardrails v2), then remove the leftover local admin (`idlab-admin`: its
    account assignment, the user, the console-made `AdministratorAccess`

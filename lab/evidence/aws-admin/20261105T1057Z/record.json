@@ -1,0 +1,539 @@
+{
+ "what": "ADR 0025 live run: AWS administration just-in-time through Entra PIM (not root); operator guardrails v2; idlab-admin removed",
+ "tenant": "86a2e327-4951-4348-a3c4-6f4b79ffd8f2",
+ "aws_account": "182002546409",
+ "entra": {
+  "admin_account": {
+   "id": "79feedc9-f610-48f8-a588-d501474cf55c",
+   "userPrincipalName": "adm-labops@ContosoHealthLab.onmicrosoft.com",
+   "displayName": "Lab Operations (automation)",
+   "employeeType": "Automation account",
+   "accountEnabled": true,
+   "onPremisesSyncEnabled": null,
+   "createdDateTime": "2026-11-05T10:18:01Z",
+   "givenName": "Lab",
+   "surname": "Operations",
+   "licences": 0,
+   "sponsors": [
+    "Michael Williams"
+   ],
+   "methods": [
+    "passwordAuthenticationMethod",
+    "softwareOathAuthenticationMethod"
+   ],
+   "memberOf_now": [
+    "Contoso Health Lab"
+   ]
+  },
+  "pim_group": {
+   "createdDateTime": "2026-11-05T10:34:03Z",
+   "displayName": "PIM-AWS-Lab-Admins",
+   "id": "ea2a0e59-3d72-456e-96d6-8c3fd6fc53f5",
+   "isAssignableToRole": true,
+   "mailNickname": "pim-aws-lab-admins",
+   "securityEnabled": true
+  },
+  "pim_member_policy": {
+   "Expiration_Admin_Eligibility": {
+    "isExpirationRequired": true,
+    "maximumDuration": "P180D"
+   },
+   "Expiration_Admin_Assignment": {
+    "isExpirationRequired": true,
+    "maximumDuration": "P15D"
+   },
+   "Approval_EndUser_Assignment": {
+    "isApprovalRequired": false,
+    "isRequestorJustificationRequired": true
+   },
+   "Enablement_EndUser_Assignment": {
+    "enabledRules": [
+     "MultiFactorAuthentication",
+     "Justification"
+    ]
+   },
+   "Expiration_EndUser_Assignment": {
+    "isExpirationRequired": false,
+    "maximumDuration": "PT2H"
+   },
+   "Notification_Admin_EndUser_Assignment": {
+    "notificationLevel": "All",
+    "recipients": "<security mailbox>"
+   }
+  },
+  "eligibility": [
+   {
+    "principalId": "79feedc9-f610-48f8-a588-d501474cf55c",
+    "memberType": "direct",
+    "status": "Provisioned",
+    "start": "2026-11-05T10:36:51.927Z",
+    "end": "2027-05-04T10:36:51.4Z"
+   }
+  ],
+  "aws_app_principals": [
+   "App-AWS-IdentityCenter-Users",
+   "PIM-AWS-Lab-Admins"
+  ],
+  "audit_on_group": [
+   {
+    "utc": "2026-11-05T10:34:03Z",
+    "service": "Core Directory",
+    "activity": "Add group",
+    "by": "gh-oidc-entra-apply (write)",
+    "reason": ""
+   },
+   {
+    "utc": "2026-11-05T10:34:03Z",
+    "service": "Core Directory",
+    "activity": "Add owner to group",
+    "by": "gh-oidc-entra-apply (write)",
+    "reason": ""
+   },
+   {
+    "utc": "2026-11-05T10:34:03Z",
+    "service": "Core Directory",
+    "activity": "Update group",
+    "by": "gh-oidc-entra-apply (write)",
+    "reason": ""
+   },
+   {
+    "utc": "2026-11-05T10:34:04Z",
+    "service": "Core Directory",
+    "activity": "Update group",
+    "by": "gh-oidc-entra-apply (write)",
+    "reason": ""
+   },
+   {
+    "utc": "2026-11-05T10:34:25Z",
+    "service": "Core Directory",
+    "activity": "Add app role assignment to group",
+    "by": "gh-oidc-entra-apply (write)",
+    "reason": ""
+   },
+   {
+    "utc": "2026-11-05T10:34:48Z",
+    "service": "PIM",
+    "activity": "Onboarded resource to PIM",
+    "by": "gh-oidc-entra-apply (write)",
+    "reason": ""
+   },
+   {
+    "utc": "2026-11-05T10:34:48Z",
+    "service": "PIM",
+    "activity": "Update role setting in PIM",
+    "by": "gh-oidc-entra-apply (write)",
+    "reason": "Setting changes in this session: Maximum activation duration updated to 02:00:00. MFA on activation requirement enabled. Maximum active assignment duration set to 15.00:00:00. Maximum eligible assignm"
+   },
+   {
+    "utc": "2026-11-05T10:36:51Z",
+    "service": "PIM",
+    "activity": "Add eligible member to role in PIM requested (timebound)",
+    "by": "Contoso Lab Operator (local Mac, certificate)",
+    "reason": "ADR 0025: adm-labops (Lab Operations automation, sponsor = owner) may ACTIVATE AWS admin for 2 h at a time; eligibility expires after 180 days."
+   },
+   {
+    "utc": "2026-11-05T10:36:51Z",
+    "service": "Core Directory",
+    "activity": "Add eligible member to group",
+    "by": "MS-PIM",
+    "reason": ""
+   },
+   {
+    "utc": "2026-11-05T10:36:51Z",
+    "service": "PIM",
+    "activity": "Add eligible member to role in PIM completed (timebound)",
+    "by": "Contoso Lab Operator (local Mac, certificate)",
+    "reason": "ADR 0025: adm-labops (Lab Operations automation, sponsor = owner) may ACTIVATE AWS admin for 2 h at a time; eligibility expires after 180 days."
+   },
+   {
+    "utc": "2026-11-05T10:44:31Z",
+    "service": "PIM",
+    "activity": "Add member to role requested (PIM activation)",
+    "by": "adm-labops@ContosoHealthLab.onmicrosoft.com",
+    "reason": "ADR 0025: apply AWS operator guardrails v2 and remove the leftover local admin idlab-admin (slice 3)"
+   },
+   {
+    "utc": "2026-11-05T10:44:32Z",
+    "service": "Core Directory",
+    "activity": "Add member to group",
+    "by": "MS-PIM",
+    "reason": ""
+   },
+   {
+    "utc": "2026-11-05T10:44:38Z",
+    "service": "PIM",
+    "activity": "Add member to role completed (PIM activation)",
+    "by": "adm-labops@ContosoHealthLab.onmicrosoft.com",
+    "reason": "ADR 0025: apply AWS operator guardrails v2 and remove the leftover local admin idlab-admin (slice 3)"
+   },
+   {
+    "utc": "2026-11-05T11:01:07Z",
+    "service": "Core Directory",
+    "activity": "Remove member from group",
+    "by": "MS-PIM",
+    "reason": ""
+   }
+  ],
+  "provisioning_to_aws": [
+   {
+    "utc": "2026-11-05T10:37:20Z",
+    "action": "create",
+    "status": "success",
+    "object": "PIM-AWS-Lab-Admins",
+    "step": "Group 'PIM-AWS-Lab-Admins' was created in AWSSingleSignon",
+    "error": null
+   },
+   {
+    "utc": "2026-11-05T10:45:44Z",
+    "action": "create",
+    "status": "failure",
+    "object": "Lab Operations (automation)",
+    "step": "Failed to create User 'adm-labops@ContosoHealthLab.onmicrosoft.com' in AWSSingleSignon",
+    "error": "name: The attribute name is required"
+   },
+   {
+    "utc": "2026-11-05T10:45:45Z",
+    "action": "other",
+    "status": "skipped",
+    "object": "PIM-AWS-Lab-Admins",
+    "step": "The state of the entry in both the source and target systems already match. No change to the Group 'PIM-AWS-Lab-Admins' currently needs to be made.",
+    "error": null
+   },
+   {
+    "utc": "2026-11-05T10:45:46Z",
+    "action": "other",
+    "status": "skipped",
+    "object": "PIM-AWS-Lab-Admins",
+    "step": "The state of the entry in both the source and target systems already match. No change to the urn:ietf:params:scim:schemas:core:2.0:Group 'PIM-AWS-Lab-Admins' cu",
+    "error": null
+   },
+   {
+    "utc": "2026-11-05T10:45:46Z",
+    "action": "other",
+    "status": "skipped",
+    "object": "PIM-AWS-Lab-Admins",
+    "step": "The state of the entry in both the source and target systems already match. No change to the urn:ietf:params:scim:schemas:core:2.0:Group 'PIM-AWS-Lab-Admins' cu",
+    "error": null
+   },
+   {
+    "utc": "2026-11-05T10:55:32Z",
+    "action": "other",
+    "status": "skipped",
+    "object": "PIM-AWS-Lab-Admins",
+    "step": "The state of the entry in both the source and target systems already match. No change to the Group 'PIM-AWS-Lab-Admins' currently needs to be made.",
+    "error": null
+   },
+   {
+    "utc": "2026-11-05T10:55:33Z",
+    "action": "update",
+    "status": "success",
+    "object": "PIM-AWS-Lab-Admins",
+    "step": "Group 'PIM-AWS-Lab-Admins' was updated in AWSSingleSignon",
+    "error": null
+   },
+   {
+    "utc": "2026-11-05T10:55:33Z",
+    "action": "other",
+    "status": "skipped",
+    "object": "PIM-AWS-Lab-Admins",
+    "step": "The state of the entry in both the source and target systems already match. No change to the Group 'PIM-AWS-Lab-Admins' currently needs to be made.",
+    "error": null
+   },
+   {
+    "utc": "2026-11-05T10:55:33Z",
+    "action": "create",
+    "status": "success",
+    "object": "Lab Operations (automation)",
+    "step": "User 'adm-labops@ContosoHealthLab.onmicrosoft.com' was created in AWSSingleSignon",
+    "error": null
+   }
+  ]
+ },
+ "aws": {
+  "account_summary": {
+   "rootMfa": 0,
+   "rootKeys": 0,
+   "iamUsers": 0
+  },
+  "scim_group": {
+   "name": "PIM-AWS-Lab-Admins",
+   "ext": [
+    "ea2a0e59-3d72-456e-96d6-8c3fd6fc53f5"
+   ]
+  },
+  "permission_sets_and_assignments": "{\n    \"name\": \"LabAdministrator\",\n    \"session\": \"PT1H\",\n    \"arn\": \"arn:aws:sso:::permissionSet/ssoins-72232b0965feb6d3/ps-6cc43a70cfb6763d\"\n}\n[\n    {\n        \"AccountId\": \"182002546409\",\n        \"PermissionSetArn\": \"arn:aws:sso:::permissionSet/ssoins-72232b0965feb6d3/ps-6cc43a70cfb6763d\",\n        \"PrincipalType\": \"GROUP\",\n        \"PrincipalId\": \"34182468-40a1-709f-2e8c-edaa85a7364d\"\n    }\n]\n[\n    \"arn:aws:iam::aws:policy/AdministratorAccess\"\n]\n{\n    \"name\": \"ViewOnlyAccess\",\n    \"session\": \"PT1H\",\n    \"arn\": \"arn:aws:sso:::permissionSet/ssoins-72232b0965feb6d3/ps-7223c94e6d32c488\"\n}\n[\n    {\n        \"AccountId\": \"182002546409\",\n        \"PermissionSetArn\": \"arn:aws:sso:::permissionSet/ssoins-72232b0965feb6d3/ps-7223c94e6d32c488\",\n        \"PrincipalType\": \"GROUP\",\n        \"PrincipalId\": \"94785438-4031-70d7-edd2-b6610938f033\"\n    }\n]\n[\n    \"arn:aws:iam::aws:policy/job-function/ViewOnlyAccess\"\n]\n",
+  "identity_store_users": [
+   "adm-labops@ContosoHealthLab.onmicrosoft.com",
+   "dana.okafor@contosohealthlab.com",
+   "sofia.reyes@contosohealthlab.com",
+   "grace.mwangi@contosohealthlab.com",
+   "marcus.bello@contosohealthlab.com",
+   "test-user-a@contosohealthlab.com"
+  ],
+  "operator_guardrails_sids": [
+   "NoIamChanges",
+   "NoIdentityCenterChanges",
+   "NoNewAccountsOrDelegation",
+   "NoOtherWayIn",
+   "CannotCloseOrDetachTheAccount"
+  ],
+  "operator_guardrails_deny_actions": 83,
+  "cloudtrail_writes": [
+   {
+    "time": "2026-11-05T10:38:39Z",
+    "event": "CreateRole",
+    "source": "iam.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261105T053834",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:38:39Z",
+    "event": "CreateAccountAssignment",
+    "source": "sso.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261105T053834",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:38:49Z",
+    "event": "AttachManagedPolicyToPermissionSet",
+    "source": "sso.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261105T053834",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:38:49Z",
+    "event": "ProvisionPermissionSet",
+    "source": "sso.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261105T053834",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:38:50Z",
+    "event": "AttachRolePolicy",
+    "source": "iam.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261105T053834",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:38:50Z",
+    "event": "UpdateApplicationProfileForAWSAccountInstance",
+    "source": "sso.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261105T053834",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:39:13Z",
+    "event": "Authenticate",
+    "source": "sso.amazonaws.com",
+    "actor": "",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:39:22Z",
+    "event": "Federate",
+    "source": "sso.amazonaws.com",
+    "actor": "",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:56:32Z",
+    "event": "Authenticate",
+    "source": "sso.amazonaws.com",
+    "actor": "",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:56:35Z",
+    "event": "CreateToken",
+    "source": "sso.amazonaws.com",
+    "actor": "",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:57:02Z",
+    "event": "PutRolePolicy",
+    "source": "iam.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabAdministrator_24b9b533273f8bdb/adm-labops@ContosoHealthLab.onmicrosoft.com",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:57:30Z",
+    "event": "DeleteAccountAssignment",
+    "source": "sso.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabAdministrator_24b9b533273f8bdb/adm-labops@ContosoHealthLab.onmicrosoft.com",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:57:36Z",
+    "event": "DeleteUser",
+    "source": "identitystore.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabAdministrator_24b9b533273f8bdb/adm-labops@ContosoHealthLab.onmicrosoft.com",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:57:38Z",
+    "event": "DeletePermissionSet",
+    "source": "sso.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabAdministrator_24b9b533273f8bdb/adm-labops@ContosoHealthLab.onmicrosoft.com",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:57:39Z",
+    "event": "DeleteRole",
+    "source": "iam.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/AWSServiceRoleForSSO/AWS-SSO",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:57:39Z",
+    "event": "DetachRolePolicy",
+    "source": "iam.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/AWSServiceRoleForSSO/AWS-SSO",
+    "error": null
+   },
+   {
+    "time": "2026-11-05T10:58:30Z",
+    "event": "CreatePermissionSet",
+    "source": "sso.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261105T055826",
+    "error": "AccessDenied"
+   },
+   {
+    "time": "2026-11-05T10:58:34Z",
+    "event": "CreateUser",
+    "source": "identitystore.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261105T055832",
+    "error": "AccessDenied"
+   },
+   {
+    "time": "2026-11-05T10:58:37Z",
+    "event": "CreateUser",
+    "source": "iam.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261105T055835",
+    "error": "AccessDenied"
+   },
+   {
+    "time": "2026-11-05T10:58:57Z",
+    "event": "SimulatePrincipalPolicy",
+    "source": "iam.amazonaws.com",
+    "actor": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261105T055853",
+    "error": null
+   }
+  ],
+  "operator_simulate": [
+   [
+    "sso:CreatePermissionSet",
+    "explicitDeny"
+   ],
+   [
+    "sso:CreateAccountAssignment",
+    "explicitDeny"
+   ],
+   [
+    "sso:AttachManagedPolicyToPermissionSet",
+    "explicitDeny"
+   ],
+   [
+    "sso:ProvisionPermissionSet",
+    "explicitDeny"
+   ],
+   [
+    "sso:PutInlinePolicyToPermissionSet",
+    "explicitDeny"
+   ],
+   [
+    "sso:CreateApplication",
+    "explicitDeny"
+   ],
+   [
+    "sso-directory:CreateBearerToken",
+    "explicitDeny"
+   ],
+   [
+    "sso-directory:CreateUser",
+    "explicitDeny"
+   ],
+   [
+    "identitystore:CreateGroupMembership",
+    "explicitDeny"
+   ],
+   [
+    "identitystore:CreateUser",
+    "explicitDeny"
+   ],
+   [
+    "iam:CreateRole",
+    "explicitDeny"
+   ],
+   [
+    "iam:CreateAccessKey",
+    "explicitDeny"
+   ],
+   [
+    "iam:PutRolePolicy",
+    "explicitDeny"
+   ],
+   [
+    "iam:PassRole",
+    "explicitDeny"
+   ],
+   [
+    "iam:AcceptDelegationRequest",
+    "explicitDeny"
+   ],
+   [
+    "organizations:CreateAccount",
+    "explicitDeny"
+   ],
+   [
+    "organizations:RegisterDelegatedAdministrator",
+    "explicitDeny"
+   ],
+   [
+    "sts:AssumeRoot",
+    "explicitDeny"
+   ],
+   [
+    "account:StartPrimaryEmailUpdate",
+    "explicitDeny"
+   ],
+   [
+    "rolesanywhere:CreateTrustAnchor",
+    "explicitDeny"
+   ],
+   [
+    "sso:ListPermissionSets",
+    "allowed"
+   ],
+   [
+    "sso:DescribePermissionSet",
+    "allowed"
+   ],
+   [
+    "identitystore:ListUsers",
+    "allowed"
+   ],
+   [
+    "iam:GetRole",
+    "allowed"
+   ],
+   [
+    "s3:ListAllMyBuckets",
+    "allowed"
+   ],
+   [
+    "ec2:DescribeInstances",
+    "allowed"
+   ]
+  ]
+ },
+ "end_of_activation": {
+  "deactivated_by_user_utc": "2026-11-05T11:01:07Z",
+  "pim_removed_member_by": "MS-PIM",
+  "aws_group_membership_gone_by_utc": "2026-11-05T11:14:21Z",
+  "aws_user_status_after": "DISABLED",
+  "cached_1h_role_credentials_still_worked_utc": "2026-11-05T11:14:5xZ",
+  "fresh_credentials_after_utc": "2026-11-05T11:14:57Z refused: SSO session invalid"
+ },
+ "provisioning_note": "PIM-triggered provisioning ran 10:45:44Z (about 1 min after activation) but AWS refused the user without name; givenName/surname set, provision on demand created it 10:55:33Z; membership 10:56:13Z"
+}
