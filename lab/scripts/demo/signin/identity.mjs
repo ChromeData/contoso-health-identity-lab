@@ -233,10 +233,15 @@ async function entraAccountOf(context) {
   const p = await context.newPage();
   try {
     await p.goto('https://myaccount.microsoft.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
-    for (let i = 0; i < 30; i++) {
+    // My Account can stay blank after a redirect (seen live): reload it, at
+    // most twice, as drive() does - and still refuse to go on until the
+    // account is known.
+    for (let i = 0, reloads = 0; i < 75; i++) {
       if (LOGIN_HOST.test(host(p.url()))) return null; // the session did not sign anyone in silently
-      const m = (await pageText(p)).match(/[A-Za-z0-9._%+-]+@contosohealthlab\.(com|onmicrosoft\.com)/i);
+      const t = await pageText(p);
+      const m = t.match(/[A-Za-z0-9._%+-]+@contosohealthlab\.(com|onmicrosoft\.com)/i);
       if (m) return m[0].toLowerCase();
+      if (!t.trim() && i > 0 && i % 20 === 0 && reloads < 2) { reloads++; await p.reload({ waitUntil: 'domcontentloaded' }).catch(() => {}); }
       await sleep(1000);
     }
     throw new Error('could not tell which Entra account this context is signed in as (My Account showed no account)');
