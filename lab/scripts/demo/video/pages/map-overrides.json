@@ -16,7 +16,7 @@
    "A second building that accepts our staff badge."
   ],
   "SNOW": [
-   "The IT help desk, a free developer copy. Its sign-in uses the hospital login.",
+   "The IT help desk, a free developer copy. Staff sign in with their hospital login.",
    "The ticket desk."
   ],
   "OKTA": [
@@ -238,7 +238,8 @@
   "DRIFT": "RAN · tenant",
   "LCW": "RAN · tenant",
   "CONTAIN": "RAN · tenant",
-  "PB": "RAN · tenant"
+  "PB": "RAN · tenant",
+  "SNOW": "RAN · tenant"
  },
  "fields": {
   "OKTA": {
@@ -317,7 +318,8 @@
    "where.0.label": "Key Vault with a private endpoint (Terraform)"
   },
   "SNOW": {
-   "where.0.label": "ServiceNow sign-in with the hospital login"
+   "where.0.label": "ServiceNow sign-in with the hospital login",
+   "going.after": "RAN · tenant"
   }
  },
  "stationFields": {
