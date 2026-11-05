@@ -17,7 +17,10 @@
 #   * Only members of rdp-admins may open a session (sesman
 #     AlwaysGroupCheck); root may not. Clipboard and drive redirection off.
 #   * The session is ONE xterm, no desktop; typing `exit` ends the session
-#     and xrdp drops the connection, so a scripted session ends cleanly.
+#     and xrdp drops the connection, so a scripted session ends by itself
+#     (guacd logs "Manually logged off."). The session writes
+#     ~/.rdp-session-ready once it can take keys (startwm.sh), so the
+#     harness types then, not after a fixed wait.
 #
 # Built from the same pinned Debian image as pam-tools / ssh-target / the Samba
 # DC, pinned here by tag AND digest (the multi-arch index digest). TEST/LAB

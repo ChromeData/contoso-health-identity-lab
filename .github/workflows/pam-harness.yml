@@ -14,15 +14,23 @@
 # the midPoint campaign, dynamic database credentials and the Vault audit
 # feed, all in Docker on the runner; plus the offline suites (dependency-scan
 # Pester tests, the ingest script, dual control against the ServiceNow mock,
-# the recording-format check). The optional 500-account `scale` suite is not
-# run here (add a dispatch input if it is ever wanted).
+# the recording-format check, the scripted-session client's verdicts in
+# tunnel-client). The optional 500-account `scale` suite is not run here
+# (add a dispatch input if it is ever wanted).
 #
 # NO CLOUD CREDENTIALS: no id-token: write, no secrets, no repo variables. The
 # harness generates every lab credential (`pam-up.sh` writes `.env` and
 # `.secrets/` on the runner); they live only for this run and are never
-# printed or uploaded. No artifact is uploaded either: the per-suite logs in
-# lab/pam/out/test-runs/ name lab accounts and operators, so only the
-# runner's own console output and the PASS / FAIL counts leave the runner.
+# printed or uploaded. A PASSING run uploads nothing: only the console output
+# and the PASS / FAIL counts leave the runner. A FAILING run also uploads its
+# logs (suite logs, guacd / guacamole / rdp-target container logs) as an
+# artifact kept 7 days, so a failure can be read instead of guessed at - but
+# only after test/scrub_logs.py has taken out every credential this run
+# generated (exact values from .env and every .secrets/ file, plus token,
+# JWT, private-key and long-token shapes; suite log-scrub tests it). The
+# scrub fails closed: if it cannot run, nothing is uploaded. What stays in
+# them is the synthetic harness accounts and operators (tier0-admin-01,
+# ops-alice, ...), which are names, not credentials.
 #
 # Not on pull requests, on purpose: a full run takes several minutes and
 # pulls every stand-in image (Vault, Guacamole, Conjur, midPoint, PostgreSQL).
@@ -93,6 +101,37 @@ jobs:
       - name: run-all (default suites)
         working-directory: lab/pam
         run: ./test/run-all.sh
+
+      # On failure only (see the header): collect the logs that say WHY,
+      # scrub them, and only then let them leave the runner. Collection is
+      # best effort (a stack that never started has no container logs); the
+      # scrub is not - its failure skips the upload.
+      - name: Collect + scrub failure logs
+        id: scrub
+        if: ${{ failure() }}
+        working-directory: lab/pam
+        run: |
+          set -euo pipefail
+          raw="$RUNNER_TEMP/pam-logs-raw"; out="$RUNNER_TEMP/pam-logs"
+          mkdir -p "$raw"
+          d=$(find out/test-runs -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)
+          if [ -n "$d" ]; then cp "$d"/*.log "$d"/results.tsv "$raw"/ 2>/dev/null || true; fi
+          for s in guacd guacamole; do
+            docker compose logs --no-color --timestamps "$s" > "$raw/docker-$s.log" 2>&1 || true
+          done
+          docker compose --profile rdp logs --no-color --timestamps rdp-target > "$raw/docker-rdp-target.log" 2>&1 || true
+          python3 -I test/scrub_logs.py --secrets .env --secrets .secrets --secrets dynamic-db/.secrets \
+            --out "$out" "$raw"/*
+          rm -rf "$raw"
+
+      - name: Upload scrubbed failure logs
+        if: ${{ failure() && steps.scrub.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pam-harness-failure-logs-${{ github.run_id }}
+          path: ${{ runner.temp }}/pam-logs
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Per-suite table (job summary)
         if: ${{ !cancelled() }}

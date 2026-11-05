@@ -487,6 +487,19 @@ rdp_conn_ok() { # CONNECTION-NAME SAM: rdp-target:3389, that account, TLS, no do
     && [[ "$(guac_conn_param_by_name "$1" security)|$(guac_conn_param_by_name "$1" domain)" == "tls|" ]] \
     && [[ "$(guac_conn_param_by_name "$1" recording-path)" == "\${HISTORY_PATH}/\${HISTORY_UUID}" ]]
 }
+tunnel_reason() { # guac_tunnel.py's final verdict/error from LAST_OUT (readiness progress lines skipped)
+  local r
+  r=$(grep '^guac_tunnel:' <<<"$LAST_OUT" | grep -v -e '^guac_tunnel: target ready after' -e '^guac_tunnel: target not ready yet' | tail -n 1 || true)
+  printf '%s' "${r:-$(tail -n 1 <<<"$LAST_OUT")}"
+}
+guacd_rdp_close_reason() { # how guacd says the last RDP connection and its user ended (its own log lines; no credentials in them)
+  docker compose logs --no-log-prefix --since 5m guacd 2>/dev/null \
+    | grep -E 'RDP server closed/refused connection|Connection closed\.|Disconnect reason code|User is not responding|Last user of connection' \
+    | tail -n 3 | tr '\n\t' '  ' | sed 's/ *$//'
+}
+rdp_server_ended_on_exit() { # the client saw the server end the session AND rdp-target says the xterm exited
+  said "the server ended it" && sesman_logged "finished normally"
+}
 rdp_proof_has() { rdpc exec -T rdp-target cat "/home/$1/rdp-proof" </dev/null 2>/dev/null | grep -qF -- "$2"; }   # SAM TEXT
 sesman_logged() { rdpc exec -T rdp-target cat /var/log/xrdp-sesman.log </dev/null 2>/dev/null | grep -qF -- "$1"; }
 history_last() { # history_last CONNECTION-NAME -> its newest history entry (JSON)
@@ -950,17 +963,39 @@ check "PAM audit line: checkout target=rdp-target account=$RACCT approvers=ops-c
 RPW_FILE="$TEST_SECRETS/rdp-injected-password"
 guac_conn_param_by_name "$RCONN" password > "$RPW_FILE" || true
 check "the injected Vault password gets a Kerberos TGT for $RACCT from the DC (kinit on rdp-target)" kdc_accepts "$RACCT" < "$RPW_FILE"
-rdpc exec -T rdp-target rm -f "/home/$RACCT/rdp-proof" </dev/null >/dev/null 2>&1 || true
+rdpc exec -T rdp-target rm -f "/home/$RACCT/rdp-proof" "/home/$RACCT/.rdp-session-ready" </dev/null >/dev/null 2>&1 || true
 sess=$(op_tok ops-alice)
+# WHEN TO TYPE: once the session can take keys, not after a fixed wait. The
+# session's shell writes ~/.rdp-session-ready when its xterm answers a
+# terminal query, i.e. after the window is mapped (rdp-target/startwm.sh);
+# guac_tunnel.py polls for it (bounded by --timeout, progress logged).
+# HOW IT ENDS: the typed exit closes the xterm, the session ends, xrdp drops
+# RDP, and guacd closes the tunnel on the client's next instruction - which
+# the client's 5 s "nop" keep-alive guarantees (without it guacd waited 15 s
+# and sent CLIENT_TIMEOUT: test/guac_tunnel.py, KEEP-ALIVE). The check below
+# also needs xrdp-sesman's own "finished normally" (the typed exit closed the
+# xterm), so the client's view alone never passes it.
+# WHAT IS TYPED: the proof, `cat` of it, then the time once a second for 4 s
+# before `exit`, so the recording shows the output and keeps drawing (each
+# tick is a frame; an idle screen adds no frames to a recording), which is
+# what spans the format check's 3 s minimum. The ticks are display inside the
+# session, not a wait for anything: typing starts on the ready marker above.
 if LAST_OUT=$(printf '%s' "$sess" | python3 test/guac_tunnel.py --base "$GUAC_URL" --connection-id "$(conn_id_by_name "$RCONN")" \
-     --mouse 512,384 --settle 12 --type "id > rdp-proof; hostname >> rdp-proof; exit" --timeout 120 2>&1); then
+     --mouse 512,384 --ready-cmd "docker compose --profile rdp exec -T rdp-target test -e /home/$RACCT/.rdp-session-ready" \
+     --type "id > rdp-proof; hostname >> rdp-proof; cat rdp-proof; for t in 1 2 3 4; do sleep 1; date -u +%T; done; exit" \
+     --timeout 120 2>&1); then
   printf '%s\n' "$LAST_OUT" | indent
   pass "a real RDP session through Guacamole as ops-alice (HTTP tunnel, xrdp autologon with the injected credential, keys typed)"
 else
-  printf '%s\n' "$LAST_OUT" | indent; fail "a real RDP session through Guacamole as ops-alice"
+  # The client's own reason goes on the FAIL line itself (its LAST verdict or
+  # error line, not the readiness progress before it): run-all prints FAIL
+  # lines to the console, but this indented output stays in e2e.log (never
+  # uploaded), so without it a nightly failure names the test and not the cause.
+  printf '%s\n' "$LAST_OUT" | indent
+  fail "a real RDP session through Guacamole as ops-alice ($(tunnel_reason); guacd: $(guacd_rdp_close_reason))"
 fi
 sess=""
-check "... and the server ended it when the typed 'exit' closed the session" said "the server ended it"
+check "... and the server ended it when the typed 'exit' closed the session" rdp_server_ended_on_exit
 RH=$(history_last "$RCONN" || echo '{}')
 RUSER=$(jq -r '.username // ""' <<<"$RH"); RUUID=$(jq -r '.uuid // ""' <<<"$RH"); RHID=$(jq -r '.identifier // ""' <<<"$RH")
 RLOG=$(jq -r '(.logs // {}) | keys[0] // ""' <<<"$RH")

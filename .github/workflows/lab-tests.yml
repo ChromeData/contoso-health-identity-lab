@@ -176,6 +176,12 @@ jobs:
           # Pure parts of the lab passkey tool (no browser, Graph or Keychain);
           # node is preinstalled on ubuntu-latest, node:test needs no package.
           node --test lab/scripts/demo/tests/passkey.test.mjs
+          # The PAM harness's scripted-session client verdicts (fake Guacamole
+          # tunnel on 127.0.0.1, stdlib only): the nightly pam-harness run is
+          # not on pull requests, so this is where a PR breaking them fails.
+          python3 -I lab/pam/test/guac_tunnel.test.py
+          # ... and the scrubber pam-harness.yml runs before uploading failure logs.
+          python3 -I lab/pam/test/scrub_logs.test.py
 
       # The plain-English plan/apply summaries run with continue-on-error in
       # terraform-plan.yml / terraform-apply.yml (a summary bug must never
