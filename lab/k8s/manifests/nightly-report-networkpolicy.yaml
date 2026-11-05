@@ -1,0 +1,32 @@
+# =============================================================================
+# lab/k8s/manifests/nightly-report-networkpolicy.yaml
+# -----------------------------------------------------------------------------
+# Nothing may connect TO the nightly-report pod. It is a batch job: it reads
+# its database credential from the Vault Agent sidecar (a file on a shared
+# in-pod volume) and makes outbound calls only. Its probes are exec probes
+# (a file check), so no kubelet traffic needs to reach it either.
+#
+# Ingress only, on purpose: egress (Vault, the database, DNS) is left open
+# here because the lab's kind cluster runs the default CNI, and an egress
+# allow-list that drifts from the Vault and database addresses would fail the
+# e2e for reasons unrelated to identity. The production equivalent adds an
+# egress allow-list per destination (lab/docs/STAND-INS.md).
+#
+# Also satisfies Checkov CKV2_K8S_6 ("pods which lack an associated
+# NetworkPolicy"), which a Checkov update started enforcing on 2026-11-04.
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nightly-report-deny-ingress
+  namespace: clinical-apps
+  labels:
+    app.kubernetes.io/name: nightly-report
+    app.kubernetes.io/part-of: contoso-health-identity-lab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nightly-report
+  policyTypes:
+    - Ingress
+  ingress: []
