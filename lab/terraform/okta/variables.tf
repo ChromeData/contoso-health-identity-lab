@@ -45,7 +45,12 @@ variable "okta_base_url" {
 variable "clinic_login_domain" {
   type        = string
   description = <<-EOT
-    The clinic users' login (email) domain, e.g. clinic.contoso.example. It
+    The login (email) domain Okta routes to Entra, e.g. clinic.contoso.example
+    for a clinic that keeps its own domain; the lab uses the hospital's
+    contosohealthlab.com (clinic staff use hospital accounts after the
+    acquisition, so Okta sends staff with a hospital address to the hospital
+    login). It must also be the domain of the users' Entra email, because Okta
+    names a JIT user after it. It
     is the SUFFIX the routing rule matches (users whose Okta username ends
     with it go to Entra) and the domain the Clinic-Staff group rule keys on.
     A bare domain: no @, no scheme, no wildcard. Not a secret, but

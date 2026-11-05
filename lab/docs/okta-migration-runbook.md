@@ -68,7 +68,11 @@ order). The client secret stays a manual hand-off, on purpose.
 3. Okta: the **routing rule** — users whose login domain is
    `clinic_login_domain` → the Entra IdP (`okta_policy_rule_idp_discovery.clinic_to_entra`,
    priority 1, suffix match). Okta's default rule (Okta login) is never
-   managed and stays **below** it as the fallback.
+   managed and stays **below** it as the fallback. **In the lab**
+   `clinic_login_domain = contosohealthlab.com`: after the acquisition,
+   clinic staff use hospital accounts, so Okta sends staff with a hospital
+   address to the hospital login. Okta's own admin signs in with an
+   `onmicrosoft.com` address and stays on Okta's login.
 4. Entra: `App-Okta-Federation-Users` assigned to `okta-clinic-idp`, the
    only assignment — `azuread_app_role_assignment.okta_federation_users` in
    `okta.tf` (the group is created by Terraform `modules/groups`). That's the

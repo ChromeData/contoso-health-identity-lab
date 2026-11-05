@@ -5,11 +5,14 @@ org: the real Okta product on its free plan, standing in for the acquired
 clinic's enterprise Okta tenant (the Okta row in
 [`lab/docs/STAND-INS.md`](../../docs/STAND-INS.md)).
 
-> **Status: BUILT.** `validate` passes and 16 mocked `terraform test` runs
-> pass (below). **Nothing has been applied: no Okta org and no Entra tenant
-> exist.** RAN · tenant: nothing. Every runtime statement here comes from the
-> Okta provider's schema (4.20.0) or Okta's documentation; what neither
-> proves is marked *verify:*.
+> **Status: RAN · tenant.** Applied to the lab's Okta Integrator Free org
+> (capture-log E58), the authorize-request fix live 2026-11-05 (#140), and the
+> routing domain switched to `contosohealthlab.com` the same day (targeted
+> apply of the routing rule and the group rule). The first federated sign-in
+> (E102) reached Okta through Entra: Okta created the user by JIT, put her in
+> Clinic-Staff and started her session; the Okta dashboard then asked for an
+> Okta factor (see the verify list). Runtime statements still marked *verify:*
+> are not proven by that run.
 
 It is Phase 1 of [`lab/docs/okta-migration-runbook.md`](../../docs/okta-migration-runbook.md)
 as code, decided in [ADR 0022](../../docs/adr/0022-okta-coexistence-as-code.md).
@@ -160,7 +163,9 @@ app in `modules/apps`, then `hide_web = true` here for one sign-in cycle, then
 - [ ] `String.substringAfter(user.login, "@")` evaluates as expected: the clinic user is in Clinic-Staff and sees the bookmark; a non-clinic user is not and does not.
 - [ ] Rollback: `routing_rule_active = false` applied and timed; the next sign-in uses an Okta password; then `true` again.
 - [x] The first sign-in exchange succeeds with the provider's default request-signature settings; if the authorize call fails at Entra, set `request_signature_scope = "NONE"` and record it. **Resolved 2026-11-05:** the default (`REQUEST`, HS256) failed at Entra with AADSTS70013 (*the 'request' request parameter is not supported*) on the first clinic sign-in; `main.tf` now sets `NONE`, and the live IdP was set to match through the Okta API (the step this item documents).
-- [ ] The routed domain is the one clinic users type at Okta **and** the domain of their Entra email: JIT names the new Okta user after the Entra `email` claim (`idpuser.email`), and the routing rule only matches `clinic_login_domain`. If the two domains differ (the lab's placeholder `clinic.contoso.example` vs the users' `contosohealthlab.com`), the first sign-in works when the user types a clinic-domain username, but the Okta user JIT creates has the other domain and is not routed next time.
+- [x] The routed domain is the one users type at Okta **and** the domain of their Entra email (Okta names a JIT user after `idpuser.email`, and the next sign-in is routed by it). **Decided 2026-11-05:** after the acquisition, clinic staff use hospital accounts, so `clinic_login_domain = contosohealthlab.com`: Okta sends staff with a hospital address to the hospital login. Okta's own admin (an `onmicrosoft.com` login) matches neither the routing rule nor the group rule, so it keeps the Default Rule.
+- [ ] Okta's own sign-on policy for the Okta dashboard (catch-all *Any two factors*) does not count the Entra MFA (IdP `trustClaims` false; provider 4.20 has no attribute for it on `okta_idp_oidc`): on 2026-11-05 a JIT-created clinic user was signed in to Okta and then asked to enroll Okta Verify or a passkey. Open decision: an Okta Dashboard rule for Clinic-Staff that accepts the IdP sign-in as enough (MFA already enforced at Entra by CA001), or Okta *Trust claims*.
+- [ ] Users need a first and last name in Entra: Okta's JIT refuses a user without them (`firstName`/`lastName` *cannot be left blank*, seen live). HR-fed users always have both.
 - [ ] Integrator Free exposed everything used here (OIDC IdP, routing rules, group rules, bookmark apps, API tokens).
 - [ ] The state file holds the client secret: it stayed on the applier's laptop, and `terraform.tfstate*` is gitignored (`git status` shows nothing from this directory except the lock file and code).
 
