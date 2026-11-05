@@ -25,10 +25,23 @@ enable_governance = true
 # Needs a fallback reviewer group id (TF_ACCESS_REVIEW_FALLBACK_GROUP_OBJECT_ID
 # or the entitlement approver group). A POLICY review switched back off needs
 # the portal. The bodies are created by post-apply/New-AccessReviewDefinitions.ps1.
+# ON since 2026-11-05 (all three tiers, capture-log E110):
+#   _requestable: both T2 packages (ICU - Float Access, Pharmacy) expire after
+#                 180 days with no extension, so ADR 0012's certification for
+#                 them is the expiry + manager re-approval and NO campaign is
+#                 rendered (the plan shows no policy change). The flag makes
+#                 any later T2 package that outlives 180 days or allows
+#                 extension get its half-yearly review without another PR.
+#   _inactive:    the stale-account review of App-Okta-Federation-Users (the
+#                 acquired clinic's staff): members with no sign-in for 90 days,
+#                 quarterly, the group owners review (fallback group if none),
+#                 unanswered = removed. Output-only here; the operator creates
+#                 the series (Invoke-PostApply.ps1 -Only access-reviews, which
+#                 needs AccessReview.ReadWrite.All - envs/operator, ADR 0024).
 enable_access_reviews             = false
 enable_access_reviews_privileged  = true
-enable_access_reviews_requestable = false
-enable_access_reviews_inactive    = false
+enable_access_reviews_requestable = true
+enable_access_reviews_inactive    = true
 
 # PIM tier groups (8 Tier 0: approval + ticket + 4h - 2h for Privileged
 # Authentication Admins - eligibility 180 days; 8 Tier 1 incl.

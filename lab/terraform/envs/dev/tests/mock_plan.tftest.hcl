@@ -145,6 +145,18 @@ run "plan_lab_tfvars" {
     ])
     error_message = "Day 3: CA021 body, help-desk AU rule and the access-package assignment model exist (enable_governance); PIM still asks for MFA (CA021 report-only); the privileged (T1) access reviews render with enable_access_reviews_privileged"
   }
+  # 2026-11-05 (E110): every review tier is on. The inactive-user review of the
+  # clinic's Okta-federated staff renders for the post-apply script; the T2
+  # flag renders nothing for the two 180-day, no-extension packages (their
+  # expiry + re-approval is the certification, ADR 0012); no flag ever puts a
+  # review on a birthright (T3) package.
+  assert {
+    condition = alltrue([
+      var.enable_access_reviews_privileged && var.enable_access_reviews_requestable && var.enable_access_reviews_inactive,
+      contains(keys(output.access_review_definitions), "inactive:App-Okta-Federation-Users"),
+    ])
+    error_message = "lab.tfvars turns all three review tiers on: the inactive-user review of App-Okta-Federation-Users must render (access_review_definitions)"
+  }
   assert {
     condition     = output.pim_privileged_role_template_ids != null && nonsensitive(output.directory_role_pim_policies) != null
     error_message = "Day 1: modules/pim renders the tier map and the Global Administrator policy body with enable_premium; they are APPLIED only on Day 2 (enable_pim_tiers, Set-DirectoryRolePimPolicies.ps1)"
