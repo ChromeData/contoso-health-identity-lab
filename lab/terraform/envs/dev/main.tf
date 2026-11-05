@@ -624,6 +624,7 @@ module "apps" {
   aws_access_portal_url                 = var.aws_access_portal_url
   saml_cert_notification_emails         = var.saml_cert_notification_emails
   app_owner_object_ids                  = var.app_owner_object_ids
+  iac_owner_client_id                   = var.apply_client_id
 
   enable_scim_provisioning = var.enable_scim_provisioning
   aws_scim_template_id     = var.aws_scim_template_id

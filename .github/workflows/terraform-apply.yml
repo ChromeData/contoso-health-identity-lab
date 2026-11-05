@@ -106,6 +106,8 @@ env:
   TF_VAR_aws_access_portal_url: ${{ vars.TF_AWS_ACCESS_PORTAL_URL }}
   TF_VAR_aws_scim_template_id: ${{ vars.TF_AWS_SCIM_TEMPLATE_ID }}
   TF_VAR_app_owner_object_ids: ${{ secrets.TF_APP_OWNER_OBJECT_IDS || '[]' }}
+  # The APPLY app owns every app in modules/apps, whoever runs the plan.
+  TF_VAR_apply_client_id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
   TF_VAR_saml_cert_notification_emails: ${{ secrets.TF_SAML_CERT_NOTIFICATION_EMAILS || '[]' }}
   TF_VAR_containment_playbook_id: ${{ vars.TF_CONTAINMENT_PLAYBOOK_ID }}
   # PIM notification mailbox (modules/pim): a SECRET for the same reason as
