@@ -91,7 +91,14 @@ async function step(page, upn, s) {
   // Temporary Access Pass (enroll.mjs only).
   const tapBox = await onScreen(page, 'input[name=accesspass], #accesspass');
   if (tapBox) {
-    if (!s.tap) throw new Error('Entra asked for a Temporary Access Pass but this sign-in has none (a pass is still active on the account?)');
+    if (!s.tap) {
+      // A pass is active on the account (someone issued one) and Entra offers
+      // it first. A password sign-in takes "Use your password instead", as a
+      // user would; the pass is left alone (it is not ours to delete).
+      const sw = await onScreen(page, '#idA_PWD_SwitchToPassword, a:has-text("Use your password instead"), button:has-text("Use your password instead")');
+      if (sw && !s.switchedToPassword) { s.switchedToPassword = true; await sw.click(); return 'a pass is active on the account: use your password instead'; }
+      throw new Error('Entra asked for a Temporary Access Pass, this sign-in has none, and there is no "Use your password instead"');
+    }
     if (s.tapUsed) throw new Error('Entra asked for the Temporary Access Pass twice: it was refused');
     await tapBox.fill(s.tap); s.tapUsed = true; await clickSubmit(page); return 'temporary access pass';
   }
