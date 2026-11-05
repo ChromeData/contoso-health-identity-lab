@@ -137,13 +137,13 @@ Describe 'Assessment and record guards' {
     It 'app roles cover the read scopes they include (ReadWrite covers Read, Directory.Read.All covers users and members)' {
         $req = @('User.Read.All', 'GroupMember.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.Read.All')
         # The lab operator's application roles (AGENT-RULES access list).
-        @(Get-UncoveredGraphPermission -Have @('User.ReadWrite.All', 'GroupMember.ReadWrite.All', 'Directory.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.ReadWrite.All') -Required $req) | Should -BeNullOrEmpty
-        @(Get-UncoveredGraphPermission -Have @('Directory.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.Read.All') -Required $req) | Should -BeNullOrEmpty
-        @(Get-UncoveredGraphPermission -Have $req -Required $req) | Should -BeNullOrEmpty
-        @(Get-UncoveredGraphPermission -Have @('User.ReadWrite.All', 'GroupMember.ReadWrite.All', 'UserAuthenticationMethod.ReadWrite.All') -Required $req) | Should -Be @('Policy.Read.All')
+        @(Get-MissingGraphScope -Have @('User.ReadWrite.All', 'GroupMember.ReadWrite.All', 'Directory.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.ReadWrite.All') -Required $req) | Should -BeNullOrEmpty
+        @(Get-MissingGraphScope -Have @('Directory.Read.All', 'Policy.Read.All', 'UserAuthenticationMethod.Read.All') -Required $req) | Should -BeNullOrEmpty
+        @(Get-MissingGraphScope -Have $req -Required $req) | Should -BeNullOrEmpty
+        @(Get-MissingGraphScope -Have @('User.ReadWrite.All', 'GroupMember.ReadWrite.All', 'UserAuthenticationMethod.ReadWrite.All') -Required $req) | Should -Be @('Policy.Read.All')
         # Directory.Read.All does not read authentication methods.
-        @(Get-UncoveredGraphPermission -Have @('Directory.Read.All', 'Policy.Read.All') -Required $req) | Should -Be @('UserAuthenticationMethod.Read.All')
-        @(Get-UncoveredGraphPermission -Have @() -Required $req) | Should -BeNullOrEmpty
+        @(Get-MissingGraphScope -Have @('Directory.Read.All', 'Policy.Read.All') -Required $req) | Should -Be @('UserAuthenticationMethod.Read.All')
+        @(Get-MissingGraphScope -Have @() -Required $req) | Should -BeNullOrEmpty
     }
 
     It 'catches identifiers before a public record is written' {

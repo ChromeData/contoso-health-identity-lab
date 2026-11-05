@@ -420,10 +420,10 @@ Describe 'Connect-GraphFromAzureCli parity' {
             (Get-ScriptFunctionBlock -Path (Get-LabScriptPath $s) -Name 'Connect-GraphFromAzureCli').ToString() | Should -Be $canonical -Because $s
         }
     }
-    It 'Get-MissingGraphScope is identical in 06, 08 and 09' {
+    It 'Get-MissingGraphScope is identical in 06, 08, 09 and the break-glass drill' {
         $canonical = (Get-ScriptFunctionBlock -Path (Get-LabScriptPath '06-NHI-Inventory.ps1') -Name 'Get-MissingGraphScope').ToString()
         $canonical | Should -Match 'ReadWrite'
-        foreach ($s in '08-Measure-KPIs.ps1', '09-SoD-Report.ps1') {
+        foreach ($s in '08-Measure-KPIs.ps1', '09-SoD-Report.ps1', 'Invoke-BreakGlassDrill.ps1') {
             (Get-ScriptFunctionBlock -Path (Get-LabScriptPath $s) -Name 'Get-MissingGraphScope').ToString() | Should -Be $canonical -Because $s
         }
     }
