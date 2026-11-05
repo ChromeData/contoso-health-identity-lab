@@ -797,11 +797,23 @@ function Get-EvidenceRecordText {
     $count = { param($Items) @($Items | Where-Object { $null -ne $_ }).Count }
     switch ($Name) {
         'pim_activation_history.json' {
-            $groups = & $count ($rows | Where-Object { (Get-SummaryValue $_ 'elevationType') -eq 'PIM for Groups' })
-            $roles = & $count ($rows | Where-Object { (Get-SummaryValue $_ 'elevationType') -eq 'PIM for roles' })
-            $why = & $count ($rows | Where-Object { [string](Get-SummaryValue $_ 'justification') })
-            $mfa = & $count ($rows | Where-Object { [string](Get-SummaryValue $_ 'mfa') -match '^(?i)true$' })
-            return "$($rows.Count) just-in-time elevation(s) recorded: $groups through PIM for Groups, $roles through PIM for directory roles; $why with a justification; $mfa with MFA confirmed in the audit log. Directory-role and older group activations come from the directory audit log, which keeps 30 days."
+            # The rows are activation REQUESTS: the requests API also returns
+            # pending and refused ones. Only granted ones are elevations.
+            # Status values: Learn, privilegedAccessGroupAssignmentScheduleRequest
+            # (Granted, Provisioned, ScheduleCreated, Pending*, Denied, Canceled,
+            # Revoked, Failed); audit-log rows read "success (...)".
+            $st = { param($r) [string](Get-SummaryValue $r 'status') }
+            $granted = @($rows | Where-Object { (& $st $_) -match '^(Granted|Provisioned|ScheduleCreated|success\b)' })
+            $pending = & $count ($rows | Where-Object { (& $st $_) -like 'Pending*' })
+            $refused = & $count ($rows | Where-Object { (& $st $_) -match '^(Denied|Canceled|Revoked|Failed)' })
+            $other = $rows.Count - $granted.Count - $pending - $refused
+            $groups = & $count ($granted | Where-Object { (Get-SummaryValue $_ 'elevationType') -eq 'PIM for Groups' })
+            $roles = & $count ($granted | Where-Object { (Get-SummaryValue $_ 'elevationType') -eq 'PIM for roles' })
+            $why = & $count ($granted | Where-Object { [string](Get-SummaryValue $_ 'justification') })
+            $mfa = & $count ($granted | Where-Object { [string](Get-SummaryValue $_ 'mfa') -match '^(?i)true$' })
+            $line = "$($rows.Count) activation request(s): $($granted.Count) granted, $pending pending, $refused denied, cancelled, revoked or failed"
+            if ($other) { $line += ", $other with another status" }
+            return "$line. Of the granted: $groups through PIM for Groups, $roles through PIM for directory roles; $why with a justification; $mfa with MFA confirmed in the audit log. Directory-role and older group activations come from the directory audit log, which keeps 30 days."
         }
         'pim_active_assignments.json' {
             $dir = @($rows | Where-Object { (Get-SummaryValue $_ 'source') -eq 'Directory role' -and (Get-SummaryValue $_ 'isPrivileged') })
@@ -810,18 +822,26 @@ function Get-EvidenceRecordText {
             $ids = { param($Items) @($Items | Where-Object { $null -ne $_ } | ForEach-Object { [string](Get-SummaryValue $_ 'principalId') } | Sort-Object -Unique).Count }
             $bg = & $ids ($standing | Where-Object { Get-SummaryValue $_ 'isBreakGlass' })
             $notBg = @($standing | Where-Object { -not (Get-SummaryValue $_ 'isBreakGlass') })
-            $users = & $ids ($notBg | Where-Object { (Get-SummaryValue $_ 'principalType') -eq '#microsoft.graph.user' -and [string](Get-SummaryValue $_ 'memberType') -ne 'Group' })
+            $userRows = @($notBg | Where-Object { (Get-SummaryValue $_ 'principalType') -eq '#microsoft.graph.user' -and [string](Get-SummaryValue $_ 'memberType') -ne 'Group' })
+            $users = & $ids $userRows
+            # 'Assigned' means not just in time, not necessarily forever: count
+            # the ones with no end date apart.
+            $noEnd = & $ids ($userRows | Where-Object { -not (Get-SummaryValue $_ 'endDateTime') })
+            # Users the instances list as holding the role THROUGH a group
+            # (memberType Group). Standing members of other role-holding groups
+            # are not expanded here; the line says so.
+            $viaGroup = & $ids ($notBg | Where-Object { (Get-SummaryValue $_ 'principalType') -eq '#microsoft.graph.user' -and [string](Get-SummaryValue $_ 'memberType') -eq 'Group' })
             $grps = & $ids ($notBg | Where-Object { (Get-SummaryValue $_ 'principalType') -eq '#microsoft.graph.group' })
             $sps = & $ids ($notBg | Where-Object { (Get-SummaryValue $_ 'principalType') -eq '#microsoft.graph.servicePrincipal' })
             $unknown = & $ids ($notBg | Where-Object { (Get-SummaryValue $_ 'principalType') -notin '#microsoft.graph.user', '#microsoft.graph.group', '#microsoft.graph.servicePrincipal' })
             $grpRows = @($rows | Where-Object { (Get-SummaryValue $_ 'source') -eq 'PIM for Groups' })
             $grpAssigned = & $count ($grpRows | Where-Object { [string](Get-SummaryValue $_ 'assignmentType') -eq 'assigned' })
             $grpActivated = & $count ($grpRows | Where-Object { [string](Get-SummaryValue $_ 'assignmentType') -eq 'activated' })
-            $line = "Standing (Assigned) privileged directory-role holders: $users user account(s) outside break-glass, $bg break-glass principal(s), $grps group(s), $sps service principal(s)"
+            $line = "Standing (Assigned, not just-in-time) privileged directory-role holders: $users user account(s) outside break-glass assigned directly ($noEnd with no end date), $bg break-glass principal(s), $grps group(s), $sps service principal(s)"
             if ($unknown) { $line += ", $unknown of unknown type" }
-            $line += ". Privileged roles activated just in time right now: $($activated.Count). PIM for Groups rows: $grpAssigned standing (assigned), $grpActivated activated."
-            if ($users -gt 0) { $line += " **Not zero standing admin:** $users user account(s) outside break-glass hold a privileged role permanently (names in this file)." }
-            else { $line += ' No user account outside break-glass holds a privileged role permanently in these rows.' }
+            $line += ". Users listed as holding a role through a group: $viaGroup; standing members of the other role-holding groups are not expanded here. Privileged roles activated just in time right now: $($activated.Count). PIM for Groups rows (the governed groups): $grpAssigned standing (assigned), $grpActivated activated."
+            if ($users -gt 0) { $line += " **Not zero standing admin:** $users user account(s) outside break-glass hold a standing privileged role directly (names in this file)." }
+            else { $line += ' No user account outside break-glass holds a standing privileged role by direct assignment; access through groups is counted separately above.' }
             return $line
         }
         'pim_activation_activities.json' { return "$($rows.Count) PIM entries in the directory audit log (30-day retention)." }
@@ -845,7 +865,7 @@ function Get-EvidenceRecordText {
         'mfa_registration_coverage.json' {
             $sum = @($rows | Where-Object { Get-SummaryValue $_ '_summary' }) | Select-Object -First 1
             if (-not $sum) { return 'No coverage summary row in the file.' }
-            return "$(Get-SummaryValue $sum 'mfaRegistered') of $(Get-SummaryValue $sum 'totalUsers') users registered for MFA ($(Get-SummaryValue $sum 'coveragePercent')%). Registration is not enforcement: the Conditional Access row says who must use MFA."
+            return "$(Get-SummaryValue $sum 'mfaRegistered') of $(Get-SummaryValue $sum 'totalUsers') users registered for MFA ($(Get-SummaryValue $sum 'coveragePercent')%). Registration is not enforcement: who must use MFA is in conditional_access_policies.json (each policy's users and grant controls)."
         }
         'privileged_role_assignments.json' {
             $bg = & $count ($rows | Where-Object { Get-SummaryValue $_ 'isBreakGlass' })
@@ -903,6 +923,7 @@ function ConvertTo-EvidenceSummaryMarkdown {
         if ($notTenant.Count) { $found += " $($notTenant.Count) listed as not a tenant run (not evidence)." }
         if ($k[0] -eq 'out/nhi_inventory.json' -and $Nhi) {
             $found = "Latest tenant inventory (``$($Nhi['file'])``, $($Nhi['generatedAtUtc'])): $($Nhi['nhiCount']) non-human identities; **$($Nhi['orphanedNhi']) without an accountable owner**; $($Nhi['tierZeroNhi']) Tier 0; $($Nhi['expired']) with an expired credential. $($ok.Count) file(s) hashed."
+            if ($Nhi['complete'] -ne $true) { $found += ' **Incomplete run: a data source failed, so these counts are a minimum, not a clean result.**' }
         }
         if ($k[0] -eq 'kpis/*.json' -and $Kpi) {
             $found += " Latest snapshot (``$($Kpi['file'])``, label ``$($Kpi['label'])``): standing privileged humans = $($Kpi['standing']) (break-glass counted apart)."
@@ -977,8 +998,14 @@ function Get-CompanionFact {
         $sum = if ($j.Contains('Summary')) { $j['Summary'] } else { $j['summary'] }
         $at = & $iso $(if ($j.Contains('GeneratedAtUtc')) { $j['GeneratedAtUtc'] } else { $j['generatedAtUtc'] })
         if (-not $sum -or -not $sum['kpi']) { continue }
+        # Complete only when every data source was read: the public summary
+        # records it as complete, the full inventory as DataSources statuses.
+        # A partial run's counts are a floor, and the page says so.
+        $complete = if ($j.Contains('complete')) { $j['complete'] -eq $true }
+        elseif ($j.Contains('DataSources')) { -not @(@($j['DataSources']) | Where-Object { $_ -and [string]$_['Status'] -like 'FAILED*' }).Count }
+        else { $false }   # completeness not recorded: never assume it
         $cand = @{ file = $file; generatedAtUtc = $at; nhiCount = $sum['nhiCount']; orphanedNhi = $sum['kpi']['orphanedNhi']
-            tierZeroNhi = $sum['kpi']['tierZeroNhi']; expired = $sum['kpi']['nhiWithExpiredCredential'] }
+            tierZeroNhi = $sum['kpi']['tierZeroNhi']; expired = $sum['kpi']['nhiWithExpiredCredential']; complete = [bool]$complete }
         if (-not $nhi -or [datetime]$cand['generatedAtUtc'] -gt [datetime]$nhi['generatedAtUtc']) { $nhi = $cand }
     }
     return @{ Nhi = $nhi; Kpi = $kpi }
