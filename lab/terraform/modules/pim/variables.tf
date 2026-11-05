@@ -592,8 +592,8 @@ variable "workforce_au_excluded_employee_ids" {
   description = <<-EOT
     HR employee ids (employeeId) kept OUT of AU-Workforce-Standard: the VIPs
     that post-apply/New-RestrictedAdminUnit.ps1 puts in the restricted
-    management AU (RMAU-VIP). Appended to workforce_au_membership_rule as
-    -and (user.employeeId -notIn [...]) in output workforce_au_membership_body.
+    management AU (RMAU-VIP). Rendered in output workforce_au_membership_body
+    as (<workforce_au_membership_rule>) -and (user.employeeId -notIn [...]).
     WHY BOTH: the RMAU alone already stops the help desk (an RMAU member can
     be changed only by roles scoped to THAT RMAU - Learn, "Restricted
     management administrative units", Who can modify objects), but leaving a

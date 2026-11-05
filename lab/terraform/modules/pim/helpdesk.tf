@@ -57,8 +57,11 @@ locals {
   # rules for groups" - the same rule language administrative units use).
   # Verified live 2026-11-05: Graph accepted this exact rule on
   # AU-Workforce-Standard and the two excluded VIPs left it (capture E16c).
+  # The base rule is wrapped in parentheses first: -and binds tighter than
+  # -or, so a base rule with an -or would otherwise keep the excluded VIPs
+  # in every branch but the last.
   workforce_au_membership_rule = length(var.workforce_au_excluded_employee_ids) == 0 ? var.workforce_au_membership_rule : format(
-    "%s -and (user.employeeId -notIn [%s])",
+    "(%s) -and (user.employeeId -notIn [%s])",
     var.workforce_au_membership_rule,
     join(",", [for id in var.workforce_au_excluded_employee_ids : format("\"%s\"", id)])
   )

@@ -115,8 +115,8 @@ records both exceptions, with User Administrator. Contributor on the RG is Tier 
   restricted-management attribute: the dynamic rule is a Graph PATCH, and
   the VIP restricted AU is created by `post-apply/New-RestrictedAdminUnit.ps1`.
   `workforce_au_excluded_employee_ids` keeps that AU's VIPs out of the
-  help desk's AU by HR employee id (appended to the rule as
-  `-and (user.employeeId -notIn [...])`). The VIP AU's own responder roles
+  help desk's AU by HR employee id (the base rule is parenthesised, then
+  `-and (user.employeeId -notIn [...])` is appended). The VIP AU's own responder roles
   (Helpdesk + Authentication Administrator held by
   `PIM-Tier0-Privileged-Auth-Admins` at `RMAU-VIP` scope) are granted by
   that script through PIM, not by this module: Terraform never sees the
