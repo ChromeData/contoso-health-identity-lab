@@ -1,0 +1,142 @@
+// Offline tests for the staff sign-in toolkit (lib.mjs): no tenant, no
+// browser, no Keychain. Run: node --test lab/scripts/demo/signin/tests/
+// CI runs them in lab-tests.yml ("Shell tests (no containers)").
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+// Point the per-user state at a throwaway folder BEFORE lib.mjs is loaded.
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'signin-test-'));
+process.env.CONTOSO_OPERATOR_HOME = home;
+process.env.SIGNIN_QUIET = '1';
+const lib = await import('../lib.mjs');
+
+// RFC 6238 Appendix B, SHA-1 rows: seed "12345678901234567890" (base32 below), 8 digits.
+const RFC_SEED = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+const RFC_ROWS = [[59, '94287082'], [1111111109, '07081804'], [1111111111, '14050471'],
+  [1234567890, '89005924'], [2000000000, '69279037'], [20000000000, '65353130']];
+
+test('totp matches the RFC 6238 SHA-1 test vectors', () => {
+  for (const [t, code] of RFC_ROWS) assert.equal(lib.totp(RFC_SEED, { now: t * 1000, digits: 8 }).code, code, `T=${t}`);
+});
+
+test('totp gives 6 digits by default, the last 6 of the RFC value', () => {
+  assert.equal(lib.totp(RFC_SEED, { now: 59000 }).code, '287082');
+});
+
+test('totp reports the 30-second counter and the seconds left in it', () => {
+  const r = lib.totp(RFC_SEED, { now: 59000 });
+  assert.equal(r.counter, 1);
+  assert.equal(r.secondsLeft, 1);
+});
+
+test('hotp matches RFC 4226 Appendix D (counter 0 and 9)', () => {
+  const key = Buffer.from('12345678901234567890');
+  assert.equal(lib.hotp(key, 0), '755224');
+  assert.equal(lib.hotp(key, 9), '520489');
+});
+
+test('base32 decoding ignores spaces, case and padding (as Entra shows the key in groups)', () => {
+  const grouped = 'gezd gnbv gy3t qojq gezd gnbv gy3t qojq==';
+  assert.equal(lib.base32Decode(grouped).toString(), '12345678901234567890');
+});
+
+test('base32 decoding refuses characters outside the alphabet', () => {
+  assert.throws(() => lib.base32Decode('ABC1DEF8'), /not a base32 secret/);
+  assert.throws(() => lib.base32Decode(''), /not a base32 secret/);
+});
+
+test('checkUpn accepts the lab domains and lower-cases', () => {
+  assert.equal(lib.checkUpn('Test-User-A@ContosoHealthLab.com'), 'test-user-a@contosohealthlab.com');
+  assert.equal(lib.checkUpn('dana.okafor@contosohealthlab.onmicrosoft.com'), 'dana.okafor@contosohealthlab.onmicrosoft.com');
+});
+
+test('checkUpn refuses the owner account, break-glass accounts and other tenants', () => {
+  assert.throws(() => lib.checkUpn('MichaelWilliams@ContosoHealthLab.onmicrosoft.com'), /refused/);
+  assert.throws(() => lib.checkUpn('bg-admin-01@contosohealthlab.onmicrosoft.com'), /refused/);
+  assert.throws(() => lib.checkUpn('someone@contoso.com'), /not in the lab tenant/);
+  assert.throws(() => lib.checkUpn('not-an-upn'), /not a user principal name/);
+});
+
+test('Keychain item names follow the documented pattern', () => {
+  assert.equal(lib.totpService('test-user-a@contosohealthlab.com'), 'contoso-lab-totp-test-user-a');
+  assert.equal(lib.pwService('Test-User-B@contosohealthlab.com'), 'contoso-lab-pw-test-user-b');
+});
+
+test('keychainWrite refuses a value the security -i parser would split (before calling security)', () => {
+  assert.throws(() => lib.keychainWrite('contoso-lab-x', 'a@b', 'label', 'two words'), /one token/);
+  assert.throws(() => lib.keychainWrite('contoso-lab-x', 'a@b', 'label', 'quo"te'), /one token/);
+  assert.throws(() => lib.keychainWrite('contoso-lab-x', 'a@b', 'label', ''), /one token/);
+});
+
+test('randomPassword: length, all four character classes, nothing keychainWrite refuses', () => {
+  for (let i = 0; i < 200; i++) {
+    const p = lib.randomPassword();
+    assert.equal(p.length, 28);
+    assert.match(p, /[A-Z]/); assert.match(p, /[a-z]/); assert.match(p, /[0-9]/); assert.match(p, /[^A-Za-z0-9]/);
+    assert.doesNotMatch(p, /[\s"'\\]/);
+  }
+});
+
+test('freshTotp never hands out a code from a window already used', async () => {
+  const upn = 'test-user-c@contosohealthlab.com';
+  const now = lib.totp(RFC_SEED);
+  // A window far in the future is "already used": freshTotp must not return
+  // the current code. Use the current window and check the wait instead.
+  lib.markTotpStep(upn, now.counter);
+  const t0 = Date.now();
+  const code = await lib.freshTotp(upn, RFC_SEED);
+  const after = lib.totp(RFC_SEED);
+  assert.ok(Date.now() - t0 >= (now.secondsLeft - 1) * 1000, 'it waited for the next window');
+  assert.equal(code, after.code);
+  assert.equal(fs.readFileSync(path.join(home, 'session', 'browser', 'test-user-c.totp-step'), 'utf8'), String(after.counter));
+});
+
+// ---- Keychain fail-closed, through a fake `security` (CONTOSO_SECURITY_BIN) ----
+function fakeSecurity(exitCode, stdout = '') {
+  const f = path.join(home, `fake-security-${exitCode}.sh`);
+  fs.writeFileSync(f, `#!/bin/sh\nprintf '%s' '${stdout}'\nexit ${exitCode}\n`, { mode: 0o755 });
+  return f;
+}
+async function withFake(bin, fn) {
+  // lib.mjs reads the variable at load time: load a fresh copy per fake.
+  process.env.CONTOSO_SECURITY_BIN = bin;
+  try { return await fn(await import(`../lib.mjs?fake=${path.basename(bin)}`)); }
+  finally { delete process.env.CONTOSO_SECURITY_BIN; }
+}
+
+test('keychainRead: "item not found" (exit 44) is null, not an error', async () => {
+  await withFake(fakeSecurity(44), (l) => { assert.equal(l.keychainRead('contoso-lab-x'), null); assert.equal(l.passwordFor('test-user-a@contosohealthlab.com'), null); });
+});
+
+test('keychainRead: any other failure (e.g. 36, Keychain locked) throws - never read as "no password"', async () => {
+  await withFake(fakeSecurity(36), (l) => {
+    assert.throws(() => l.keychainRead('contoso-lab-x'), /Keychain read failed \(security exit 36\)/);
+    assert.throws(() => l.passwordFor('test-user-a@contosohealthlab.com'), /Keychain read failed/);
+  });
+});
+
+// A fake where contoso-lab-pw-<user> does not exist and every other item has
+// the given account attribute (and that text as its value with -w).
+function fakeOlderItem(acct) {
+  const f = path.join(home, `fake-older-${acct.replace(/[^a-z]/g, '')}.sh`);
+  fs.writeFileSync(f, `#!/bin/sh\ncase "$3" in contoso-lab-pw-*) exit 44;; esac\nprintf '%s' '"acct"<blob>="${acct}"'\nexit 0\n`, { mode: 0o755 });
+  return f;
+}
+
+test('passwordFor: an older contoso-lab-<user> item is used only when its account is the UPN', async () => {
+  await withFake(fakeOlderItem('someone-else@contosohealthlab.com'), (l) => {
+    assert.equal(l.passwordFor('test-user-a@contosohealthlab.com'), null);
+  });
+  await withFake(fakeOlderItem('test-user-a@contosohealthlab.com'), (l) => {
+    assert.equal(l.passwordFor('test-user-a@contosohealthlab.com').service, 'contoso-lab-test-user-a');
+  });
+});
+
+test('keychainWrite: a failing security -i reports the exit code, never its output', async () => {
+  await withFake(fakeSecurity(1, 'add-generic-password ... -w SECRETVALUE'), (l) => {
+    assert.throws(() => l.keychainWrite('contoso-lab-x', 'a@b', 'label', 'SECRETVALUE'), (e) => /security exit 1/.test(e.message) && !/SECRETVALUE/.test(e.message));
+  });
+});
