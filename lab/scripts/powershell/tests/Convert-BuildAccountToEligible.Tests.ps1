@@ -61,6 +61,8 @@ BeforeAll {
             $a = $Arguments -join ' '
             if ($a -like 'account show*') { return 'sub-0000' }
             if ($a -like 'monitor log-analytics workspace show*') { return [pscustomobject]@{ customerId = 'ws-cust'; id = '/subscriptions/sub-0000/resourceGroups/rg-identity-lab/providers/Microsoft.OperationalInsights/workspaces/loga-idlab' } }
+            # NRT rules are only returned by the preview API (GA answers 404 for them).
+            if ($a -match 'SecurityInsights/alertRules/' -and $a -notmatch 'api-version=2025-01-01-preview') { throw "alertRules read without api-version=2025-01-01-preview: $a" }
             if ($a -match 'SecurityInsights/alertRules/([^?]+)\?') {
                 # Only the deployed name answers; any other name is a 404 ($null with -AllowNotFound).
                 if ($Matches[1] -eq $global:CvTest.RuleName) { return [pscustomobject]@{ properties = [pscustomobject]@{ enabled = $global:CvTest.RuleEnabled; displayName = 'Contoso - Break-glass account sign-in (any)' } } }

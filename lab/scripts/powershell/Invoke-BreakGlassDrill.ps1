@@ -113,7 +113,8 @@
     lab/evidence/drills/ may be cited until this script (or the runbook by
     hand) has produced a record from a real drill.
     verify: SecurityAlert.AlertName equals the analytics rule display name.
-    verify: Sentinel alertRules api-version 2023-02-01 and scheduledQueryRules
+    verify: Sentinel alertRules api-version 2025-01-01-preview (the GA versions
+    do not return NRT rules, read 2026-11-05) and scheduledQueryRules
       api-version 2021-08-01 return properties.enabled.
     verify: Alerts Management list (api-version 2019-05-05-preview) filtered by
       alertRule returns the log-alert firings.
@@ -505,7 +506,11 @@ $wsCustomerId = [string]$ws.customerId
 # name -nrt); the scheduled name is still tried so the drill also works
 # against a workspace applied before that change.
 $sentinelRuleUris = @('contoso-break-glass-signin-nrt', 'contoso-break-glass-signin') | ForEach-Object {
-    "https://management.azure.com$($ws.id)/providers/Microsoft.SecurityInsights/alertRules/$($_)?api-version=2023-02-01"
+    # 2025-01-01-preview: the GA versions (2023-02-01 ... 2024-09-01) do not
+    # return the NRT rule at all - "Rule ... was not found in version
+    # 2023-02-01" (read live 2026-11-05) - while this one returns NRT,
+    # Scheduled and Fusion rules alike.
+    "https://management.azure.com$($ws.id)/providers/Microsoft.SecurityInsights/alertRules/$($_)?api-version=2025-01-01-preview"
 }
 function Get-BreakGlassSentinelRule {
     # First deployed name wins; $null when neither exists (a 404 each).
