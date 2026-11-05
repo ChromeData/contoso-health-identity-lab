@@ -103,6 +103,17 @@ feed_line="$(printf '%s\n' "$feed_out" | tail -1)"
 if [ "$feed_rc" = 0 ]; then ok "$feed_line"
 else no "${feed_line:-Splunk live feed: check gave no answer} (lab/scripts/monitoring/README.md, The Splunk live feed)"; fi
 
+# ---- sign-ins (signin-doctor) -----------------------------------------------
+# Every identity the recording browser signs in as (lab/scripts/demo/signin/
+# identities.json): a fresh headless sign-in with its own method (passkey,
+# password + authenticator code, ServiceNow/Splunk local), no human. Pass-based
+# identities are skipped (they would issue a credential). ~2 minutes.
+# The table: node lab/scripts/demo/signin/doctor.mjs
+doc_out="$(node "$here/signin/doctor.mjs" --summary 2>/dev/null)"; doc_rc=$?
+doc_line="$(printf '%s\n' "$doc_out" | tail -1)"
+if [ "$doc_rc" = 0 ]; then ok "Sign-ins: $doc_line"
+else no "Sign-ins: ${doc_line:-signin-doctor gave no answer} (node lab/scripts/demo/signin/doctor.mjs for the table)"; fi
+
 # ---- time limits ------------------------------------------------------------
 end="$(g 'directory/subscriptions?$select=nextLifecycleDateTime,isTrial' "sort(value[?isTrial].nextLifecycleDateTime) | [0]")"
 if [ -n "$end" ]; then
