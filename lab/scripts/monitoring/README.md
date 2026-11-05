@@ -23,6 +23,7 @@ detections need.
 | `Deploy-Playbook.ps1` | Deploys `lab/monitoring/playbook-notify.json` (Teams card to the SOC channel + ServiceNow ticket on every incident; for the break-glass rule also on every alert that joins an open incident - `modules/monitoring`, `notify_on_alert_added_rule_keys`). |
 | `authorize-teams-connection.mjs` | Authorizes a playbook's Teams API connection once, headless, as `svc-soc-automation` (ARM `listConsentLinks` / `confirmConsentCode`, staff sign-in toolkit), and fails unless the connection reads back Connected as that account. |
 | `answer-teams-card.mjs` | Drill aid: answers a containment card in Teams on the web as a lab TEST user (the playbook still decides whether that answer counts). |
+| `../demo/containment-drill.sh` | Arms the on-camera drill (throwaway user, one incident, the card waiting) and disarms it; see `lab/scripts/demo/README.md`. |
 | `Deploy-ContainmentPlaybook.ps1` | Deploys `lab/monitoring/playbook-contain.json` and grants its managed identity exactly the rights it uses. |
 | `Invoke-AdContainment.ps1` | The AD half of containment: disables / re-enables an AD account on DC01 through `az vm run-command`, writes an evidence record. |
 | `ingest-vault-audit.sh` | Ships Vault check-out / check-in evidence (lab/pam audit log) to the `VaultCheckout_CL` table through the Logs Ingestion API. |

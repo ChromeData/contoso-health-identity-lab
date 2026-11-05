@@ -273,6 +273,38 @@ seed); `signin/signin.mjs <upn> <start-url>` signs that user in through Entra,
 headless, on any app that sends people to Entra (AWS access portal, Okta, My
 Apps), and is also a module (`signIn(upn, url, {headless})`) for scripts that
 need a staff session. Details, secrets and undo: [`signin/README.md`](signin/README.md).
+## The containment card on camera: `containment-drill.sh`
+
+Piece 7's optional step: an approver opens the approval card in **Contoso SOC
+/ Identity-SecOps** and presses **Contain**. The script sets that up and
+takes it down again, as the lab operator:
+
+```bash
+lab/scripts/demo/containment-drill.sh arm      # last line: DRILL_INCIDENT=<n>
+lab/scripts/demo/containment-drill.sh status   # what exists, changes nothing
+lab/scripts/demo/containment-drill.sh disarm   # after the take
+```
+
+- **arm** creates the throwaway cloud-only `itdr-drill-<UTC date>` user (no
+  licence, a password nobody keeps), raises ONE High incident that names only
+  that user (a temporary analytics rule, switched off as soon as the incident
+  exists), starts `pb-identity-contain` on it and waits until the card is in
+  the channel: about two minutes. Run it again and it reports the same
+  incident. `--with-notify` also posts the alert card and opens the
+  ServiceNow ticket first.
+- It **refuses** (exit 3) while any containment card is waiting about an
+  account that is not a lab test or drill account, and names those incidents:
+  answer them *Reject*, or cancel their runs, first. A card about a real
+  person must never sit next to the drill card on camera.
+- Whoever presses **Contain** must be in `ITDR-Containment-Approvers` and a
+  member of the Contoso SOC team. After the take the drill user is disabled
+  and `arm` says "disarm first" (exit 4).
+- **disarm** cancels any card still waiting on a drill incident, deletes and
+  purges the drill user, deletes the rule, closes the incident as
+  BenignPositive with the outcome in a comment, and reads all of it back.
+
+Offline test: `tests/containment-drill.test.sh` (stubbed `az` and `curl`).
+Live record: `lab/evidence/itdr/20261105T125302Z/` (capture-log E41b).
 
 ## Rewind and replay the whole lab: `rewind-lab.sh`
 

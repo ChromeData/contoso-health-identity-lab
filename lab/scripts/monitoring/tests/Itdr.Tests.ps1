@@ -291,6 +291,8 @@ Describe 'Teams drill helpers (authorize-teams-connection.mjs, answer-teams-card
         $answer | Should -Match 'graph\.microsoft\.com/v1\.0/users/\$\{id\}\?\$select=userPrincipalName'
         $answer | Should -Match "choice !== 'reject'"
         $answer | Should -Match '!drillOnly\(subjects\)'
+        # A brand-new incident's empty entity list is retried, never taken as an answer.
+        $answer | Should -Match 'if \(subjects\.length\) break'
         # No subject parsed out of card text (a display name can hold a fake address).
         $answer | Should -Not -Match 'subjectOf'
         # The click goes to the tagged button, never to a page-wide index that can shift.
