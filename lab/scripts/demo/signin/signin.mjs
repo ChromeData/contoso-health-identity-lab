@@ -34,6 +34,20 @@ const LOGIN_HOST = /(^|\.)(login\.microsoftonline\.com|login\.microsoft\.com|log
 const OKTA_HOST = /\.(okta|oktapreview|okta-emea)\.com$/i;
 const host = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
 
+// Pages where Entra stops the sign-in and no answer from the user can help:
+// an AADSTS error, an admin-consent wall, a registration interrupt. Pure, so
+// it is unit-tested; the message names what an admin has to do.
+export function entraBlocker(text) {
+  const aadsts = text.match(/AADSTS\d+[^\n]*/);
+  if (aadsts) return `Entra refused the sign-in: ${aadsts[0].slice(0, 300)}`;
+  if (/Approval required|Need admin approval/i.test(text)) {
+    const app = (text.match(/Approval required\s*\n+\s*([^\n]+)/i) || [])[1];
+    return `Entra wants an admin to consent to ${app ? `the app "${app.trim()}"` : 'this app'} first (Enterprise applications > Permissions > Grant admin consent)`;
+  }
+  if (/More information required|Let's keep your account secure/i.test(text)) return 'Entra wants security info registered first (run enroll.mjs)';
+  return null;
+}
+
 // A locator that is really on screen. Entra keeps the boxes of the other
 // steps in the DOM for password managers - class moveOffScreen, opacity 0,
 // aria-hidden, 10 px wide in a corner - so isVisible() alone is not enough.
@@ -77,8 +91,8 @@ async function step(page, upn, s) {
   if (!LOGIN_HOST.test(h)) return null;
 
   const text = await pageText(page);
-  const aadsts = text.match(/AADSTS\d+[^\n]*/);
-  if (aadsts && !(await onScreen(page, 'input[name=loginfmt], input[name=passwd], input[name=otc]'))) throw new Error(`Entra refused the sign-in: ${aadsts[0].slice(0, 300)}`);
+  const blocked = entraBlocker(text);
+  if (blocked && !(await onScreen(page, 'input[name=loginfmt], input[name=passwd], input[name=otc]'))) throw new Error(blocked);
 
   // Pick an account.
   if (await onScreen(page, '#tilesHolder, [data-test-id="tilesHolder"]')) {
@@ -174,7 +188,6 @@ async function step(page, upn, s) {
     await clickSubmit(page);
     return 'username';
   }
-  if (/More information required|Let's keep your account secure|Action Required/i.test(text)) throw new Error('Entra wants security info registered first (run enroll.mjs)');
   return null;
 }
 

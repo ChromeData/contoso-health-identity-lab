@@ -187,3 +187,21 @@ test('verdict: still on Entra, or the URL not yet steady = wait', () => {
   assert.equal(verdict({ ...base, onApp: false }), 'wait');
   assert.equal(verdict({ ...base, steadyMs: 1000 }), 'wait');
 });
+
+// ---- pages where Entra stops the sign-in (signin.mjs entraBlocker) ------------
+const { entraBlocker } = await import('../signin.mjs');
+test('entraBlocker: an AADSTS error is reported with its code', () => {
+  assert.match(entraBlocker('Sign in\nAADSTS70013: The \'request\' request parameter is not supported.\n'), /Entra refused the sign-in: AADSTS70013/);
+});
+test('entraBlocker: an admin-consent wall names the app and the fix (seen live on okta-clinic-idp)', () => {
+  const m = entraBlocker('test-user-b@contosohealthlab.com\nApproval required\nokta-clinic-idp\nThis app requires your admin\'s approval to:');
+  assert.match(m, /admin to consent to the app "okta-clinic-idp"/);
+  assert.match(m, /Grant admin consent/);
+});
+test('entraBlocker: a registration interrupt points at enroll.mjs', () => {
+  assert.match(entraBlocker('More information required\nYour organization needs more information'), /run enroll\.mjs/);
+});
+test('entraBlocker: ordinary sign-in pages are not blockers', () => {
+  assert.equal(entraBlocker('Sign in\nCan\'t access your account?\nNext'), null);
+  assert.equal(entraBlocker('Enter code\nEnter the code displayed in your authenticator app'), null);
+});
