@@ -12,6 +12,13 @@
 #   * a wildcard, trailing slash, path, non-ServiceNow host or http URL is
 #     refused, and the flag without a URL or group fails the plan;
 #   * a mocked APPLY with everything on (provider id parsing, role fallback).
+#   * provisioning (servicenow_provisioning.tf) is absent by default; when on:
+#     the GALLERY template (verified id), hidden SP, assignment required, ONE
+#     assignment to the SSO app's group, the ServiceNowOutDelta job STOPPED,
+#     the credential keys InstanceName (from the URL) / UserName / Password,
+#     APPLY owns the app registration, no wildcard reply URL; the gated apply
+#     refuses an empty credential, a PR plan only warns; missing URL / group
+#     fail the plan; a bad credential is refused; the job can be started.
 
 mock_provider "azuread" {
   mock_data "azuread_client_config" {
@@ -88,6 +95,22 @@ run "servicenow_absent_by_default" {
       && length(azuread_app_role_assignment.servicenow_users) == 0
     )
     error_message = "no ServiceNow object may be planned unless enable_servicenow_sso = true"
+  }
+  assert {
+    condition = (
+      length(azuread_application_from_template.servicenow_provisioning) == 0
+      && length(azuread_service_principal.servicenow_provisioning) == 0
+      && length(azuread_application_owner.servicenow_provisioning) == 0
+      && length(azuread_application_redirect_uris.servicenow_provisioning) == 0
+      && length(azuread_app_role_assignment.servicenow_provisioning_users) == 0
+      && length(azuread_synchronization_job.servicenow) == 0
+      && length(azuread_synchronization_secret.servicenow) == 0
+    )
+    error_message = "no ServiceNow provisioning object may be planned unless enable_servicenow_provisioning = true"
+  }
+  assert {
+    condition     = output.nhi_inventory.servicenow_provisioning == null && output.servicenow_provisioning_job_id == null && output.servicenow_provisioning_service_principal_object_id == null
+    error_message = "provisioning outputs and the NHI inventory row must be null while the flag is off"
   }
   assert {
     condition     = output.nhi_inventory.servicenow == null && output.servicenow_service_principal_object_id == null && output.servicenow_federation_metadata_url == null && output.servicenow_saml_signing_cert_activation_command == null
@@ -313,8 +336,8 @@ run "servicenow_on_mocked_apply" {
     error_message = "the metadata URL must be the tenant's federation metadata for the ServiceNow app id"
   }
   assert {
-    condition     = output.nhi_inventory.servicenow.credential_type == "saml-signing-certificate (Entra-held private key)" && output.nhi_inventory.servicenow.outbound_secret == "none (provisioning to ServiceNow designed, not built)"
-    error_message = "the NHI inventory must list the ServiceNow app, its Entra-held signing key and no outbound secret"
+    condition     = output.nhi_inventory.servicenow.credential_type == "saml-signing-certificate (Entra-held private key)" && output.nhi_inventory.servicenow.outbound_secret == "none (ServiceNow provisioning is off: enable_servicenow_provisioning)"
+    error_message = "the NHI inventory must list the ServiceNow app, its Entra-held signing key and no outbound secret (provisioning off here)"
   }
   assert {
     condition     = output.servicenow_assigned_group_object_id == "77777777-7777-7777-7777-777777777777"
@@ -349,6 +372,235 @@ run "servicenow_prefers_the_user_role" {
 
   assert {
     condition     = azuread_app_role_assignment.servicenow_users[0].app_role_id == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    error_message = "the assignment must use the app's own enabled User role when it exists"
+  }
+}
+
+# =============================================================================
+# ServiceNow provisioning (servicenow_provisioning.tf)
+# =============================================================================
+
+run "provisioning_on_plans_the_gallery_app_stopped_job_and_credential" {
+  command = plan
+
+  variables {
+    enable_servicenow_sso               = true
+    enable_servicenow_provisioning      = true
+    servicenow_instance_url             = "https://dev00000.service-now.com"
+    servicenow_users_group_object_id    = "77777777-7777-7777-7777-777777777777"
+    require_scim_credentials            = true
+    servicenow_provisioning_credentials = { user_name = "svc-entra-provisioning", password = "dummy-password-for-mocked-tests" }
+  }
+
+  assert {
+    condition = (
+      length(azuread_application_from_template.servicenow_provisioning) == 1
+      && length(azuread_service_principal.servicenow_provisioning) == 1
+      && length(azuread_app_role_assignment.servicenow_provisioning_users) == 1
+      && length(azuread_synchronization_job.servicenow) == 1
+      && length(azuread_synchronization_secret.servicenow) == 1
+    )
+    error_message = "the flag must plan exactly one provisioning app, SP, assignment, job and credential"
+  }
+  assert {
+    condition     = azuread_application_from_template.servicenow_provisioning[0].template_id == "0919fd62-4056-4151-83f7-7cfd3fade8e3" && azuread_application_from_template.servicenow_provisioning[0].display_name == "ServiceNow - Provisioning"
+    error_message = "the provisioning app must come from the GALLERY 'ServiceNow' template (id read from Graph applicationTemplates, 2026-11-05)"
+  }
+  assert {
+    condition     = azuread_service_principal.servicenow_provisioning[0].app_role_assignment_required == true && azuread_service_principal.servicenow_provisioning[0].use_existing == true
+    error_message = "the provisioning SP must adopt the template's SP and require assignment (provisioning scope = assigned only)"
+  }
+  assert {
+    condition     = contains(tolist(azuread_service_principal.servicenow_provisioning[0].tags), "HideApp") && contains(tolist(azuread_service_principal.servicenow_provisioning[0].tags), "WindowsAzureActiveDirectoryIntegratedApp")
+    error_message = "the provisioning app must stay an enterprise app and be hidden from My Apps (staff click the SSO tile)"
+  }
+  assert {
+    condition     = contains(tolist(azuread_service_principal.servicenow_provisioning[0].owners), "66666666-6666-6666-6666-666666666666") && contains(tolist(azuread_service_principal.servicenow_provisioning[0].owners), "44444444-4444-4444-4444-444444444444")
+    error_message = "owners must be the named human plus the Terraform identity"
+  }
+  assert {
+    condition     = azuread_application_owner.servicenow_provisioning[0].owner_object_id == "44444444-4444-4444-4444-444444444444"
+    error_message = "the Terraform identity must own the provisioning app REGISTRATION (an app-only instantiate records no owner)"
+  }
+  assert {
+    condition     = azuread_application_redirect_uris.servicenow_provisioning[0].redirect_uris == toset(["https://dev00000.service-now.com/navpage.do"])
+    error_message = "the gallery's wildcard reply URL must be replaced by the instance's one URL"
+  }
+  assert {
+    condition     = azuread_app_role_assignment.servicenow_provisioning_users[0].principal_object_id == "77777777-7777-7777-7777-777777777777" && azuread_app_role_assignment.servicenow_users[0].principal_object_id == azuread_app_role_assignment.servicenow_provisioning_users[0].principal_object_id
+    error_message = "the provisioning app must be assigned to the SSO app's group and nothing else (one scope for sign-in and accounts)"
+  }
+  assert {
+    condition     = azuread_synchronization_job.servicenow[0].enabled == false && azuread_synchronization_job.servicenow[0].template_id == "ServiceNowOutDelta"
+    error_message = "the job must use the ServiceNow connector template and be created STOPPED"
+  }
+  assert {
+    condition     = [for c in azuread_synchronization_secret.servicenow[0].credential : c.key] == ["InstanceName", "UserName", "Password"]
+    error_message = "the credential must carry exactly the connector's Basic keys (synchronization template metadata): InstanceName, UserName, Password"
+  }
+  assert {
+    condition     = nonsensitive(azuread_synchronization_secret.servicenow[0].credential[0].value) == "dev00000"
+    error_message = "InstanceName must be the instance URL's host label"
+  }
+  # Turning provisioning on adds nothing to the other apps.
+  assert {
+    condition     = length(azuread_synchronization_job.aws) == 0 && azuread_app_role_assignment.aws_users.principal_object_id == "55555555-5555-5555-5555-555555555555"
+    error_message = "ServiceNow provisioning must not add an AWS job or change the AWS assignment"
+  }
+}
+
+run "provisioning_gated_apply_refuses_an_empty_credential" {
+  command = plan
+
+  variables {
+    enable_servicenow_provisioning   = true
+    servicenow_instance_url          = "https://dev00000.service-now.com"
+    servicenow_users_group_object_id = "77777777-7777-7777-7777-777777777777"
+    require_scim_credentials         = true
+  }
+
+  expect_failures = [azuread_synchronization_secret.servicenow]
+}
+
+run "provisioning_pr_plan_without_the_credential_only_warns" {
+  command = plan
+
+  variables {
+    enable_servicenow_provisioning   = true
+    servicenow_instance_url          = "https://dev00000.service-now.com"
+    servicenow_users_group_object_id = "77777777-7777-7777-7777-777777777777"
+  }
+
+  expect_failures = [check.servicenow_provisioning_credential_supplied_on_create]
+}
+
+run "provisioning_without_instance_url_fails_the_plan" {
+  command = plan
+
+  variables {
+    enable_servicenow_provisioning      = true
+    servicenow_users_group_object_id    = "77777777-7777-7777-7777-777777777777"
+    servicenow_provisioning_credentials = { user_name = "svc-entra-provisioning", password = "dummy-password-for-mocked-tests" }
+  }
+
+  expect_failures = [azuread_application_from_template.servicenow_provisioning]
+}
+
+run "provisioning_without_group_fails_the_plan" {
+  command = plan
+
+  variables {
+    enable_servicenow_provisioning      = true
+    servicenow_instance_url             = "https://dev00000.service-now.com"
+    servicenow_provisioning_credentials = { user_name = "svc-entra-provisioning", password = "dummy-password-for-mocked-tests" }
+  }
+
+  expect_failures = [azuread_app_role_assignment.servicenow_provisioning_users]
+}
+
+run "provisioning_short_password_is_rejected" {
+  command = plan
+
+  variables {
+    enable_servicenow_provisioning      = true
+    servicenow_instance_url             = "https://dev00000.service-now.com"
+    servicenow_users_group_object_id    = "77777777-7777-7777-7777-777777777777"
+    servicenow_provisioning_credentials = { user_name = "svc-entra-provisioning", password = "short" }
+  }
+
+  expect_failures = [var.servicenow_provisioning_credentials]
+}
+
+run "provisioning_bad_user_name_is_rejected" {
+  command = plan
+
+  variables {
+    enable_servicenow_provisioning      = true
+    servicenow_instance_url             = "https://dev00000.service-now.com"
+    servicenow_users_group_object_id    = "77777777-7777-7777-7777-777777777777"
+    servicenow_provisioning_credentials = { user_name = "svc entra;drop", password = "dummy-password-for-mocked-tests" }
+  }
+
+  expect_failures = [var.servicenow_provisioning_credentials]
+}
+
+run "provisioning_job_can_be_started" {
+  command = plan
+
+  variables {
+    enable_servicenow_provisioning      = true
+    servicenow_provisioning_job_enabled = true
+    servicenow_instance_url             = "https://dev00000.service-now.com"
+    servicenow_users_group_object_id    = "77777777-7777-7777-7777-777777777777"
+    servicenow_provisioning_credentials = { user_name = "svc-entra-provisioning", password = "dummy-password-for-mocked-tests" }
+  }
+
+  assert {
+    condition     = azuread_synchronization_job.servicenow[0].enabled == true
+    error_message = "servicenow_provisioning_job_enabled must start the job"
+  }
+}
+
+# Mocked APPLY with SSO + provisioning on: the provider parses the path-form
+# ids, the assignment falls back to the gallery "User" role (never the
+# default-access role, which provisioning skips), the outputs and the NHI rows.
+run "provisioning_on_mocked_apply" {
+  command   = apply
+  state_key = "servicenow_provisioning"
+
+  variables {
+    enable_servicenow_sso               = true
+    enable_servicenow_provisioning      = true
+    servicenow_instance_url             = "https://dev00000.service-now.com"
+    servicenow_users_group_object_id    = "77777777-7777-7777-7777-777777777777"
+    require_scim_credentials            = true
+    servicenow_provisioning_credentials = { user_name = "svc-entra-provisioning", password = "dummy-password-for-mocked-tests" }
+  }
+
+  assert {
+    condition     = azuread_app_role_assignment.servicenow_provisioning_users[0].app_role_id == "4fe59fae-f463-4713-857a-ae9e82a35498"
+    error_message = "with no role reported by the SP, the gallery 'User' role id (read on the instantiated template) must be used, never default access"
+  }
+  assert {
+    condition     = output.servicenow_provisioning_reply_url_import_id == "/applications/12121212-1212-1212-1212-121212121212/redirectUris/Web"
+    error_message = "the import id must be the provider's /applications/<object id>/redirectUris/Web form for the provisioning app"
+  }
+  assert {
+    condition     = output.servicenow_provisioning_job_enabled == false && output.servicenow_provisioning_assigned_group_object_id == "77777777-7777-7777-7777-777777777777"
+    error_message = "the outputs must show a stopped job scoped to App-ServiceNow-Users"
+  }
+  assert {
+    condition     = output.nhi_inventory.servicenow_provisioning.outbound_secret == "servicenow-provisioning-password (Key Vault; ServiceNow integration user, web-service access only - nhi-secrets-register)" && output.nhi_inventory.servicenow.outbound_secret == "none (accounts come from the separate ServiceNow provisioning app)"
+    error_message = "the NHI inventory must list the provisioning app's outbound credential, and the SSO app must point to it"
+  }
+}
+
+# The gallery "User" role is preferred by name when the SP reports it.
+run "provisioning_prefers_the_user_role" {
+  command   = apply
+  state_key = "servicenow_provisioning_user_role"
+
+  variables {
+    enable_servicenow_provisioning      = true
+    servicenow_instance_url             = "https://dev00000.service-now.com"
+    servicenow_users_group_object_id    = "77777777-7777-7777-7777-777777777777"
+    servicenow_provisioning_credentials = { user_name = "svc-entra-provisioning", password = "dummy-password-for-mocked-tests" }
+  }
+
+  override_resource {
+    target = azuread_service_principal.servicenow_provisioning
+    values = {
+      id        = "/servicePrincipals/98989898-9898-9898-9898-989898989898"
+      object_id = "98989898-9898-9898-9898-989898989898"
+      app_roles = [
+        { allowed_member_types = ["User"], description = "msiam_access", display_name = "msiam_access", enabled = true, id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", value = "" },
+        { allowed_member_types = ["User"], description = "User", display_name = "User", enabled = true, id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", value = "" },
+      ]
+    }
+  }
+
+  assert {
+    condition     = azuread_app_role_assignment.servicenow_provisioning_users[0].app_role_id == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     error_message = "the assignment must use the app's own enabled User role when it exists"
   }
 }

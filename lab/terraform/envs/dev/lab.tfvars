@@ -120,6 +120,10 @@ enable_shared_clinical_ca     = false
 # clinical_portal_preauthorize_azure_cli: E25 token demo only; off again after.
 # enable_servicenow_sso adds the ServiceNow PDI SAML app (its instance URL
 # goes in terraform.tfvars / TF_VAR_, never here).
+# enable_servicenow_provisioning adds the ServiceNow provisioning app (gallery,
+# hidden, same group) with its job STOPPED; its credential is written by the
+# LOCAL seeding apply (modules/apps/README.md "ServiceNow provisioning"), so a
+# CI apply that runs before it fails closed and passes on a re-run after.
 # enable_okta_federation adds okta-clinic-idp, Entra as the IdP for the acquired
 # clinic's Okta org (runbook Phase 1, ADR 0022; the org host goes in
 # terraform.tfvars / TF_VAR_, never here). The Okta side is the separate,
@@ -135,6 +139,8 @@ aws_scim_job_enabled                   = true
 enable_pam_oidc_app                    = false
 clinical_portal_preauthorize_azure_cli = false
 enable_servicenow_sso                  = true
+enable_servicenow_provisioning         = true
+servicenow_provisioning_job_enabled    = false
 enable_okta_federation                 = true
 
 # Non-human identity governance: App-Consent-Reviewers group (premium) for the
