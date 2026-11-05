@@ -766,7 +766,7 @@ def cmd_run(a) -> int:
         for t in tables:
             if t not in TABLES:
                 raise FeedError("unsupported table %r" % t)
-            run_once(st, make_la_query(op, wid), Hec(a.hec_url, token), DEFAULT_WS, tables,
+        run_once(st, make_la_query(op, wid), Hec(a.hec_url, token), DEFAULT_WS, tables,
                  dry_run=a.dry_run, overlap_min=a.overlap_minutes, backfill_h=a.backfill_hours,
                  lookup=splunk_id_lookup)
     return 0

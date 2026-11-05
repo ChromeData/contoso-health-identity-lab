@@ -33,6 +33,7 @@ import os
 import plistlib
 import re
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -412,6 +413,23 @@ class StateLockKeychain(Base):
         self.assertTrue(all(TOKEN not in " ".join(a) for a, _ in calls))
         with self.assertRaises(feed.FeedError):
             feed.keychain_set("s", "a", "l", "has space; rm -rf")
+
+    def test_one_launch_is_one_poll_of_every_table(self):
+        with mock.patch.object(feed, "keychain_get", return_value=TOKEN), \
+                mock.patch.object(feed, "workspace_id", return_value="c534d563-05c3-4505-ba6f-d67090e5212a"), \
+                mock.patch.object(feed, "run_once") as ro:
+            self.assertEqual(feed.main(["--state-dir", self.tmp.name, "run", "--op", sys.executable]), 0)
+        self.assertEqual(ro.call_count, 1)
+        self.assertEqual(ro.call_args[0][4], list(feed.TABLES))
+        self.assertIs(ro.call_args[1]["lookup"], feed.splunk_id_lookup)
+
+    def test_unknown_table_is_refused_before_any_poll(self):
+        with mock.patch.object(feed, "keychain_get", return_value=TOKEN), \
+                mock.patch.object(feed, "workspace_id", return_value="c534d563-05c3-4505-ba6f-d67090e5212a"), \
+                mock.patch.object(feed, "run_once") as ro:
+            self.assertEqual(feed.main(["--state-dir", self.tmp.name, "run", "--op", sys.executable,
+                                        "--tables", "SigninLogs,SigninLogs | take 1"]), 1)
+        ro.assert_not_called()
 
     def test_missing_hec_token_stops_run(self):
         with mock.patch.object(feed, "keychain_get", return_value=None):
