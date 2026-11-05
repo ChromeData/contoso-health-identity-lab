@@ -114,7 +114,11 @@ def inc_by_name(n):
 if "/alertRules" in u:
     tail = u.split("/alertRules", 1)[1]
     if tail.startswith("?"):
-        out(paged([{"name": "contoso-%d" % k, "properties": {"displayName": "Contoso rule %d" % k}} for k in range(5)] + [{"name": k, "properties": v} for k, v in st["rules"].items()]))
+        # The GA versions leave NRT rules out of the list: listing must use the preview.
+        assert "api-version=2025-01-01-preview" in u, "alertRules listed without the preview api-version: " + u
+        out(paged([{"name": "contoso-%d" % k, "kind": "Scheduled", "properties": {"displayName": "Contoso rule %d" % k}} for k in range(5)]
+                  + [{"name": "contoso-break-glass-signin-nrt", "kind": "NRT", "properties": {"displayName": "Contoso - Break-glass account sign-in (any)"}}]
+                  + [{"name": k, "kind": "Scheduled", "properties": v} for k, v in st["rules"].items()]))
     rid = tail.lstrip("/").split("?")[0]
     if m == "PUT":
         if rid in st["rule_deleted"]:
