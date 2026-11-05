@@ -692,6 +692,12 @@ do {
     Write-Console ("  {0:HH:mm:ss} {1}: {2}" -f (Get-Date), $assess.Result, ($assess.Reasons -join '; ')) -ForegroundColor DarkGray
     Start-Sleep -Seconds $PollSeconds
 } while ($true)
+# The wait ran out with an alert but no incident (Sentinel path): not a Pass.
+$pending = @(Get-PendingIncident -Assessment $assess -AlertPath $alertPath)
+if ($pending.Count) {
+    if ($assess.Result -eq 'Pass') { $assess.Result = 'Partial' }
+    $assess.Reasons = @($assess.Reasons) + "alerted but no Sentinel incident within $WaitMinutes min for: $($pending -join ', ')"
+}
 
 Write-Console "`nPost-drill re-check (runbook step 7)" -ForegroundColor Cyan
 $null = Invoke-Preflight -GroupMailNickname $BreakGlassGroupMailNickname -Domain $OnMicrosoftDomain -KeysPerAccount $ExpectedKeysPerAccount

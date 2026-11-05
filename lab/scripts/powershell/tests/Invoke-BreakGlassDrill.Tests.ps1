@@ -285,6 +285,28 @@ Describe 'Invoke-BreakGlassDrill.ps1 (mocked Graph, az and Log Analytics)' {
         @($rec.signIns | ForEach-Object incidentNumber) | Should -Be @('42', '42')
     }
 
+    It 'Verify: alerts but no Sentinel incident by the deadline -> Partial, exit 1' {
+        Set-DrillMocks
+        Mock Invoke-LaQuery {
+            $t = $global:DrillTest
+            if ($Query -match '^SecurityIncident') { return @() }
+            if ($Query -match 'AADNonInteractiveUserSignInLogs') {
+                return @([pscustomobject]@{ TimeGenerated = $t.Start.AddMinutes(5).ToString('o'); UserPrincipalName = 'bg-admin-01@contosolab.onmicrosoft.com'; SignInType = 'interactive'; ResultType = '0'; Methods = 'Passkey (device-bound)'; IPAddress = '203.0.113.10'; CorrelationId = 'c1' })
+            }
+            if ($Query -match '^SecurityAlert') { return @([pscustomobject]@{ TimeUtc = $t.Start.AddMinutes(11).ToString('o'); AlertId = 'alert-1'; Accounts = @('bg-admin-01') }) }
+            if ($Query -match '^AuditLogs') { return @([pscustomobject]@{ Operations = 0 }) }
+            if ($Query -match '^SigninLogs \| where TimeGenerated > ago\(1d\) \| count') { return @([pscustomobject]@{ Count = 12 }) }
+            throw "unexpected KQL in test: $Query"
+        }
+        $pub = Join-Path $TestDrive 'noinc-pub'; $priv = Join-Path $TestDrive 'noinc-priv'
+        $global:LASTEXITCODE = 0
+        & $script:Drill -Phase Verify -DrillStartUtc $global:DrillTest.Start -DeclaredSignIns 'bg-admin-01:key 1' -WaitMinutes 0 -EvidenceDirectory $pub -PrivateDirectory $priv -WarningAction SilentlyContinue
+        $LASTEXITCODE | Should -Be 1
+        $rec = Get-Content -LiteralPath @(Get-ChildItem -LiteralPath $pub -Filter '*.json')[0].FullName -Raw | ConvertFrom-Json
+        $rec.result | Should -Be 'Partial'
+        ($rec.resultReasons -join ' ') | Should -Match 'no Sentinel incident .* bg-admin-01'
+    }
+
     It 'Pending incidents: Sentinel path only, alerted sign-ins without an incident number' {
         $a = [pscustomobject]@{ SignIns = @([pscustomobject]@{ account = 'bg-admin-01'; alertObserved = $true; incidentNumber = $null }, [pscustomobject]@{ account = 'bg-admin-02'; alertObserved = $true; incidentNumber = '42' }, [pscustomobject]@{ account = 'bg-admin-03'; alertObserved = $false; incidentNumber = $null }) }
         @(Get-PendingIncident -Assessment $a -AlertPath 'sentinel') | Should -Be @('bg-admin-01')

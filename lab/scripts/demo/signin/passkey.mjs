@@ -644,7 +644,14 @@ async function registerViaTap(upn, uid, before, { headless }) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US' });
   const { page, credentials } = await withAuthenticators(context);
   const s = { mode: 'tap', tap: null, reissue: issue };
-  let failed = null;
+  let failed = null, pendingSaved = false;
+  // The private key goes to the -pending item the moment the virtual
+  // authenticator holds it, BEFORE the wizard's naming step: a wizard error
+  // after Entra accepted the key must not lose the key.
+  const savePending = (cred) => {
+    saveRecord(upn, { upn, rpId: cred.rpId, credentialId: cred.credentialId, privateKey: cred.privateKey, userHandle: cred.userHandle, signCount: cred.signCount, via: 'tap', createdUtc: new Date().toISOString(), methodId: null }, pendingService(upn));
+    pendingSaved = true;
+  };
   try {
     s.tap = issue();
     await page.goto(SECURITY_INFO, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -670,6 +677,7 @@ async function registerViaTap(upn, uid, before, { headless }) {
     while (Date.now() < deadline) {
       await sleep(1500);
       const creds = (await credentials()).filter((c) => c.rpId === 'login.microsoft.com');
+      if (creds.length && !pendingSaved) { savePending(pickCredential(creds)); log(`${localPart(upn)}: new key saved to Keychain ${pendingService(upn)}`); }
       const txt = await pageText(page);
       // PASSKEY_DEBUG=1: a screenshot (inputs blurred) and the on-screen names
       // per pass, for when Microsoft changes the wizard.
@@ -703,8 +711,8 @@ async function registerViaTap(upn, uid, before, { headless }) {
     }
     await sleep(2000);
     const cred = pickCredential(await credentials(), 'login.microsoft.com');
-    const rec = { upn, rpId: cred.rpId, credentialId: cred.credentialId, privateKey: cred.privateKey, userHandle: cred.userHandle, signCount: cred.signCount, via: 'tap', createdUtc: new Date().toISOString(), methodId: null };
-    saveRecord(upn, rec, pendingService(upn));
+    savePending(cred);
+    const rec = decodeRecord(keychainRead(pendingService(upn)));
     log(`${localPart(upn)}: credential exported to Keychain ${pendingService(upn)}`);
     // Graph must list a NEW passkey method; its id ties the Keychain copy to
     // it. A Graph read that fails throws here and KEEPS the pending key.
@@ -718,6 +726,16 @@ async function registerViaTap(upn, uid, before, { headless }) {
   } catch (e) {
     const f = await shot(page, `register-fail-${localPart(upn)}`);
     e.message += ` [screenshot: ${f}]`;
+    // A saved key is discarded only when Graph, polled for ~30 s (new
+    // methods show up late), lists nothing new; otherwise it is kept.
+    if (pendingSaved) {
+      try {
+        let added = [];
+        for (let i = 0; i < 10 && !added.length; i++) { added = newMethods(before, fido2Methods(uid)); if (!added.length) await sleep(3000); }
+        if (!added.length) { keychainDelete(pendingService(upn)); e.message += '; Entra registered no new passkey, so the saved key was discarded'; }
+        else e.message += `; Entra lists ${added.length} new passkey method(s): the key is KEPT in Keychain ${pendingService(upn)}`;
+      } catch (g) { e.message += `; the key is KEPT in Keychain ${pendingService(upn)} (Graph could not be read: ${g.message})`; }
+    }
     failed = e;
     throw e;
   } finally {
