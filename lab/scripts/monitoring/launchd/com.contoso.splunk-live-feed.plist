@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.contoso.splunk-live-feed - per-user LaunchAgent for the Splunk live feed.
+  TEMPLATE: `feed-splunk-live.py install` fills the double-underscore placeholders with this
+  Mac's paths, writes the result to ~/Library/LaunchAgents/ and loads it with
+  `launchctl bootstrap gui/<uid>`. launchd does not expand ~ or $HOME, hence a template.
+  WHY a LaunchAgent (not a LaunchDaemon, not cron): it runs as the signed-in user, so
+  it reaches the login Keychain (HEC token) and the operator's az profile, like the
+  evidence runner's agent; it survives logout/login and reboots (RunAtLoad).
+  Every 300 s (StartInterval) = "fed every five minutes". launchd never starts a
+  second copy while one is still running, and the script's own lock refuses one too.
+  No secret in here: the script reads the HEC token from the Keychain at run time.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>__LABEL__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>-I</string>
+    <string>__SCRIPT__</string>
+    <string>--state-dir</string>
+    <string>__STATE_DIR__</string>
+    <string>run</string>
+    <string>--op</string>
+    <string>__OP__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>300</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>__LOG__</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG__</string>
+</dict>
+</plist>

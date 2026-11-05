@@ -10,8 +10,9 @@
 #   fixes   DC01 started (it shuts down every evening); Cloud Sync's pause
 #           cleared (Microsoft pauses it while DC01 is off - "quarantine")
 #   checks  the sync agent on DC01, HR -> AD, AD -> Entra and Entra -> AWS jobs,
-#           the evidence runner on this Mac, Splunk, trial end dates, time left
-#           before DC01's evening shutdown, and that no demo hire is left over
+#           the evidence runner on this Mac, Splunk and its live feed (newest
+#           feed event in Splunk under 15 minutes old), trial end dates, time
+#           left before DC01's evening shutdown, and that no demo hire is left over
 # Prints one line per check and ends with READY or NOT READY.
 #   preflight.sh            fix + check
 #   preflight.sh --check    check only (starts nothing, clears nothing)
@@ -93,6 +94,14 @@ rn="$(gh api "repos/$REPO/actions/runners" -q '[.runners[]|select(.name=="contos
 open_gates="$(gh issue list -R "$REPO" --search 'Approve: apply in:title is:open' --json number -q 'length' 2>/dev/null)"
 [ "${open_gates:-0}" = 0 ] && ok "No change is waiting for approval" || warn "$open_gates change(s) waiting for an 'approve' comment"
 docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^contoso-splunk' && ok "Splunk is running (http://127.0.0.1:8000, set time to All time)" || warn "Splunk is not running (only needed for piece 8)"
+# The Splunk live feed (lab/scripts/monitoring/feed-splunk-live.py, LaunchAgent every
+# 5 min): its newest event in Splunk must be under 15 minutes old, or "Splunk watches
+# the live lab too" is not true right now. `check` searches as a search-only Splunk
+# user (password in Keychain), never the admin, and prints one line either way.
+feed_out="$(/usr/bin/python3 -I "$here/../monitoring/feed-splunk-live.py" check --max-age-minutes 15 2>&1)"; feed_rc=$?
+feed_line="$(printf '%s\n' "$feed_out" | tail -1)"
+if [ "$feed_rc" = 0 ]; then ok "$feed_line"
+else no "${feed_line:-Splunk live feed: check gave no answer} (lab/scripts/monitoring/README.md, The Splunk live feed)"; fi
 
 # ---- time limits ------------------------------------------------------------
 end="$(g 'directory/subscriptions?$select=nextLifecycleDateTime,isTrial' "sort(value[?isTrial].nextLifecycleDateTime) | [0]")"

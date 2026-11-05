@@ -170,6 +170,9 @@ jobs:
           node --test lab/terraform/okta/tests/trust-claims.test.mjs
           bash lab/scripts/demo/tests/containment-drill.test.sh
           (cd lab/splunk && ./render-savedsearches.sh --check)
+          # Splunk live feed: watermark, de-dup, HEC failures, LaunchAgent template,
+          # preflight verdict (fake Log Analytics, an HEC stub on 127.0.0.1; stdlib only).
+          python3 -I -m unittest discover -s lab/scripts/monitoring/tests -p 'test_feed_splunk_live.py' -v
           # Pure parts of the lab passkey tool (no browser, Graph or Keychain);
           # node is preinstalled on ubuntu-latest, node:test needs no package.
           node --test lab/scripts/demo/tests/passkey.test.mjs

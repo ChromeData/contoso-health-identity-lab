@@ -1,4 +1,4 @@
-# Monitoring scripts: notify, ITDR containment, PAM check-out feed
+# Monitoring scripts: notify, ITDR containment, PAM check-out feed, Splunk live feed
 
 Identity Threat Detection and Response (ITDR) for the Contoso Health lab:
 eleven detections (KQL for Sentinel / Log Analytics, SPL twins for Splunk), a
@@ -27,7 +27,9 @@ detections need.
 | `Deploy-ContainmentPlaybook.ps1` | Deploys `lab/monitoring/playbook-contain.json` and grants its managed identity exactly the rights it uses. |
 | `Invoke-AdContainment.ps1` | The AD half of containment: disables / re-enables an AD account on DC01 through `az vm run-command`, writes an evidence record. |
 | `ingest-vault-audit.sh` | Ships Vault check-out / check-in evidence (lab/pam audit log) to the `VaultCheckout_CL` table through the Logs Ingestion API. |
-| `tests/` | Offline tests: `Itdr.Tests.ps1` (Pester) and `ingest-vault-audit.test.sh` (stubbed `az`/`curl`, synthetic audit log). |
+| `feed-splunk-live.py` | The **Splunk live feed**: every 5 minutes (per-user LaunchAgent) it reads the tenant's new rows from Log Analytics as the operator and posts them to the local Splunk's HTTP Event Collector, so the 22 SPL twins run on real events. See [The Splunk live feed](#the-splunk-live-feed). |
+| `launchd/com.contoso.splunk-live-feed.plist` | The LaunchAgent template `feed-splunk-live.py install` fills in and loads. |
+| `tests/` | Offline tests: `Itdr.Tests.ps1` (Pester), `ingest-vault-audit.test.sh` (stubbed `az`/`curl`, synthetic audit log) and `test_feed_splunk_live.py` (fake Log Analytics, a real HEC stub on 127.0.0.1). |
 
 ## Detections
 
@@ -280,6 +282,93 @@ After the Sentinel trial, the same eleven queries run as Log Analytics alerts
 are a Sentinel feature, and the SecurityEvent rules need an Event-table
 variant there (verify above).
 
+## The Splunk live feed
+
+**RAN · tenant (2026-11-05, capture-log E113).** Sentinel and the local Splunk
+now judge the same tenant events. `feed-splunk-live.py` runs every 300 s as a
+per-user LaunchAgent on the operator Mac (like the evidence runner) and:
+
+1. asks Log Analytics (`loga-idlab`, the workspace Sentinel's rules read) for the
+   rows ingested since its watermark, as the lab operator (`op az account
+   get-access-token --resource https://api.loganalytics.io`, then the Logs query
+   API). Tables: the seven the SPL twins search, `SigninLogs`,
+   `AADNonInteractiveUserSignInLogs`, `AuditLogs` (Entra sign-in and directory
+   audit logs, streamed by Entra's diagnostic setting), `AADUserRiskEvents`,
+   `AADRiskyUsers`, `SecurityEvent` (DC01) and `VaultCheckout_CL`;
+2. posts each row to Splunk HEC (`https://127.0.0.1:8088`) with `index=entra`,
+   the sourcetype the SPL expects (`azure:loganalytics:<table>`),
+   `source=livefeed:loga-idlab:<Table>`, `_time` = `TimeGenerated`, and the Log
+   Analytics record id as the indexed field `feed_item_id`;
+3. writes one `sourcetype=contoso:livefeed:heartbeat` event after a run in which
+   every table succeeded.
+
+**Why the workspace and not Graph.** The SPL twins were written against the Log
+Analytics schema (`ResultType`, `LocationDetails.countryOrRegion`, ...). Graph's
+`auditLogs/signIns` and `auditLogs/directoryAudits` hold the same Entra events in
+another shape (`status.errorCode`, camelCase) and cover two of the seven tables.
+Reading the workspace gives both SIEMs identical input (ADR 0023, amendment
+2026-11-05). Production path it stands in for: Entra diagnostic settings ->
+Event Hub -> Splunk Add-on for Microsoft Cloud Services (`lab/docs/STAND-INS.md`).
+
+**Never a duplicate, never a gap the overlap can see.** Per table the state file
+(`~/.contoso-operator/splunk-feed/state.json`, mode 600, no secrets) keeps the
+newest `ingestion_time()` sent and the record ids (`_ItemId`) sent in the last
+10 minutes. Each run re-reads from watermark - 10 min and drops ids it already
+sent; the state is saved after every accepted HEC batch. An HEC answer other
+than HTTP 200 + `{"code":0}` stops the run with exit 1 and no heartbeat. Only
+answers that mean nothing was indexed (HTTP 503, connection refused) are retried
+at once. Any other failure (a lost reply, a 4xx part-way through a batch: HEC
+indexes a batch in order) leaves the batch **in doubt**: its record ids go in
+the state file, and the next run asks Splunk which of them it already holds
+(`tstats` on the indexed field `feed_item_id`, as the search-only user) and
+sends only the rest. No answer from Splunk means nothing is sent. A Log
+Analytics result marked partial (HTTP 200 with an `error` object) is refused
+whole. A second copy refuses to start while one runs (lock).
+Residual: a row that becomes queryable more than 10 minutes after its
+`ingestion_time()` would be missed (`--overlap-minutes` widens the window).
+
+**Secrets.** The feed's own HEC token (`contoso_live_feed`, pinned to
+`index=entra`, read back) is created by `setup` over Splunk's REST API with the
+admin password from the running stack's `lab/splunk/.env` (found through the
+container's compose label, read in process, never printed). Its value lives only
+in the Keychain item `contoso-splunk-hec-live`. `check` signs in as
+`contoso-feed-check`, a Splunk user whose only role (`contoso_feed_reader`) has
+the single capability `search` on the `entra` index; its password is the
+Keychain item `contoso-splunk-feed-reader`. The Log Analytics bearer token stays
+in process memory.
+
+```bash
+# once (Splunk up: lab/splunk/splunk-up.sh)
+/usr/bin/python3 -I lab/scripts/monitoring/feed-splunk-live.py setup
+/usr/bin/python3 -I lab/scripts/monitoring/feed-splunk-live.py run --dry-run   # counts only
+/usr/bin/python3 -I lab/scripts/monitoring/feed-splunk-live.py run            # first run back-fills 24 h
+
+# install / update the LaunchAgent (copies the script to ~/.contoso-operator/splunk-feed/bin,
+# writes ~/Library/LaunchAgents/com.contoso.splunk-live-feed.plist, launchctl bootstrap gui/$UID)
+/usr/bin/python3 -I lab/scripts/monitoring/feed-splunk-live.py install
+/usr/bin/python3 -I lab/scripts/monitoring/feed-splunk-live.py status
+/usr/bin/python3 -I lab/scripts/monitoring/feed-splunk-live.py check           # what preflight.sh runs
+tail -f ~/Library/Logs/contoso-splunk-live-feed/feed.log
+
+# uninstall (keeps the watermarks and both Keychain items)
+/usr/bin/python3 -I lab/scripts/monitoring/feed-splunk-live.py uninstall
+# full removal: also
+#   rm -r ~/.contoso-operator/splunk-feed
+#   security delete-generic-password -s contoso-splunk-hec-live
+#   security delete-generic-password -s contoso-splunk-feed-reader
+#   and in Splunk: Settings > Data inputs > HTTP Event Collector > contoso_live_feed, Delete;
+#   Settings > Users > contoso-feed-check, Delete; Roles > contoso_feed_reader, Delete
+```
+
+Use `/usr/bin/python3` (it trusts the macOS roots; a python.org build without its
+"Install Certificates" step fails TLS to `api.loganalytics.io`). After a merge
+that changes the script, re-run `install` from the updated checkout: the agent
+runs the installed copy, and `status` shows which commit it came from. While the
+feed is installed, do not also run `lab/splunk/ingest-from-loganalytics.sh` (it
+would send the same rows a second time under another source), and
+`lab/splunk/replay-synthetic.py` refuses to empty the index because it now holds
+tenant logs.
+
 ## Offline validation (re-runnable)
 
 ```bash
@@ -297,6 +386,9 @@ lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
 
 # Splunk twins rendered into the app
 lab/splunk/render-savedsearches.sh --check
+
+# Splunk live feed: watermark, de-dup, HEC failures, LaunchAgent template, preflight verdict
+python3 -I -m unittest discover -s lab/scripts/monitoring/tests -p 'test_feed_splunk_live.py' -v
 ```
 
 KQL is checked structurally (brackets, `let` terminators, Severity column,

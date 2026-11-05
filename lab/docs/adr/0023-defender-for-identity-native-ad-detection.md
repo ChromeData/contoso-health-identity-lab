@@ -1,7 +1,7 @@
 # ADR 0023: Defender for Identity as the native AD-attack detection layer
 
 - **Status:** Accepted. Code BUILT (validated offline), staged behind `enable_defender_for_identity = false`. Not applied: it needs a Defender licence (free 90-day trial) and a sensor on DC01, neither of which Terraform can create.
-- **Date:** 2026-10-31
+- **Date:** 2026-10-31 (amended 2026-11-05: the Splunk twins run on live tenant events, see the amendment below)
 - **Decision owner:** Detection lead (in the lab, the repository maintainer)
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
@@ -123,6 +123,64 @@ Offline today: the twins run on the Kusto emulator (22/22 rules,
 `lab/evidence/kusto/`), and `mdi.tf` is covered by the module's mocked
 `terraform test`.
 
+## Amendment 2026-11-05: the Splunk twins run on live tenant events
+
+**Context.** The Decision keeps the twins as "the Splunk migration path" and
+"the post-trial fallback". Until today the Splunk side had only ever run on
+synthetic harness rows (E61) and could not back the closing line that the lab
+is "watched by two camera systems": Sentinel watched the tenant, Splunk watched
+recordings.
+
+**Decision.** Splunk gets a live feed from the same workspace Sentinel reads.
+`lab/scripts/monitoring/feed-splunk-live.py` runs every 5 minutes as a per-user
+LaunchAgent on the operator Mac and posts the rows Log Analytics received since
+its watermark to the local Splunk HEC, as the lab operator (no person's
+session, no new Azure permission: Owner on the lab subscription includes Log
+Analytics read).
+
+- **Source: the Log Analytics tables, not Graph.** The 22 SPL twins search the
+  Log Analytics schema (`azure:loganalytics:<table>`, `ResultType`,
+  `LocationDetails.countryOrRegion`, ...). Graph's `auditLogs/signIns` and
+  `auditLogs/directoryAudits` carry the same Entra sign-in and directory-audit
+  events in another shape and cover two of the seven tables the twins read
+  (`SecurityEvent`, the risk tables and `VaultCheckout_CL` are not in Graph).
+  Feeding the workspace rows gives both SIEMs identical input, so a difference
+  in what fires is a difference in the rules, never in the data.
+- **Each row once.** Watermark on `ingestion_time()` minus a 10-minute overlap,
+  de-duplicated by the workspace's own record id (`_ItemId`); the state is
+  saved after every accepted HEC batch; an HEC failure stops the run and keeps
+  the watermark at the last accepted batch. A batch Splunk may have indexed
+  (reply lost, error part-way) is never resent blindly: the next run asks
+  Splunk which of its record ids it holds and sends only the others. A Log
+  Analytics result marked partial is refused whole.
+- **Proven, not assumed.** A heartbeat event after every clean run;
+  `lab/scripts/demo/preflight.sh` fails when the feed's newest event in Splunk
+  is 15 minutes old or more.
+- **Least privilege on the Splunk side.** The feed's own HEC token, pinned to
+  `index=entra` and kept in the Keychain; the preflight searches as a user whose
+  only capability is `search` on `entra`.
+
+**Consequences.**
+
+- The twins now fire on real events. First proof (capture-log E113): twelve
+  wrong passwords for two lab test users from one IP in one 10-minute bin
+  (16:30Z) reached Splunk by the 16:41Z feed run, and the *Failed sign-in
+  spike* alert fired at 16:45Z with the same row Sentinel's KQL rule produced
+  at 16:42Z (incident #57): FailedCount 12, two users, likely brute force.
+- **Lag:** Entra reaches the workspace 2-15 minutes after an event, then up to
+  5 minutes to the next poll, then up to 5 minutes to the next scheduled
+  search. Sentinel's NRT break-glass rule is faster; the scheduled twins are
+  comparable to their Sentinel counterparts.
+- **The feed lives on the operator Mac.** When the Mac sleeps, Docker is
+  stopped or the operator certificate lapses, Splunk stops seeing the tenant
+  and the preflight says so; the watermark resumes where it stopped (rows
+  older than a day before the watermark would need `--backfill-hours`).
+  Production would stream from an Event Hub (`lab/docs/STAND-INS.md`).
+- **Lookups differ until filled.** Splunk's operator-IP and SoD-holdings
+  lookups are header-only by design (`lab/splunk/README.md`); Sentinel's
+  watchlist is rendered by Terraform. Those two twins can therefore judge the
+  same rows differently until the lookups are filled by hand.
+
 ## Revisit trigger
 
 - The 90-day trial ends: decide licence or fall back to the twins.
@@ -148,6 +206,10 @@ Offline today: the twins run on the Kusto emulator (22/22 rules,
 - `lab/docs/STAND-INS.md`: the DC01 SecurityEvent / MDI row
 - `lab/docs/adr/0013-tier0-domain-controller-exposure.md`: the operator
   allowlist the custom rule reads
+- `lab/scripts/monitoring/feed-splunk-live.py`,
+  `lab/scripts/monitoring/launchd/com.contoso.splunk-live-feed.plist`,
+  `lab/scripts/monitoring/tests/test_feed_splunk_live.py`: the live feed
+  (amendment 2026-11-05); capture-log E113
 - `lab/docs/adr/0017-approval-gated-identity-containment.md`: the AD
   containment path the twins keep
 

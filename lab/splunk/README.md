@@ -4,12 +4,15 @@
 > 1. **Splunk Enterprise 60-day trial** (the real product, time-limited
 >    license, in a local container) stands in for a **production Splunk**
 >    deployment.
-> 2. **`ingest-from-loganalytics.sh` replays** Entra logs that already landed
->    in Log Analytics (`loga-idlab`). It stands in for the production data
->    path: the **Splunk Add-on for Microsoft Azure** (Graph sign-in/audit
->    inputs) or **Entra diagnostic settings → Azure Event Hub → Splunk**
->    streaming. Same Entra events, delivered in batches on demand instead of
->    continuously.
+> 2. **The live feed** (`lab/scripts/monitoring/feed-splunk-live.py`, a
+>    LaunchAgent on the operator Mac, every 5 minutes) reads the Entra and
+>    DC01 rows that Log Analytics (`loga-idlab`) received since its last run
+>    and posts them to HEC. It stands in for the production data path:
+>    **Entra diagnostic settings → Azure Event Hub → Splunk Add-on for
+>    Microsoft Cloud Services** (streaming) or the **Splunk Add-on for
+>    Microsoft Azure** (Graph inputs). Same Entra events, pulled every five
+>    minutes instead of streamed. `ingest-from-loganalytics.sh` (the older
+>    on-demand replay) stays for a Splunk without the feed.
 >
 > Both rows are in [`STAND-INS.md`](../docs/STAND-INS.md), which holds the
 > authoritative wording, so it isn't copied here.
@@ -17,10 +20,10 @@
 | | |
 |---|---|
 | **Cost** | **$0.** Splunk trial license; local Docker; querying Analytics-tier Log Analytics tables isn't billed per query; no Event Hub, no app registration. |
-| **Secrets** | None new. The replay rides your existing `az login`. The admin password and HEC token are generated into `lab/splunk/.env` (0600, gitignored) and are never printed. |
+| **Secrets** | The admin password and the stack's HEC token are generated into `lab/splunk/.env` (0600, gitignored) and are never printed. The live feed has its **own** HEC token (`contoso_live_feed`, pinned to `index=entra`) in the Keychain item `contoso-splunk-hec-live`, and a search-only user for the preflight check (`contoso-feed-check`, Keychain `contoso-splunk-feed-reader`). It reads Log Analytics as the lab operator (certificate, no new secret); the replay rides your own `az login`. |
 | **Trial clock** | 60 days from first boot. When it expires you choose: switch the license group to **Free** (Settings → Licensing), where scheduled searches keep running but **alerts no longer trigger** (Splunk's *About Splunk Free*), or buy a license. Record inside the window. |
 | **Scope** | **Frozen.** Splunk is the optional second SIEM: the 22 SPL twins mirror the 22 KQL rules and no new twins are added. A new detection is written in KQL only. The SoD tripwire's rule copy is guarded by a mirror test (`09-SoD-Report.Tests.ps1`, "Ruleset mirror") against `lab/iga/sod-rules.json`. |
-| **Status** | **BUILT.** Verified offline only: YAML parse, `bash -n`, shellcheck, `./render-savedsearches.sh --check` ("matches detections/*.spl (22 detections)", 2026-10-20), and the replay + bootstrap scripts against mock `az`/HEC/REST endpoints. **Never run against a real Splunk or workspace yet**: the PAM vault-anomaly harness skips its SPL step because no local Splunk was up. Lines marked `verify:` depend on behaviour only a live run confirms. |
+| **Status** | **RAN · tenant (2026-11-05, capture-log E113): live.** The feed has run every 5 minutes since 16:14Z. Twelve wrong passwords for two test users from one IP (16:30Z) reached Splunk by the 16:41Z feed run and the *Failed sign-in spike* alert fired on them at 16:45Z (FailedCount 12, likely brute force); Sentinel's KQL twin fired on the same rows at 16:42Z (incident #57). Record: `lab/evidence/splunk/20261105T164502Z-live/`. Earlier: RAN · harness (E61, 2026-10-31), 22 of 22 saved searches fired on synthetic events. The checklist below says which live items are proven. |
 
 ---
 
@@ -35,6 +38,7 @@
 | `render-savedsearches.sh` | Builds `app/contoso_identity/default/savedsearches.conf` from the `.spl` files; `--check` fails if the committed `.conf` is stale. |
 | `app/contoso_identity/` | Splunk app, bind-mounted into the container: `entra` index, JSON extraction for the seven sourcetypes (three Entra tables + the four ITDR tables), raised extraction limits, the generated alerts, global export. |
 | `lib.sh` | Shared helpers (no-secret-leak REST/HEC calls). Sourced, never run. |
+| `../scripts/monitoring/feed-splunk-live.py` | **The live feed** (lives with the other feeds): Log Analytics → HEC every 5 minutes as a LaunchAgent, watermark + record-id de-duplication, heartbeat, `check` for the preflight. Setup, install and uninstall: [`lab/scripts/monitoring/README.md`](../scripts/monitoring/README.md#the-splunk-live-feed). |
 | `.env.example` | Every key the stack reads. You don't copy it; `splunk-up.sh` writes `.env`. |
 | `.gitignore` | Keeps `.env` (password + HEC token), `.state/` (high-water marks, app fingerprint, dry-run tenant data) and Splunk-Web edits (`app/contoso_identity/local/`) out of git — on its own, before the repo-root `.gitignore` lists them. |
 
@@ -81,9 +85,14 @@ cd lab/splunk
 #   (manual) read the terms, set the two lines in .env
 ./splunk-up.sh          # 2nd run: starts Splunk, verifies index/app/alerts/HEC
 
-# generate signal in the tenant (sign-ins, a PIM activation, a break-glass drill), wait 5-15 min, then:
-./ingest-from-loganalytics.sh --timespan PT24H          # replay all three tables
-./ingest-from-loganalytics.sh --follow 120               # or: keep replaying every 2 min during the demo
+# the live feed (once; then the LaunchAgent keeps it running every 5 min):
+cd ../..
+/usr/bin/python3 -I lab/scripts/monitoring/feed-splunk-live.py setup     # its HEC token + search-only user -> Keychain
+/usr/bin/python3 -I lab/scripts/monitoring/feed-splunk-live.py install   # LaunchAgent, runs at once and every 300 s
+/usr/bin/python3 -I lab/scripts/monitoring/feed-splunk-live.py check     # newest feed event < 15 min old?
+
+# without the feed (a Splunk on another machine): the on-demand replay
+# ./ingest-from-loganalytics.sh --timespan PT24H   (never while the feed is installed: same rows twice)
 ```
 
 Then in Splunk Web (`http://127.0.0.1:8000`, `admin` / `SPLUNK_PASSWORD` from
@@ -224,12 +233,12 @@ Live (record only when all are ticked):
 - [ ] Change a `.spl` search line or `@conf` value (comments are stripped from the `.conf`, so a comment edit changes nothing), re-render, re-run `./splunk-up.sh`: it logs the restart, and the search shown in **Alerts** matches the file.
 - [ ] **Settings → Licensing** shows the Enterprise **Trial** and its end date.
 - [ ] `index=entra sourcetype=contoso:hec:smoketest` returns the smoke event.
-- [ ] After the replay: `index=entra | stats count by sourcetype` shows the three `azure:loganalytics:*` sourcetypes.
-- [ ] `index=entra sourcetype=azure:loganalytics:signinlogs | head 1` shows `UserPrincipalName`, `ResultType`, `LocationDetails.countryOrRegion` as fields (JSON extraction works).
-- [ ] Same window, same counts: `SigninLogs | where TimeGenerated > ago(1h) | count` in Log Analytics equals `index=entra sourcetype=azure:loganalytics:signinlogs earliest=-1h | stats count` in Splunk.
-- [ ] Re-running the replay sends **0** events (high-water mark works).
-- [ ] Each `detections/*.spl` returns the same row(s) as its `lab/kql/*.kql` twin for the generated signal — in particular **one** `failed-signin-spike` row for Sofia's 12 wrong passwords from one IP, `Pattern = likely brute force`. Both languages bin on 10-minute **clock** boundaries (`:00`, `:10`, …), so type all 12 inside one such bin — 7 + 5 across a boundary gives **zero** rows in both SIEMs.
-- [ ] **Activity → Triggered Alerts** lists the fired alerts within ~5 min of the replay.
+- [x] After the first live-feed run: `index=entra source="livefeed:*" | stats count dc(feed_item_id) by sourcetype` shows six `azure:loganalytics:*` sourcetypes with count = distinct ids (E113; `VaultCheckout_CL` had no rows that day).
+- [x] `index=entra sourcetype=azure:loganalytics:signinlogs | head 1` shows `UserPrincipalName`, `ResultType`, `LocationDetails.countryOrRegion` as fields (JSON extraction works).
+- [x] Same window, same counts (E113, 2026-11-05 09:00-15:00Z by `TimeGenerated`): Log Analytics and `index=entra source="livefeed:*"` both hold SigninLogs 342, AADNonInteractiveUserSignInLogs 1767, AuditLogs 1646, SecurityEvent 1987, and every Splunk count equals its distinct `feed_item_id` count.
+- [x] Re-running the feed sends **0** old events: the second run skipped every row inside its 10-minute overlap as already sent (E113).
+- [~] (partly, E113: the failed-sign-in spike, live: 12 wrong passwords for two test users from one IP in one bin gave one row in each SIEM, `Pattern = likely brute force`; the other 21 twins are proven on synthetic events only, E61) Each `detections/*.spl` returns the same row(s) as its `lab/kql/*.kql` twin for the generated signal — in particular **one** `failed-signin-spike` row for Sofia's 12 wrong passwords from one IP, `Pattern = likely brute force`. Both languages bin on 10-minute **clock** boundaries (`:00`, `:10`, …), so type all 12 inside one such bin — 7 + 5 across a boundary gives **zero** rows in both SIEMs.
+- [x] **Activity → Triggered Alerts** lists the fired alert: 16:45:02Z, 4 minutes after the feed delivered the last of the 12 rows (E113, screenshot 4).
 - [ ] `git status` shows nothing under `lab/splunk/` except intended changes (`.env`, `.state/`, `app/contoso_identity/local/` stay ignored).
 
 ## Troubleshooting

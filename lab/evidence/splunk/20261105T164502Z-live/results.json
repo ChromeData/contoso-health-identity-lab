@@ -1,0 +1,93 @@
+{
+  "id": "E113",
+  "when": "2026-11-05T16:45:02Z",
+  "what": "Splunk live feed RAN against the tenant: lab/scripts/monitoring/feed-splunk-live.py (LaunchAgent com.contoso.splunk-live-feed, every 300 s, as the lab operator) reads new Log Analytics rows from loga-idlab and posts them to the local Splunk 10.4.4 HEC; the Splunk twin of the failed-sign-in-spike rule fired on real tenant events, as Sentinel's KQL rule did on the same rows.",
+  "setup": {
+    "hec_token": "contoso_live_feed, pinned to index=entra (read back); value only in Keychain item contoso-splunk-hec-live",
+    "reader": "contoso-feed-check, role contoso_feed_reader (capabilities [search], srchIndexesAllowed [entra], no imported roles); password in Keychain item contoso-splunk-feed-reader",
+    "agent_loaded": "2026-11-05T16:14:20Z (runs at load, then every 300 s)"
+  },
+  "first_run_backfill_24h": {
+    "at": "2026-11-05T16:13:20Z",
+    "sent": {
+      "SigninLogs": 346,
+      "AADNonInteractiveUserSignInLogs": 1773,
+      "AuditLogs": 2585,
+      "AADUserRiskEvents": 1,
+      "AADRiskyUsers": 2,
+      "SecurityEvent": 2954,
+      "VaultCheckout_CL": 0
+    }
+  },
+  "second_run_dedup": {
+    "at": "2026-11-05T16:13:35Z",
+    "sent": {
+      "SecurityEvent": 2
+    },
+    "skipped_already_sent": {
+      "SigninLogs": 1,
+      "AADNonInteractiveUserSignInLogs": 1,
+      "AuditLogs": 14,
+      "AADUserRiskEvents": 1,
+      "AADRiskyUsers": 1,
+      "SecurityEvent": 63
+    }
+  },
+  "parity_09_15Z": {
+    "note": "count by TimeGenerated 2026-11-05 09:00-15:00Z; Splunk count = distinct feed_item_id for every table",
+    "log_analytics": {
+      "SigninLogs": 342,
+      "AADNonInteractiveUserSignInLogs": 1767,
+      "AuditLogs": 1646,
+      "SecurityEvent": 1987
+    },
+    "splunk_livefeed": {
+      "SigninLogs": 342,
+      "AADNonInteractiveUserSignInLogs": 1767,
+      "AuditLogs": 1646,
+      "SecurityEvent": 1987
+    }
+  },
+  "trigger": {
+    "first_attempt": "16:20:06-16:23:38Z: 16 fresh My Apps sign-ins (signin.mjs --fresh) by test-user-a and test-user-b. Entra logged 24 rows, all ResultType 0 (no 'stay signed in' interrupt rows this time), so neither SIEM's spike rule had anything to count; both stayed quiet on that bin.",
+    "used": "16:30:05-16:30:38Z: 12 wrong passwords at the Entra sign-in page for My Apps, 6 each for test-user-a and test-user-b, driven with the sign-in toolkit's library (lab/scripts/demo/signin/lib.mjs: checkUpn refuses the owner and break-glass accounts; playwright()); each a fresh random wrong password, below smart lockout's threshold of 10 per account; nothing changed on either account.",
+    "log_analytics": "SigninLogs, bin 16:30Z, one IP: 12 rows, ResultType 50126, users test-user-a + test-user-b; last row ingested 16:37:40Z"
+  },
+  "splunk": {
+    "rows_in_splunk": "8 by the 16:36 feed run, 12 by the 16:41 run (source livefeed:loga-idlab:SigninLogs)",
+    "alert": "Contoso - Failed sign-in spike from one IP (spray or brute force)",
+    "triggered": "2026-11-05T16:45:02Z",
+    "sid": "scheduler__nobody_Y29udG9zb19pZGVudGl0eQ__RMD52d6b7df9dde45449_at_1793897100_14432",
+    "result_row": {
+      "TimeGenerated": "2026-11-05T16:30:00+0000",
+      "IPAddress": "[operator Mac public IP, redacted]",
+      "Country": "US",
+      "FailedCount": 12,
+      "TargetedUsers": 2,
+      "Pattern": "likely brute force",
+      "UserList": [
+        "test-user-a@contosohealthlab.com",
+        "test-user-b@contosohealthlab.com"
+      ],
+      "ErrorCodes": "50126",
+      "Apps": "My Apps",
+      "FirstSeen": "2026-11-05T16:32:22.237+0000",
+      "LastSeen": "2026-11-05T16:35:12.736+0000"
+    }
+  },
+  "sentinel_same_rows": {
+    "alert": "Contoso - Failed sign-in spike from one IP (spray / brute force)",
+    "alert_time": "2026-11-05T16:42:44Z",
+    "bin": "2026-11-05T16:30:00Z",
+    "incident": 57,
+    "incident_created": "2026-11-05T16:43:02Z"
+  },
+  "preflight_check": "feed-splunk-live.py check (as contoso-feed-check): 'Splunk live feed: last poll 0 min ago, newest tenant event received 0 min ago'",
+  "screenshots": [
+    "1-live-feed-fresh-events.png",
+    "2-live-failed-signins-raw.png",
+    "3-spike-alert-results.png",
+    "4-triggered-alerts.png"
+  ],
+  "limits": "Pull every 5 minutes, not a stream: Entra-to-workspace lag (here 2-7 min) + up to 5 min to the next feed run + up to 5 min to the next scheduled search; Splunk fired 2 min after Sentinel. Runs while the operator Mac, Docker and Splunk are up. The operator Mac's public IP is redacted in the screenshots and this record."
+}
