@@ -16,8 +16,8 @@
 #
 # THE IDENTITY CHAIN this completes (joiner/mover/leaver end to end):
 #
-#   HR feed -> AD -> Cloud Sync -> Entra user (a cloud engineer)
-#     -> access package "IT - Cloud Engineering Apps" (modules/entitlement)
+#   HR feed -> AD -> Cloud Sync -> Entra user (Dana)
+#     -> access package "Nurse - Clinical Apps" (modules/entitlement)
 #     -> Entra group App-AWS-IdentityCenter-Users (modules/groups)
 #     -> SCIM (Entra provisioning service, ~40-min cycle or on demand)
 #     -> Identity Store group with the same DisplayName      <- READ here
