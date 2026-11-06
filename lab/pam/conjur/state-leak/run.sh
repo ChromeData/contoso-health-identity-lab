@@ -25,7 +25,8 @@
 # Exit: 0 = the result the README states (data source leaks into state,
 # backup and saved plan; ephemeral does not and did read the value);
 # 1 = a different result (read the table); 2 = could not run (including an
-# existing contoso-stateleak stack or a busy port, which it leaves alone). Nothing secret is printed: counts and lengths only.
+# existing contoso-stateleak stack or a busy port, which it leaves alone).
+# Nothing secret is printed: counts and lengths only.
 #
 # Secrets handling: the Conjur admin key, host key, auth tokens and the value
 # live in shell variables and 0600 files in a mktemp folder; they reach curl
@@ -76,7 +77,7 @@ export STATE_LEAK_DB_PASSWORD STATE_LEAK_DATA_KEY
 # still there, or the port is taken, stop without touching it. The cleanup
 # trap is installed only after these checks, so a refusal deletes nothing.
 existing="$(docker compose ps -a -q 2>/dev/null)" || die "cannot ask docker compose about project $PROJECT"
-[[ -z "$existing" ]] || die "compose project $PROJECT already exists (an earlier KEEP=1 run?); remove it with: docker compose -p $PROJECT -f $COMPOSE_FILE down -v"
+[[ -z "$existing" ]] || die "compose project $PROJECT already exists (an earlier KEEP=1 run?); remove it with (run outside this folder, so no compose file is picked up): docker compose -p $PROJECT down -v"
 if curl -fsS -o /dev/null "$URL/" 2>/dev/null; then
   die "something already answers on $URL; set STATE_LEAK_PORT to a free port"
 fi
