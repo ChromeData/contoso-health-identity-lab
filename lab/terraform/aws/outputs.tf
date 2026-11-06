@@ -107,3 +107,20 @@ output "lab_admin_account_assignment_id" {
   description = "Composite id of the LabAdministrator assignment (principal, type, account, permission set, instance)."
   value       = one(aws_ssoadmin_account_assignment.lab_admins[*].id)
 }
+
+# ---- Audit trail (audit-trail.tf) ---------------------------------------------
+
+output "audit_trail_arn" {
+  description = "ARN of the CloudTrail trail (null unless enable_audit_baseline). Check it with: aws cloudtrail get-trail-status --name <arn>."
+  value       = one(aws_cloudtrail.audit[*].arn)
+}
+
+output "audit_bucket_name" {
+  description = "S3 bucket holding the trail's log and digest files (null unless enable_audit_baseline)."
+  value       = one(aws_s3_bucket.audit[*].bucket)
+}
+
+output "access_analyzer_arn" {
+  description = "ARN of the external-access IAM Access Analyzer (null unless enable_audit_baseline). Findings: aws accessanalyzer list-findings-v2 --analyzer-arn <arn>."
+  value       = one(aws_accessanalyzer_analyzer.external_access[*].arn)
+}

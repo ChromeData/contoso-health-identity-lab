@@ -26,6 +26,10 @@ Plus one small stand-in for the patient portal the cloud engineers run: a
 private S3 bucket with two objects (see
 [Patient portal stand-in](#patient-portal-stand-in-patient-portaltf)).
 
+And the account's own audit trail, built but not yet applied: a CloudTrail
+trail, its locked-down bucket and an IAM Access Analyzer (see
+[Audit trail](#audit-trail-audit-trailtf-built-not-applied)).
+
 Provider: **hashicorp/aws `~> 6.0`** (6.69.1 current on 2026-10-19).
 
 ---
@@ -352,6 +356,96 @@ The bucket shows `index.html` and `status.json`; **Open** on either is
 AccessDenied. **Teardown:** `terraform destroy -target=aws_s3_bucket.patient_portal`
 removes the bucket, its objects and old versions (`force_destroy`, lab only).
 
+## Audit trail (`audit-trail.tf`, built, not applied)
+
+**Status: BUILT.** Mocked tests pass and a targeted plan ran as the operator
+against the real account on 2026-11-06 (no apply): 9 to add, 1 to change
+(the operator guardrails), 0 to destroy. Capture log E105.
+
+**Why.** The lab quotes CloudTrail records as evidence (ADR 0024, ADR 0025),
+but nothing here created a trail. On 2026-11-06 account 182002546409 had no
+trail and no Access Analyzer (`describe-trails --include-shadow-trails` and
+`list-analyzers`: both empty). Those records came from CloudTrail **Event
+history**: on by default and free, but 90 days, one region at a time, and
+no file anyone can keep. A trail writes every event to S3, in every region,
+with a signed digest each hour that shows whether a log file was changed or
+deleted afterwards.
+
+| Object | Terraform | Value |
+|---|---|---|
+| Trail | `aws_cloudtrail.audit` | `contoso-lab-audit-trail`: all regions, global services (IAM, STS, Identity Center), log file validation on, management events (reads and writes) only |
+| Bucket | `aws_s3_bucket.audit` + public-access block, ownership controls, versioning, encryption, lifecycle | `contoso-health-audit-trail-<account id>`: private, ACLs off, versioned, SSE-S3, kept 365 days (`audit_log_retention_days`, 90-3650), not `force_destroy` |
+| Bucket policy | `aws_s3_bucket_policy.audit` | CloudTrail may check the ACL and write under `AWSLogs/<account>/`, **only for this trail** (`aws:SourceArn`); anything not over TLS is denied |
+| Access Analyzer | `aws_accessanalyzer_analyzer.external_access` | `contoso-lab-external-access`, type `ACCOUNT`: lists anything in the account shared outside it |
+
+**The operator can't erase it (guardrails v3).** Before this change the
+operator, with AdministratorAccess, could stop or delete the trail
+(`simulate-principal-policy` on 2026-11-06: `cloudtrail:StopLogging` and
+`cloudtrail:DeleteTrail` "allowed"). Two new Deny statements on
+`contoso-lab-operator`:
+
+- `NoAuditTampering`, account-wide: stop, delete or reconfigure any trail;
+  delete the analyzer, or hide its findings (archive rules, `UpdateFindings`).
+- `NoAuditBucketTampering`, on the audit bucket only: delete the bucket or
+  any log file or version, write into it, or change its policy, lifecycle,
+  versioning, encryption, public-access block, ownership or object lock.
+  It's scoped to one bucket because the operator still runs the patient
+  portal. A role-scoped Deny is usually dodged by making a new principal,
+  and the operator can't make one (`NoIamChanges`).
+
+Reads stay open: the operator still runs `lookup-events` and reads log files
+for evidence. CloudTrail writes as the `cloudtrail.amazonaws.com` service,
+which a Deny on the operator's role doesn't touch.
+
+**Cost** (AWS pricing pages, read 2026-11-06): the first copy of management
+events delivered to S3 is free, and this is the account's only trail. No
+data events, Insights or CloudWatch Logs copy, so CloudTrail bills nothing
+else. S3 for a quiet lab account: a few MB a month, cents. External access
+analysis: "no additional charge" (the paid unused-access and internal-access
+analyzers aren't built).
+
+**Not ported** from the old AWS-Multi-Account-Baseline repo: GuardDuty,
+Security Hub and its CIS/FSBP standards (monthly charges, and nobody reads
+their findings yet), AWS Config, and the LocalStack switch.
+
+**Apply it** (one LabAdministrator session, after a PIM activation of
+`PIM-AWS-Lab-Admins`; see [AWS admin without root](#aws-admin-without-root-lab-admintf-entra-operatortf-v2-adr-0025)).
+Not the operator: creating the analyzer also creates the service-linked role
+`AWSServiceRoleForAccessAnalyzer` (absent on 2026-11-06), and the operator
+gets `explicitDeny` on `iam:CreateServiceLinkedRole`. The guardrails change
+is an IAM write, so it needs the same session. The local state of this root
+was written by OpenTofu (its provider address is `registry.opentofu.org`),
+so the 2026-11-06 plan ran with `tofu`; use the same tool for the apply.
+
+```bash
+aws sts get-caller-identity --profile idlab-labadmin   # must say 182002546409
+tofu plan -var aws_profile=idlab-labadmin -var enable_audit_baseline=true -out audit.tfplan \
+  -target=aws_cloudtrail.audit -target=aws_accessanalyzer_analyzer.external_access \
+  -target=aws_s3_bucket_lifecycle_configuration.audit -target=aws_s3_bucket_ownership_controls.audit \
+  -target=aws_s3_bucket_server_side_encryption_configuration.audit \
+  -target=aws_iam_role_policy.entra_operator_guardrails   # expect: 9 to add, 1 to change
+tofu apply audit.tfplan
+```
+
+Then set `enable_audit_baseline = true` in `terraform.tfvars`, so a later
+full plan doesn't try to remove them.
+
+**Verify after the apply** (not run yet):
+
+- `aws cloudtrail get-trail-status --name contoso-lab-audit-trail`:
+  `IsLogging: true`, and after about 15 minutes a `LatestDeliveryTime`.
+- `aws cloudtrail validate-logs --trail-arn <audit_trail_arn> --start-time <apply time>`
+  reports the digest and log files as valid (digests start an hour in).
+- As the operator: `aws iam simulate-principal-policy` for
+  `cloudtrail:StopLogging`, `cloudtrail:DeleteTrail` and `s3:DeleteObject`
+  on the bucket shows `explicitDeny`; `cloudtrail:LookupEvents` stays
+  `allowed`.
+- `aws accessanalyzer list-findings-v2 --analyzer-arn <access_analyzer_arn>`
+  answers (an empty list is a valid answer).
+
+**Teardown.** The bucket isn't `force_destroy`, on purpose: empty it
+(every version) by hand first, then `tofu destroy -target=aws_cloudtrail.audit ...`.
+
 ---
 
 ## Verify list
@@ -427,6 +521,17 @@ this directory reports 0 failed.
 portal bucket: private, versioned, SSE-KMS, tagged, exactly `index.html` and
 `status.json`, a TLS-only policy whose one Allow is `s3:GetBucketLocation`.
 Both files together: **12 passed, 0 failed**.
+`tests/audit_trail.tftest.hcl` (added 2026-11-06, Terraform 1.16.5, aws
+6.69.1) pins the audit trail: off by default; all regions, global services,
+log file validation, management events only; the bucket private,
+versioned, SSE-S3, kept a year and not `force_destroy`; CloudTrail may write
+only for this trail (and the hand-built trail ARN equals the real one); the
+analyzer is the free `ACCOUNT` type; retention under 90 days is refused.
+`tests/entra_operator.tftest.hcl` gained `guardrails_v3_protect_the_audit_trail`,
+which fails against the v2 guardrails. All six files on 2026-11-06:
+**30 passed, 0 failed**. Mutation checks: the old guardrails fail the v3
+run, and a trail ARN with the old repo's trail name fails two audit runs.
+Checkov 3.3.20 on this directory: 0 failed.
 
 **Not verified (needs a live AWS account):**
 - The real apply.
@@ -551,6 +656,13 @@ already open in AWS outlives its PIM activation.
 ---
 
 ## Sources (checked 2026-10-19; GitHub OIDC additions 2026-10-20)
+
+- Added 2026-11-06 for `audit-trail.tf`: CloudTrail User Guide, *Amazon S3
+  bucket policy for CloudTrail* (the two statements and the `aws:SourceArn`
+  recommendation) and *Encrypting CloudTrail log files ... with AWS KMS keys*
+  (SSE-S3 when SSE-KMS isn't enabled); the CloudTrail and IAM Access
+  Analyzer pricing pages; action names checked against the AWS policy
+  generator's service map (awspolicygen.s3.amazonaws.com/js/policies.js).
 
 - Provider docs v6.69.1: `d/ssoadmin_instances`, `d/identitystore_group`
   (`alternate_identifier.unique_attribute`, `DisplayName` as used in the
