@@ -5,7 +5,9 @@ workspace, with eleven lab detection rules plus Microsoft's Fusion rule.
 
 > **Current status (2026-10-31):** the numbers here are what *this stage*
 > restores — eleven lab rules plus Fusion. In all, Terraform can schedule
-> seventeen (the 22 KQL rules minus the five in `itdr_exclude_rules`); the
+> seventeen (the 22 KQL rules of the first two sets minus the five in
+> `itdr_exclude_rules`; the two third-set rules wait for
+> `enable_itdr_detections_v3`); the
 > remaining rules come online in later stages as their data — the domain
 > controller, risky users, the vault — starts flowing.
 

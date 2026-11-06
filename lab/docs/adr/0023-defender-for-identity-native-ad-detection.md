@@ -138,7 +138,7 @@ its watermark to the local Splunk HEC, as the lab operator (no person's
 session, no new Azure permission: Owner on the lab subscription includes Log
 Analytics read).
 
-- **Source: the Log Analytics tables, not Graph.** The 22 SPL twins search the
+- **Source: the Log Analytics tables, not Graph.** The SPL twins search the
   Log Analytics schema (`azure:loganalytics:<table>`, `ResultType`,
   `LocationDetails.countryOrRegion`, ...). Graph's `auditLogs/signIns` and
   `auditLogs/directoryAudits` carry the same Entra sign-in and directory-audit

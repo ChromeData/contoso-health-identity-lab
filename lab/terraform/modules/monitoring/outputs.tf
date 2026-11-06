@@ -13,7 +13,7 @@ output "la_alert_rule_ids" {
 }
 
 output "itdr_rule_keys" {
-  description = "ITDR rule keys (v1 + v2) selected for the active detection path (empty until enable_itdr_detections). The LA path skips sentinel_only_rule_keys."
+  description = "ITDR rule keys (v1 + v2 + v3) selected for the active detection path (empty until enable_itdr_detections). The LA path skips sentinel_only_rule_keys."
   value       = keys(local.itdr_selected)
 }
 

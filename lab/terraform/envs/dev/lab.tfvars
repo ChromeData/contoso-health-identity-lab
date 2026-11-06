@@ -201,6 +201,15 @@ enable_itdr_detections_v2 = true
 vault_feed_v2_columns     = false
 operator_ips_expires_on   = "2027-01-20"
 
+# Third-set ITDR rules (2026-11-06, ported from Sentinel-Privileged-Access):
+# a dormant admin account signing in again, and bulk Key Vault secret reads.
+# Both Sentinel only (14-day look-back); the Key Vault rule never contains.
+# Off until its own one-line PR turns it on: Sentinel checks each new rule's
+# query at creation and one refusal fails the whole apply, so the flip ships
+# alone. Both queries already ran read-only on loga-idlab (2026-11-06) and
+# compiled against its real tables.
+enable_itdr_detections_v3 = false
+
 # ITDR rules held back while their data does not exist yet: Sentinel rejects
 # a rule whose table has never received data, and the preview rule is not
 # trusted until a real activation. Rule keys are not tenant identifiers, so
