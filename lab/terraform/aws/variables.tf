@@ -355,3 +355,31 @@ variable "lab_admin_session_duration" {
     error_message = "lab_admin_session_duration must be PT1H or PT2H (no longer than the PIM activation, modules/pim aws_admin_activation_max_duration)."
   }
 }
+
+# ---- Audit trail (audit-trail.tf) ---------------------------------------------
+
+variable "enable_audit_baseline" {
+  type        = bool
+  description = <<-EOT
+    Create the CloudTrail trail contoso-lab-audit-trail, its S3 bucket and the
+    external-access IAM Access Analyzer (audit-trail.tf). Apply with a
+    LabAdministrator session: the analyzer's service-linked role needs
+    iam:CreateServiceLinkedRole, which the operator is denied.
+  EOT
+  default     = false
+}
+
+variable "audit_log_retention_days" {
+  type        = number
+  description = <<-EOT
+    Days the trail's log files stay in the bucket before they expire. Default
+    365 (one year). CloudTrail Event history keeps 90 days on its own, so a
+    shorter retention adds nothing.
+  EOT
+  default     = 365
+
+  validation {
+    condition     = var.audit_log_retention_days >= 90 && var.audit_log_retention_days <= 3650 && floor(var.audit_log_retention_days) == var.audit_log_retention_days
+    error_message = "audit_log_retention_days must be a whole number of days from 90 (Event history already keeps 90) to 3650."
+  }
+}

@@ -1,0 +1,82 @@
+{
+ "what": "Read-only checks before the audit trail (lab/terraform/aws/audit-trail.tf) and operator guardrails v3: what exists, what the operator can do today, and a targeted plan. NOTHING was applied.",
+ "utc": "2026-11-06T07:21:15Z",
+ "identity": "lab operator (contoso-lab-operator role, via lab/scripts/operator/op)",
+ "aws_account": "182002546409",
+ "region": "us-east-1",
+ "cloudtrail_describe_trails_include_shadow": {
+  "trailList": []
+ },
+ "accessanalyzer_list_analyzers": {
+  "analyzers": []
+ },
+ "iam_get_role_AWSServiceRoleForAccessAnalyzer": "NoSuchEntity",
+ "operator_simulate_principal_policy_guardrails_v2": [
+  {
+   "action": "cloudtrail:CreateTrail",
+   "decision": "allowed"
+  },
+  {
+   "action": "cloudtrail:StopLogging",
+   "decision": "allowed"
+  },
+  {
+   "action": "cloudtrail:DeleteTrail",
+   "decision": "allowed"
+  },
+  {
+   "action": "cloudtrail:UpdateTrail",
+   "decision": "allowed"
+  },
+  {
+   "action": "cloudtrail:LookupEvents",
+   "decision": "allowed"
+  },
+  {
+   "action": "s3:DeleteBucket",
+   "decision": "allowed"
+  },
+  {
+   "action": "s3:DeleteObject",
+   "decision": "allowed"
+  },
+  {
+   "action": "access-analyzer:CreateAnalyzer",
+   "decision": "allowed"
+  },
+  {
+   "action": "access-analyzer:DeleteAnalyzer",
+   "decision": "allowed"
+  },
+  {
+   "action": "iam:CreateServiceLinkedRole",
+   "decision": "explicitDeny"
+  }
+ ],
+ "targeted_plan": {
+  "tool": "OpenTofu 1.13.1 (the root's local state was written by OpenTofu), hashicorp/aws 6.69.1 from registry.opentofu.org in a scratch copy; state read from a copy, -lock=false, plan file deleted, no apply",
+  "vars": "enable_audit_baseline=true, aws_profile=idlab-operator, the local terraform.tfvars",
+  "targets": [
+   "aws_cloudtrail.audit",
+   "aws_accessanalyzer_analyzer.external_access",
+   "aws_s3_bucket_lifecycle_configuration.audit",
+   "aws_s3_bucket_ownership_controls.audit",
+   "aws_s3_bucket_server_side_encryption_configuration.audit",
+   "aws_iam_role_policy.entra_operator_guardrails"
+  ],
+  "result": [
+   "# aws_accessanalyzer_analyzer.external_access[0] will be created",
+   "# aws_cloudtrail.audit[0] will be created",
+   "# aws_iam_role_policy.entra_operator_guardrails[0] will be updated in-place",
+   "# aws_s3_bucket.audit[0] will be created",
+   "# aws_s3_bucket_lifecycle_configuration.audit[0] will be created",
+   "# aws_s3_bucket_ownership_controls.audit[0] will be created",
+   "# aws_s3_bucket_policy.audit[0] will be created",
+   "# aws_s3_bucket_public_access_block.audit[0] will be created",
+   "# aws_s3_bucket_server_side_encryption_configuration.audit[0] will be created",
+   "# aws_s3_bucket_versioning.audit[0] will be created",
+   "Plan: 9 to add, 1 to change, 0 to destroy."
+  ],
+  "guardrails_diff": "adds NoAuditTampering and NoAuditBucketTampering (arn:aws:s3:::contoso-health-audit-trail-182002546409 and /*); the five v2 statements are unchanged"
+ }
+}

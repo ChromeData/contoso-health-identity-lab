@@ -15,9 +15,10 @@
 #
 # WHAT THE ROLE MAY DO: AdministratorAccess in this one account - the lab
 # account the provider's allowed_account_ids pins - EXCEPT anything that
-# changes WHO can administer AWS. An explicit Deny keeps that true even for
-# an admin. Guardrails v2 (ADR 0025) - every statement is account-wide,
-# because a Deny scoped to the operator's own role is bypassed by making
+# changes WHO can administer AWS, or erases the record of what it did. An
+# explicit Deny keeps that true even for an admin. Guardrails v2 (ADR 0025)
+# and v3 (audit-trail.tf) - every statement but the audit-bucket one is
+# account-wide, because a Deny scoped to the operator's own role is bypassed by making
 # another principal:
 #   * NoIamChanges: every IAM write verb, PassRole included: no users or
 #     access keys, no second role it could assume or hand to a service, no
@@ -41,6 +42,21 @@
 #   * NoOtherWayIn: IAM Roles Anywhere trust anchors, profiles, CRLs and
 #     attribute mappings (a certificate way in without Entra).
 #   * CannotCloseOrDetachTheAccount.
+#   * NoAuditTampering (new in v3, audit-trail.tf): the operator can't
+#     stop, delete or reconfigure any CloudTrail trail, can't delete the
+#     Access Analyzer or hide its findings (archive rules, UpdateFindings),
+#     and can't delete, overwrite or loosen anything in the audit bucket,
+#     or make it Requester Pays (CloudTrail can't deliver to one).
+#     Before v3 it could (simulate-principal-policy 2026-11-06:
+#     cloudtrail:StopLogging and DeleteTrail "allowed"), which means the
+#     identity being watched could switch the camera off. The S3 part is
+#     scoped to the audit bucket, the one exception to "account-wide": the
+#     operator still runs the patient-portal bucket, and the reason for the
+#     account-wide rule (a new principal sheds a role-scoped Deny) can't
+#     apply, because NoIamChanges stops it making one. CloudTrail itself
+#     writes as the cloudtrail.amazonaws.com service, which this role-level
+#     Deny doesn't touch. Action names checked 2026-11-06 against the same
+#     service map.
 # Action names checked 2026-11-05 against the AWS policy generator's
 # service map (awspolicygen.s3.amazonaws.com/js/policies.js) and the
 # Service Authorization Reference.
@@ -144,6 +160,34 @@ locals {
           "rolesanywhere:Put*", "rolesanywhere:Import*",
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "NoAuditTampering"
+        Effect = "Deny"
+        Action = [
+          "cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "cloudtrail:UpdateTrail",
+          "cloudtrail:PutEventSelectors", "cloudtrail:PutInsightSelectors",
+          "access-analyzer:DeleteAnalyzer", "access-analyzer:CreateArchiveRule",
+          "access-analyzer:UpdateArchiveRule", "access-analyzer:ApplyArchiveRule",
+          "access-analyzer:UpdateFindings",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "NoAuditBucketTampering"
+        Effect = "Deny"
+        Action = [
+          "s3:DeleteBucket", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy",
+          "s3:PutLifecycleConfiguration", "s3:PutBucketVersioning",
+          "s3:PutEncryptionConfiguration", "s3:PutBucketPublicAccessBlock",
+          "s3:PutBucketOwnershipControls", "s3:PutBucketAcl",
+          # Requester Pays: CloudTrail can't deliver to such a bucket, so
+          # switching it on would stop new logs without a CloudTrail call.
+          "s3:PutBucketRequestPayment",
+          "s3:PutBucketObjectLockConfiguration", "s3:PutObjectRetention",
+          "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion",
+        ]
+        Resource = [local.audit_bucket_arn, "${local.audit_bucket_arn}/*"]
       },
       {
         Sid      = "CannotCloseOrDetachTheAccount"
