@@ -10,11 +10,14 @@ What it does, plainly
           case has no rows for it) ...
       <the rule, rendered as modules/monitoring deploys it>
   A `let` with a table's name shadows the real table for that query, so the
-  rule reads only the case's synthetic rows. The query goes to loga-idlab
-  through the lab operator (`op az monitor log-analytics query`). Nothing is
-  ingested or written in the workspace. The answer is judged with the
-  harness's own evaluate() (positive: rows that match `expect`; negative:
-  zero rows; expectRows / expectNone).
+  rule reads only the case's synthetic rows. The query goes to loga-idlab's
+  query API (api.loganalytics.io/v1, POST .../query) through the lab
+  operator (`op az rest`). Nothing is ingested or written in the
+  workspace. The answer keeps its column types (a dynamic column comes back
+  as JSON text and is decoded by the harness's own primary_table(), so a
+  make_set() list compares as a list), and is judged with the harness's own
+  evaluate() (positive: rows that match `expect`; negative: zero rows;
+  expectRows / expectNone).
 
 Why it exists
   run.sh needs the Kusto emulator, whose licence only the operator can
@@ -30,11 +33,13 @@ Limits
   - A query body has a size limit (the 1450-row baseline case fits; a much
     larger case may be refused with "Request entity too large" = ERROR).
   - Watchlists, table variants and shim variants are not supported here: a
-    case that uses them is reported as SKIPPED, never as passed.
+    case that uses them is reported as SKIPPED, never as passed, and any
+    SKIPPED case makes the run INCOMPLETE (exit 1), not PASS.
 
 Usage
   lab/monitoring/kusto-harness/run-on-workspace.py --rules a,b [--record DIR]
-  Exit 0 = every case passed; 1 = a case failed or errored; 2 = refused.
+  Exit 0 = every case passed; 1 = a case failed, errored or was skipped;
+  2 = refused.
 """
 import argparse, datetime as dt, hashlib, json, os, subprocess, sys, tempfile
 
@@ -45,6 +50,7 @@ sys.path.insert(0, HERE)
 import harness  # noqa: E402  (this folder's harness.py)
 
 RG, WS_NAME = "rg-identity-lab", "loga-idlab"
+LA_API = "https://api.loganalytics.io"
 
 
 def op_az(args):
@@ -63,18 +69,22 @@ def workspace_id():
     return wid
 
 
-def coerce(v):
-    # az returns every cell as text; turn numbers / booleans back into JSON
-    # values so evaluate() compares like the emulator path does.
-    if isinstance(v, str):
-        if v in ("True", "False", "true", "false"):
-            return v.lower() == "true"
-        for f in (int, float):
-            try:
-                return f(v)
-            except ValueError:
-                pass
-    return v
+def to_kusto_payload(resp):
+    # The query API answers {"tables": [{"columns": [{"name", "type"}],
+    # "rows": [[...]]}]} (lowercase keys). The harness's primary_table()
+    # reads the ADX v1 shape, so rename the keys and let it decode: typed
+    # numbers and booleans stay typed, dynamic values are parsed from JSON.
+    return {"Tables": [{"Columns": [{"ColumnName": c["name"], "ColumnType": c["type"]} for c in t.get("columns", [])],
+                        "Rows": t.get("rows", [])} for t in resp.get("tables", [])]}
+
+
+def verdict_of(counts):
+    """PASS only when cases ran and every one passed; a SKIPPED case is INCOMPLETE."""
+    if counts.get("FAIL") or counts.get("ERROR") or not counts.get("PASS"):
+        return "FAIL"
+    if counts.get("SKIPPED"):
+        return "INCOMPLETE"   # a case that never ran is not a pass
+    return "PASS"
 
 
 def case_query(ctx, rule, k, base):
@@ -120,29 +130,28 @@ def main():
                 print(f"SKIP  {k['id']}", flush=True)
                 continue
             q = case_query(ctx, rule, k, dt.datetime.now(dt.timezone.utc))
-            with tempfile.NamedTemporaryFile("w", suffix=".kql", delete=False) as f:
-                f.write(q)
+            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+                json.dump({"query": q}, f)
                 qpath = f.name
             try:
-                # @file: the Azure CLI reads the argument from the file, so a
-                # large case never hits the argv size limit.
-                rc, out, err = op_az(["monitor", "log-analytics", "query", "-w", wid, "--analytics-query", "@" + qpath])
+                # @file: the Azure CLI reads the body from the file, so a large
+                # case never hits the argv size limit.
+                rc, out, err = op_az(["rest", "--method", "post", "--resource", LA_API,
+                                      "--url", f"{LA_API}/v1/workspaces/{wid}/query",
+                                      "--headers", "Content-Type=application/json", "--body", "@" + qpath])
             finally:
                 os.unlink(qpath)
             if rc != 0:
                 entry.update(status="ERROR", failures=[f"query error: {err.strip()[-500:]}"])
             else:
-                rows = [{c: coerce(v) for c, v in r.items() if c != "TableName"} for r in json.loads(out)]
-                # Output column names are known only when rows came back; for an
-                # empty answer, take the expected names so evaluate() reports
-                # "no rows", not "unknown column".
-                cols = [(c, None) for c in (rows[0] if rows else {c for e in k["expect"] for c in e})]
-                fails, _ = harness.evaluate(k, {"rows": rows, "columns": cols})
+                res = harness.primary_table(to_kusto_payload(json.loads(out)))
+                rows = res["rows"]
+                fails, _ = harness.evaluate(k, res)
                 entry.update(status="FAIL" if fails else "PASS", rowCount=len(rows), rows=rows[:5], failures=fails)
             results.append(entry)
             print(f"{entry['status']:5} {k['id']}" + (f"  -- {entry['failures'][0][:300]}" if entry.get("failures") else ""), flush=True)
     counts = {s: sum(1 for r in results if r["status"] == s) for s in ("PASS", "FAIL", "ERROR", "SKIPPED")}
-    verdict = "PASS" if counts["FAIL"] == 0 and counts["ERROR"] == 0 and counts["PASS"] > 0 else "FAIL"
+    verdict = verdict_of(counts)
     print(f"RESULT {verdict} {counts}")
     if a.record:
         os.makedirs(a.record, exist_ok=True)

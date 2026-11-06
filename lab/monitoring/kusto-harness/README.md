@@ -9,7 +9,7 @@ hashed run record.
 `keyvault-bulk-secret-read`) **have not run on the emulator.** Their 25 cases
 ran on the Log Analytics query engine instead, with `run-on-workspace.py`
 (below): RAN · harness, on the Log Analytics query engine, 2026-11-06, PASS 25/25, record
-[`lab/evidence/kusto/20261106T073048Z-workspace/`](../../evidence/kusto/20261106T073048Z-workspace/)
+[`lab/evidence/kusto/20261106T074249Z-workspace/`](../../evidence/kusto/20261106T074249Z-workspace/)
 (capture-log E114). Everything below about the emulator runs is about the 22
 rules that existed on those days.
 
@@ -328,13 +328,18 @@ than asserted; they explain any case that fails. They cover:
 ## Run on the workspace instead: `run-on-workspace.py`
 
 No emulator and no licence step: each case becomes one **read-only** query to
-loga-idlab, sent through the lab operator (`op az monitor log-analytics
-query`). The case's rows are bound with `let <Table> = view() { print ... |
-mv-expand | project ... }`, using the same typed projection `.append` uses
-here; a `let` with a table's name shadows the real table for that one query,
-so the rule reads only the synthetic rows. The query is the rule rendered as
-`modules/monitoring` deploys it. Nothing is ingested or written in the
-workspace. Answers are judged by the same `evaluate()`.
+loga-idlab's query API (`POST api.loganalytics.io/v1/workspaces/<id>/query`),
+sent through the lab operator (`op az rest`). The case's rows are bound with
+`let <Table> = view() { print ... | mv-expand | project ... }`, using the
+same typed projection `.append` uses here; a `let` with a table's name
+shadows the real table for that one query, so the rule reads only the
+synthetic rows. The query is the rule rendered as `modules/monitoring`
+deploys it. Nothing is ingested or written in the workspace. The answer
+keeps its column types: `primary_table()` decodes it as on the emulator
+path (a `dynamic` column such as a `make_set()` list arrives as JSON text
+and becomes a list), and the same `evaluate()` judges it. A SKIPPED case
+makes the run INCOMPLETE (exit 1), never PASS. Offline tests of the decoding
+and the verdict: `tests/test_run_on_workspace.py` (in `lab-tests.yml`).
 
 ```bash
 lab/monitoring/kusto-harness/run-on-workspace.py \

@@ -87,7 +87,7 @@ Sentinel-Privileged-Access repo. `modules/monitoring/itdr_v3.tf` deploys them
 when the flag is on (it is off in `lab.tfvars`); both are Sentinel-only, and
 the Key Vault rule never triggers containment. Their 25 harness cases passed
 on the Log Analytics query engine on 2026-11-06 (E114,
-`lab/evidence/kusto/20261106T073048Z-workspace/`); they have not run on the
+`lab/evidence/kusto/20261106T074249Z-workspace/`); they have not run on the
 Kusto emulator and are not deployed. The Key Vault twin in Splunk has no data
 to read: no feed sends AzureDiagnostics.
 

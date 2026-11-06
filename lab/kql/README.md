@@ -132,7 +132,7 @@ reads.
 What has run for these two (2026-11-06): both queries, unchanged, read-only
 on loga-idlab (they compile against the real tables and returned no rows);
 their 25 harness cases on the Log Analytics query engine, PASS 25/25
-([`../evidence/kusto/20261106T073048Z-workspace/`](../evidence/kusto/20261106T073048Z-workspace/),
+([`../evidence/kusto/20261106T074249Z-workspace/`](../evidence/kusto/20261106T074249Z-workspace/),
 E114); `modules/monitoring`'s mocked `terraform test` (`itdr_v3.tftest.hcl`);
 both SPL twins as one-off searches on the local Splunk (they parse; the
 dormant twin gave the same five accounts and counts as the KQL on the same

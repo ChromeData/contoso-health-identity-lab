@@ -1,8 +1,8 @@
 {
  "what": "kusto-harness cases run on the Log Analytics query engine (loga-idlab), read-only, rows bound by let",
  "notAScheduledRule": true,
- "started": "2026-11-06T07:30:57Z",
- "finished": "2026-11-06T07:32:04Z",
+ "started": "2026-11-06T07:42:50Z",
+ "finished": "2026-11-06T07:43:58Z",
  "result": "PASS",
  "counts": {
   "PASS": 25,
@@ -27,18 +27,20 @@
    "rowCount": 1,
    "rows": [
     {
-     "AppDisplayName": "Azure Portal",
-     "CreatedOn": "None",
-     "IPAddress": "203.0.113.10",
-     "IPAddresses": "[\"203.0.113.10\"]",
-     "NewAccount": false,
-     "PrivilegedById": false,
-     "QuietSince": "2026-10-23T07:30:59.3002072Z",
+     "TimeGenerated": "2026-11-06T07:22:50.870177Z",
      "Severity": "High",
-     "SignIns": 1,
-     "TimeGenerated": "2026-11-06T07:10:57.922029Z",
+     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com",
      "UserId": "11111111-1111-1111-1111-111111111111",
-     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com"
+     "PrivilegedById": false,
+     "NewAccount": false,
+     "CreatedOn": null,
+     "QuietSince": "2026-10-23T07:42:53.2166911Z",
+     "SignIns": 1,
+     "IPAddress": "203.0.113.10",
+     "IPAddresses": [
+      "203.0.113.10"
+     ],
+     "AppDisplayName": "Azure Portal"
     }
    ],
    "failures": []
@@ -51,18 +53,20 @@
    "rowCount": 1,
    "rows": [
     {
-     "AppDisplayName": "Azure Portal",
-     "CreatedOn": "None",
-     "IPAddress": "203.0.113.10",
-     "IPAddresses": "[\"203.0.113.10\"]",
-     "NewAccount": false,
-     "PrivilegedById": false,
-     "QuietSince": "2026-10-23T07:31:01.5155073Z",
+     "TimeGenerated": "2026-11-06T07:22:53.368883Z",
      "Severity": "High",
-     "SignIns": 1,
-     "TimeGenerated": "2026-11-06T07:10:59.419166Z",
+     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com",
      "UserId": "11111111-1111-1111-1111-111111111111",
-     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com"
+     "PrivilegedById": false,
+     "NewAccount": false,
+     "CreatedOn": null,
+     "QuietSince": "2026-10-23T07:42:54.5442653Z",
+     "SignIns": 1,
+     "IPAddress": "203.0.113.10",
+     "IPAddresses": [
+      "203.0.113.10"
+     ],
+     "AppDisplayName": "Azure Portal"
     }
    ],
    "failures": []
@@ -75,18 +79,21 @@
    "rowCount": 1,
    "rows": [
     {
-     "AppDisplayName": "Azure Portal",
-     "CreatedOn": "None",
-     "IPAddress": "203.0.113.11",
-     "IPAddresses": "[\"203.0.113.11\",\"203.0.113.10\"]",
-     "NewAccount": false,
-     "PrivilegedById": false,
-     "QuietSince": "2026-10-23T07:31:03.1066943Z",
+     "TimeGenerated": "2026-11-06T06:52:54.66271Z",
      "Severity": "High",
-     "SignIns": 2,
-     "TimeGenerated": "2026-11-06T06:41:01.65938Z",
+     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com",
      "UserId": "11111111-1111-1111-1111-111111111111",
-     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com"
+     "PrivilegedById": false,
+     "NewAccount": false,
+     "CreatedOn": null,
+     "QuietSince": "2026-10-23T07:42:56.0078623Z",
+     "SignIns": 2,
+     "IPAddress": "203.0.113.11",
+     "IPAddresses": [
+      "203.0.113.11",
+      "203.0.113.10"
+     ],
+     "AppDisplayName": "Azure Portal"
     }
    ],
    "failures": []
@@ -99,18 +106,20 @@
    "rowCount": 1,
    "rows": [
     {
-     "AppDisplayName": "Azure Portal",
-     "CreatedOn": "None",
-     "IPAddress": "203.0.113.10",
-     "IPAddresses": "[\"203.0.113.10\"]",
-     "NewAccount": false,
-     "PrivilegedById": false,
-     "QuietSince": "2026-10-23T07:31:05.0229231Z",
+     "TimeGenerated": "2026-11-06T07:22:56.126693Z",
      "Severity": "High",
-     "SignIns": 1,
-     "TimeGenerated": "2026-11-06T07:11:03.308733Z",
+     "UserPrincipalName": "tier0-admin-01@contosohealthlab.onmicrosoft.com",
      "UserId": "22222222-2222-2222-2222-222222222222",
-     "UserPrincipalName": "tier0-admin-01@contosohealthlab.onmicrosoft.com"
+     "PrivilegedById": false,
+     "NewAccount": false,
+     "CreatedOn": null,
+     "QuietSince": "2026-10-23T07:42:57.5994572Z",
+     "SignIns": 1,
+     "IPAddress": "203.0.113.10",
+     "IPAddresses": [
+      "203.0.113.10"
+     ],
+     "AppDisplayName": "Azure Portal"
     }
    ],
    "failures": []
@@ -123,18 +132,20 @@
    "rowCount": 1,
    "rows": [
     {
-     "AppDisplayName": "Azure Portal",
-     "CreatedOn": "None",
-     "IPAddress": "203.0.113.10",
-     "IPAddresses": "[\"203.0.113.10\"]",
-     "NewAccount": false,
-     "PrivilegedById": true,
-     "QuietSince": "2026-10-23T07:31:06.5441609Z",
+     "TimeGenerated": "2026-11-06T07:22:57.734755Z",
      "Severity": "High",
-     "SignIns": 1,
-     "TimeGenerated": "2026-11-06T07:11:05.168763Z",
+     "UserPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com",
      "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-     "UserPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com"
+     "PrivilegedById": true,
+     "NewAccount": false,
+     "CreatedOn": null,
+     "QuietSince": "2026-10-23T07:43:00.3012327Z",
+     "SignIns": 1,
+     "IPAddress": "203.0.113.10",
+     "IPAddresses": [
+      "203.0.113.10"
+     ],
+     "AppDisplayName": "Azure Portal"
     }
    ],
    "failures": []
@@ -147,18 +158,20 @@
    "rowCount": 1,
    "rows": [
     {
-     "AppDisplayName": "Azure Portal",
-     "CreatedOn": "2026-11-04T07:31:06.664185Z",
-     "IPAddress": "203.0.113.10",
-     "IPAddresses": "[\"203.0.113.10\"]",
-     "NewAccount": true,
-     "PrivilegedById": false,
-     "QuietSince": "2026-10-23T07:31:07.8447314Z",
+     "TimeGenerated": "2026-11-06T07:23:00.446788Z",
      "Severity": "Medium",
-     "SignIns": 1,
-     "TimeGenerated": "2026-11-06T07:11:06.664185Z",
+     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com",
      "UserId": "11111111-1111-1111-1111-111111111111",
-     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com"
+     "PrivilegedById": false,
+     "NewAccount": true,
+     "CreatedOn": "2026-11-04T07:43:00.446788Z",
+     "QuietSince": "2026-10-23T07:43:01.7701799Z",
+     "SignIns": 1,
+     "IPAddress": "203.0.113.10",
+     "IPAddresses": [
+      "203.0.113.10"
+     ],
+     "AppDisplayName": "Azure Portal"
     }
    ],
    "failures": []
@@ -234,25 +247,46 @@
    "rowCount": 1,
    "rows": [
     {
-     "BaselineReads": 0,
-     "CallerAppId": "55555555-5555-5555-5555-555555555555",
-     "CallerId": "11111111-1111-1111-1111-111111111111",
-     "CallerIp": "10.10.2.4",
-     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
-     "CallerType": "app",
-     "CallerUpn": "",
-     "Denied": 0,
-     "DeniedSecrets": 0,
-     "HourlyMean": 0,
-     "ReadThreshold": 20,
-     "Reads": 30,
-     "SecretNames": "[\"secret-0\",\"secret-1\",\"secret-2\",\"secret-3\",\"secret-4\",\"secret-5\",\"secret-6\",\"secret-7\",\"secret-8\",\"secret-9\",\"secret-10\",\"secret-11\",\"secret-12\",\"secret-13\",\"secret-14\",\"secret-15\",\"secret-16\",\"secret-17\",\"secret-18\",\"secret-19\"]",
-     "Secrets": 30,
+     "TimeGenerated": "2026-11-06T07:33:16.419909Z",
      "Severity": "High",
      "Signal": "bulk read",
-     "TimeGenerated": "2026-11-06T07:21:30.77036Z",
+     "CallerId": "11111111-1111-1111-1111-111111111111",
+     "CallerType": "app",
+     "CallerUpn": "",
+     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
+     "CallerAppId": "55555555-5555-5555-5555-555555555555",
+     "CallerIp": "10.10.2.4",
+     "Reads": 30,
+     "Secrets": 30,
+     "Denied": 0,
+     "DeniedSecrets": 0,
+     "SecretNames": [
+      "secret-0",
+      "secret-1",
+      "secret-2",
+      "secret-3",
+      "secret-4",
+      "secret-5",
+      "secret-6",
+      "secret-7",
+      "secret-8",
+      "secret-9",
+      "secret-10",
+      "secret-11",
+      "secret-12",
+      "secret-13",
+      "secret-14",
+      "secret-15",
+      "secret-16",
+      "secret-17",
+      "secret-18",
+      "secret-19"
+     ],
+     "Vaults": 1,
      "VaultResourceId": "/SUBSCRIPTIONS/22222222-2222-2222-2222-222222222222/RESOURCEGROUPS/RG-IDENTITY-LAB/PROVIDERS/MICROSOFT.KEYVAULT/VAULTS/KV-IDLAB-20F1",
-     "Vaults": 1
+     "BaselineReads": 0,
+     "HourlyMean": 0,
+     "ReadThreshold": 20
     }
    ],
    "failures": []
@@ -265,25 +299,27 @@
    "rowCount": 1,
    "rows": [
     {
-     "BaselineReads": 0,
-     "CallerAppId": "55555555-5555-5555-5555-555555555555",
-     "CallerId": "11111111-1111-1111-1111-111111111111",
-     "CallerIp": "10.10.2.4",
-     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
-     "CallerType": "app",
-     "CallerUpn": "",
-     "Denied": 0,
-     "DeniedSecrets": 0,
-     "HourlyMean": 0,
-     "ReadThreshold": 20,
-     "Reads": 25,
-     "SecretNames": "[\"uami-app-secret\"]",
-     "Secrets": 1,
+     "TimeGenerated": "2026-11-06T07:33:18.016996Z",
      "Severity": "Medium",
      "Signal": "bulk read",
-     "TimeGenerated": "2026-11-06T07:21:36.423642Z",
+     "CallerId": "11111111-1111-1111-1111-111111111111",
+     "CallerType": "app",
+     "CallerUpn": "",
+     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
+     "CallerAppId": "55555555-5555-5555-5555-555555555555",
+     "CallerIp": "10.10.2.4",
+     "Reads": 25,
+     "Secrets": 1,
+     "Denied": 0,
+     "DeniedSecrets": 0,
+     "SecretNames": [
+      "uami-app-secret"
+     ],
+     "Vaults": 1,
      "VaultResourceId": "/SUBSCRIPTIONS/22222222-2222-2222-2222-222222222222/RESOURCEGROUPS/RG-IDENTITY-LAB/PROVIDERS/MICROSOFT.KEYVAULT/VAULTS/KV-IDLAB-20F1",
-     "Vaults": 1
+     "BaselineReads": 0,
+     "HourlyMean": 0,
+     "ReadThreshold": 20
     }
    ],
    "failures": []
@@ -296,25 +332,46 @@
    "rowCount": 1,
    "rows": [
     {
-     "BaselineReads": 0,
-     "CallerAppId": "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
-     "CallerId": "66666666-6666-6666-6666-666666666666",
-     "CallerIp": "10.10.2.4",
-     "CallerObjectId": "66666666-6666-6666-6666-666666666666",
-     "CallerType": "user",
-     "CallerUpn": "adm-raj.patel@contosohealthlab.onmicrosoft.com",
-     "Denied": 0,
-     "DeniedSecrets": 0,
-     "HourlyMean": 0,
-     "ReadThreshold": 20,
-     "Reads": 24,
-     "SecretNames": "[\"shared-0\",\"shared-1\",\"shared-2\",\"shared-3\",\"shared-4\",\"shared-5\",\"shared-6\",\"shared-7\",\"shared-8\",\"shared-9\",\"shared-10\",\"shared-11\",\"shared-12\",\"shared-13\",\"shared-14\",\"shared-15\",\"shared-16\",\"shared-17\",\"shared-18\",\"shared-19\"]",
-     "Secrets": 24,
+     "TimeGenerated": "2026-11-06T07:33:19.60036Z",
      "Severity": "High",
      "Signal": "bulk read",
-     "TimeGenerated": "2026-11-06T07:21:37.939411Z",
+     "CallerId": "66666666-6666-6666-6666-666666666666",
+     "CallerType": "user",
+     "CallerUpn": "adm-raj.patel@contosohealthlab.onmicrosoft.com",
+     "CallerObjectId": "66666666-6666-6666-6666-666666666666",
+     "CallerAppId": "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
+     "CallerIp": "10.10.2.4",
+     "Reads": 24,
+     "Secrets": 24,
+     "Denied": 0,
+     "DeniedSecrets": 0,
+     "SecretNames": [
+      "shared-0",
+      "shared-1",
+      "shared-2",
+      "shared-3",
+      "shared-4",
+      "shared-5",
+      "shared-6",
+      "shared-7",
+      "shared-8",
+      "shared-9",
+      "shared-10",
+      "shared-11",
+      "shared-12",
+      "shared-13",
+      "shared-14",
+      "shared-15",
+      "shared-16",
+      "shared-17",
+      "shared-18",
+      "shared-19"
+     ],
+     "Vaults": 1,
      "VaultResourceId": "/SUBSCRIPTIONS/22222222-2222-2222-2222-222222222222/RESOURCEGROUPS/RG-IDENTITY-LAB/PROVIDERS/MICROSOFT.KEYVAULT/VAULTS/KV-IDLAB-20F1",
-     "Vaults": 1
+     "BaselineReads": 0,
+     "HourlyMean": 0,
+     "ReadThreshold": 20
     }
    ],
    "failures": []
@@ -327,25 +384,46 @@
    "rowCount": 1,
    "rows": [
     {
-     "BaselineReads": 0,
-     "CallerAppId": "55555555-5555-5555-5555-555555555555",
-     "CallerId": "11111111-1111-1111-1111-111111111111",
-     "CallerIp": "10.10.2.4",
-     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
-     "CallerType": "app",
-     "CallerUpn": "",
-     "Denied": 25,
-     "DeniedSecrets": 25,
-     "HourlyMean": 0,
-     "ReadThreshold": 20,
-     "Reads": 0,
-     "SecretNames": "[\"secret-0\",\"secret-1\",\"secret-2\",\"secret-3\",\"secret-4\",\"secret-5\",\"secret-6\",\"secret-7\",\"secret-8\",\"secret-9\",\"secret-10\",\"secret-11\",\"secret-12\",\"secret-13\",\"secret-14\",\"secret-15\",\"secret-16\",\"secret-17\",\"secret-18\",\"secret-19\"]",
-     "Secrets": 0,
+     "TimeGenerated": "2026-11-06T07:33:21.381196Z",
      "Severity": "High",
      "Signal": "denied burst",
-     "TimeGenerated": "2026-11-06T07:21:39.42215Z",
+     "CallerId": "11111111-1111-1111-1111-111111111111",
+     "CallerType": "app",
+     "CallerUpn": "",
+     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
+     "CallerAppId": "55555555-5555-5555-5555-555555555555",
+     "CallerIp": "10.10.2.4",
+     "Reads": 0,
+     "Secrets": 0,
+     "Denied": 25,
+     "DeniedSecrets": 25,
+     "SecretNames": [
+      "secret-0",
+      "secret-1",
+      "secret-2",
+      "secret-3",
+      "secret-4",
+      "secret-5",
+      "secret-6",
+      "secret-7",
+      "secret-8",
+      "secret-9",
+      "secret-10",
+      "secret-11",
+      "secret-12",
+      "secret-13",
+      "secret-14",
+      "secret-15",
+      "secret-16",
+      "secret-17",
+      "secret-18",
+      "secret-19"
+     ],
+     "Vaults": 1,
      "VaultResourceId": "/SUBSCRIPTIONS/22222222-2222-2222-2222-222222222222/RESOURCEGROUPS/RG-IDENTITY-LAB/PROVIDERS/MICROSOFT.KEYVAULT/VAULTS/KV-IDLAB-20F1",
-     "Vaults": 1
+     "BaselineReads": 0,
+     "HourlyMean": 0,
+     "ReadThreshold": 20
     }
    ],
    "failures": []
@@ -376,25 +454,27 @@
    "rowCount": 1,
    "rows": [
     {
-     "BaselineReads": 0,
-     "CallerAppId": "55555555-5555-5555-5555-555555555555",
-     "CallerId": "11111111-1111-1111-1111-111111111111",
-     "CallerIp": "10.10.2.4",
-     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
-     "CallerType": "app",
-     "CallerUpn": "",
-     "Denied": 0,
-     "DeniedSecrets": 0,
-     "HourlyMean": 0,
-     "ReadThreshold": 20,
-     "Reads": 21,
-     "SecretNames": "[\"uami-app-secret\"]",
-     "Secrets": 1,
+     "TimeGenerated": "2026-11-06T07:33:46.841175Z",
      "Severity": "Medium",
      "Signal": "bulk read",
-     "TimeGenerated": "2026-11-06T07:21:45.786436Z",
+     "CallerId": "11111111-1111-1111-1111-111111111111",
+     "CallerType": "app",
+     "CallerUpn": "",
+     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
+     "CallerAppId": "55555555-5555-5555-5555-555555555555",
+     "CallerIp": "10.10.2.4",
+     "Reads": 21,
+     "Secrets": 1,
+     "Denied": 0,
+     "DeniedSecrets": 0,
+     "SecretNames": [
+      "uami-app-secret"
+     ],
+     "Vaults": 1,
      "VaultResourceId": "/SUBSCRIPTIONS/22222222-2222-2222-2222-222222222222/RESOURCEGROUPS/RG-IDENTITY-LAB/PROVIDERS/MICROSOFT.KEYVAULT/VAULTS/KV-IDLAB-20F1",
-     "Vaults": 1
+     "BaselineReads": 0,
+     "HourlyMean": 0,
+     "ReadThreshold": 20
     }
    ],
    "failures": []
