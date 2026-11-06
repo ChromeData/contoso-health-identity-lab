@@ -152,6 +152,7 @@ containment_on_alert_added = false
 # watchlist rows (from operator_ip_ranges, enable_dc only) stop counting
 # after it, and the plan warns. A date is a policy knob, not a tenant id.
 enable_itdr_detections_v2 = false
+enable_itdr_detections_v3 = false
 vault_feed_v2_columns     = false
 operator_ips_expires_on   = "2027-01-20"
 

@@ -857,6 +857,18 @@ variable "enable_itdr_detections_v2" {
   default     = false
 }
 
+variable "enable_itdr_detections_v3" {
+  type        = bool
+  description = <<-EOT
+    Add the two third-set ITDR rules (modules/monitoring itdr_v3.tf: a
+    dormant admin account signing in again, bulk Key Vault secret reads).
+    Needs enable_itdr_detections (modules/monitoring refuses the plan
+    otherwise). Starts no trial. Both are Sentinel only (14-day look-back);
+    the Key Vault rule never triggers containment.
+  EOT
+  default     = false
+}
+
 variable "operator_ips_expires_on" {
   type        = string
   description = "ExpiresOn (yyyy-mm-dd) of every operator_ips watchlist row: ADR 0013's review date. dc-logon-outside-operator-allowlist ignores an expired row (so every DC01 logon alerts) and the plan warns once the date has passed. Required while the watchlist exists (enable_sentinel + enable_itdr_detections_v2 + enable_dc with operator_ip_ranges). null = not set."

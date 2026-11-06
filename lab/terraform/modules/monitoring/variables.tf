@@ -106,9 +106,26 @@ variable "enable_itdr_detections_v2" {
   }
 }
 
+variable "enable_itdr_detections_v3" {
+  type        = bool
+  description = <<-EOT
+    Add the two third-set ITDR rules (itdr_v3.tf; lab/kql:
+    dormant-privileged-account-reactivation, keyvault-bulk-secret-read) to
+    the active detection path. Needs enable_itdr_detections. Starts no trial.
+    Both are Sentinel only (14-day look-back; Log Analytics alerts stop at 2
+    days). keyvault_bulk_secret_read never triggers containment.
+  EOT
+  default     = false
+
+  validation {
+    condition     = !var.enable_itdr_detections_v3 || var.enable_itdr_detections
+    error_message = "enable_itdr_detections_v3 needs enable_itdr_detections = true, as the v2 set does: the v3 rules join the ITDR pack (per-identity grouping, containment wiring)."
+  }
+}
+
 variable "itdr_exclude_rules" {
   type        = list(string)
-  description = "ITDR rule keys (v1 and v2) to hold back (e.g. identity_risk until the RiskyUsers / UserRiskEvents diagnostic categories have data, tier0_logon_without_checkout and dc_logon_outside_operator_allowlist until DC01 + the Vault feed do). Sentinel rejects a rule whose table has never received data."
+  description = "ITDR rule keys (v1, v2 and v3) to hold back (e.g. identity_risk until the RiskyUsers / UserRiskEvents diagnostic categories have data, tier0_logon_without_checkout and dc_logon_outside_operator_allowlist until DC01 + the Vault feed do). Sentinel rejects a rule whose table has never received data."
   default     = []
 
   validation {
@@ -119,8 +136,9 @@ variable "itdr_exclude_rules" {
       "dcsync_replication_request",
       "device_code_signin", "security_info_registered_risky", "dc_logon_outside_operator_allowlist",
       "vault_privileged_access_anomaly", "sod_violation_granted", "pim_activation_without_auth_context",
+      "dormant_privileged_account_reactivation", "keyvault_bulk_secret_read",
     ], k)])
-    error_message = "itdr_exclude_rules: unknown rule key (see local.itdr_rules in itdr.tf and local.itdr_v2_rules in itdr_v2.tf)."
+    error_message = "itdr_exclude_rules: unknown rule key (see local.itdr_rules in itdr.tf, local.itdr_v2_rules in itdr_v2.tf and local.itdr_v3_rules in itdr_v3.tf)."
   }
 }
 
@@ -156,7 +174,7 @@ variable "containment_playbook_id" {
 
 variable "containment_rule_keys" {
   type        = list(string)
-  description = "ITDR rule keys whose High incidents trigger containment. null = every deployed ITDR rule except sod_violation_granted and vault_privileged_access_anomaly, which never do."
+  description = "ITDR rule keys whose High incidents trigger containment. null = every deployed ITDR rule except sod_violation_granted, vault_privileged_access_anomaly and keyvault_bulk_secret_read, which never do."
   default     = null
 
   validation {
@@ -167,15 +185,16 @@ variable "containment_rule_keys" {
       "dcsync_replication_request",
       "device_code_signin", "security_info_registered_risky", "dc_logon_outside_operator_allowlist",
       "vault_privileged_access_anomaly", "sod_violation_granted", "pim_activation_without_auth_context",
+      "dormant_privileged_account_reactivation", "keyvault_bulk_secret_read",
     ], k)])
-    error_message = "containment_rule_keys: unknown rule key (see local.itdr_rules in itdr.tf and local.itdr_v2_rules in itdr_v2.tf)."
+    error_message = "containment_rule_keys: unknown rule key (see local.itdr_rules in itdr.tf, local.itdr_v2_rules in itdr_v2.tf and local.itdr_v3_rules in itdr_v3.tf)."
   }
 
   # local.itdr_never_contain (itdr_v2.tf), refused by name so the plan says
   # why instead of silently dropping the key.
   validation {
-    condition     = var.containment_rule_keys == null ? true : !anytrue([for k in var.containment_rule_keys : contains(["sod_violation_granted", "vault_privileged_access_anomaly"], k)])
-    error_message = "containment_rule_keys: sod_violation_granted and vault_privileged_access_anomaly never trigger containment - disabling a clinician over an SoD conflict is a patient-safety event (ADR 0012), and the vault rule's Account is a Vault identity the playbook cannot act on."
+    condition     = var.containment_rule_keys == null ? true : !anytrue([for k in var.containment_rule_keys : contains(["sod_violation_granted", "vault_privileged_access_anomaly", "keyvault_bulk_secret_read"], k)])
+    error_message = "containment_rule_keys: sod_violation_granted, vault_privileged_access_anomaly and keyvault_bulk_secret_read never trigger containment - disabling a clinician over an SoD conflict is a patient-safety event (ADR 0012), the vault rule's Account is a Vault identity the playbook cannot act on, and the Key Vault rule's caller is usually a managed identity, which the playbook (it acts on Entra users) cannot disable."
   }
 }
 

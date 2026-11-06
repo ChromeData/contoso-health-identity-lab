@@ -1,0 +1,22 @@
+Conjur state-leak experiment (local, no tenant)
+command: TF_BIN=<HashiCorp Terraform 1.16.5, darwin_arm64, SHA-256 checked against releases.hashicorp.com SHA256SUMS> bash lab/pam/conjur/state-leak/run.sh
+host: the lab Mac (Apple Silicon, Colima; Conjur amd64 under emulation)
+exit: 0
+
+[07:16:13Z] Starting a throwaway Conjur OSS 1.27.0 on http://127.0.0.1:8093
+[07:16:28Z] Loading policy.yml (one variable, one runner host)
+[07:16:29Z] Stored a random 40-character value in state-leak/db-password (never printed)
+[07:16:29Z] host/state-leak/terraform-runner can fetch the value (policy works)
+[07:16:29Z] [datasource] terraform init / apply / apply again / plan -out
+[07:16:32Z] [ephemeral] negative control: a plan expecting the wrong length must fail
+[07:16:33Z] [ephemeral] negative control failed on the precondition, as it must
+[07:16:33Z] [ephemeral] terraform init / apply / apply again / plan -out
+[07:16:34Z] Terraform: Terraform v1.16.5; provider cyberark/conjur 0.9.15 (lock file)
+
+path         terraform.tfstate  terraform.tfstate.backup   saved plan   terraform output
+datasource   1                  1                          2            0
+ephemeral    0                  0                          0            0
+(times the 40-character value appears in each file)
+
+AS STATED: the data source wrote the secret into state in plaintext; the ephemeral resource
+read it (precondition passed) and left it in no state, plan or output file.
