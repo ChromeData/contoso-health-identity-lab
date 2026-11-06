@@ -50,7 +50,9 @@ BeforeDiscovery {
         'app-credential-added', 'app-consent-granted', 'ca-policy-changed', 'role-assigned-outside-pim',
         'pim-group-member-added-outside-pim', 'auth-method-changed-by-admin', 'identity-risk',
         'tier0-logon-without-checkout', 'ad-privileged-group-change', 'kerberoast-rc4-service-ticket',
-        'dcsync-replication-request'
+        'dcsync-replication-request',
+        # Third set (itdr_v3.tf, 2026-11-06): same structural checks.
+        'dormant-privileged-account-reactivation', 'keyvault-bulk-secret-read'
     )
     $script:IacAwareRules = @('app-credential-added', 'app-consent-granted', 'ca-policy-changed',
         'role-assigned-outside-pim', 'pim-group-member-added-outside-pim')

@@ -1,0 +1,448 @@
+{
+ "what": "kusto-harness cases run on the Log Analytics query engine (loga-idlab), read-only, rows bound by let",
+ "notAScheduledRule": true,
+ "started": "2026-11-06T07:30:57Z",
+ "finished": "2026-11-06T07:32:04Z",
+ "result": "PASS",
+ "counts": {
+  "PASS": 25,
+  "FAIL": 0,
+  "ERROR": 0,
+  "SKIPPED": 0
+ },
+ "rules": {
+  "dormant-privileged-account-reactivation": "f5f4f612f5aa6d35e73fa43a180ad0e1da6dba3b76e95771905518eba64d727d",
+  "keyvault-bulk-secret-read": "c3ee5815dfd258bb469f0b81d2afbe603066c087dcd8201337aa475742a6149f"
+ },
+ "caseFiles": {
+  "dormant-privileged-account-reactivation": "f391986bc6fc28b098dccece588beeb75f84df5ad5c61cd731c7a061787a624e",
+  "keyvault-bulk-secret-read": "519f6f9f62a42b2e6cfb7379f20c41d9c8c7001cb276d47dbee00411654e94a7"
+ },
+ "cases": [
+  {
+   "id": "dormant-privileged-account-reactivation/quiet-admin-wakes",
+   "kind": "positive",
+   "label": "adm-ava.lin: no sign-in in 14 days, then an interactive success now: High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "AppDisplayName": "Azure Portal",
+     "CreatedOn": "None",
+     "IPAddress": "203.0.113.10",
+     "IPAddresses": "[\"203.0.113.10\"]",
+     "NewAccount": false,
+     "PrivilegedById": false,
+     "QuietSince": "2026-10-23T07:30:59.3002072Z",
+     "Severity": "High",
+     "SignIns": 1,
+     "TimeGenerated": "2026-11-06T07:10:57.922029Z",
+     "UserId": "11111111-1111-1111-1111-111111111111",
+     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/last-signin-before-the-look-back",
+   "kind": "positive",
+   "label": "Signed in 15 days ago (outside the 14-day look-back) and again now: still dormant",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "AppDisplayName": "Azure Portal",
+     "CreatedOn": "None",
+     "IPAddress": "203.0.113.10",
+     "IPAddresses": "[\"203.0.113.10\"]",
+     "NewAccount": false,
+     "PrivilegedById": false,
+     "QuietSince": "2026-10-23T07:31:01.5155073Z",
+     "Severity": "High",
+     "SignIns": 1,
+     "TimeGenerated": "2026-11-06T07:10:59.419166Z",
+     "UserId": "11111111-1111-1111-1111-111111111111",
+     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/two-signins-this-hour",
+   "kind": "positive",
+   "label": "Two interactive successes inside the judge hour and nothing before: one row, SignIns 2, the first sign-in's IP",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "AppDisplayName": "Azure Portal",
+     "CreatedOn": "None",
+     "IPAddress": "203.0.113.11",
+     "IPAddresses": "[\"203.0.113.11\",\"203.0.113.10\"]",
+     "NewAccount": false,
+     "PrivilegedById": false,
+     "QuietSince": "2026-10-23T07:31:03.1066943Z",
+     "Severity": "High",
+     "SignIns": 2,
+     "TimeGenerated": "2026-11-06T06:41:01.65938Z",
+     "UserId": "11111111-1111-1111-1111-111111111111",
+     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/tier0-admin-naming",
+   "kind": "positive",
+   "label": "tier0-admin-01 is privileged by naming",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "AppDisplayName": "Azure Portal",
+     "CreatedOn": "None",
+     "IPAddress": "203.0.113.10",
+     "IPAddresses": "[\"203.0.113.10\"]",
+     "NewAccount": false,
+     "PrivilegedById": false,
+     "QuietSince": "2026-10-23T07:31:05.0229231Z",
+     "Severity": "High",
+     "SignIns": 1,
+     "TimeGenerated": "2026-11-06T07:11:03.308733Z",
+     "UserId": "22222222-2222-2222-2222-222222222222",
+     "UserPrincipalName": "tier0-admin-01@contosohealthlab.onmicrosoft.com"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/privileged-by-rendered-id",
+   "kind": "positive",
+   "label": "helen.carter has a staff-style name but her object id is in the rendered PrivilegedUserIds",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "AppDisplayName": "Azure Portal",
+     "CreatedOn": "None",
+     "IPAddress": "203.0.113.10",
+     "IPAddresses": "[\"203.0.113.10\"]",
+     "NewAccount": false,
+     "PrivilegedById": true,
+     "QuietSince": "2026-10-23T07:31:06.5441609Z",
+     "Severity": "High",
+     "SignIns": 1,
+     "TimeGenerated": "2026-11-06T07:11:05.168763Z",
+     "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+     "UserPrincipalName": "helen.carter@contosohealthlab.onmicrosoft.com"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/new-admin-first-signin",
+   "kind": "positive",
+   "label": "adm-ava.lin was created 2 days ago (Add user in AuditLogs): her first sign-in is Medium, not High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "AppDisplayName": "Azure Portal",
+     "CreatedOn": "2026-11-04T07:31:06.664185Z",
+     "IPAddress": "203.0.113.10",
+     "IPAddresses": "[\"203.0.113.10\"]",
+     "NewAccount": true,
+     "PrivilegedById": false,
+     "QuietSince": "2026-10-23T07:31:07.8447314Z",
+     "Severity": "Medium",
+     "SignIns": 1,
+     "TimeGenerated": "2026-11-06T07:11:06.664185Z",
+     "UserId": "11111111-1111-1111-1111-111111111111",
+     "UserPrincipalName": "adm-ava.lin@contosohealthlab.onmicrosoft.com"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/active-admin-10-day-gap",
+   "kind": "negative",
+   "label": "DECOY (from the old repo): signed in 10 days ago and now - a normal gap",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/non-interactive-refresh-is-activity",
+   "kind": "negative",
+   "label": "DECOY: no interactive sign-in for 14 days, but a token refresh 5 days ago: the account had a live session, so it is not dormant",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/only-non-interactive-now",
+   "kind": "negative",
+   "label": "DECOY: a non-interactive refresh in the last hour is not someone signing in",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/staff-account-not-privileged",
+   "kind": "negative",
+   "label": "DECOY (from the old repo): dana.okafor is not privileged, however long the gap",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/failed-signin-is-not-waking",
+   "kind": "negative",
+   "label": "DECOY (from the old repo): a failed sign-in (50126) against a quiet admin is a spray, not a reactivation",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/break-glass-left-to-its-own-rule",
+   "kind": "negative",
+   "label": "DECOY: bg-admin-01 is quiet by design and break-glass-signin already alerts on every sign-in, even when its id is rendered in",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "dormant-privileged-account-reactivation/woke-two-hours-ago",
+   "kind": "negative",
+   "label": "DECOY: the wake-up sign-in was 2 hours ago, so the previous hourly run judged it; this run must not repeat it",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/mi-harvests-many-secrets",
+   "kind": "positive",
+   "label": "A managed identity reads 30 different secrets in 10 minutes: bulk read, High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "BaselineReads": 0,
+     "CallerAppId": "55555555-5555-5555-5555-555555555555",
+     "CallerId": "11111111-1111-1111-1111-111111111111",
+     "CallerIp": "10.10.2.4",
+     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
+     "CallerType": "app",
+     "CallerUpn": "",
+     "Denied": 0,
+     "DeniedSecrets": 0,
+     "HourlyMean": 0,
+     "ReadThreshold": 20,
+     "Reads": 30,
+     "SecretNames": "[\"secret-0\",\"secret-1\",\"secret-2\",\"secret-3\",\"secret-4\",\"secret-5\",\"secret-6\",\"secret-7\",\"secret-8\",\"secret-9\",\"secret-10\",\"secret-11\",\"secret-12\",\"secret-13\",\"secret-14\",\"secret-15\",\"secret-16\",\"secret-17\",\"secret-18\",\"secret-19\"]",
+     "Secrets": 30,
+     "Severity": "High",
+     "Signal": "bulk read",
+     "TimeGenerated": "2026-11-06T07:21:30.77036Z",
+     "VaultResourceId": "/SUBSCRIPTIONS/22222222-2222-2222-2222-222222222222/RESOURCEGROUPS/RG-IDENTITY-LAB/PROVIDERS/MICROSOFT.KEYVAULT/VAULTS/KV-IDLAB-20F1",
+     "Vaults": 1
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/one-secret-retry-loop",
+   "kind": "positive",
+   "label": "The same identity reads its one secret 25 times: over the floor of 20, one secret, so Medium",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "BaselineReads": 0,
+     "CallerAppId": "55555555-5555-5555-5555-555555555555",
+     "CallerId": "11111111-1111-1111-1111-111111111111",
+     "CallerIp": "10.10.2.4",
+     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
+     "CallerType": "app",
+     "CallerUpn": "",
+     "Denied": 0,
+     "DeniedSecrets": 0,
+     "HourlyMean": 0,
+     "ReadThreshold": 20,
+     "Reads": 25,
+     "SecretNames": "[\"uami-app-secret\"]",
+     "Secrets": 1,
+     "Severity": "Medium",
+     "Signal": "bulk read",
+     "TimeGenerated": "2026-11-06T07:21:36.423642Z",
+     "VaultResourceId": "/SUBSCRIPTIONS/22222222-2222-2222-2222-222222222222/RESOURCEGROUPS/RG-IDENTITY-LAB/PROVIDERS/MICROSOFT.KEYVAULT/VAULTS/KV-IDLAB-20F1",
+     "Vaults": 1
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/user-caller",
+   "kind": "positive",
+   "label": "A user (idtyp user, UPN present) reads 6 secrets 4 times each: keyed on the user's object id, CallerUpn shown, High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "BaselineReads": 0,
+     "CallerAppId": "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
+     "CallerId": "66666666-6666-6666-6666-666666666666",
+     "CallerIp": "10.10.2.4",
+     "CallerObjectId": "66666666-6666-6666-6666-666666666666",
+     "CallerType": "user",
+     "CallerUpn": "adm-raj.patel@contosohealthlab.onmicrosoft.com",
+     "Denied": 0,
+     "DeniedSecrets": 0,
+     "HourlyMean": 0,
+     "ReadThreshold": 20,
+     "Reads": 24,
+     "SecretNames": "[\"shared-0\",\"shared-1\",\"shared-2\",\"shared-3\",\"shared-4\",\"shared-5\",\"shared-6\",\"shared-7\",\"shared-8\",\"shared-9\",\"shared-10\",\"shared-11\",\"shared-12\",\"shared-13\",\"shared-14\",\"shared-15\",\"shared-16\",\"shared-17\",\"shared-18\",\"shared-19\"]",
+     "Secrets": 24,
+     "Severity": "High",
+     "Signal": "bulk read",
+     "TimeGenerated": "2026-11-06T07:21:37.939411Z",
+     "VaultResourceId": "/SUBSCRIPTIONS/22222222-2222-2222-2222-222222222222/RESOURCEGROUPS/RG-IDENTITY-LAB/PROVIDERS/MICROSOFT.KEYVAULT/VAULTS/KV-IDLAB-20F1",
+     "Vaults": 1
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/denied-burst",
+   "kind": "positive",
+   "label": "The managed identity tries 25 secrets it may not read (403, the ABAC condition held): denied burst, High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "BaselineReads": 0,
+     "CallerAppId": "55555555-5555-5555-5555-555555555555",
+     "CallerId": "11111111-1111-1111-1111-111111111111",
+     "CallerIp": "10.10.2.4",
+     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
+     "CallerType": "app",
+     "CallerUpn": "",
+     "Denied": 25,
+     "DeniedSecrets": 25,
+     "HourlyMean": 0,
+     "ReadThreshold": 20,
+     "Reads": 0,
+     "SecretNames": "[\"secret-0\",\"secret-1\",\"secret-2\",\"secret-3\",\"secret-4\",\"secret-5\",\"secret-6\",\"secret-7\",\"secret-8\",\"secret-9\",\"secret-10\",\"secret-11\",\"secret-12\",\"secret-13\",\"secret-14\",\"secret-15\",\"secret-16\",\"secret-17\",\"secret-18\",\"secret-19\"]",
+     "Secrets": 0,
+     "Severity": "High",
+     "Signal": "denied burst",
+     "TimeGenerated": "2026-11-06T07:21:39.42215Z",
+     "VaultResourceId": "/SUBSCRIPTIONS/22222222-2222-2222-2222-222222222222/RESOURCEGROUPS/RG-IDENTITY-LAB/PROVIDERS/MICROSOFT.KEYVAULT/VAULTS/KV-IDLAB-20F1",
+     "Vaults": 1
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/under-the-floor",
+   "kind": "negative",
+   "label": "DECOY (from the old repo): 15 reads is under the floor of 20, whatever the baseline",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/two-quiet-identities-not-merged",
+   "kind": "negative",
+   "label": "DECOY: two managed identities, no UPN, 12 reads each. Keyed on UPN (the old rule) they were one empty-name caller with 24 reads and fired; keyed on object id each is under the floor",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/same-reads-no-baseline",
+   "kind": "positive",
+   "label": "The same 21 reads from an identity with no history: the floor of 20 is the threshold, so it fires (the pair to within-own-baseline)",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "BaselineReads": 0,
+     "CallerAppId": "55555555-5555-5555-5555-555555555555",
+     "CallerId": "11111111-1111-1111-1111-111111111111",
+     "CallerIp": "10.10.2.4",
+     "CallerObjectId": "11111111-1111-1111-1111-111111111111",
+     "CallerType": "app",
+     "CallerUpn": "",
+     "Denied": 0,
+     "DeniedSecrets": 0,
+     "HourlyMean": 0,
+     "ReadThreshold": 20,
+     "Reads": 21,
+     "SecretNames": "[\"uami-app-secret\"]",
+     "Secrets": 1,
+     "Severity": "Medium",
+     "Signal": "bulk read",
+     "TimeGenerated": "2026-11-06T07:21:45.786436Z",
+     "VaultResourceId": "/SUBSCRIPTIONS/22222222-2222-2222-2222-222222222222/RESOURCEGROUPS/RG-IDENTITY-LAB/PROVIDERS/MICROSOFT.KEYVAULT/VAULTS/KV-IDLAB-20F1",
+     "Vaults": 1
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/within-own-baseline",
+   "kind": "negative",
+   "label": "DECOY: 21 reads this hour (over the floor of 20) from an identity that read 1450 times in the 335 hours before: mean 4.33 an hour, threshold 21.6, so not 5x its own normal. Baseline rows carry short strings to keep the case small",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/secret-list-not-counted",
+   "kind": "negative",
+   "label": "DECOY (from the old repo): 80 SecretList calls list names, they do not read values",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/not-found-is-not-a-read",
+   "kind": "negative",
+   "label": "DECOY: 30 SecretGet calls for a secret that does not exist (logged ResultType Success, HTTP 404) read nothing",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/denied-under-the-floor",
+   "kind": "negative",
+   "label": "DECOY: 10 refused reads is under the denied floor of 20",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "keyvault-bulk-secret-read/burst-outside-the-hour",
+   "kind": "negative",
+   "label": "DECOY: a 50-read burst 3 hours ago was judged by an earlier run",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  }
+ ]
+}

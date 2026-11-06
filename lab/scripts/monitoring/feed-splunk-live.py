@@ -4,7 +4,7 @@ feed-splunk-live.py - the LIVE feed: lab tenant logs -> local Splunk, every 5 mi
 
 WHAT IT IS
   The second SIEM (lab/splunk, Splunk Enterprise trial in Docker) runs the same
-  22 detections as Sentinel, written in SPL. Until this feed it only ever saw
+  detections as Sentinel, written in SPL. Until this feed it only ever saw
   synthetic test rows (replay-synthetic.py) or a one-off replay
   (ingest-from-loganalytics.sh). This script keeps it fed from the real tenant:
   a per-user LaunchAgent runs `run` every 300 s, so the Splunk alerts judge the
@@ -17,8 +17,10 @@ WHERE THE EVENTS COME FROM (and why there, not Graph)
   AADNonInteractiveUserSignInLogs and AuditLogs (directory audit) into it; DC01's
   Azure Monitor Agent sends SecurityEvent; Identity Protection sends
   AADUserRiskEvents / AADRiskyUsers; ingest-vault-audit.sh sends VaultCheckout_CL.
-  Those seven tables are exactly what lab/splunk/detections/*.spl search
-  (sourcetype azure:loganalytics:<table>, Log Analytics column names). Graph's
+  Those seven tables are what lab/splunk/detections/*.spl search
+  (sourcetype azure:loganalytics:<table>, Log Analytics column names), except
+  keyvault-bulk-secret-read.spl: it reads AzureDiagnostics (Key Vault), which
+  this feed does not send yet, so that one search has no data here. Graph's
   auditLogs/signIns and auditLogs/directoryAudits carry the SAME Entra events in
   a different shape (camelCase, status.errorCode instead of ResultType), so
   feeding Graph would need a field-alias layer the twins were never written
@@ -148,7 +150,8 @@ LA_API = "https://api.loganalytics.io/v1/workspaces/{}/query"
 LA_RESOURCE = "https://api.loganalytics.io"
 DEFAULT_RG, DEFAULT_WS = "rg-identity-lab", "loga-idlab"
 
-# Table -> sourcetype: the seven tables lab/splunk/detections/*.spl read, named as
+# Table -> sourcetype: the seven tables lab/splunk/detections/*.spl read (all but
+# keyvault-bulk-secret-read.spl's AzureDiagnostics, not fed yet), named as
 # in app/contoso_identity/default/props.conf. Also the allow-list: a table name is
 # interpolated into KQL, so nothing outside this map is ever accepted.
 TABLES = {

@@ -1,8 +1,17 @@
 # Kusto-emulator harness for `lab/kql`
 
-Runs all 22 `lab/kql/*.kql` detections on a real KQL engine, the Azure Data
-Explorer Kusto emulator ("Kustainer") in a local container, against synthetic
-positive and negative events, and publishes a hashed run record.
+Runs the `lab/kql/*.kql` detections (24 since 2026-11-06) on a real KQL
+engine, the Azure Data Explorer Kusto emulator ("Kustainer") in a local
+container, against synthetic positive and negative events, and publishes a
+hashed run record.
+
+**The two rules added on 2026-11-06** (`dormant-privileged-account-reactivation`,
+`keyvault-bulk-secret-read`) **have not run on the emulator.** Their 25 cases
+ran on the Log Analytics query engine instead, with `run-on-workspace.py`
+(below): RAN · harness, on the Log Analytics query engine, 2026-11-06, PASS 25/25, record
+[`lab/evidence/kusto/20261106T073048Z-workspace/`](../../evidence/kusto/20261106T073048Z-workspace/)
+(capture-log E114). Everything below about the emulator runs is about the 22
+rules that existed on those days.
 
 **Status: RAN · harness, once.** On 2026-10-21 (UTC) the operator accepted
 the emulator's licence and ran `run.sh --accept-eula`. Record:
@@ -168,6 +177,14 @@ refused or preflight failed.
   (`harness.py check` compares the names). It has two variants: `v2`
   (`vault_feed_v2_columns = true`, the default) and `base` (no `Ticket`,
   `Operator` or `ErrorText`).
+- `AzureDiagnostics` (Key Vault AuditEvent rows, read by
+  `keyvault-bulk-secret-read`) is a **subset**, not Learn's full list:
+  AzureDiagnostics gains a column the first time a resource sends a field it
+  lacks (Learn, ms.date 2026-09-28), so Learn cannot list every Key Vault
+  column. The names and types come from `getschema` on loga-idlab, run as the
+  operator on 2026-11-06. Two differ from Learn's page: `identity_claim_appid_g`
+  is `string` there (Learn: Guid), and the workspace has `ResourceId` (Learn
+  lists `_ResourceId`).
 - Watchlist store tables: `Watchlist_operator_ips` has `SearchKey`,
   `IpRange`, `Owner` and `ExpiresOn` (from `itdr_v2.tf`).
   `Watchlist_sod_holdings` has the columns `sod-violation-granted.kql` reads.
@@ -206,7 +223,7 @@ constants.
 
 ## Cases
 
-- **Hand-written**: `cases/<rule>.json` covers 15 rules. That includes every
+- **Hand-written**: `cases/<rule>.json` covers 17 rules (15 until 2026-11-06). That includes every
   rule the existing fixtures do not cover, plus raw-event versions of the
   fixture rows the import has to skip.
 
@@ -259,7 +276,10 @@ constants.
   | hand-written | 15 | 129 | | |
   | imported | 10 | 94 (12 rows skipped) | | |
 
-  Every rule has at least 2 positives and 1 negative.
+  Every rule has at least 2 positives and 1 negative. That table is the
+  2026-10-21 run's. `harness.py check` on 2026-11-06, with the two new case
+  files (13 cases for the dormant rule, 12 for the Key Vault rule, each with
+  the old repo's decoys and new ones): **302 cases over 24 rules**, all valid.
 - Isolation: before each case the harness clears every table it wrote and
   ingests only that case's rows, using `.append <table> <| print ... |
   mv-expand | project`, typed and in table column order (ingest-from-query
@@ -284,7 +304,8 @@ constants.
 
   A rule passes only with at least one positive and one negative and nothing
   but PASS or XFAIL. A rule none of whose cases reached the engine is
-  `NOT RUN`, never FAIL. The run passes only if all 22 rules pass.
+  `NOT RUN`, never FAIL. The run passes only if every rule passes (22 in the
+recorded runs).
 
 ## Engine probes (`cases/_engine-probes.json`)
 
@@ -303,6 +324,42 @@ than asserted; they explain any case that fails. They cover:
 - `coalesce` with `''`;
 - property-bag key order in `tostring()`;
 - how the v1 endpoint encodes `dynamic`.
+
+## Run on the workspace instead: `run-on-workspace.py`
+
+No emulator and no licence step: each case becomes one **read-only** query to
+loga-idlab, sent through the lab operator (`op az monitor log-analytics
+query`). The case's rows are bound with `let <Table> = view() { print ... |
+mv-expand | project ... }`, using the same typed projection `.append` uses
+here; a `let` with a table's name shadows the real table for that one query,
+so the rule reads only the synthetic rows. The query is the rule rendered as
+`modules/monitoring` deploys it. Nothing is ingested or written in the
+workspace. Answers are judged by the same `evaluate()`.
+
+```bash
+lab/monitoring/kusto-harness/run-on-workspace.py \
+  --rules dormant-privileged-account-reactivation,keyvault-bulk-secret-read \
+  --record lab/evidence/kusto/<UTC ts>-workspace
+```
+
+What it is and is not: the real Log Analytics engine and function library,
+but **not a scheduled rule** (no rule created, no incident, no query period,
+no entity mapping) and not real log data. Relative times resolve against the
+local clock just before each query. Cases with watchlists, table variants or
+shim variants are reported SKIPPED (run.sh only). A query body has a size
+limit: a 1500-row case was refused ("Request entity too large"), which is why
+the Key Vault baseline case uses short strings in its 1450 rows. The workspace
+id is read at run time (no default; a failed lookup stops the run). Exit 0 =
+all passed.
+
+Run on 2026-11-06 (RAN · harness, on the Log Analytics query engine, E114): the two new rules, PASS
+25/25. The same cases against the OLD Key Vault rule's query (from
+Sentinel-Privileged-Access, `ResourceType == "VAULTS"` swapped for the
+equivalent `ResourceProvider` filter because the harness table has no
+`ResourceType`) failed 7 of 12: it merged two managed identities with no UPN
+into one 24-read caller and fired, it counted 30 HTTP 404 "reads" and fired,
+and it has no refused-read signal or the output columns the cases assert.
+That comparison was a one-off check and has no record in the repo.
 
 ## Run record: `lab/evidence/kusto/<UTC ts>/`
 
@@ -494,6 +551,7 @@ still no engine):
 | `harness.py` | Driver (stdlib only): `check`, `render`, `wait`, `run`, `guids` |
 | `schemas.json` | Learn column lists, VaultCheckout_CL variants, watchlist stores |
 | `shims.kql` | `_GetWatchlist` shim and its two edge variants |
-| `cases/<rule>.json` | Hand-written cases (15 rules) |
+| `cases/<rule>.json` | Hand-written cases (17 rules) |
+| `run-on-workspace.py` | The same cases on the Log Analytics query engine, read-only, through the lab operator (no emulator) |
 | `cases/_engine-probes.json` | Engine-semantics probes |
 | `cases/_itdr-import-overrides.json` | `xfail` marks on imported fixture rows (none since CODE-NEEDED-2 was applied) |

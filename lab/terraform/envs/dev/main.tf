@@ -84,6 +84,9 @@
 #     enable_itdr_detections_v2         ->   + 6 second-wave rules + (Sentinel)
 #                                          operator_ips watchlist, rows from
 #                                          operator_ip_ranges while enable_dc.
+#     enable_itdr_detections_v3         ->   + 2 third-set rules (dormant admin
+#                                          sign-in, Key Vault bulk reads;
+#                                          Sentinel only).
 #     vault_feed_v2_columns             ->   + Ticket/Operator/ErrorText columns.
 #     enable_itdr_containment           ->   + containment playbook automation
 #                                          rule (needs enable_sentinel).
@@ -575,8 +578,10 @@ module "monitoring" {
   dc_vm_id                   = var.enable_dc ? module.dc_vm[0].vm_id : ""
   containment_on_alert_added = var.containment_on_alert_added
 
-  # Second-wave rules + the extended vault feed columns (each its own flag).
+  # Second- and third-wave rules + the extended vault feed columns (each its
+  # own flag).
   enable_itdr_detections_v2 = var.enable_itdr_detections_v2
+  enable_itdr_detections_v3 = var.enable_itdr_detections_v3
   vault_feed_v2_columns     = var.vault_feed_v2_columns
 
   # Defender for Identity (ADR 0023): the native AD-attack detector. The flag

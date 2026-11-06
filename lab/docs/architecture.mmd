@@ -129,7 +129,7 @@ flowchart TB
   subgraph ITDR["Identity threat detection + response · owner: SOC"]
     direction TB
     FEED["Vault audit → VaultCheckout_CL<br/><b>stand-in:</b> CyberArk PTA syslog → AMA<br/><b>RAN · harness</b> · log not in repo"]
-    LA["Sentinel + Log Analytics<br/>Entra logs + DC01 security events<br/>22 rules: 5 core + 17 ITDR<br/>consent · app credential · CA tampering<br/>role outside PIM · device code<br/>Kerberoast · DCSync · unvaulted Tier 0<br/><b>stand-in:</b> these AD rules =<br/>Defender for Identity (MDI)<br/><b>BUILT</b>"]
+    LA["Sentinel + Log Analytics<br/>Entra logs + DC01 security events<br/>22 rules: 5 core + 17 ITDR<br/>(+2 written, not deployed)<br/>consent · app credential · CA tampering<br/>role outside PIM · device code<br/>Kerberoast · DCSync · unvaulted Tier 0<br/><b>stand-in:</b> these AD rules =<br/>Defender for Identity (MDI)<br/><b>BUILT</b>"]
     PB["Notify playbook<br/>Teams card + ServiceNow incident<br/><b>BUILT</b>"]
     CONTAIN["Containment on a High incident<br/>Teams approval by a listed approver<br/>revoke · confirm compromised<br/>cloud-only: disable (opt-in role)<br/>synced: flagged; a person disables in AD<br/><b>stand-in:</b> AD script = MDI response<br/><b>BUILT</b> · ADR-0017"]
     SPLUNK["Splunk replay · 2nd SIEM<br/><b>stand-in:</b> Event Hub + Splunk Add-on<br/><b>BUILT</b>"]

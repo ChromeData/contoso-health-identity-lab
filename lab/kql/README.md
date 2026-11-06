@@ -1,21 +1,29 @@
 # KQL detections
 
-22 identity detections for Contoso Health, one `.kql` file each. These files
+24 identity detections for Contoso Health, one `.kql` file each. These files
 are the single source: `lab/terraform/modules/monitoring` deploys them as
 Microsoft Sentinel scheduled rules (during the Sentinel trial) or as Log
 Analytics scheduled query alerts (after it), and each one has an SPL twin in
 [`../splunk/detections/`](../splunk/detections/) with the same window,
 threshold and output columns.
 
-**Scope.** The SPL column is frozen: Splunk is the optional second SIEM, and
-a new detection is written in KQL only, with no new twin. Entra Agent ID is
+**Scope.** Splunk is the optional second SIEM. Its SPL column was frozen at
+22; the two rules ported on 2026-11-06 got twins anyway, on request, so every
+rule here still has one. Entra Agent ID is
 optional scope ([ADR 0018](../docs/adr/0018-nhi-ownership-and-agent-identity-sponsorship.md)):
 no rule here watches agent identities.
 
-**Status: BUILT, and RAN · harness on a local KQL engine.** All 22 rules
-ran on the Azure Data Explorer Kusto emulator on 2026-10-21 (below). No
-rule has run in a Log Analytics workspace or Sentinel: no tenant or
-workspace exists yet (RAN · tenant: nothing). What has run (offline, on
+**Status: BUILT, and RAN · harness on a local KQL engine.** The 22 rules of
+that day ran on the Azure Data Explorer Kusto emulator on 2026-10-21 (below).
+The two added on 2026-11-06 (third set, below) have not run on the emulator:
+their cases ran on the Log Analytics query engine instead (RAN · harness,
+on the workspace's engine, E114). In the tenant, the Sentinel analytics
+rules list read on 2026-11-06 showed 16 of the first 22 as enabled
+scheduled rules (plus Microsoft's Fusion rule); the five in
+`itdr_exclude_rules`, the break-glass rule (being moved to a near-real-time
+rule, `main.tf`) and the two third-set rules were not in it. (This paragraph
+said until 2026-11-06 that no workspace existed; that was out of date.) What
+has run offline (on
 2026-10-20, unless marked otherwise):
 
 - `modules/monitoring`'s mocked `terraform test` (32 runs) checks that every
@@ -104,6 +112,32 @@ approval-gated containment playbook (`enable_itdr_containment`).
 | `vault-privileged-access-anomaly.kql` | PAM vault misuse, the CyberArk PTA / CPM alert equivalent: Tier-0 read outside a ticketed check-out, check-out without a ticket, rotation failure, root-token use, failed-login burst, Tier-0 access denied (T1555, T1078, T1110, T1562) | Medium (per row) | VaultCheckout_CL | 5 min / 6 h | `vault-privileged-access-anomaly.spl` | `enable_itdr_detections_v2` + `vault_feed_v2_columns` | **never** (the account is a Vault identity, not an AD one) |
 | `sod-violation-granted.kql` | A grant that completes a pair in `lab/iga/sod-rules.json` (SOD-01 to SOD-09) (T1098) | Medium; per row the rule's own risk, Low under an approved exception | AuditLogs, `sod_holdings` watchlist (from `09-SoD-Report.ps1 -HoldingsSnapshotPath`; the upload is tenant-time) | 1 h / 14 days | `sod-violation-granted.spl` (enabled; an empty `contoso_sod_holdings.csv` = grants inside the 14-day window only) | `enable_itdr_detections_v2` (**Sentinel only**) | **never** (disabling a clinician over an SoD conflict is a patient-safety event, [ADR 0012](../docs/adr/0012-access-review-no-response-and-clinical-lockout.md)) |
 | `pim-activation-without-auth-context.kql` | A Tier-0 PIM activation that PIM let through on plain MFA because authentication context `c1` was not satisfied or CA021 was not enforced (T1078.004, T1556.009). Preview: activation strings still `verify:` | High (per row) | AuditLogs, sign-in logs | 1 h / 1 day | `pim-activation-without-auth-context.spl` | `enable_itdr_detections_v2` (keep in `itdr_exclude_rules` until verified) | yes |
+
+### ITDR, third set (2): ported 2026-11-06, not deployed
+
+Rewritten from the owner's older Sentinel-Privileged-Access repo. Fixed on
+the way: the old dormant rule asked for a 90-day look-back (Sentinel allows
+14 days, Learn "Create scheduled analytics rules"), compared the string
+`ResultType` with a number, and judged privilege by a UPN watchlist; the old
+Key Vault rule spelled its tactic `Credentialaccess` (Sentinel's name is
+`CredentialAccess`), keyed callers on UPN only (the lab's Key Vault callers
+are mostly managed identities, which have none) and counted HTTP 404s as
+reads.
+
+| Detection | Catches | Severity | Tables | Runs every / looks back | SPL twin | Deployed by | Containment |
+|---|---|---|---|---|---|---|---|
+| `dormant-privileged-account-reactivation.kql` | An admin account (adm-* or tier0-admin-NN naming, or a `PrivilegedUserIds` object id) with no successful sign-in, interactive or not, in the 14-day look-back signs in interactively (T1078.004). bg-admin-NN is left to `break-glass-signin` | High; per row Medium when the account was created inside the look-back | SigninLogs, AADNonInteractiveUserSignInLogs, AuditLogs | 1 h / 14 days | `dormant-privileged-account-reactivation.spl` | `enable_itdr_detections_v3` (**Sentinel only**; off in `lab.tfvars`) | yes |
+| `keyvault-bulk-secret-read.kql` | One Key Vault caller, keyed on object id, then app id, then UPN: successful reads above max(20, 5x its own 14-day hourly mean), or 20+ refused reads (T1555.006, T1552.001) | Medium; per row High across 5+ distinct secrets | AzureDiagnostics (Key Vault AuditEvent) | 1 h / 14 days | `keyvault-bulk-secret-read.spl` (no data in Splunk: no feed sends AzureDiagnostics) | `enable_itdr_detections_v3` (**Sentinel only**; off in `lab.tfvars`) | **never** (the caller is usually a managed identity; the playbook acts on Entra users) |
+
+What has run for these two (2026-11-06): both queries, unchanged, read-only
+on loga-idlab (they compile against the real tables and returned no rows);
+their 25 harness cases on the Log Analytics query engine, PASS 25/25
+([`../evidence/kusto/20261106T073048Z-workspace/`](../evidence/kusto/20261106T073048Z-workspace/),
+E114); `modules/monitoring`'s mocked `terraform test` (`itdr_v3.tftest.hcl`);
+both SPL twins as one-off searches on the local Splunk (they parse; the
+dormant twin gave the same five accounts and counts as the KQL on the same
+shortened window with the dormancy filter removed). Not run: the Kusto
+emulator, a Sentinel rule, an incident.
 
 ## Before a rule can be deployed
 
