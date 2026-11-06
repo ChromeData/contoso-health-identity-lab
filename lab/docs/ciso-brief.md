@@ -52,7 +52,7 @@ in the lab tenant, with a row in `lab/evidence/capture-log.csv` (64 merged pull 
   accounts), used in recorded sessions, and rotated when returned. Database logins for
   clinical reporting are issued per request and expire within the hour.
 - **Identity attacks are detected and contained** (BUILT; no detection has
-  fired). 22 detections cover token theft, MFA tampering, admin changes
+  fired). 24 detections cover token theft, MFA tampering, admin changes
   outside the process, the domain controller and the vault. After one
   approval in Teams, a compromised account is signed out; a cloud-only
   account is also disabled. Staff accounts that come from on-premises AD are

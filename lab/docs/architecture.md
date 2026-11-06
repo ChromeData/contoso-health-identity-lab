@@ -140,7 +140,9 @@ each Conditional Access graduation.
    added, CA tampering, a role or PIM-group membership granted outside PIM,
    admin MFA changes, device code sign-in, risky security-info registration,
    unvaulted Tier-0 logons, Kerberoasting, DCSync, vault misuse and an SoD
-   pair completed. Each set sits behind a staging flag. The domain-controller
+   pair completed. Two more are written and tested but not deployed yet
+   (`enable_itdr_detections_v3`): a dormant admin account signing in again,
+   and bulk Key Vault secret reads. Each set sits behind a staging flag. The domain-controller
    rules are the lab's own KQL over DC01's security log, standing in for
    Microsoft Defender for Identity's detections. A notify playbook posts a
    Teams card and opens a ServiceNow incident. On a High incident the

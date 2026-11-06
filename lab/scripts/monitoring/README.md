@@ -27,7 +27,7 @@ detections need.
 | `Deploy-ContainmentPlaybook.ps1` | Deploys `lab/monitoring/playbook-contain.json` and grants its managed identity exactly the rights it uses. |
 | `Invoke-AdContainment.ps1` | The AD half of containment: disables / re-enables an AD account on DC01 through `az vm run-command`, writes an evidence record. |
 | `ingest-vault-audit.sh` | Ships Vault check-out / check-in evidence (lab/pam audit log) to the `VaultCheckout_CL` table through the Logs Ingestion API. |
-| `feed-splunk-live.py` | The **Splunk live feed**: every 5 minutes (per-user LaunchAgent) it reads the tenant's new rows from Log Analytics as the operator and posts them to the local Splunk's HTTP Event Collector, so the 22 SPL twins run on real events. See [The Splunk live feed](#the-splunk-live-feed). |
+| `feed-splunk-live.py` | The **Splunk live feed**: every 5 minutes (per-user LaunchAgent) it reads the tenant's new rows from Log Analytics as the operator and posts them to the local Splunk's HTTP Event Collector, so the SPL twins run on real events (all but the Key Vault one: the feed does not carry AzureDiagnostics). See [The Splunk live feed](#the-splunk-live-feed). |
 | `launchd/com.contoso.splunk-live-feed.plist` | The LaunchAgent template `feed-splunk-live.py install` fills in and loads. |
 | `tests/` | Offline tests: `Itdr.Tests.ps1` (Pester), `ingest-vault-audit.test.sh` (stubbed `az`/`curl`, synthetic audit log) and `test_feed_splunk_live.py` (fake Log Analytics, a real HEC stub on 127.0.0.1). |
 
@@ -67,14 +67,29 @@ who was attacked.
 `lab/splunk/detections` also hold `device-code-signin`,
 `security-info-registered-risky`, `sod-violation-granted`,
 `pim-activation-without-auth-context`, `vault-privileged-access-anomaly` and
-`dc-logon-outside-operator-allowlist`. Splunk schedules all of them (its 22
-saved searches). `modules/monitoring/itdr_v2.tf` deploys them when
+`dc-logon-outside-operator-allowlist`. Splunk schedules all of them (its 24
+saved searches, with the third set below). `modules/monitoring/itdr_v2.tf` deploys them when
 `enable_itdr_detections_v2` is on: two are Sentinel-only (14-day look-backs the
 Log Analytics alert path can't run), and the vault anomaly needs the extended
 `VaultCheckout_CL` columns (`Ticket`, `Operator`, `ErrorText`, flag
 `vault_feed_v2_columns` with `ingest-vault-audit.sh --signals all`). While the
 flag is off, run them by hand in Logs as hunting queries, and never present
 them as live rules.
+
+**Third set (two more, behind `enable_itdr_detections_v3`, added
+2026-11-06).** `dormant-privileged-account-reactivation` (an admin account
+with no successful sign-in for the whole 14-day look-back signs in
+interactively; bg-admin-NN is left to `break-glass-signin`) and
+`keyvault-bulk-secret-read` (one caller, keyed on its object id so managed
+identities count, reads Key Vault secrets far above its own normal rate, or
+has 20 or more reads refused). Ported from the owner's older
+Sentinel-Privileged-Access repo. `modules/monitoring/itdr_v3.tf` deploys them
+when the flag is on (it is off in `lab.tfvars`); both are Sentinel-only, and
+the Key Vault rule never triggers containment. Their 25 harness cases passed
+on the Log Analytics query engine on 2026-11-06 (E114,
+`lab/evidence/kusto/20261106T074249Z-workspace/`); they have not run on the
+Kusto emulator and are not deployed. The Key Vault twin in Splunk has no data
+to read: no feed sends AzureDiagnostics.
 
 Severity is **dynamic**: each query computes a `Severity` column that the
 Sentinel rule uses per alert (one alert per result row). Incidents group per
@@ -400,7 +415,7 @@ ranges, phishable auth-strength combinations) are pulled out of the KQL and
 run on sample text, and `tests/KqlLite.ps1` (a small, deliberately partial
 KQL interpreter) runs each rule's own row-level pipeline over those rows.
 The Kusto-emulator harness (`lab/monitoring/kusto-harness/`) ran all 22
-rules on a real KQL engine on 2026-10-21 (RAN · harness): the Azure Data
+rules of that day on a real KQL engine on 2026-10-21 (RAN · harness): the Azure Data
 Explorer Kusto emulator in a local container, synthetic tables and events,
 Sentinel's `_GetWatchlist` shimmed. 22/22 rules and 223/223 cases passed,
 and it imported 94 of these fixture rows as engine cases (12 stage-level or
