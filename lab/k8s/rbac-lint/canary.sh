@@ -28,14 +28,33 @@ fail=0
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-expect() {  # expect <label> <wanted exit code> <file>
-  local label="$1" want="$2" target="$3" out rc
+# Every planted role must be caught for its own risk, not just "some
+# findings": lab-wildcard alone trips every risk id, so an exit code (or the
+# set of risk ids) would still pass if every other planted role were missed.
+# "[risk] Kind/name" as rbac_lint.py prints it; the namespaced Role is
+# absent from the ClusterRoleList shape, which holds ClusterRoles only.
+CLUSTER_PAIRS=(
+  "escalate|ClusterRole/lab-escalate"
+  "bind|ClusterRole/lab-bind"
+  "secrets-read|ClusterRole/lab-secret-reader"
+  "wildcard-all|ClusterRole/lab-wildcard"
+  "impersonate|ClusterRole/lab-wildcard"
+  "token-create|ClusterRole/lab-wildcard"
+)
+ROLE_PAIRS=("pods-create|Role/app/lab-pod-creator")
+
+expect() {  # expect <label> <wanted exit code> <file> [risk|Kind/name ...]
+  local label="$1" want="$2" target="$3" out rc pair missing=()
+  shift 3
   out="$("${lint[@]}" "$target" 2>&1)"
   rc=$?
-  if [[ $rc -eq $want ]]; then
-    echo "  OK    $label: exit $rc ($(echo "$out" | grep -E 'risky RBAC rule|No risky|^error' | head -1))"
+  for pair in "$@"; do
+    grep -qE "^  \[${pair%%|*} +\] ${pair#*|}:" <<<"$out" || missing+=("$pair")
+  done
+  if [[ $rc -eq $want && ${#missing[@]} -eq 0 ]]; then
+    echo "  OK    $label: exit $rc ($(echo "$out" | grep -E 'risky RBAC rule|No risky|^error' | head -1))${*:+, all $# planted pairs found}"
   else
-    echo "  FAIL  $label: exit $rc, wanted $want"
+    echo "  FAIL  $label: exit $rc, wanted $want${missing[*]:+; missing: ${missing[*]}}"
     echo "$out" | sed 's/^/        /'
     fail=1
   fi
@@ -58,9 +77,9 @@ print(f"  built: List of {len(docs)} objects, ClusterRoleList of {len(roles)} ki
 PY
 
 echo "==> positive control: must find the planted escalation (exit 1)"
-expect "risky-rbac.yaml as written"            1 "$risky"
-expect "kubectl -o json List wrapper"          1 "$work/list.json"
-expect "raw API ClusterRoleList (no item kind)" 1 "$work/typed.json"
+expect "risky-rbac.yaml as written"            1 "$risky"           "${CLUSTER_PAIRS[@]}" "${ROLE_PAIRS[@]}"
+expect "kubectl -o json List wrapper"          1 "$work/list.json"  "${CLUSTER_PAIRS[@]}" "${ROLE_PAIRS[@]}"
+expect "raw API ClusterRoleList (no item kind)" 1 "$work/typed.json" "${CLUSTER_PAIRS[@]}"
 echo "==> negative control: the lab's own human roles must be clean (exit 0)"
 expect "clean-rbac.yaml"                       0 "$clean"
 echo "==> a missing input must be 'could not run' (exit 2), never a detection"

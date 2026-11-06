@@ -40,6 +40,9 @@ except ImportError:  # pragma: no cover - environment problem, not a finding
 
 EXIT_CLEAN, EXIT_FINDINGS, EXIT_ERROR = 0, 1, 2
 RBAC_KINDS = ("Role", "ClusterRole")
+# Kubernetes' user-facing default ClusterRoles; the rest of its defaults are
+# named system:*. https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings
+DEFAULT_ROLE_NAMES = ("cluster-admin", "admin", "edit", "view")
 
 
 class LintError(Exception):
@@ -182,12 +185,26 @@ def analyze_doc(doc, _inherited_kind=None, stats=None):
     # escalate; listing them on every run buries the planted ones. Classified,
     # not suppressed: still returned, still counted, not what the exit code is
     # about. https://kubernetes.io/docs/reference/access-authn-authz/rbac/#default-roles-and-role-bindings
+    #
+    # The label alone is not trusted: anyone writing a manifest can add it to
+    # a wildcard role. A role counts as built-in only if it ALSO has a name
+    # Kubernetes uses for its defaults (cluster-admin / admin / edit / view,
+    # or the system: prefix). A labelled role with any other name is a
+    # normal finding, flagged as claiming to be built-in. Residual risk: a
+    # custom role named system:<something> with the label is still treated
+    # as built-in (shown with --include-builtin, not in the exit code).
     labels = meta.get("labels", {}) or {}
-    builtin = labels.get("kubernetes.io/bootstrapping") == "rbac-defaults"
+    namespace = meta.get("namespace")
+    labelled = labels.get("kubernetes.io/bootstrapping") == "rbac-defaults"
+    builtin = labelled and (name in DEFAULT_ROLE_NAMES or str(name).startswith("system:"))
+    claims_builtin = labelled and not builtin
 
-    rules = doc.get("rules", []) or []
+    rules = doc.get("rules")
+    if rules is None:
+        rules = []          # absent or null: a role with no rules
     if not isinstance(rules, list):
-        raise LintError(f"{kind}/{name}: rules is not a list")
+        # rules: false / 0 / "" must not read as "no rules, clean".
+        raise LintError(f"{kind}/{name}: rules is not a list (got {type(rules).__name__})")
 
     findings = []
     for rule in rules:
@@ -195,9 +212,11 @@ def analyze_doc(doc, _inherited_kind=None, stats=None):
             findings.append({
                 "kind": kind,
                 "name": name,
+                "namespace": namespace if kind == "Role" else None,
                 "risk": rid,
                 "reason": REASONS[rid],
                 "builtin": builtin,
+                "claims_builtin": claims_builtin,
             })
     return findings
 
@@ -212,6 +231,14 @@ def analyze_text(text, stats=None):
     for doc in docs:
         findings.extend(analyze_doc(doc, stats=stats))
     return findings
+
+
+def label(finding):
+    """Kind/name, or Role/<namespace>/name: same-named Roles in different
+    namespaces (kubectl get roles -A) must be told apart."""
+    if finding.get("namespace"):
+        return f"{finding['kind']}/{finding['namespace']}/{finding['name']}"
+    return f"{finding['kind']}/{finding['name']}"
 
 
 def run(argv, out=sys.stdout, err=sys.stderr):
@@ -245,13 +272,14 @@ def run(argv, out=sys.stdout, err=sys.stderr):
     builtin = [f for f in total if f["builtin"]]
 
     for f in custom:
-        print(f"  [{f['risk']:14}] {f['kind']}/{f['name']}: {f['reason']}", file=out)
+        note = "  (labelled rbac-defaults, but not a Kubernetes default name)" if f["claims_builtin"] else ""
+        print(f"  [{f['risk']:14}] {label(f)}: {f['reason']}{note}", file=out)
     if builtin:
         print(file=out)
         if show_builtin:
             print("  --- Kubernetes built-ins (kubernetes.io/bootstrapping: rbac-defaults) ---", file=out)
             for f in builtin:
-                print(f"  [{f['risk']:14}] {f['kind']}/{f['name']}: {f['reason']}", file=out)
+                print(f"  [{f['risk']:14}] {label(f)}: {f['reason']}", file=out)
         else:
             print(f"  ({len(builtin)} finding(s) on Kubernetes built-in roles hidden, "
                   f"--include-builtin to show)", file=out)

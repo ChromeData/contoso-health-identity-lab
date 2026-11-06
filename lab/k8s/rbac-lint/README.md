@@ -9,7 +9,7 @@ not. [`rbac_lint.py`](rbac_lint.py) reads Role and ClusterRole YAML or JSON
 (manifests, or an export from a cluster) and names those rules before
 anything is applied.
 
-> **Status: RAN · harness.** The unit tests (32) and the canary run on every
+> **Status: RAN · harness.** The unit tests (39) and the canary run on every
 > pull request in `lab-tests.yml` (no cluster). On 2026-11-06 the linter
 > also ran against a real, throwaway k3s v1.31.4 cluster in Docker on the
 > lab Mac, with `fixtures/risky-rbac.yaml` applied: record
@@ -29,9 +29,13 @@ anything is applied.
 | `token-create` | create on `serviceaccounts/token` | mint a token for any service account |
 | `wildcard-all` | `*` verbs on `*` resources | cluster-admin by another name |
 
-Roles Kubernetes ships itself (label `kubernetes.io/bootstrapping:
-rbac-defaults`, such as `cluster-admin`) are counted but kept out of the
-exit code; `--include-builtin` prints them.
+Roles Kubernetes ships itself are counted but kept out of the exit code;
+`--include-builtin` prints them. A role counts as built-in only if it has
+the label `kubernetes.io/bootstrapping: rbac-defaults` **and** a name
+Kubernetes uses for its defaults (`cluster-admin`, `admin`, `edit`, `view`,
+or `system:...`). Anyone can add the label to a manifest, so a labelled role
+with any other name is a normal finding, marked as claiming to be built-in.
+A namespaced Role is printed as `Role/<namespace>/<name>`.
 
 Exit codes: **0** clean, **1** risky rules found, **2** could not do the job
 (missing file, unreadable input, or no Role/ClusterRole read at all).
@@ -52,10 +56,12 @@ A security check that has never been seen to fail proves nothing.
 fixture, [`fixtures/risky-rbac.yaml`](fixtures/risky-rbac.yaml) (never
 applied by anything in this repo), in all three shapes it meets: as written,
 wrapped the way `kubectl -o json` returns it, and as the Kubernetes API
-returns it. It must find the planted roles every time. It also runs the
+returns it. Each planted role must be found for its own risk every time, not just "some
+findings", because one wildcard role alone trips every risk. It also runs the
 linter on [`fixtures/clean-rbac.yaml`](fixtures/clean-rbac.yaml), the lab's
-own two human roles copied from `lab/terraform/k8s/identity/main.tf`, which
-must come back clean, and on a missing file, which must be "could not run",
+own two human roles copied from `lab/terraform/k8s/identity/main.tf` (a
+test fails if the copy and the Terraform drift apart), which must come back
+clean, and on a missing file, which must be "could not run",
 never a detection.
 
 ## What was fixed while porting

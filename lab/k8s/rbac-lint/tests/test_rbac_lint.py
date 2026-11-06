@@ -16,6 +16,7 @@ linter (checked 2026-11-06 by running this file against it):
 
 import io
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -25,6 +26,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 LINT_DIR = Path(os.environ.get("RBAC_LINT_DIR", HERE.parent))
 FIXTURES = HERE.parent / "fixtures"
+REPO = HERE.parents[3]
+TF_IDENTITY = REPO / "lab" / "terraform" / "k8s" / "identity" / "main.tf"
 sys.path.insert(0, str(LINT_DIR))
 
 import rbac_lint  # noqa: E402
@@ -170,12 +173,70 @@ rules: [{apiGroups: ["*"], resources: ["*"], verbs: ["*"]}]
         self.assertTrue(findings)
         self.assertTrue(all(f["builtin"] for f in findings))
 
+    def test_label_alone_does_not_make_a_role_builtin(self):
+        # Review (PR #209): anyone can add the label to a wildcard role.
+        doc = """
+kind: ClusterRole
+metadata:
+  name: totally-harmless
+  labels: {kubernetes.io/bootstrapping: rbac-defaults}
+rules: [{apiGroups: ["*"], resources: ["*"], verbs: ["*"]}]
+"""
+        findings = rbac_lint.analyze_text(doc)
+        self.assertTrue(findings)
+        self.assertTrue(all(not f["builtin"] and f["claims_builtin"] for f in findings))
+        code, out, _ = run_cli(write_tmp(doc))
+        self.assertEqual(code, 1)
+        self.assertIn("labelled rbac-defaults, but not a Kubernetes default name", out)
+
+    def test_system_prefixed_default_is_builtin(self):
+        doc = ("kind: ClusterRole\nmetadata:\n  name: system:controller:x\n"
+               "  labels: {kubernetes.io/bootstrapping: rbac-defaults}\n"
+               "rules: [{resources: ['*'], verbs: ['*']}]\n")
+        self.assertTrue(all(f["builtin"] for f in rbac_lint.analyze_text(doc)))
+
+    def test_malformed_rules_are_an_error_not_clean(self):
+        # Review (PR #209): `or []` turned rules: false / 0 / "" into "no rules".
+        for bad in ("false", "0", '""', "{a: 1}"):
+            with self.subTest(rules=bad):
+                with self.assertRaises(rbac_lint.LintError):
+                    rbac_lint.analyze_text(f"kind: ClusterRole\nmetadata: {{name: x}}\nrules: {bad}\n")
+                self.assertEqual(run_cli(write_tmp(f"kind: ClusterRole\nmetadata: {{name: x}}\nrules: {bad}\n"))[0], 2)
+
+    def test_absent_or_null_rules_are_a_role_with_no_rules(self):
+        for doc in ("kind: ClusterRole\nmetadata: {name: x}\n", "kind: ClusterRole\nmetadata: {name: x}\nrules: null\n"):
+            with self.subTest(doc=doc):
+                self.assertEqual(rbac_lint.analyze_text(doc), [])
+
+    def test_namespace_is_kept_and_printed_for_roles(self):
+        # Review (PR #209): same-named Roles in two namespaces must be told apart.
+        doc = ("kind: List\nitems:\n"
+               "  - {kind: Role, metadata: {name: r, namespace: a}, rules: [{resources: [pods], verbs: [create]}]}\n"
+               "  - {kind: Role, metadata: {name: r, namespace: b}, rules: [{resources: [pods], verbs: [create]}]}\n")
+        self.assertEqual({f["namespace"] for f in rbac_lint.analyze_text(doc)}, {"a", "b"})
+        _code, out, _ = run_cli(write_tmp(doc))
+        self.assertIn("Role/a/r:", out)
+        self.assertIn("Role/b/r:", out)
+
     def test_custom_role_is_not_marked_builtin(self):
         doc = "kind: ClusterRole\nmetadata: {name: lab-wildcard}\nrules: [{apiGroups: ['*'], resources: ['*'], verbs: ['*']}]\n"
         self.assertTrue(all(not f["builtin"] for f in rbac_lint.analyze_text(doc)))
 
 
 class TestFixtures(unittest.TestCase):
+    def test_every_planted_role_is_caught_for_its_own_risk(self):
+        # Review (PR #209): lab-wildcard alone trips every risk id, so the set
+        # of ids cannot show that the other planted roles were caught.
+        pairs = {(f["risk"], f["name"]) for f in rbac_lint.analyze_text((FIXTURES / "risky-rbac.yaml").read_text())}
+        for want in (("escalate", "lab-escalate"), ("bind", "lab-bind"), ("secrets-read", "lab-secret-reader"),
+                     ("pods-create", "lab-pod-creator"), ("wildcard-all", "lab-wildcard")):
+            self.assertIn(want, pairs)
+
+    def test_clean_fixture_matches_the_terraform_roles(self):
+        # Review (PR #209): the negative control is a hand copy of
+        # local.human_roles; fail if the Terraform changes and the copy does not.
+        self.assertEqual(_fixture_roles(), _terraform_roles())
+
     def test_risky_fixture_trips_all_planted_risks(self):
         risks = {f["risk"] for f in rbac_lint.analyze_text((FIXTURES / "risky-rbac.yaml").read_text())}
         for expected in ("escalate", "bind", "impersonate", "secrets-read", "pods-create", "wildcard-all", "token-create"):
@@ -186,6 +247,47 @@ class TestFixtures(unittest.TestCase):
         findings = rbac_lint.analyze_text((FIXTURES / "clean-rbac.yaml").read_text(), stats)
         self.assertEqual(findings, [])
         self.assertEqual(stats["rbac_objects"], 2)
+
+
+def _fixture_roles():
+    """{role: sorted [(apiGroups, resources, verbs)]} from clean-rbac.yaml."""
+    import yaml
+    roles = {}
+    for doc in yaml.safe_load_all((FIXTURES / "clean-rbac.yaml").read_text()):
+        if doc:
+            roles[doc["metadata"]["name"]] = sorted(
+                (tuple(r["apiGroups"]), tuple(r["resources"]), tuple(r["verbs"])) for r in doc["rules"])
+    return roles
+
+
+def _terraform_roles():
+    """The same shape, read from local.human_roles in the identity root.
+
+    A small reader for the exact form main.tf uses ({ api_groups = [...],
+    resources = [...], verbs = local.x | [...] } one per line). If the form
+    changes so nothing is read, the test fails rather than passing on {}.
+    """
+    text = TF_IDENTITY.read_text()
+    verbs_vars = {m.group(1): re.findall(r'"([^"]*)"', m.group(2))
+                  for m in re.finditer(r"^\s*(\w+_verbs)\s*=\s*\[([^\]]*)\]", text, re.M)}
+    block = text[text.index("human_roles = {"):]
+    block = block[: block.index("\n  }\n")]
+    roles, current = {}, None
+    for line in block.splitlines():
+        m = re.match(r'\s*"([\w-]+)"\s*=\s*\{', line)
+        if m:
+            current = m.group(1)
+            roles[current] = []
+            continue
+        m = re.match(r"\s*\{\s*api_groups\s*=\s*\[([^\]]*)\],\s*resources\s*=\s*\[([^\]]*)\],"
+                     r"\s*verbs\s*=\s*(local\.(\w+)|\[([^\]]*)\])", line)
+        if m and current:
+            verbs = verbs_vars[m.group(4)] if m.group(4) else re.findall(r'"([^"]*)"', m.group(5))
+            roles[current].append((tuple(re.findall(r'"([^"]*)"', m.group(1))),
+                                   tuple(re.findall(r'"([^"]*)"', m.group(2))), tuple(verbs)))
+    if not roles or not all(roles.values()):
+        raise AssertionError(f"could not read local.human_roles from {TF_IDENTITY}")
+    return {k: sorted(v) for k, v in roles.items()}
 
 
 class TestExitCodes(unittest.TestCase):
