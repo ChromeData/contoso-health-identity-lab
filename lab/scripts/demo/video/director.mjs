@@ -67,12 +67,21 @@ function injectSheet(s) {
   }
   for (const [p, v] of Object.entries(ovr.delivery || {})) put(d.delivery, p, v);
   s = s.replace(re, (_, a, __, c) => a + JSON.stringify(d).replace(/</g, '\\u003c') + c);
-  // numbering 5..14 on pills and chips (the setup row is 1..4), and a handle for sheet-numbers.js (safe to run twice)
-  s = s.replace('pillShape(pin, s.title, s.pillW, PILL_H);', 'pillShape(pin, (s.i + 5) + " · " + s.title, s.pillW + 46, PILL_H);');
-  s = s.replace('data-go="station:${esc(s.id)}">${esc(s.title)}</button>`))', 'data-go="station:${esc(s.id)}">${s.i + 5} ${esc(s.title)}</button>`))');
-  s = s.replace('data-go="delivery">Delivery</button>', 'data-go="delivery">14 Delivery</button>');
+  // numbering 6..15 on pills and chips (the setup row is 1..5), and a handle for sheet-numbers.js (safe to run twice)
+  s = s.replace('pillShape(pin, s.title, s.pillW, PILL_H);', 'pillShape(pin, (s.i + 6) + " · " + s.title, s.pillW + 46, PILL_H);');
+  s = s.replace('data-go="station:${esc(s.id)}">${esc(s.title)}</button>`))', 'data-go="station:${esc(s.id)}">${s.i + 6} ${esc(s.title)}</button>`))');
+  s = s.replace('data-go="delivery">Delivery</button>', 'data-go="delivery">15 Delivery</button>');
   if (!s.includes('window.__lab = ')) s = s.replace('  function flyTo(', "  window.__lab = { flyTo, fitRect, select, W, L, NB, get cam() { return cam; }, panel: document.getElementById('panel'), chips: document.getElementById('chips'), svg };\n  function flyTo(");
   s = s.replace(/<style id="sheet">[\s\S]*?<\/style>\n?/, '').replace(/<script id="sheetjs">[\s\S]*?<\/script>\n?/, '').replace(/<script id="sheetnum">[\s\S]*?<\/script>\n?/, '');
+  // Wording (2026-11-06): HashiCorp Vault, Guacamole and Splunk are shown as the real products they are, not
+  // as stand-ins (map-overrides.json clears their standin_for), so the generic UI text for the outer row and
+  // for harness-only tiles no longer calls every tile there a stand-in. The true stand-ins (midPoint, the
+  // container-secrets demo, the HR spreadsheet) keep their own "stands in for" line. Fail closed: if the base
+  // map's wording moved, stop rather than ship the old text.
+  const swapUi = (from, to) => { if (s.includes(from)) { s = s.split(from).join(to); return; } if (!s.includes(to)) throw new Error(`map UI text not found in the base map: ${from}`); };
+  swapUi("'Two steps out: stand-ins'", "'Two steps out: specialist tools'");
+  swapUi("'Two steps out: a specialist stand-in'", "'Two steps out: a specialist tool'");
+  swapUi("It stands in for a product with no free trial, so it runs on the test setup.", "It runs on the local test setup, not in the tenant.");
   return s.replace('</body>', `<style id="sheet">\n${css}</style>\n<script id="sheetjs">\n${js}</script>\n<script id="sheetnum">\n${nums}</script>\n</body>`);
 }
 function buildMap() {
