@@ -25,6 +25,10 @@
 #     anomalies, SoD violations, Tier-0 PIM activation without the auth
 #     context. Two of them are Sentinel only (14-day look-back); two never
 #     trigger containment. Why a separate flag: itdr_v2.tf header.
+#   * ITDR v3 (enable_itdr_detections_v3, two rules, itdr_v3.tf) - a dormant
+#     admin account signing in again, and bulk Key Vault secret reads. Both
+#     Sentinel only (14-day look-back); the Key Vault rule never triggers
+#     containment.
 #
 # Automated response:
 #   * notify   - lab/monitoring/playbook-notify.json (Teams card + ServiceNow),
@@ -182,7 +186,8 @@ locals {
   }
 
   # ITDR rules (itdr.tf) join only when enable_itdr_detections is on, the v2
-  # set (itdr_v2.tf) only when enable_itdr_detections_v2 is on, minus any held
+  # set (itdr_v2.tf) only when enable_itdr_detections_v2 is on, the v3 set
+  # (itdr_v3.tf) only when enable_itdr_detections_v3 is on, minus any held
   # back in itdr_exclude_rules (filtering for-expressions, for the same
   # object-type reason as the rule resources' for_each).
   itdr_selected = merge(
@@ -193,6 +198,10 @@ locals {
     {
       for k, r in local.itdr_v2_rules : k => r
       if var.enable_itdr_detections_v2 && !contains(var.itdr_exclude_rules, k)
+    },
+    {
+      for k, r in local.itdr_v3_rules : k => r
+      if var.enable_itdr_detections_v3 && !contains(var.itdr_exclude_rules, k)
     },
   )
 

@@ -26,7 +26,7 @@ working.
 | `terraform/envs/dev/lab.tfvars` | The committed policy knobs: staging flags, CA states, blocked countries |
 | `pipelines/` + `.github/workflows/` | The OIDC plan/apply pipeline. PLAN identity is read-only; APPLY is gated by the `prod` environment |
 | `scripts/` | The HR mock, joiner/mover/leaver, post-apply Graph steps, reports, evidence pack |
-| `kql/`, `splunk/`, `monitoring/` | 22 detections in KQL with their SPL twins: five core rules and the ITDR set. The notify playbook (Teams + ServiceNow) and the Teams-approved containment playbook |
+| `kql/`, `splunk/`, `monitoring/` | 24 detections in KQL with their SPL twins: five core rules and the ITDR set. The notify playbook (Teams + ServiceNow) and the Teams-approved containment playbook |
 | `iga/` | Birthright rules, SoD rules and the access catalog behind the governance scripts |
 | `pam/` | Vault (CPM stand-in, with discovery, onboarding, reconciliation and an HA/DR rehearsal), Guacamole (PSM and PSMP stand-in), Conjur, midPoint, dynamic database credentials |
 | `k8s/` | kind-based workload identity: Vault Kubernetes auth, admission policy, drift test |

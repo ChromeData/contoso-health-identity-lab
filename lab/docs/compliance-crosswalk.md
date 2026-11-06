@@ -132,7 +132,7 @@ Each row names a control the lab implements in code, where in the repo it lives,
 
 ## 8. Logging, monitoring, detection (Sentinel + Splunk)
 
-**Lab:** `lab/terraform/modules/entra-diagnostics/`, `lab/terraform/modules/monitoring/`, `lab/kql/` (22 rules, listed in `threat-model.md`), `lab/splunk/detections/`, `lab/monitoring/playbook-notify.json` (Logic App → Teams/ServiceNow). Containment is section 14.
+**Lab:** `lab/terraform/modules/entra-diagnostics/`, `lab/terraform/modules/monitoring/`, `lab/kql/` (24 rules, listed in `threat-model.md`), `lab/splunk/detections/`, `lab/monitoring/playbook-notify.json` (Logic App → Teams/ServiceNow). Containment is section 14.
 
 | Framework | Control |
 |---|---|

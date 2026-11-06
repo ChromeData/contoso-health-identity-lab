@@ -27,7 +27,7 @@ Each number is from a row in [`lab/evidence/capture-log.csv`](lab/evidence/captu
 | **Robot accounts** | 19 non-human identities inventoried against the OWASP NHI Top 10. 8 have no accountable owner, and that is the list being worked (E70) |
 | **Blocked combinations** | A nurse asking for controlled-substance dispensing access is refused at request time (E39c), and the after-the-fact report finds 0 people holding both sides (E71) |
 | **Change control** | More than 80 merged pull requests and more than 30 pipeline applies by 2026-11-05. A nightly drift check caught a real Microsoft schema change, which was reviewed and taken into the baseline (#112, #113) |
-| **Detections** | 22 of 22 detections fire on synthetic replays: 277 of 277 cases on the Kusto emulator, 22 of 22 Splunk searches (E60a, E61). Synthetic events, not tenant incidents |
+| **Detections** | 24 detections. The first 22 fire on synthetic replays: 277 of 277 cases on the Kusto emulator, 22 of 22 Splunk searches (E60a, E61). The 2 added on 2026-11-06 (a dormant admin account signing in again, bulk Key Vault secret reads) passed their 25 cases on the Log Analytics query engine (E114); they are not deployed yet. Synthetic events, not tenant incidents |
 | **Audit evidence** | A SHA-256 evidence pack filed in write-once storage, where a delete is refused and an overwrite keeps the old version (E06, E56). GitHub Actions now collects all 7 records under a read-only identity and reads every file back (E74) |
 
 What broke along the way, and the control each failure added: [field notes](lab/docs/field-notes.md).
@@ -62,7 +62,7 @@ What ran on the author's machine (first on 2026-10-20 and 21 UTC, the detection 
 >   `--scale` suite put 500 synthetic privileged accounts through the same
 >   discovery, onboarding, rotation and reconciliation scripts (79/79, GAP
 >   0). The Kubernetes segment passed 12/12 pipeline stages and 64/64
->   end-to-end checks on a throwaway kind cluster. The 22 KQL detections ran
+>   end-to-end checks on a throwaway kind cluster. The 22 KQL detections of that day ran
 >   on the Azure Data Explorer Kusto emulator, a local KQL engine, against
 >   synthetic tables and events: 22/22 rules and 277/277 cases passed
 >   (`lab/evidence/kusto/20261031T060102Z/`; the earlier 223-case run is
@@ -193,8 +193,8 @@ lab/config-baseline/     the reviewed tenant-configuration baseline and drift ex
 lab/scripts/             mock HR + JML lifecycle, post-apply Graph steps (one orchestrator), NHI / shadow-admin /
                          KPI / assessment scripts, drills, DC build, Intune, ITDR containment + vault feed, demo reset
 lab/iga/                 access catalog, birthright rules, SoD rules (SOD-01 to SOD-09)
-lab/kql/                 22 detections (the source for Sentinel rules, Log Analytics alerts and the SPL twins)
-lab/splunk/              second SIEM (run on synthetic events, E59 to E61): compose, replay ingest, 22 SPL detections
+lab/kql/                 24 detections (the source for Sentinel rules, Log Analytics alerts and the SPL twins)
+lab/splunk/              second SIEM (run on synthetic events, E59 to E61): compose, replay ingest, 24 SPL detections
 lab/monitoring/          Sentinel playbooks (ARM): notify, approval-gated containment; the KQL emulator harness (ran 22/22)
 lab/pam/                 Vault · Guacamole · Conjur · midPoint (Docker, loopback-only), dynamic DB credentials,
                          HA/DR, and the harnesses with one runner (test/run-all.sh)
@@ -277,6 +277,6 @@ Written down on purpose. A reviewer will find these in ten minutes; better they 
 | **One person authors and approves.** The apply gate accepts a self-approval and records it as such (`APPLY_TWO_PERSON=false`). | One collaborator, and GitHub only enforces required reviewers on public or paid repos. | Set `APPLY_TWO_PERSON=true` (the gate then refuses the author), add a second approver account, and turn on branch protection with a required reviewer. The refusal path is already in `.github/scripts/apply-approval-gate.sh`. |
 | **Two sign-in policies are report-only** (CA002 phishing-resistant admins, CA021 step-up for Tier-0 activation). | No passkeys are registered yet; enforcing them first would lock every admin out. | Register two hardware keys per admin, run the passwordless rollout (`07-Passwordless-Rollout.ps1`), then graduate both through their own reviewed change. |
 | **The build account still holds a standing Global Administrator role.** | It created the tenant and the pipeline identities; removing it is the last step, not the first. | Make it eligible in PIM like every other admin, keep the two break-glass accounts as the only standing exceptions, and watch all three with the existing detection rules. |
-| **Splunk has run only on synthetic events.** All 22 SPL twins fire on the replayed detection test cases (E59 to E61); the Log Analytics replay still needs a live admin session. | The tenant-backed replay rides `az login`, which the lab's own 4-hour admin re-auth rule keeps killing. | Run `ingest-from-loganalytics.sh` once with a live admin session and record the tenant-backed row. |
+| **Splunk has run only on synthetic events.** The first 22 SPL twins fire on the replayed detection test cases (E59 to E61); the 2 added on 2026-11-06 have not been replayed. The Log Analytics replay still needs a live admin session. | The tenant-backed replay rides `az login`, which the lab's own 4-hour admin re-auth rule keeps killing. | Run `ingest-from-loganalytics.sh` once with a live admin session and record the tenant-backed row. |
 | **Several products are stand-ins** (HR system, CyberArk, SailPoint, Workday). | No free trials exist; each stand-in is named with what it replaces (`lab/docs/STAND-INS.md`). | Swap each stand-in for the real product behind the same interface; the code paths and runbooks do not change. |
 | **Eight robot accounts have no accountable owner** (E70). | The inventory (`06-NHI-Inventory.ps1`) found them; assigning owners needs the business to name people. | Owners assigned in the access-package model, enforced by the nightly drift check. |
