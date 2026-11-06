@@ -1,0 +1,14 @@
+# 2026-11-06T07:40:35Z lab/pipelines/scanner-selftest/tests/selftest.test.sh (stub scanners)
+ok   both scanners work: pass
+ok   checkov finds nothing on bad
+ok   checkov crashes (exit 2)
+ok   checkov scans nothing, exits 0
+ok   checkov parsing error
+ok   checkov flags the clean fixture
+ok   trufflehog finds nothing on bad
+ok   trufflehog scans 0 chunks, exits 0
+ok   trufflehog crashes
+ok   unknown argument refused
+ok   no key file left in fixtures/
+selftest.test.sh: 11 passed, 0 failed
+exit=0

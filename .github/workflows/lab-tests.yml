@@ -89,6 +89,29 @@ jobs:
   # PowerShell: PSScriptAnalyzer (errors fail) + every Pester suite, the ITDR
   # suite, and the shell tests that need no containers.
   # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Positive control for the merge gate's scanners (ADR 0026). Runs the SAME
+  # Checkov and TruffleHog images as terraform-plan.yml on a deliberately
+  # unsafe fixture (must be caught) and its clean twin (must pass), counting
+  # findings from each tool's JSON. Fails if either scanner sees 0 on the
+  # unsafe fixture, flags the clean one, crashes or scans nothing. The
+  # planted secret is generated at run time; nothing secret-shaped is
+  # committed. No credentials; both containers run with --network none.
+  # ---------------------------------------------------------------------------
+  scanner-positive-control:
+    name: scanner positive control (Checkov + TruffleHog must fail on bad)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Self-test (pinned images, as the gate runs them)
+        run: bash lab/pipelines/scanner-selftest/selftest.sh
+
   powershell-test:
     name: Pester + PSScriptAnalyzer + shell tests
     runs-on: ubuntu-latest
@@ -169,6 +192,8 @@ jobs:
           node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs lab/scripts/demo/signin/tests/identity.test.mjs
           node --test lab/terraform/okta/tests/trust-claims.test.mjs
           bash lab/scripts/demo/tests/containment-drill.test.sh
+          # The scanner positive control's own failure modes (stub scanners).
+          bash lab/pipelines/scanner-selftest/tests/selftest.test.sh
           (cd lab/splunk && ./render-savedsearches.sh --check)
           # Splunk live feed: watermark, de-dup, HEC failures, LaunchAgent template,
           # preflight verdict (fake Log Analytics, an HEC stub on 127.0.0.1; stdlib only).
