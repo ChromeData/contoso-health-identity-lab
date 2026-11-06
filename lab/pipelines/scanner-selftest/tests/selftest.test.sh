@@ -24,6 +24,7 @@ bad=0; [[ "$(basename "$dir")" == "bad" ]] && bad=1
 mode="${STUB_CHECKOV:-ok}"
 case "$mode" in
   crash) echo "Traceback: boom" >&2; exit 2 ;;
+  crash-leaky) printf '%s\n' "-----BEGIN PRIVATE KEY-----" "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7" "Error: boom" >&2; exit 2 ;;
   empty) printf '{"passed":0,"failed":0,"skipped":0,"parsing_errors":0,"resource_count":0}\n'; exit 0 ;;
   parseerr) printf '{"check_type":"terraform","results":{"failed_checks":[]},"summary":{"passed":0,"failed":0,"parsing_errors":1,"resource_count":1}}\n'; exit 0 ;;
 esac
@@ -58,7 +59,7 @@ check() { # check NAME WANT_EXIT WANT_TEXT [ENV=VAL...]
   local name="$1" want="$2" text="$3"; shift 3
   local out rc
   out="$(env "$@" SELFTEST_CHECKOV_BIN="$STUBS/checkov" SELFTEST_TRUFFLEHOG_BIN="$STUBS/trufflehog" bash "$SELFTEST" --local 2>&1)"; rc=$?
-  if [[ "$rc" == "$want" ]] && grep -qF -- "$text" <<<"$out" && ! grep -q "BEGIN PRIVATE KEY" <<<"$out"; then
+  if [[ "$rc" == "$want" ]] && grep -qF -- "$text" <<<"$out" && ! grep -qE "BEGIN PRIVATE KEY|MIIEvQIBADAN" <<<"$out"; then
     pass=$((pass + 1)); echo "ok   $name"
   else
     failn=$((failn + 1)); echo "FAIL $name (exit $rc, wanted $want and '$text')"; printf '%s\n' "$out"
@@ -68,6 +69,8 @@ check() { # check NAME WANT_EXIT WANT_TEXT [ENV=VAL...]
 check "both scanners work: pass"              0 "RESULT PASS"
 check "checkov finds nothing on bad"          1 "checkov   : 0 findings - the gate would NOT catch" STUB_CHECKOV=zero
 check "checkov crashes (exit 2)"              1 "checkov   : ERROR" STUB_CHECKOV=crash
+check "a crash says why in the log"           1 "| Traceback: boom" STUB_CHECKOV=crash
+check "the reason never shows key material"   1 "| Error: boom" STUB_CHECKOV=crash-leaky
 check "checkov scans nothing, exits 0"        1 "checkov   : ERROR" STUB_CHECKOV=empty
 check "checkov parsing error"                 1 "checkov   : ERROR" STUB_CHECKOV=parseerr
 check "checkov flags the clean fixture"       1 "the gate would block the clean fixture" STUB_CHECKOV=flags-good

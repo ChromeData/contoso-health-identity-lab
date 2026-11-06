@@ -102,6 +102,22 @@ chmod -R a+rX "$WORK/bad" "$WORK/good"
 
 # --- counters: print a number of findings, or ERROR -------------------------
 
+# Why a scanner gave no result, on stderr, so the CI log says what broke
+# (image pull, rejected flag, crash) before the trap deletes the files. Only
+# the exit code and the last lines of the scanner's own LOG (stderr) are
+# shown, never its findings (stdout); lines that could carry key material
+# (a PEM marker or a long base64 run) are dropped, and each line is cut at
+# 200 characters.
+why() { # why SCANNER FIXTURE RC ERRFILE REASON
+  local scanner="$1" fixture="$2" rc="$3" errfile="$4" reason="$5"
+  echo "  [$scanner on $fixture] no result: $reason (exit $rc). Last log lines:" >&2
+  if [[ -s "$errfile" ]]; then
+    grep -avE 'PRIVATE KEY|BEGIN |[A-Za-z0-9+/=]{48,}' "$errfile" | tail -n 5 | cut -c1-200 | sed 's/^/    | /' >&2
+  else
+    echo "    | (empty)" >&2
+  fi
+}
+
 run_checkov() { # run_checkov DIR OUTFILE ERRFILE -> scanner exit code
   local dir="$1" out="$2" err="$3"
   if [[ "$MODE" == "docker" ]]; then
@@ -119,23 +135,23 @@ count_checkov() { # count_checkov DIR
   name="$(basename "$1")"; out="$WORK/checkov.$name.json"; err="$WORK/checkov.$name.err"
   run_checkov "$dir" "$out" "$err"; rc=$?
   # Checkov: 0 = no failed checks, 1 = failed checks; anything else = broken.
-  if (( rc > 1 )); then echo "ERROR"; return; fi
-  python3 -I - "$out" <<'PY' || echo "ERROR"
+  if (( rc > 1 )); then why checkov "$name" "$rc" "$err" "scanner exited with an error"; echo "ERROR"; return; fi
+  python3 -I - "$out" 2>"$WORK/checkov.$name.parse" <<'PY' || { why checkov "$name" "$rc" "$err" "$(head -c 200 "$WORK/checkov.$name.parse")"; echo "ERROR"; }
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))
 except Exception:
-    sys.exit(1)
+    sys.exit("its output is not JSON")
 reports = d if isinstance(d, list) else [d]
 total_resources = failed = 0
 for r in reports:
     s = r.get("summary") or {}
     if s.get("parsing_errors", 0):
-        sys.exit(1)                     # a file it could not read is not a scan
+        sys.exit("it reported parsing errors")      # a file it could not read is not a scan
     total_resources += int(s.get("resource_count", 0))
     failed += len((r.get("results") or {}).get("failed_checks") or [])
 if total_resources < 1:
-    sys.exit(1)                         # descended into nothing
+    sys.exit("it scanned 0 resources")              # descended into nothing
 print(failed)
 PY
 }
@@ -157,8 +173,8 @@ count_trufflehog() { # count_trufflehog DIR
   name="$(basename "$1")"; out="$WORK/trufflehog.$name.jsonl"; err="$WORK/trufflehog.$name.log"
   run_trufflehog "$dir" "$out" "$err"; rc=$?
   # No --fail here, so a finished scan exits 0 with or without findings.
-  if (( rc != 0 )); then echo "ERROR"; return; fi
-  python3 -I - "$out" "$err" <<'PY' || echo "ERROR"
+  if (( rc != 0 )); then why trufflehog "$name" "$rc" "$err" "scanner exited with an error"; echo "ERROR"; return; fi
+  python3 -I - "$out" "$err" 2>"$WORK/trufflehog.$name.parse" <<'PY' || { why trufflehog "$name" "$rc" "$err" "$(head -c 200 "$WORK/trufflehog.$name.parse")"; echo "ERROR"; }
 import json, sys
 chunks = None
 for line in open(sys.argv[2], errors="replace"):
@@ -169,7 +185,7 @@ for line in open(sys.argv[2], errors="replace"):
     if rec.get("msg") == "finished scanning":
         chunks = int(rec.get("chunks", 0))
 if not chunks:
-    sys.exit(1)                         # no summary, or it scanned 0 chunks
+    sys.exit("it scanned 0 chunks (or wrote no summary)")
 findings = 0
 for line in open(sys.argv[1], errors="replace"):
     try:
