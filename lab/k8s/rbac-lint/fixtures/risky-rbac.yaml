@@ -1,0 +1,81 @@
+# DELIBERATELY RISKY RBAC: the linter's positive control. NEVER APPLIED.
+#
+# Nothing applies this file: it sits outside lab/k8s/manifests, which is the
+# only folder ci/pipeline.sh applies and Checkov scans. It exists so the
+# canary (canary.sh) and the tests have something they MUST catch.
+#
+# These are the permissions that undo the workload-identity segment: a pod can
+# hold no static credential at all and still own the cluster because its
+# service account can mint tokens, rewrite its own permissions, or read every
+# secret. Each object below plants one escalation path. Ported from the
+# author's earlier Conjur-Kubernetes-KubiScan lab, unchanged apart from this
+# header. lab-pod-creator's namespace "app" is that lab's, not this one's.
+---
+# Risk 1: `escalate`, grant yourself any permission, bypassing the normal
+# guard that you can't create a role more powerful than your own.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lab-escalate
+rules:
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["escalate", "create"]
+---
+# Risk 2: `bind`, bind any existing role to yourself, including cluster-admin.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lab-bind
+rules:
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings"]
+    verbs: ["bind", "create"]
+---
+# Risk 3: read every secret in the cluster. Static-credential injection is
+# pointless if a SA can just read all the secrets directly.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lab-secret-reader
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+---
+# Risk 4: create pods, schedule a pod mounting a privileged service account,
+# then use its token. The classic "I only have pod-create" escalation.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lab-pod-creator
+  namespace: app
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create"]
+---
+# Risk 5: a wildcard on everything. The "temporary" grant that never leaves.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lab-wildcard
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+# Risk 6: the binding that makes Risk 5 live, a service account wearing a
+# cluster-admin-equivalent role.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lab-wildcard-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lab-wildcard
+subjects:
+  - kind: ServiceAccount
+    name: secret-consumer
+    namespace: app

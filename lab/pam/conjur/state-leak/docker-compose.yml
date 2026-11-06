@@ -1,0 +1,28 @@
+# Throwaway Conjur OSS for the state-leak experiment. Its own compose project
+# (contoso-stateleak, set by run.sh), so it never touches the shared
+# contoso-pam stack or its Conjur account. Same images and settings as the
+# conjur service in lab/pam/docker-compose.yml. Loopback only; deleted, with
+# its volume, at the end of every run.
+name: contoso-stateleak
+services:
+  db:
+    image: postgres:16.15
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_PASSWORD: ${STATE_LEAK_DB_PASSWORD:?run run.sh, not docker compose directly}
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  conjur:
+    image: cyberark/conjur:1.27.0
+    platform: linux/amd64   # Conjur publishes amd64 images only (lab/pam/README.md)
+    command: server
+    depends_on: [db]
+    environment:
+      DATABASE_URL: postgres://postgres:${STATE_LEAK_DB_PASSWORD}@db/postgres
+      CONJUR_DATA_KEY: ${STATE_LEAK_DATA_KEY:?run run.sh, not docker compose directly}
+      CONJUR_AUTHENTICATORS: authn
+    ports: ["127.0.0.1:${STATE_LEAK_PORT:-8093}:80"]
+
+volumes:
+  db:

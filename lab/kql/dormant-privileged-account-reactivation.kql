@@ -1,0 +1,123 @@
+// =============================================================================
+// Detection: Dormant privileged account signs in again
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, third set)
+// SPL twin:  lab/splunk/detections/dormant-privileged-account-reactivation.spl
+// Ported:    from the owner's older Sentinel-Privileged-Access repo
+//            (2026-11-06), rewritten for this lab (see "WHAT CHANGED").
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   An admin account that had no successful sign-in for the whole 14-day
+//   look-back suddenly signs in interactively. A quiet admin account waking
+//   up is a classic sign of a stolen or forgotten privileged identity: the
+//   account a PAM programme should already have removed, or one an attacker
+//   has just taken over. One row per account that woke up in the last hour.
+//
+//   "Quiet" means no success in EITHER sign-in table: a non-interactive
+//   token refresh is activity too (the account had a live session), so an
+//   admin whose tools refresh tokens every day never counts as dormant.
+//   Only an INTERACTIVE success in the last hour counts as waking up.
+//
+// WHY 14 DAYS, NOT 30
+//   A Sentinel scheduled rule can look back at most 14 days (Microsoft
+//   Learn, "Create scheduled analytics rules": "Lookup data from the last
+//   ... Allowed range: 5 minutes to 14 days", ms.date 2026-07-02). The old
+//   rule asked for 90 days and would have been refused when Sentinel
+//   created it. Here "dormant" = no success in the 14 days before this hour;
+//   the rule cannot tell 15 idle days from 200, and says so (QuietSince).
+//
+// SEVERITY (dynamic - the Severity column)
+//   High   : the account existed before the look-back (no "Add user" for it
+//            in AuditLogs in the last 14 days).
+//   Medium : the account was created inside the look-back: a new admin's
+//            first sign-in is usually expected, but still reviewed.
+//
+// TABLE / SOURCE
+//   SigninLogs + AADNonInteractiveUserSignInLogs (successes: ResultType is a
+//   STRING, "0" = success, as in failed-signin-spike.kql), AuditLogs
+//   ("Add user", the target's object id in TargetResources[].id).
+//   Privileged = object id in PrivilegedUserIds (rendered by
+//   modules/monitoring from var.privileged_user_ids) OR the lab's admin
+//   naming: adm-<name> (the separate admin accounts; modules/pim keeps
+//   adm-* out of the staff groups) and tier0-admin-NN. The break-glass
+//   accounts (bg-admin-NN) are left out on purpose: break-glass-signin.kql
+//   already raises a High incident for EVERY sign-in by them, so this rule
+//   would only add a second incident for the same event.
+//
+// LICENSE
+//   Sign-in and audit logs in Log Analytics: Entra ID P1 or P2 (the lab has
+//   P2). Sentinel only: Log Analytics alerts look back at most 2 days.
+//
+// MITRE ATT&CK
+//   T1078.004 Valid Accounts: Cloud Accounts (InitialAccess, Persistence)
+//
+// FALSE-POSITIVE NOTES
+//   - An admin back from two weeks' leave. That is still worth one look:
+//     the reviewer confirms with the person, out of band.
+//   - A new admin account (Medium, see SEVERITY).
+//   - Ingestion delay: a sign-in that reaches the workspace more than an
+//     hour late falls outside the 1-hour judge window and is never judged
+//     (the usual scheduled-rule limit; verify: on the first live alert).
+//
+// TUNABLE
+//   LookBack 14d (Sentinel's maximum), JudgeWindow 1h (= the run interval),
+//   PrivilegedNamePattern. An empty PrivilegedUserIds list (a standalone
+//   paste) still watches the admin naming; it never widens anything.
+//
+// SUGGESTED SENTINEL RULE
+//   Frequency 1h · Lookback 14d · one alert per row · Severity column ·
+//   Entities: Account = UserPrincipalName / UserId, IP = IPAddress.
+//
+// AUTOMATED RESPONSE
+//   Notify on every incident; on High, the approval-gated containment card
+//   (revoke sessions, then disable) - it only asks. The reviewer confirms
+//   with the account owner out of band before approving.
+//
+// WHAT CHANGED FROM THE OLD RULE
+//   - 90-day look-back -> 14 days (Sentinel's limit, above).
+//   - Watchlist 'PrivilegedAccounts' by UPN -> immutable object ids
+//     rendered by Terraform, plus the lab's admin naming.
+//   - ResultType == 0 (a number) -> "0": the column is a string.
+//   - Non-interactive refreshes now count as activity; break-glass left to
+//     its own rule; a new account is Medium instead of High.
+// =============================================================================
+
+let LookBack = 14d;
+let JudgeWindow = 1h;
+// Privileged users by OBJECT ID (rendered by modules/monitoring, as in
+// device-code-signin.kql; committed empty, so a standalone run uses the
+// naming only).
+let PrivilegedUserIds = dynamic([]); // @@PRIVILEGED_USER_IDS@@
+let PrivilegedNamePattern = @"(?i)^(adm-[a-z0-9._-]+|tier0-admin-[0-9]{2})@";
+let BreakGlassPattern = @"(?i)^bg-admin-[0-9]{2}@";
+let Successes = union
+    (SigninLogs
+        | where TimeGenerated > ago(LookBack) and ResultType == "0"
+        | project TimeGenerated, UserId, UserPrincipalName, IPAddress, AppDisplayName, SignInType = "interactive"),
+    (AADNonInteractiveUserSignInLogs
+        | where TimeGenerated > ago(LookBack) and ResultType == "0"
+        | project TimeGenerated, UserId, UserPrincipalName, IPAddress, AppDisplayName, SignInType = "non-interactive")
+    | where UserId in (PrivilegedUserIds) or UserPrincipalName matches regex PrivilegedNamePattern
+    | where not(UserPrincipalName matches regex BreakGlassPattern);
+let PriorActivity = Successes
+    | where TimeGenerated <= ago(JudgeWindow)
+    | summarize LastPriorSignIn = max(TimeGenerated) by UserId;
+let CreatedInWindow = AuditLogs
+    | where TimeGenerated > ago(LookBack)
+    | where OperationName == "Add user" and Result =~ "success"
+    | mv-expand Target = TargetResources
+    | extend UserId = tostring(Target.id)
+    | where isnotempty(UserId)
+    | summarize CreatedOn = min(TimeGenerated) by UserId;
+Successes
+| where TimeGenerated > ago(JudgeWindow) and SignInType == "interactive"
+| summarize arg_min(TimeGenerated, UserPrincipalName, IPAddress, AppDisplayName),
+            SignIns = count(), IPAddresses = make_set(IPAddress, 10) by UserId
+| join kind=leftanti PriorActivity on UserId
+| join kind=leftouter CreatedInWindow on UserId
+| project-away UserId1
+| extend NewAccount = isnotnull(CreatedOn)
+| extend QuietSince = ago(LookBack)
+| extend PrivilegedById = UserId in (PrivilegedUserIds)
+| extend Severity = iff(NewAccount, "Medium", "High")
+| project TimeGenerated, Severity, UserPrincipalName, UserId, PrivilegedById, NewAccount, CreatedOn,
+          QuietSince, SignIns, IPAddress, IPAddresses, AppDisplayName

@@ -75,3 +75,11 @@ lab_admin_group_display_name = "PIM-AWS-Lab-Admins"
 # Optional lineage pin: envs/dev output aws_admin_group_object_id
 lab_admin_entra_group_object_id = ""
 lab_admin_session_duration      = "PT1H"
+
+# ---- Audit trail (optional, off by default - audit-trail.tf) ----------------
+# CloudTrail trail contoso-lab-audit-trail + its S3 bucket + the free
+# external-access IAM Access Analyzer. Apply with the LabAdministrator
+# profile (idlab-labadmin): the analyzer's service-linked role needs an IAM
+# write the operator is denied.
+enable_audit_baseline    = false
+audit_log_retention_days = 365

@@ -586,6 +586,36 @@
           ]
         }
       }
+    },
+    "AzureDiagnostics": {
+      "source": {
+        "url": "https://learn.microsoft.com/azure/azure-monitor/reference/tables/azurediagnostics",
+        "msDate": "2026-09-28",
+        "read": "2026-11-06",
+        "via": "getschema on loga-idlab (AzureDiagnostics | where ResourceProvider == \"MICROSOFT.KEYVAULT\"), run as the lab operator on 2026-11-06",
+        "note": "A SUBSET, not the full table: AzureDiagnostics gains a column the first time a resource sends a field it does not have yet (Learn, same page), so Learn's list cannot name every Key Vault column. These are the Key Vault AuditEvent columns keyvault-bulk-secret-read.kql reads, with the types the live workspace reports. Two differ from Learn's list: identity_claim_appid_g is string here (Learn: Guid), and the workspace has ResourceId (Learn lists _ResourceId)."
+      },
+      "learnColumns": {
+        "TimeGenerated": "datetime",
+        "Category": "string",
+        "CallerIPAddress": "string",
+        "httpStatusCode_d": "real",
+        "id_s": "string",
+        "identity_claim_appid_g": "string",
+        "identity_claim_idtyp_s": "string",
+        "identity_claim_oid_g": "string",
+        "identity_claim_upn_s": "string",
+        "OperationName": "string",
+        "requestUri_s": "string",
+        "Resource": "string",
+        "ResourceGroup": "string",
+        "ResourceId": "string",
+        "ResourceProvider": "string",
+        "ResourceType": "string",
+        "ResultSignature": "string",
+        "ResultType": "string",
+        "SubscriptionId": "string"
+      }
     }
   },
   "watchlists": {

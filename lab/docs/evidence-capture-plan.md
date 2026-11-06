@@ -290,7 +290,7 @@ sign-ins of history: Microsoft's atypical-travel simulation on test user A.
 | Dynamic database credentials | L02 (local only; no tenant step) |
 | NHI + Agent ID | E21, E42, E43, E53, E53b |
 | Risk detection simulation | E26, E27, E37, E38 |
-| KQL alerts firing (22 rules) | E18, E27, E28b, E31, E39c, E42-E48 (incl. E45b, E46c), E49, E51, E51b, E51c, E51f, E36b (`pim-activation-without-auth-context`, expected quiet) |
+| KQL alerts firing (24 rules; none yet for the 2 v3 rules, not deployed) | E18, E27, E28b, E31, E39c, E42-E48 (incl. E45b, E46c), E49, E51, E51b, E51c, E51f, E36b (`pim-activation-without-auth-context`, expected quiet) |
 | AD plane (Kerberoast, privileged-group add, DCSync, AD assessment) | E51b, E51c |
 | CA restore / token protection | E51d; E51e |
 | Protected actions (CA023 + `c2`) | E51g |

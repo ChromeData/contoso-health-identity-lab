@@ -1,0 +1,70 @@
+RBAC linter against a real cluster (local, no tenant)
+utc: 2026-11-06T07:10:06Z
+cluster: throwaway docker container rancher/k3s:v1.31.4-k3s1 (digest sha256:627fc392e5e7992fb8aa738fb04bc0c9ae9a068999cb4cfbea5858661cd79d04), deleted after the run
+planted: kubectl apply -f lab/k8s/rbac-lint/fixtures/risky-rbac.yaml (namespace app created for its Role)
+old linter: scripts/rbac_lint.py from the earlier Conjur-Kubernetes-KubiScan lab
+new linter: lab/k8s/rbac-lint/rbac_lint.py (this branch)
+
+== export A: kubectl get --raw /apis/rbac.authorization.k8s.io/v1/clusterroles
+kind ClusterRoleList | items 73 | items carrying a kind field 0
+-- old linter:
+
+No risky RBAC found outside Kubernetes' own defaults.
+exit 0
+-- new linter:
+  [bind          ] ClusterRole/lab-bind: can bind any role to itself, including cluster-admin (bind)
+  [escalate      ] ClusterRole/lab-escalate: can grant itself arbitrary permissions (escalate)
+  [secrets-read  ] ClusterRole/lab-secret-reader: can read secrets
+  [escalate      ] ClusterRole/lab-wildcard: can grant itself arbitrary permissions (escalate)
+  [bind          ] ClusterRole/lab-wildcard: can bind any role to itself, including cluster-admin (bind)
+  [impersonate   ] ClusterRole/lab-wildcard: can act as any user/group/SA (impersonate)
+  [secrets-read  ] ClusterRole/lab-wildcard: can read secrets
+  [pods-create   ] ClusterRole/lab-wildcard: can create pods (run a pod as a more powerful service account)
+  [wildcard-all  ] ClusterRole/lab-wildcard: wildcard verb on wildcard resource (cluster-admin-equivalent)
+  [token-create  ] ClusterRole/lab-wildcard: can mint service-account tokens
+  [pods-create   ] ClusterRole/local-path-provisioner-role: can create pods (run a pod as a more powerful service account)
+
+  (39 finding(s) on Kubernetes built-in roles hidden, --include-builtin to show)
+
+read 73 Role/ClusterRole object(s)
+11 risky RBAC rule(s) found on non-built-in roles.
+exit 1
+
+== export B: kubectl get clusterroles,roles -A -o json
+kind List | items 81 | items carrying a kind field 81
+-- old linter (lines for the planted lab-* roles omitted; the earlier linter found them in this shape):
+  [escalate      ] ClusterRole/k3s-cloud-controller-manager: can grant itself arbitrary permissions (escalate)
+  [bind          ] ClusterRole/k3s-cloud-controller-manager: can bind any role to itself, including cluster-admin (bind)
+  [impersonate   ] ClusterRole/k3s-cloud-controller-manager: can act as any user/group/SA (impersonate)
+  [escalate      ] ClusterRole/k3s-cloud-controller-manager: can grant itself arbitrary permissions (escalate)
+  [bind          ] ClusterRole/k3s-cloud-controller-manager: can bind any role to itself, including cluster-admin (bind)
+  [impersonate   ] ClusterRole/k3s-cloud-controller-manager: can act as any user/group/SA (impersonate)
+  [escalate      ] ClusterRole/local-path-provisioner-role: can grant itself arbitrary permissions (escalate)
+  [bind          ] ClusterRole/local-path-provisioner-role: can bind any role to itself, including cluster-admin (bind)
+  [impersonate   ] ClusterRole/local-path-provisioner-role: can act as any user/group/SA (impersonate)
+  [pods-create   ] ClusterRole/local-path-provisioner-role: can create pods (schedule a pod with a privileged token)
+
+  (47 finding(s) on Kubernetes built-in roles hidden, --include-builtin to show)
+
+21 risky RBAC rule(s) found on non-built-in roles.
+Confirm each against KubiScan's live-cluster output, they should agree.
+exit 1
+-- new linter:
+  [bind          ] ClusterRole/lab-bind: can bind any role to itself, including cluster-admin (bind)
+  [escalate      ] ClusterRole/lab-escalate: can grant itself arbitrary permissions (escalate)
+  [secrets-read  ] ClusterRole/lab-secret-reader: can read secrets
+  [escalate      ] ClusterRole/lab-wildcard: can grant itself arbitrary permissions (escalate)
+  [bind          ] ClusterRole/lab-wildcard: can bind any role to itself, including cluster-admin (bind)
+  [impersonate   ] ClusterRole/lab-wildcard: can act as any user/group/SA (impersonate)
+  [secrets-read  ] ClusterRole/lab-wildcard: can read secrets
+  [pods-create   ] ClusterRole/lab-wildcard: can create pods (run a pod as a more powerful service account)
+  [wildcard-all  ] ClusterRole/lab-wildcard: wildcard verb on wildcard resource (cluster-admin-equivalent)
+  [token-create  ] ClusterRole/lab-wildcard: can mint service-account tokens
+  [pods-create   ] ClusterRole/local-path-provisioner-role: can create pods (run a pod as a more powerful service account)
+  [pods-create   ] Role/lab-pod-creator: can create pods (run a pod as a more powerful service account)
+
+  (41 finding(s) on Kubernetes built-in roles hidden, --include-builtin to show)
+
+read 81 Role/ClusterRole object(s)
+12 risky RBAC rule(s) found on non-built-in roles.
+exit 1

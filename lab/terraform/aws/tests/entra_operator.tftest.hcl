@@ -107,8 +107,8 @@ run "guardrails_deny_every_iam_write" {
     error_message = "the guardrails must deny every IAM write (no second role, user, key or trust edit), PassRole, Roles Anywhere and account closure"
   }
   assert {
-    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny" && s.Resource == "*"])
-    error_message = "the guardrail policy may only Deny, account-wide (a Deny scoped to the operator's own role is bypassed by creating another role)"
+    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny" && (s.Resource == "*" || s.Sid == "NoAuditBucketTampering")])
+    error_message = "the guardrail policy may only Deny, account-wide (a Deny scoped to the operator's own role is bypassed by creating another role); the one exception is the audit-bucket statement"
   }
   assert {
     condition     = jsondecode(aws_iam_role.entra_operator[0].assume_role_policy).Statement[0].Principal.Federated == aws_iam_openid_connect_provider.entra[0].arn
@@ -170,7 +170,41 @@ run "guardrails_v2_close_the_identity_center_path" {
     error_message = "no new member account (OrganizationAccountAccessRole), invitation, delegated administrator, SCP change, root session or recovery-contact change"
   }
   assert {
-    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny" && s.Resource == "*" && !contains(s.Action, "*")])
-    error_message = "every guardrail statement is an account-wide Deny, and none denies everything"
+    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny" && (s.Resource == "*" || s.Sid == "NoAuditBucketTampering") && !contains(s.Action, "*")])
+    error_message = "every guardrail statement is an account-wide Deny (the audit-bucket one aside, v3), and none denies everything"
+  }
+}
+
+# Guardrails v3 (audit-trail.tf): the watched identity can't switch off or
+# erase what watches it. Fails against v2, which had no such statement.
+run "guardrails_v3_protect_the_audit_trail" {
+  command = apply
+
+  variables {
+    enable_entra_operator = true
+  }
+
+  assert {
+    condition = length(setsubtract(
+      ["cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "cloudtrail:UpdateTrail", "cloudtrail:PutEventSelectors", "access-analyzer:DeleteAnalyzer", "access-analyzer:CreateArchiveRule", "access-analyzer:UpdateFindings"],
+      flatten([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Action if s.Effect == "Deny" && s.Resource == "*"])
+    )) == 0
+    error_message = "the operator must be denied, account-wide, stopping/deleting/reconfiguring any trail and deleting the analyzer or hiding its findings"
+  }
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement :
+      length(setsubtract(["s3:DeleteBucket", "s3:PutBucketPolicy", "s3:PutLifecycleConfiguration", "s3:PutBucketVersioning", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutObject", "s3:PutBucketRequestPayment"], s.Action)) == 0
+      && toset(s.Resource) == toset(["arn:aws:s3:::contoso-health-audit-trail-123456789012", "arn:aws:s3:::contoso-health-audit-trail-123456789012/*"])
+      if s.Sid == "NoAuditBucketTampering"
+    ]) && length([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s if s.Sid == "NoAuditBucketTampering"]) == 1
+    error_message = "the operator must be denied deleting, overwriting or loosening the audit bucket and its objects, or making it Requester Pays (CloudTrail cannot deliver to one) - and only that bucket (it still runs the patient portal)"
+  }
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement :
+      contains(flatten([s.Action]), "cloudtrail:CreateTrail") || contains(flatten([s.Action]), "cloudtrail:LookupEvents") || contains(flatten([s.Action]), "s3:GetObject")
+    ])
+    error_message = "reads stay open: the operator still reads the trail (LookupEvents, log files) for evidence"
   }
 }
