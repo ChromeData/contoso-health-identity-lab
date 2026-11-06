@@ -17,10 +17,9 @@
       2. BIRTHRIGHT -- All-Nurses is DYNAMIC on (department -eq "Nursing"), so
          she is added AUTOMATICALLY by Entra. This script only *verifies* it
          (you cannot, and must not, manually add to a dynamic group).
-      3. APP GROUPS (fallback only) -- add her to App-ServiceNow-Users
-         directly when the access package is not available (the
-         no-Governance path). Nurses get no AWS: that is the cloud
-         engineers' package.
+      3. APP GROUPS (fallback only) -- add her to App-ServiceNow-Users and
+         App-AWS-IdentityCenter-Users directly when the access package is not
+         available (the no-Governance path).
       4. ACCESS PACKAGE -- the governed path, by the package's assignment model
          in lab/iga/access-catalog.json (ADR 0012):
            automatic (T3 birthright, e.g. "Nurse - Clinical Apps")
@@ -142,7 +141,7 @@ param(
 
     [Parameter()]
     [ValidateNotNullOrEmpty()]
-    [string[]]$AppGroupMailNicknames = @('app-servicenow-users'),
+    [string[]]$AppGroupMailNicknames = @('app-servicenow-users', 'app-aws-identitycenter-users'),
 
     [Parameter()]
     [bool]$UseAccessPackage = $true,

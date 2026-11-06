@@ -51,8 +51,6 @@ variable "access_packages" {
     lab/iga/access-catalog.json (tests/governance.tftest.hcl checks that):
       nurse     T3 automatic  birthright for nursing staff
       icu       T3 automatic  birthright for ICU staff (the mover target)
-      cloud_engineering
-                T3 automatic  birthright for cloud engineers (ServiceNow + AWS)
       icu_float T2 request    ICU apps for float / agency nurses: the
                               requestable side, so SoD links can sit on it
       pharmacy  T2 request    controlled-substance dispensing
@@ -60,8 +58,8 @@ variable "access_packages" {
   default = {
     nurse = {
       display_name = "Nurse - Clinical Apps"
-      description  = "Clinical apps for nursing staff (ServiceNow). Assigned automatically from your HR department and job title; nothing to request."
-      group_keys   = ["servicenow"]
+      description  = "Clinical apps for nursing staff (ServiceNow + AWS). Assigned automatically from your HR department and job title; nothing to request."
+      group_keys   = ["servicenow", "aws"]
       tier         = "T3"
       assignment   = "automatic"
     }
@@ -69,15 +67,6 @@ variable "access_packages" {
       display_name = "ICU - Critical Care Apps"
       description  = "Critical-care apps for ICU staff. Assigned automatically from your HR department and job title; float and agency nurses request ICU - Float Access instead."
       group_keys   = ["servicenow", "icu_critical_care"]
-      tier         = "T3"
-      assignment   = "automatic"
-    }
-    # Cloud engineers run the hospital's patient portal in AWS, so AWS is
-    # their birthright - not the nurses'.
-    cloud_engineering = {
-      display_name = "IT - Cloud Engineering Apps"
-      description  = "ServiceNow + AWS for cloud engineers, who run the patient portal in AWS. Assigned automatically from your HR department and job title; nothing to request."
-      group_keys   = ["servicenow", "aws"]
       tier         = "T3"
       assignment   = "automatic"
     }
