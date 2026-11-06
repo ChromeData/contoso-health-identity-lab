@@ -1,9 +1,9 @@
-// Numbering and flow marks on the lab map, matching the map artifact: tiles 5.1, 5.2 ... and orange chevrons between stations.
+// Numbering and flow marks on the lab map, matching the map artifact: tiles 6.1, 6.2 ... and orange chevrons between stations.
 (function () {
   const lab = window.__lab; if (!lab) return;
   const svg = lab.svg, NS = 'http://www.w3.org/2000/svg';
   const mk = (t, a, p) => { const e = document.createElementNS(NS, t); for (const q in a) e.setAttribute(q, a[q]); p.appendChild(e); return e; };
-  const num = {}; lab.L.st.forEach((s) => s.nodes.forEach((nd, j) => { num[nd.id] = `${s.i + 5}.${j + 1}`; }));
+  const num = {}; lab.L.st.forEach((s) => s.nodes.forEach((nd, j) => { num[nd.id] = `${s.i + 6}.${j + 1}`; }));
   svg.querySelectorAll('g.node[data-go^="tile:"]').forEach((g) => {
     const id = g.getAttribute('data-go').slice(5), nd = lab.NB[id]; if (!nd) return;
     const bg = mk('g', { class: 'tnum', transform: `translate(${-nd.size / 2 + 4},${-nd.size / 2 + 4})`, 'pointer-events': 'none' }, g);
