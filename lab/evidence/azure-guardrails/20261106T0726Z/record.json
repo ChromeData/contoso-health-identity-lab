@@ -1,0 +1,76 @@
+{
+ "what": "Read-only checks before the Azure Policy guardrails (lab/terraform/modules/azure-guardrails via envs/bootstrap): the real Owner roleDefinitionId format (the old repo's bug), who holds Owner, Key Vault protection, why APPLY cannot write policy, PIM eligibilities, and a targeted plan. NOTHING was applied.",
+ "utc": "2026-11-06T07:26:36Z",
+ "identity": "lab operator (certificate service principal, via lab/scripts/operator/op)",
+ "tenant": "86a2e327-4951-4348-a3c4-6f4b79ffd8f2",
+ "subscription": "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274",
+ "owner_role_assignments": [
+  {
+   "principalId": "(redacted: the owner's account object id)",
+   "principalType": "User",
+   "roleDefinitionId": "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+   "scope": "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274",
+   "who": "the owner's account (read only; not touched)"
+  },
+  {
+   "principalId": "4b73af70-7cbd-4fdd-b6a7-c08af996b335",
+   "principalType": "ServicePrincipal",
+   "roleDefinitionId": "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+   "scope": "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274",
+   "who": "the lab operator"
+  }
+ ],
+ "key_vaults": [
+  {
+   "enablePurgeProtection": true,
+   "enableSoftDelete": true,
+   "name": "kv-idlab-20f1",
+   "softDeleteRetentionInDays": 90
+  }
+ ],
+ "contributor_notActions_authorization": [
+  "Microsoft.Authorization/*/Delete",
+  "Microsoft.Authorization/*/Write",
+  "Microsoft.Authorization/elevateAccess/Action"
+ ],
+ "role_eligibility_schedules_on_subscription": [],
+ "policy_assignments_before": [
+  {
+   "displayName": "ASC Default (subscription: de0b2a93-1c62-47b3-aaaf-1bdd1939a274)",
+   "name": "SecurityCenterBuiltIn"
+  }
+ ],
+ "roleAssignments_policy_aliases": [
+  "Microsoft.Authorization/roleAssignments/roleDefinitionId",
+  "Microsoft.Authorization/roleAssignments/principalId",
+  "Microsoft.Authorization/roleAssignments/principalType",
+  "Microsoft.Authorization/roleAssignments/canDelegate",
+  "Microsoft.Authorization/roleAssignments/description",
+  "Microsoft.Authorization/roleAssignments/condition",
+  "Microsoft.Authorization/roleAssignments/conditionVersion",
+  "Microsoft.Authorization/roleAssignments/scope",
+  "Microsoft.Authorization/roleAssignments/createdOn",
+  "Microsoft.Authorization/roleAssignments/updatedOn",
+  "Microsoft.Authorization/roleAssignments/createdBy",
+  "Microsoft.Authorization/roleAssignments/updatedBy",
+  "Microsoft.Authorization/roleAssignments/delegatedManagedIdentityResourceId"
+ ],
+ "builtin_keyvault_deletion_protection": {
+  "displayName": "Key vaults should have deletion protection enabled",
+  "mode": "Indexed",
+  "version": "2.1.0"
+ },
+ "targeted_plan": {
+  "tool": "OpenTofu 1.13.1 (the bootstrap remote state carries registry.opentofu.org providers), azurerm 4.81.0, scratch copy, remote state read with -lock=false, no apply",
+  "vars": "the local terraform.tfvars + enable_azure_guardrails=true + owner_allowed_principal_ids = the two Owner principalIds above",
+  "target": "module.azure_guardrails",
+  "result": [
+   "# module.azure_guardrails[0].azurerm_policy_definition.keyvault_protection will be created",
+   "# module.azure_guardrails[0].azurerm_policy_definition.no_standing_owner will be created",
+   "# module.azure_guardrails[0].azurerm_subscription_policy_assignment.keyvault_protection will be created",
+   "# module.azure_guardrails[0].azurerm_subscription_policy_assignment.no_standing_owner will be created",
+   "Plan: 4 to add, 0 to change, 0 to destroy."
+  ]
+ },
+ "key_vaults_note": "az keyvault show per vault (az keyvault list omits these properties); kv-idlab-20f1 is the only vault"
+}

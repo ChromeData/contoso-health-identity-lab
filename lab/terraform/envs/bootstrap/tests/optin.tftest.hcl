@@ -106,6 +106,10 @@ run "defaults_add_nothing" {
     condition     = length(azurerm_role_assignment.pim_demo_readers) == 0 && length(output.pim_demo_readers_azure_role_assignment_ids) == 0
     error_message = "PIM-Demo-Readers gets no Azure role by default"
   }
+  assert {
+    condition     = length(module.azure_guardrails) == 0 && output.azure_guardrails == null
+    error_message = "no Azure Policy guardrail is assigned by default"
+  }
   # config-drift.yml (schedule on main) signs in as PLAN: the main-ref
   # subject must be in every bootstrap apply, or it fails with AADSTS700213.
   assert {
@@ -314,4 +318,32 @@ run "pim_demo_readers_group_id_must_be_a_guid" {
   }
 
   expect_failures = [var.pim_demo_readers_group_object_id]
+}
+
+# Azure Policy guardrails: opt-in, Audit by default, Deny only with allowed
+# Owners (the module's precondition, reached through this root).
+run "azure_guardrails_opt_in_audits_first" {
+  command = plan
+
+  variables {
+    enable_azure_guardrails = true
+  }
+
+  assert {
+    condition     = length(module.azure_guardrails) == 1 && output.azure_guardrails.effects.standing_owner == "Audit" && output.azure_guardrails.effects.keyvault_protection == "Audit"
+    error_message = "enable_azure_guardrails assigns both guardrails, in Audit"
+  }
+}
+
+# (A Deny with nobody allowed is refused by the module's precondition:
+# modules/azure-guardrails/tests, run deny_with_nobody_allowed_is_refused.)
+run "azure_guardrails_effect_typo_is_refused" {
+  command = plan
+
+  variables {
+    enable_azure_guardrails = true
+    standing_owner_effect   = "deny"
+  }
+
+  expect_failures = [var.standing_owner_effect]
 }

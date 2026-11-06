@@ -14,6 +14,8 @@
 #   * Azure role grants the APPLY identity may not make (delegable_role_ids
 #     below): EVIDENCE's create-only container grant and, opt-in, the
 #     read-only Azure roles of PIM-Demo-Readers
+#   * Opt-in Azure Policy guardrails (modules/azure-guardrails): no new
+#     standing Owner, Key Vaults keep deletion protection - Audit first
 #
 # Why a separate root: the identities CI runs as must not be managed BY that
 # CI. If envs/dev owned them, a PR could widen the APPLY identity's Graph
@@ -400,4 +402,24 @@ resource "azurerm_role_assignment" "pim_demo_readers" {
   principal_id       = data.azuread_group.pim_demo_readers[0].object_id
   principal_type     = "Group"
   description        = "PIM-Demo-Readers (read-only presenter, eligible-only membership through PIM for Groups). envs/bootstrap, human-applied."
+}
+
+# -----------------------------------------------------------------------------
+# Azure Policy guardrails (modules/azure-guardrails): no new standing Owner,
+# and Key Vaults keep deletion protection. Both in Audit until a human sets
+# Deny. Here, not in envs/dev: writing policy definitions and assignments
+# needs Microsoft.Authorization/policy*/write, which APPLY's Contributor
+# excludes (NotActions Microsoft.Authorization/*/Write) - and a guardrail CI
+# could edit would not guard CI. The module header lists who it can and
+# can't affect; in short, PLAN and APPLY never hold or grant Owner, and the
+# two standing Owners go on owner_allowed_principal_ids.
+# -----------------------------------------------------------------------------
+module "azure_guardrails" {
+  source = "../../modules/azure-guardrails"
+  count  = var.enable_azure_guardrails ? 1 : 0
+
+  subscription_id             = data.azurerm_subscription.current.id
+  standing_owner_effect       = var.standing_owner_effect
+  keyvault_protection_effect  = var.keyvault_protection_effect
+  owner_allowed_principal_ids = var.owner_allowed_principal_ids
 }
