@@ -194,11 +194,11 @@ run "guardrails_v3_protect_the_audit_trail" {
   assert {
     condition = alltrue([
       for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement :
-      length(setsubtract(["s3:DeleteBucket", "s3:PutBucketPolicy", "s3:PutLifecycleConfiguration", "s3:PutBucketVersioning", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutObject"], s.Action)) == 0
+      length(setsubtract(["s3:DeleteBucket", "s3:PutBucketPolicy", "s3:PutLifecycleConfiguration", "s3:PutBucketVersioning", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutObject", "s3:PutBucketRequestPayment"], s.Action)) == 0
       && toset(s.Resource) == toset(["arn:aws:s3:::contoso-health-audit-trail-123456789012", "arn:aws:s3:::contoso-health-audit-trail-123456789012/*"])
       if s.Sid == "NoAuditBucketTampering"
     ]) && length([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s if s.Sid == "NoAuditBucketTampering"]) == 1
-    error_message = "the operator must be denied deleting, overwriting or loosening the audit bucket and its objects - and only that bucket (it still runs the patient portal)"
+    error_message = "the operator must be denied deleting, overwriting or loosening the audit bucket and its objects, or making it Requester Pays (CloudTrail cannot deliver to one) - and only that bucket (it still runs the patient portal)"
   }
   assert {
     condition = !anytrue([

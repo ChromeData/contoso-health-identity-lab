@@ -376,7 +376,7 @@ deleted afterwards.
 | Trail | `aws_cloudtrail.audit` | `contoso-lab-audit-trail`: all regions, global services (IAM, STS, Identity Center), log file validation on, management events (reads and writes) only |
 | Bucket | `aws_s3_bucket.audit` + public-access block, ownership controls, versioning, encryption, lifecycle | `contoso-health-audit-trail-<account id>`: private, ACLs off, versioned, SSE-S3, kept 365 days (`audit_log_retention_days`, 90-3650), not `force_destroy` |
 | Bucket policy | `aws_s3_bucket_policy.audit` | CloudTrail may check the ACL and write under `AWSLogs/<account>/`, **only for this trail** (`aws:SourceArn`); anything not over TLS is denied |
-| Access Analyzer | `aws_accessanalyzer_analyzer.external_access` | `contoso-lab-external-access`, type `ACCOUNT`: lists anything in the account shared outside it |
+| Access Analyzer | `aws_accessanalyzer_analyzer.external_access` | `contoso-lab-external-access`, type `ACCOUNT`, in `aws_region` only: lists that region's resources shared outside the account. A bucket or key shared from another region would not show; this root builds everything in `aws_region` (us-east-1), and a second region needs its own analyzer |
 
 **The operator can't erase it (guardrails v3).** Before this change the
 operator, with AdministratorAccess, could stop or delete the trail
@@ -388,7 +388,8 @@ operator, with AdministratorAccess, could stop or delete the trail
   delete the analyzer, or hide its findings (archive rules, `UpdateFindings`).
 - `NoAuditBucketTampering`, on the audit bucket only: delete the bucket or
   any log file or version, write into it, or change its policy, lifecycle,
-  versioning, encryption, public-access block, ownership or object lock.
+  versioning, encryption, public-access block, ownership, object lock or
+  Requester Pays (CloudTrail can't deliver to a Requester Pays bucket).
   It's scoped to one bucket because the operator still runs the patient
   portal. A role-scoped Deny is usually dodged by making a new principal,
   and the operator can't make one (`NoIamChanges`).

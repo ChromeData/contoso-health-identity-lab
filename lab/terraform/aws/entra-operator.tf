@@ -45,7 +45,8 @@
 #   * NoAuditTampering (new in v3, audit-trail.tf): the operator can't
 #     stop, delete or reconfigure any CloudTrail trail, can't delete the
 #     Access Analyzer or hide its findings (archive rules, UpdateFindings),
-#     and can't delete, overwrite or loosen anything in the audit bucket.
+#     and can't delete, overwrite or loosen anything in the audit bucket,
+#     or make it Requester Pays (CloudTrail can't deliver to one).
 #     Before v3 it could (simulate-principal-policy 2026-11-06:
 #     cloudtrail:StopLogging and DeleteTrail "allowed"), which means the
 #     identity being watched could switch the camera off. The S3 part is
@@ -180,6 +181,9 @@ locals {
           "s3:PutLifecycleConfiguration", "s3:PutBucketVersioning",
           "s3:PutEncryptionConfiguration", "s3:PutBucketPublicAccessBlock",
           "s3:PutBucketOwnershipControls", "s3:PutBucketAcl",
+          # Requester Pays: CloudTrail can't deliver to such a bucket, so
+          # switching it on would stop new logs without a CloudTrail call.
+          "s3:PutBucketRequestPayment",
           "s3:PutBucketObjectLockConfiguration", "s3:PutObjectRetention",
           "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion",
         ]

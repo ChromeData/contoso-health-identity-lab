@@ -13,10 +13,13 @@
 #   * the S3 bucket it writes to: private, versioned, encrypted, TLS only,
 #     and a bucket policy that lets CloudTrail write ONLY for this one trail
 #     (aws:SourceArn), so no other account's trail can use the bucket;
-#   * an IAM Access Analyzer (type ACCOUNT): it lists every resource in the
-#     account that is shared OUTSIDE the account (an S3 bucket, a role trust,
-#     a KMS key policy...), so a leak like a public bucket shows up as a
-#     finding instead of waiting for someone to notice.
+#   * an IAM Access Analyzer (type ACCOUNT) in var.aws_region: it lists
+#     resources shared OUTSIDE the account (an S3 bucket, a role trust, a KMS
+#     key policy...), so a leak like a public bucket shows up as a finding
+#     instead of waiting for someone to notice. An analyzer covers the
+#     regional resources of its own region: a bucket or key shared from
+#     another region would not show here. This root builds everything in
+#     aws_region (us-east-1); a second region needs its own analyzer.
 #
 # WHY: the lab already leans on CloudTrail (ADR 0024 and 0025 quote
 # AssumeRoleWithWebIdentity and PutRolePolicy records as evidence) but never
