@@ -48,9 +48,13 @@ python3 -I -m unittest discover -s lab/pam/conjur/state-leak/tests -v   # the co
 ```
 
 Needs Docker, curl, openssl, python3 and HashiCorp Terraform 1.10 or later.
-OpenTofu is refused (the lab's CI runs Terraform). Exit 0 means the result
-matches this page, 1 means it does not (the table says what differed), and 2
-means the script could not run.
+OpenTofu is refused (the lab's CI runs Terraform). Exit 0 means every number in the
+table above held (the data source's three files each hold the value, the
+ephemeral path's are all clean and present, nothing was printed). 1 means
+one did not, and the script says which. 2 means the script could not run.
+That includes finding a `contoso-stateleak` stack already there, which it
+leaves alone. The compose project name is pinned, so an exported
+`COMPOSE_PROJECT_NAME` cannot point it at another stack.
 
 What it does: it starts its own Conjur (compose project `contoso-stateleak`,
 on 127.0.0.1:8093, separate from the `lab/pam` stack) and loads

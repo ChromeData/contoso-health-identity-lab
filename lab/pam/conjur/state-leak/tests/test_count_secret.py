@@ -81,5 +81,38 @@ class CountTests(unittest.TestCase):
         self.assertEqual(code, 2)
 
 
+GOOD_DS = {"state": "1", "backup": "1", "plan": "2", "log": "0"}
+GOOD_EP = {"state": "0", "backup": "0", "plan": "0", "log": "0"}
+
+
+class VerdictTests(unittest.TestCase):
+    """Every number the README publishes must be checked (review, PR #210)."""
+
+    def test_the_published_result_passes(self):
+        self.assertEqual(count_secret.verdict(GOOD_DS, GOOD_EP), [])
+
+    def test_each_data_source_file_must_hold_the_value(self):
+        for f in ("state", "backup", "plan"):
+            for bad in ("0", "absent"):
+                with self.subTest(file=f, value=bad):
+                    self.assertTrue(count_secret.verdict({**GOOD_DS, f: bad}, GOOD_EP))
+
+    def test_each_ephemeral_file_must_be_clean_and_present(self):
+        for f in ("state", "backup", "plan", "log"):
+            for bad in ("1", "absent"):
+                with self.subTest(file=f, value=bad):
+                    self.assertTrue(count_secret.verdict(GOOD_DS, {**GOOD_EP, f: bad}))
+
+    def test_printed_value_fails(self):
+        self.assertTrue(count_secret.verdict({**GOOD_DS, "log": "1"}, GOOD_EP))
+
+    def test_cli_exit_codes(self):
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(count_secret.main(["--verdict", "1", "1", "2", "0", "0", "0", "0", "0"]), 0)
+            self.assertEqual(count_secret.main(["--verdict", "1", "absent", "2", "0", "0", "0", "0", "0"]), 1)
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(count_secret.main(["--verdict", "1"]), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -22,9 +22,10 @@
 #      as 3. Its precondition proves the value really was read.
 #   5. Deletes Conjur, its volume and the work folder (KEEP=1 keeps them).
 #
-# Exit: 0 = the result the README states (data source leaks, ephemeral does
-# not and did read the value); 1 = a different result (read the table);
-# 2 = could not run. Nothing secret is printed: counts and lengths only.
+# Exit: 0 = the result the README states (data source leaks into state,
+# backup and saved plan; ephemeral does not and did read the value);
+# 1 = a different result (read the table); 2 = could not run (including an
+# existing contoso-stateleak stack or a busy port, which it leaves alone). Nothing secret is printed: counts and lengths only.
 #
 # Secrets handling: the Conjur admin key, host key, auth tokens and the value
 # live in shell variables and 0600 files in a mktemp folder; they reach curl
@@ -62,15 +63,28 @@ tf_version="$("$TF_BIN" version 2>/dev/null | head -1)"
 (( BASH_REMATCH[1] > 1 || BASH_REMATCH[2] >= 10 )) \
   || die "Terraform >= 1.10 is needed for ephemeral resources (got $tf_version)"
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/conjur-state-leak.XXXXXX")"
-export COMPOSE_FILE="$HERE/docker-compose.yml" STATE_LEAK_PORT="$PORT"
+# The compose project is pinned HERE, for every docker compose call below. An
+# inherited COMPOSE_PROJECT_NAME (or COMPOSE_FILE) would otherwise point
+# them, and the cleanup's `down -v`, at someone else's stack.
+PROJECT=contoso-stateleak
+export COMPOSE_PROJECT_NAME="$PROJECT" COMPOSE_FILE="$HERE/docker-compose.yml" STATE_LEAK_PORT="$PORT"
 STATE_LEAK_DB_PASSWORD="$(openssl rand -hex 24)"
 STATE_LEAK_DATA_KEY="$(openssl rand -base64 32)"
 export STATE_LEAK_DB_PASSWORD STATE_LEAK_DATA_KEY
 
+# Refuse BEFORE taking ownership: if an earlier run (or a KEEP=1 stack) is
+# still there, or the port is taken, stop without touching it. The cleanup
+# trap is installed only after these checks, so a refusal deletes nothing.
+existing="$(docker compose ps -a -q 2>/dev/null)" || die "cannot ask docker compose about project $PROJECT"
+[[ -z "$existing" ]] || die "compose project $PROJECT already exists (an earlier KEEP=1 run?); remove it with: docker compose -p $PROJECT -f $COMPOSE_FILE down -v"
+if curl -fsS -o /dev/null "$URL/" 2>/dev/null; then
+  die "something already answers on $URL; set STATE_LEAK_PORT to a free port"
+fi
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/conjur-state-leak.XXXXXX")"
 cleanup() {
   if [[ "${KEEP:-0}" == 1 ]]; then
-    log "KEEP=1: left Conjur (project contoso-stateleak) and $WORK"
+    log "KEEP=1: left Conjur (project $PROJECT) and $WORK"
     return
   fi
   docker compose down -v --remove-orphans >/dev/null 2>&1 || true
@@ -79,9 +93,6 @@ cleanup() {
 trap cleanup EXIT
 
 # --- 1. Conjur ---------------------------------------------------------------
-if curl -fsS -o /dev/null "$URL/" 2>/dev/null; then
-  die "something already answers on $URL; set STATE_LEAK_PORT to a free port"
-fi
 log "Starting a throwaway Conjur OSS 1.27.0 on $URL"
 docker compose up -d >/dev/null 2>&1 || die "docker compose up failed (docker compose -f $COMPOSE_FILE logs)"
 # Root answers 200 unauthenticated once Conjur is up (the earlier lab found
@@ -158,7 +169,7 @@ run_path() {  # run_path NAME [extra terraform args...]
   # The second apply changes run_id, so Terraform writes
   # terraform.tfstate.backup: the earlier lab's open question was whether the
   # backup keeps the value too. "absent" in the table means no backup was
-  # written, and the ephemeral verdict below treats it as clean.
+  # written; the verdict counts that as a failure on either path.
   local counts
   counts="$(python3 -I "$HERE/count_secret.py" "$dir/terraform.tfstate" \
     "$dir/terraform.tfstate.backup" "$dir/saved.tfplan" "$logf")" || die "[$name] the scan could not run"
@@ -195,18 +206,8 @@ done
 echo "(times the ${#secret}-character value appears in each file)"
 echo
 
-ok=1
-[[ "$(res datasource state)" =~ ^[1-9] ]] || { echo "UNEXPECTED: the data source path did NOT put the value in terraform.tfstate"; ok=0; }
-for f in state backup plan log; do
-  [[ "$(res ephemeral $f)" == 0 || "$(res ephemeral $f)" == absent ]] \
-    || { echo "UNEXPECTED: the ephemeral path left the value in its $f file ($(res ephemeral $f))"; ok=0; }
-done
-[[ "$(res ephemeral state)" == 0 ]] || { echo "UNEXPECTED: the ephemeral path wrote no state file to check"; ok=0; }
-[[ "$(res datasource log)" == 0 ]] || { echo "UNEXPECTED: Terraform printed the value on screen"; ok=0; }
-
-if [[ $ok -eq 1 ]]; then
-  echo "AS STATED: the data source wrote the secret into state in plaintext; the ephemeral resource"
-  echo "read it (precondition passed) and left it in no state, plan or output file."
-  exit 0
-fi
-exit 1
+# The verdict is count_secret.py's (unit-tested): every published number must
+# hold, including the data source's backup and saved plan.
+python3 -I "$HERE/count_secret.py" --verdict \
+  "$(res datasource state)" "$(res datasource backup)" "$(res datasource plan)" "$(res datasource log)" \
+  "$(res ephemeral state)" "$(res ephemeral backup)" "$(res ephemeral plan)" "$(res ephemeral log)"
