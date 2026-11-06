@@ -12,7 +12,8 @@
 #     allowed is refused at plan;
 #   * the Key Vault rule is Microsoft's built-in logic: purge protection
 #     must exist and be on, a vault being recovered is skipped, and a vault
-#     that merely leaves enableSoftDelete out on a current API is fine.
+#     that merely leaves enableSoftDelete out on a current API is fine
+#     (the branch structure is checked, not just the strings).
 
 mock_provider "azurerm" {}
 
@@ -139,6 +140,47 @@ run "keyvault_rule_is_the_builtin_logic" {
   assert {
     condition     = azurerm_policy_definition.keyvault_protection.mode == "Indexed" && azurerm_policy_definition.no_standing_owner.mode == "All"
     error_message = "Key Vault: Indexed (as the built-in); role assignments carry no location or tags, so the Owner rule must be All"
+  }
+}
+
+# The branch structure, not just the strings: the "soft delete missing"
+# check must sit only under the old-API guard, or a compliant vault on a
+# current API (which leaves enableSoftDelete out) would be flagged.
+run "keyvault_rule_branches_are_guarded_by_api_version" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for b in jsondecode(azurerm_policy_definition.keyvault_protection.policy_rule)["if"].allOf[2].anyOf :
+      strcontains(jsonencode(b), jsonencode({ less = "2019-09-01", value = "[requestContext().apiVersion]" }))
+      if strcontains(jsonencode(b), jsonencode({ exists = "false", field = "Microsoft.KeyVault/vaults/enableSoftDelete" }))
+    ])
+    error_message = "enableSoftDelete exists=false may only be checked under apiVersion < 2019-09-01"
+  }
+  assert {
+    condition = length([
+      for b in jsondecode(azurerm_policy_definition.keyvault_protection.policy_rule)["if"].allOf[2].anyOf : b
+      if strcontains(jsonencode(b), jsonencode({ exists = "false", field = "Microsoft.KeyVault/vaults/enableSoftDelete" }))
+    ]) == 1
+    error_message = "exactly one branch checks a missing enableSoftDelete (the old-API one)"
+  }
+  assert {
+    condition = anytrue([
+      for b in jsondecode(azurerm_policy_definition.keyvault_protection.policy_rule)["if"].allOf[2].anyOf :
+      jsonencode(b) == jsonencode({ allOf = [{ greaterOrEquals = "2019-09-01", value = "[requestContext().apiVersion]" }, { equals = "false", field = "Microsoft.KeyVault/vaults/enableSoftDelete" }] })
+    ])
+    error_message = "on a current API only an explicit enableSoftDelete = false is caught"
+  }
+  assert {
+    condition = length(setintersection(
+      toset([for b in jsondecode(azurerm_policy_definition.keyvault_protection.policy_rule)["if"].allOf[2].anyOf : jsonencode(b)]),
+      toset([jsonencode({ exists = "false", field = "Microsoft.KeyVault/vaults/enablePurgeProtection" }), jsonencode({ equals = "false", field = "Microsoft.KeyVault/vaults/enablePurgeProtection" })])
+    )) == 2
+    error_message = "the two purge-protection checks are top-level branches (any API version)"
+  }
+  assert {
+    condition     = length(jsondecode(azurerm_policy_definition.keyvault_protection.policy_rule)["if"].allOf[2].anyOf) == 4
+    error_message = "four branches, as in the built-in: old API, current API, purge protection missing, purge protection off"
   }
 }
 

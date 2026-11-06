@@ -109,7 +109,7 @@ or `keyvault_protection_effect`, made after the Audit results are read.
 
 ## Tests
 
-`tests/guardrails.tftest.hcl` has 6 runs, all mocked:
+`tests/guardrails.tftest.hcl` has 7 runs, all mocked:
 
 - Audit is the default, both in each assignment and in each definition's
   default.
@@ -117,7 +117,9 @@ or `keyvault_protection_effect`, made after the Audit results are read.
   and does not catch Contributor.
 - The allowed principals reach the assignment.
 - A Deny with nobody allowed is refused.
-- The Key Vault rule is the built-in logic.
+- The Key Vault rule is the built-in logic, branch by branch: a missing
+  `enableSoftDelete` is only caught on an old API version, so a compliant
+  vault on a current API that leaves it out is not flagged.
 - Bad inputs are refused.
 
 `envs/bootstrap/tests/optin.tftest.hcl` adds one assertion and two runs: nothing by default,
