@@ -611,6 +611,8 @@ lab/k8s/
 │   │                               digest-pinned image, restricted-PSA contexts
 │   └── negative/
 │       └── privileged-pod.yaml   ← deliberately insecure; only for `--dry-run=server`; Checkov skips it
+├── rbac-lint/                    ← offline RBAC linter + its canary and fixtures (rbac-lint/README.md);
+│                                   not part of pipeline.sh, runs in lab-tests.yml
 ├── ci/pipeline.sh                ← the one script (CI and humans), 12 stages
 ├── ci/lib.sh                     ← shared names + helpers
 └── test/k8s-e2e.sh               ← PASS/FAIL checks, "K8S E2E PASSED (n/n)"

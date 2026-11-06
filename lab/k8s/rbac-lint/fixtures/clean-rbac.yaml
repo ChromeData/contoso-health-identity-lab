@@ -1,0 +1,47 @@
+# The negative control: the lab's two human roles, as the cluster holds them.
+#
+# Written by hand from local.human_roles in lab/terraform/k8s/identity/main.tf
+# (app-deployer and auditor in clinical-apps; deployer_verbs / reader_verbs).
+# The linter must find NOTHING here. If it ever flags these, either the linter
+# gained a false positive or the Terraform gained a risky verb; both deserve a
+# look. NOT applied: Terraform owns the real objects.
+#
+# Note what the linter does NOT see: app-deployer may create Deployments, and a
+# Deployment creates pods. The lab closes that path with the
+# clinical-apps-workload-identity admission policy (lab/k8s/README.md
+# section 3), not with RBAC, so a static RBAC linter rightly says nothing.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-deployer
+  namespace: clinical-apps
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: auditor
+  namespace: clinical-apps
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
