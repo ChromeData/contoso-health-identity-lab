@@ -218,6 +218,11 @@ jobs:
           python3 -I lab/pam/test/guac_tunnel.test.py
           # ... and the scrubber pam-harness.yml runs before uploading failure logs.
           python3 -I lab/pam/test/scrub_logs.test.py
+          # Kubernetes RBAC linter (lab/k8s/rbac-lint): unit tests, then the
+          # canary that proves it still finds its planted risky roles in all
+          # three input shapes (PyYAML from the apt step above; no cluster).
+          python3 -I -m unittest discover -s lab/k8s/rbac-lint/tests -v
+          bash lab/k8s/rbac-lint/canary.sh
           # The counter behind the Conjur state-leak result (stdlib only).
           python3 -I -m unittest discover -s lab/pam/conjur/state-leak/tests -v
           # kusto-harness run-on-workspace.py: result decoding and verdict
