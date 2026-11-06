@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "Intended CyberArk safes, memberships and accounts: the file Invoke-SafeReconcile.ps1 compares a vault with.",
+    "Roles (audit / use / full) are translated to the 22 safe permissions in RoleMap.psm1, and nowhere else.",
+    "The safes mirror the lab's Vault stand-in (pam-policy.json tiers, operators.json): tier0-admins and",
+    "tier1-admins library sets become safes; members are groups named for the operators.json roles. Addresses are the",
+    "Samba AD harness domain (corp.test.local). No secrets: passwords are set by the CPM, never written here.",
+    "Ran against the stub vault only (tests/); never against CyberArk."
+  ],
+  "safes": [
+    {
+      "name": "CH-Tier0-Admins",
+      "description": "Tier-0 AD administrator accounts (domain control).",
+      "managingCPM": "PasswordManager",
+      "members": [
+        { "name": "CH-PAM-Admins", "role": "full" },
+        { "name": "CH-Tier0-Operators", "role": "use" },
+        { "name": "CH-PAM-Auditors", "role": "audit" }
+      ]
+    },
+    {
+      "name": "CH-Tier1-Admins",
+      "description": "Tier-1 server administrator accounts.",
+      "managingCPM": "PasswordManager",
+      "members": [
+        { "name": "CH-PAM-Admins", "role": "full" },
+        { "name": "CH-Tier1-Operators", "role": "use" },
+        { "name": "CH-PAM-Auditors", "role": "audit" }
+      ]
+    }
+  ],
+  "accounts": [
+    { "safe": "CH-Tier0-Admins", "platformId": "WinDomain", "address": "corp.test.local", "userName": "tier0-admin-01" },
+    { "safe": "CH-Tier0-Admins", "platformId": "WinDomain", "address": "corp.test.local", "userName": "tier0-admin-02" },
+    { "safe": "CH-Tier1-Admins", "platformId": "WinDomain", "address": "corp.test.local", "userName": "tier1-admin-01" }
+  ]
+}

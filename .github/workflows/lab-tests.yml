@@ -150,12 +150,12 @@ jobs:
         shell: pwsh
         run: ./lab/scripts/powershell/tests/Invoke-LabTests.ps1 -CI
 
-      - name: ITDR Pester suite
+      - name: ITDR + PAM Pester suites (incl. the CyberArk psPAS reconcile against its stub)
         shell: pwsh
         run: |
           Import-Module Pester -RequiredVersion 5.7.1
           $c = New-PesterConfiguration
-          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1')
+          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1', './lab/pam/cyberark/tests')
           $c.Run.Exit = $true
           $c.Output.Verbosity = 'Normal'
           Invoke-Pester -Configuration $c
