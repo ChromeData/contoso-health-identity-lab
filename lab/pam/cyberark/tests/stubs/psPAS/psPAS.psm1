@@ -26,9 +26,9 @@
       reconciler would have stopped at the first missing safe instead:
       -ErrorAction SilentlyContinue does not suppress a terminating error
       (checked in pwsh 7.6.1, 2026-11-06).
-    * Any read can be made to fail with a status ("fail": {"Get-PASSafeMember":
-      500}) so tests can prove a failed read stops the run instead of reading
-      as "no members".
+    * Any read or write can be made to fail with a status ("fail":
+      {"Get-PASSafeMember": 500}) so tests can prove a failure stops the run
+      with the "could not run" code instead of reading as drift.
 
   WHAT IT DOES NOT PROVE: anything about a real vault: paging, the real
   objects psPAS returns, predefined members, or the API's error codes.
@@ -110,6 +110,7 @@ function Get-PASAccount {
 function Add-PASSafe {
     [CmdletBinding()]
     param([string]$SafeName, [string]$Description, [string]$ManagingCPM)
+    Test-InjectedFailure $PSCmdlet 'Add-PASSafe'
     Write-StubWrite 'Add-PASSafe' @{ SafeName = $SafeName; ManagingCPM = $ManagingCPM }
 }
 
@@ -126,6 +127,7 @@ function Add-PASSafeMember {
         [boolean]$AccessWithoutConfirmation, [boolean]$CreateFolders, [boolean]$DeleteFolders,
         [boolean]$MoveAccountsAndFolders
     )
+    Test-InjectedFailure $PSCmdlet 'Add-PASSafeMember'
     Write-StubWrite 'Add-PASSafeMember' @{ SafeName = $SafeName; MemberName = $MemberName; Permissions = (Get-BoundPermission $PSBoundParameters) }
 }
 
@@ -142,12 +144,14 @@ function Set-PASSafeMember {
         [boolean]$AccessWithoutConfirmation, [boolean]$CreateFolders, [boolean]$DeleteFolders,
         [boolean]$MoveAccountsAndFolders
     )
+    Test-InjectedFailure $PSCmdlet 'Set-PASSafeMember'
     Write-StubWrite 'Set-PASSafeMember' @{ SafeName = $SafeName; MemberName = $MemberName; Permissions = (Get-BoundPermission $PSBoundParameters) }
 }
 
 function Add-PASAccount {
     [CmdletBinding()]
     param([string]$SafeName, [string]$platformID, [string]$address, [string]$userName, [string]$secretType)
+    Test-InjectedFailure $PSCmdlet 'Add-PASAccount'
     Write-StubWrite 'Add-PASAccount' @{ SafeName = $SafeName; userName = $userName; address = $address; platformID = $platformID }
 }
 

@@ -139,6 +139,58 @@ Describe 'Fails closed: a failed read stops the run (NEW)' {
     }
 }
 
+Describe 'Review fixes (PR #213)' {
+    It 'writes nothing when a later read fails, even with drift found earlier' {
+        # Membership drift (an auditor with RetrieveAccounts) is found first;
+        # the account search then fails. No reset may have been sent.
+        $t = Get-InSyncTenant
+        $over = Get-RolePerm audit
+        $over | Add-Member -NotePropertyName RetrieveAccounts -NotePropertyValue $true
+        $t.members['CH-Tier0-Admins'][1].Permissions = $over
+        $t.fail = @{ 'Get-PASAccount' = 500 }
+        $r = Invoke-Script $Reconcile (New-State $BaseState) (New-Tenant $t) -ExtraArgs '-Apply'
+        $r.ExitCode | Should -Be 2
+        $r.Writes.Count | Should -Be 0
+    }
+    It 'a write the vault rejects is exit 2, not the drift code' {
+        $t = @{ safes = @(); members = @{}; accounts = @(); fail = @{ 'Add-PASSafeMember' = 400 } }
+        $r = Invoke-Script $Reconcile (New-State $BaseState) (New-Tenant $t) -ExtraArgs '-Apply'
+        $r.ExitCode | Should -Be 2
+        $r.Output | Should -Match 'unexpected error'
+    }
+    It 'a state file whose root is not an object is exit 2' {
+        foreach ($bad in 'null', '[]', '42') {
+            $r = Invoke-Script $Reconcile (New-TempFile '.json' $bad) (New-Tenant $EmptyTenant) -ExtraArgs '-Apply'
+            $r.ExitCode | Should -Be 2 -Because "root $bad"
+            $r.Writes.Count | Should -Be 0
+        }
+    }
+    It 'refuses a safe declared twice and an account declared twice' {
+        $s = $BaseState.Clone()
+        $s.safes = @($BaseState.safes[0], $BaseState.safes[0])
+        $s.accounts = @($BaseState.accounts[0], $BaseState.accounts[0])
+        $r = Invoke-Script $Reconcile (New-State $s) (New-Tenant $EmptyTenant) -ExtraArgs '-Apply'
+        $r.ExitCode | Should -Be 2
+        $r.Output | Should -Match "safe 'CH-Tier0-Admins' is declared twice"
+        $r.Output | Should -Match 'account CH-Tier0-Admins/tier0-admin-01@corp.test.local is declared twice'
+        $r.Writes.Count | Should -Be 0
+    }
+    It 'reports the most worrying drift first, across safes' {
+        # Safe A (first in the file) has only MISSING_PERM drift; safe B, later,
+        # has an UNEXPECTED member. UNEXPECTED must still come first.
+        $s = @{ accounts = @(); safes = @(
+                @{ name = 'A'; members = @(@{ name = 'm1'; role = 'audit' }) },
+                @{ name = 'B'; members = @(@{ name = 'm2'; role = 'audit' }) }) }
+        $t = @{ accounts = @(); safes = @(@{ safeName = 'A' }, @{ safeName = 'B' }); members = @{
+                A = @(@{ MemberName = 'm1'; Permissions = @{ ListAccounts = $true } })
+                B = @(@{ MemberName = 'm2'; Permissions = (Get-RolePerm audit) }, @{ MemberName = 'intruder'; Permissions = (Get-RolePerm full) }) } }
+        $r = Invoke-Script $Reconcile (New-State $s) (New-Tenant $t)
+        $issues = @($r.Report.drift | ForEach-Object Issue)
+        $issues[0] | Should -Be 'UNEXPECTED'
+        $issues[-1] | Should -Be 'MISSING_PERM'
+    }
+}
+
 Describe 'State file validation happens before the vault is touched' {
     It 'refuses an unknown role rather than granting an empty permission set' {
         $s = $BaseState.Clone(); $s.safes = @(@{ name = 'X'; members = @(@{ name = 'someone'; role = 'superuser' }) }); $s.accounts = @()

@@ -10,7 +10,7 @@ difference between that file and the vault, through
 CyberArk's REST API), and with `-Apply` fixes what it safely can.
 
 > **Status: BUILT (tested offline against a stub vault). It has never run
-> against CyberArk.** The lab has no CyberArk licence or tenant. The 48
+> against CyberArk.** The lab has no CyberArk licence or tenant. The 53
 > Pester tests run every script unmodified against
 > [`tests/stubs/psPAS`](tests/stubs/psPAS/psPAS.psm1), a scripted vault in a
 > JSON file with psPAS 8.2.0's parameter names, types and error shape. They
@@ -52,9 +52,14 @@ will, the first time the file is wrong, revoke someone's access in the middle
 of an incident. The stub has no `Remove-*` command at all, so a deletion
 added later fails the tests.
 
+Every read finishes before `-Apply` writes anything, so a failed read never
+leaves a half-applied run. The report (console and `-JsonPath`) lists drift
+in the order of the table above, most worrying first.
+
 Exit codes: **0** in sync, **1** drift found (also after `-Apply`, so CI
-shows it), **2** could not run (bad state file, no session, or any failed
-read other than "safe not found").
+shows it), **2** could not run: a bad state file (including a safe or
+account declared twice), no session, any failed read other than "safe not
+found", or a write the vault rejects.
 
 ## Run it
 
