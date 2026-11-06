@@ -69,3 +69,14 @@ pim_demo_readers_group_object_id   = ""
 # SOD-08). The CI identities (PLAN, APPLY, HR-SYNC, EVIDENCE) never get an
 # Entra owner: their accountable owner is a role in lab/iga/nhi-owners.json.
 # hr_provisioning_owner_object_ids = ["33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"]
+
+# Azure Policy guardrails (modules/azure-guardrails): no new standing Owner,
+# and Key Vaults keep deletion protection. Both go out in Audit. Allowed
+# Owners = the two standing Owners today (owner account + lab operator):
+#   az role assignment list --scope /subscriptions/<id> --role Owner --query "[].principalId" -o tsv
+# Switch an effect to "Deny" only after reading the Audit results
+# (az policy state list --policy-assignment lab-no-standing-owner).
+enable_azure_guardrails     = false
+standing_owner_effect       = "Audit"
+keyvault_protection_effect  = "Audit"
+owner_allowed_principal_ids = [] # ["33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"]

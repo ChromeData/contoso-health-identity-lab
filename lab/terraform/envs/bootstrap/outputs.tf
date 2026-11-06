@@ -98,3 +98,12 @@ output "pim_demo_readers_azure_role_assignment_ids" {
   description = "Role => assignment id of PIM-Demo-Readers' read-only Azure roles on the subscription ({} unless enable_pim_demo_readers_azure_rbac)."
   value       = { for k, a in azurerm_role_assignment.pim_demo_readers : k => a.id }
 }
+
+output "azure_guardrails" {
+  description = "Policy assignment ids and effects of the two Azure guardrails (null unless enable_azure_guardrails)."
+  value = var.enable_azure_guardrails ? {
+    standing_owner_assignment_id      = module.azure_guardrails[0].standing_owner_assignment_id
+    keyvault_protection_assignment_id = module.azure_guardrails[0].keyvault_protection_assignment_id
+    effects                           = module.azure_guardrails[0].effects
+  } : null
+}

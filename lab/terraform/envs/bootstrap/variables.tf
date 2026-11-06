@@ -206,3 +206,47 @@ variable "pim_demo_readers_group_object_id" {
     error_message = "pim_demo_readers_group_object_id must be empty or a lowercase group object id (GUID)."
   }
 }
+
+variable "enable_azure_guardrails" {
+  type        = bool
+  description = <<-EOT
+    Assign the two Azure Policy guardrails (modules/azure-guardrails) to the
+    subscription: no new standing Owner, and Key Vaults keep deletion
+    protection. Both start in Audit (standing_owner_effect,
+    keyvault_protection_effect). Off by default.
+  EOT
+  default     = false
+}
+
+variable "standing_owner_effect" {
+  type        = string
+  description = "Audit (default), Deny or Disabled for the no-new-standing-Owner guardrail. Switch to Deny only after reading the Audit results; Deny needs owner_allowed_principal_ids."
+  default     = "Audit"
+
+  validation {
+    condition     = contains(["Audit", "Deny", "Disabled"], var.standing_owner_effect)
+    error_message = "standing_owner_effect must be exactly Audit, Deny or Disabled."
+  }
+}
+
+variable "keyvault_protection_effect" {
+  type        = string
+  description = "Audit (default), Deny or Disabled for the Key Vault deletion-protection guardrail."
+  default     = "Audit"
+
+  validation {
+    condition     = contains(["Audit", "Deny", "Disabled"], var.keyvault_protection_effect)
+    error_message = "keyvault_protection_effect must be exactly Audit, Deny or Disabled."
+  }
+}
+
+variable "owner_allowed_principal_ids" {
+  type        = list(string)
+  description = <<-EOT
+    Object ids that may still be given Owner on the subscription: the lab
+    owner's account and the lab operator's service principal. Read them with
+    az role assignment list --scope /subscriptions/<id> --role Owner --query "[].principalId" -o tsv
+    Keep the real values in terraform.tfvars (gitignored).
+  EOT
+  default     = []
+}
