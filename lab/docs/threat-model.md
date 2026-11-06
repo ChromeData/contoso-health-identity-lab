@@ -40,8 +40,9 @@ are in `lab/evidence/` (index: `lab/evidence/README.md`).
 ## Detections
 
 Every rule is a file in `lab/kql/` with an SPL twin of the same name in
-`lab/splunk/detections/`. All 22 are BUILT; 17 are scheduled in Sentinel,
-5 held back in `itdr_exclude_rules`. Each computes its own `Severity` column, and each maps one
+`lab/splunk/detections/`. All 24 are BUILT; 17 are scheduled in Sentinel,
+5 held back in `itdr_exclude_rules`, and the 2 newest wait for their flag
+(`enable_itdr_detections_v3`, off). Each computes its own `Severity` column, and each maps one
 account entity: the identity containment would act on.
 
 | Group | Files in `lab/kql/` | Deployed by |
@@ -61,6 +62,15 @@ account entity: the identity containment would act on.
 | `vault-privileged-access-anomaly.kql` | Vault-side misuse, one `Signal` column: Tier-0 credential read outside a ticketed check-out, Tier-0 check-out without a ticket, rotation failure, root-token use, failed-login burst, Tier-0 access denied. Each signal names its CyberArk PTA or CPM analogue | Ticket-gated, per-person check-out (R06) | Change Healthcare |
 | `sod-violation-granted.kql` | Access delivered that completes a toxic pair from `lab/iga/sod-rules.json`, including a direct add to the group behind a package, which incompatibility links don't stop | Incompatible packages and `09-SoD-Report.ps1` (R15) | n/a (insider: drug diversion) |
 | `pim-activation-without-auth-context.kql` | A Tier-0 PIM activation with no step-up sign-in carrying context `c1` beforehand. PREVIEW: some fields are unconfirmed; deploy after the first real activation | CA021 and the PIM `c1` requirement. Microsoft Learn (PIM for Groups settings, checked 2026-10-20): if the context's policy is off, report-only or excludes the user, PIM's MFA fallback doesn't trigger, so a Tier-0 role activates with whatever the session already had | MGM / Scattered Spider |
+
+**The two newest detections** (2026-11-06, ported from the owner's older
+Sentinel-Privileged-Access repo; `itdr_v3.tf`, behind
+`enable_itdr_detections_v3`, off; both Sentinel only)
+
+| File | What it catches | Control it backs | Incident above |
+|---|---|---|---|
+| `dormant-privileged-account-reactivation.kql` | An admin account with no successful sign-in, interactive or not, for the whole 14-day look-back signs in interactively. High; Medium for an account created inside the look-back. Break-glass is left to `break-glass-signin` | Separate admin accounts and their reviews (inactive-account access reviews, ADR 0012) | Snowflake / UNC5537 (old, unrotated credentials) |
+| `keyvault-bulk-secret-read.kql` | One caller, keyed on its object id so managed identities count, reading Key Vault secrets far above its own 14-day rate, or 20+ refused reads. High across 5+ secrets. Never containment | The Key Vault ABAC condition (the app identity reads only its own secret, `modules/keyvault`) | n/a (credential harvesting from a secrets store, T1555.006) |
 
 **Not covered by a rule yet**
 

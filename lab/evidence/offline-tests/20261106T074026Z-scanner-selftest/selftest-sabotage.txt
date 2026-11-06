@@ -1,0 +1,10 @@
+# 2026-11-06T07:40:45Z sabotage: the Checkov image swapped for alpine:latest (no checkov inside); the self-test must FAIL with ERROR, not pass
+scanner self-test (mode: docker)
+fixtures/bad  (each scanner must find something)
+  checkov   : ERROR - the scanner could not run or scanned nothing. Not a result.
+  trufflehog: 1 finding(s) - as required
+fixtures/good (each scanner must find nothing)
+  checkov   : ERROR - the scanner could not run or scanned nothing. Not a result.
+  trufflehog: 0 finding(s) - as required
+RESULT FAIL: see above.
+exit=1

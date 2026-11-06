@@ -1,0 +1,10 @@
+# 2026-11-06T07:40:26Z lab/pipelines/scanner-selftest/selftest.sh (docker mode, pinned images), commit base 6aa85b7 + this branch's working tree
+scanner self-test (mode: docker)
+fixtures/bad  (each scanner must find something)
+  checkov   : 2 finding(s) - as required
+  trufflehog: 1 finding(s) - as required
+fixtures/good (each scanner must find nothing)
+  checkov   : 0 finding(s) - as required
+  trufflehog: 0 finding(s) - as required
+RESULT PASS: both scanners caught the unsafe fixture and cleared the clean one.
+exit=0
