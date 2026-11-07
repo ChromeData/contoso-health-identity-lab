@@ -1036,3 +1036,45 @@ variable "servicenow_saml_signing_cert_end_date" {
   description = "Expiry of the ServiceNow SAML signing certificate (RFC 3339); null = Entra's 3-year default, which the lab's 180-day credential policy rejects."
   default     = null
 }
+
+# ---- AD FS -> Entra migration exercise (lab/adfs, ADR 0009) -------------------
+
+variable "enable_adfs_https" {
+  type        = bool
+  description = <<-EOT
+    Admit HTTPS (443) to DC01 from operator_ip_ranges (the same /32), for the
+    TEMPORARY lab AD FS (lab/adfs/README.md): the operator's test browser
+    signs in to it through the Claims Viewer. Off by default. Turn it off
+    again after lab/adfs/scripts/19-Remove-Adfs.ps1.
+  EOT
+  default     = false
+}
+
+variable "enable_claims_viewer_app" {
+  type        = bool
+  description = <<-EOT
+    Create the Contoso Claims Viewer SAML app in Entra (modules/apps
+    claims_viewer.tf): the app moved off AD FS, its AD FS claim rules
+    converted to a claims-mapping policy and app roles. Needs enable_sso_apps
+    and the two group ids below. Off by default.
+  EOT
+  default     = false
+}
+
+variable "claims_viewer_clinicians_group_object_id" {
+  type        = string
+  description = "Entra object id of GRP-ClaimsViewer-Clinicians (synced from AD; exists after lab/adfs/scripts/11-Add-ClaimsViewerRp.ps1 and one Cloud Sync cycle). Not secret."
+  default     = ""
+}
+
+variable "claims_viewer_admins_group_object_id" {
+  type        = string
+  description = "Entra object id of GRP-ClaimsViewer-Admins (synced from AD). Not secret."
+  default     = ""
+}
+
+variable "claims_viewer_saml_signing_cert_end_date" {
+  type        = string
+  description = "Expiry of the Claims Viewer SAML signing certificate (RFC 3339); null = Entra's default."
+  default     = null
+}

@@ -223,6 +223,9 @@ jobs:
           # three input shapes (PyYAML from the apt step above; no cluster).
           python3 -I -m unittest discover -s lab/k8s/rbac-lint/tests -v
           bash lab/k8s/rbac-lint/canary.sh
+          # AD FS -> Entra claims diff (lab/adfs/compare): the before/after
+          # verdict the cutover proof depends on (stdlib only).
+          python3 -I -m unittest discover -s lab/adfs/compare/tests -v
           # The counter behind the Conjur state-leak result (stdlib only).
           python3 -I -m unittest discover -s lab/pam/conjur/state-leak/tests -v
           # kusto-harness run-on-workspace.py: result decoding and verdict
