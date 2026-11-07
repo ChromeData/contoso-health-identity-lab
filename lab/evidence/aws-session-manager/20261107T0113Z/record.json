@@ -1,0 +1,118 @@
+{
+ "what": "Item 7 live run: AWS Session Manager as the server access path, behind Entra PIM for Groups (ADR 0025, Session Manager section)",
+ "aws_account": "182002546409",
+ "region": "us-east-1",
+ "tenant": "86a2e327-4951-4348-a3c4-6f4b79ffd8f2",
+ "code": "lab/terraform/aws/session-manager.tf (enable_session_manager), applied from branch feat/aws-session-manager with OpenTofu 1.13.1, targeted, against the root's local state; destroyed after capture",
+ "who": {
+  "person": "adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "pim_group": "PIM-AWS-Lab-Admins (ea2a0e59-3d72-456e-96d6-8c3fd6fc53f5)",
+  "aws_role": "AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad"
+ },
+ "server": {
+  "instance_id": "i-07a274aa99e3ea550",
+  "type": "t4g.micro",
+  "ami": "AL2023 arm64 (SSM public parameter)",
+  "public_ip": null,
+  "key_name": null,
+  "imds": "v2 required",
+  "security_group_ingress_rules": 0,
+  "subnet": "10.42.0.0/24, no internet gateway or NAT",
+  "endpoints": [
+   "ssm",
+   "ssmmessages",
+   "ec2messages",
+   "logs"
+  ],
+  "agent": "3.3.5700.0 Online 01:13:00Z"
+ },
+ "timeline_utc": [
+  [
+   "00:52:33",
+   "PIM-AWS-Lab-Admins activated by adm-labops (2 h, MFA + reason), 33 s headless"
+  ],
+  [
+   "00:53:33",
+   "SCIM provision on demand (operator) put adm-labops in the AWS group"
+  ],
+  [
+   "01:03:28",
+   "aws sso login (device code) approved as adm-labops"
+  ],
+  [
+   "01:07:56-01:09:36",
+   "targeted apply: 19 added (LabAdministrator session)"
+  ],
+  [
+   "01:13:00",
+   "SSM agent Online through the endpoints only"
+  ],
+  [
+   "01:13:32-01:13:56",
+   "shell as LabServerSession: whoami=ssm-user, hostname=ip-10-42-0-23.ec2.internal, uptime, internet-no, sudo allowed"
+  ],
+  [
+   "01:14:10",
+   "transcript read from CloudWatch Logs /contoso-lab/session-manager as the operator"
+  ],
+  [
+   "01:14:51",
+   "port forwarding (AWS-StartPortForwardingSession): AccessDenied"
+  ],
+  [
+   "01:14:53",
+   "ssm:SendCommand: AccessDenied"
+  ],
+  [
+   "01:15:13",
+   "StartSession while the session-access tag was removed (operator, 01:14:53, re-added 01:15:20): AccessDenied"
+  ],
+  [
+   "01:15:24",
+   "ec2:StopInstances --dry-run: UnauthorizedOperation"
+  ],
+  [
+   "01:15:59",
+   "TerminateSession on the operator's session: AccessDenied"
+  ],
+  [
+   "01:16:12",
+   "TerminateSession on own session: allowed"
+  ],
+  [
+   "01:17:02",
+   "a shell opened and held (prints the clock every minute)"
+  ],
+  [
+   "01:18:00",
+   "PIM activation ended early by adm-labops; Entra group empty at 01:18:22"
+  ],
+  [
+   "01:26:08-01:26:14",
+   "SCIM scheduled cycle: AWS member removed, AWS user DISABLED (observed 01:26:34)"
+  ],
+  [
+   "01:26:58",
+   "already-issued 1-hour LabServerSession credentials still started a new shell (residual)"
+  ],
+  [
+   "01:27:09",
+   "a fresh credentials request was refused: 'The SSO session associated with this profile has expired or is otherwise invalid'"
+  ],
+  [
+   "01:40:46",
+   "the held shell was still open (22 min after PIM ended) until the operator ran ssm terminate-session"
+  ],
+  [
+   "01:42:51-01:46:10",
+   "teardown: second activation (01:41:47, 1 h), targeted destroy 19 destroyed; instance terminated, 0 endpoints, VPC gone, log group gone; activation ended 01:49:45; AWS member removed and user DISABLED on demand 01:50:20"
+  ]
+ ],
+ "not_proven_or_limits": [
+  "the lab operator role (standing AdministratorAccess, live guardrails v2) opened a shell on the server at 01:15:51Z with no PIM activation (CloudTrail StartSession, contoso-lab-operator); guardrails v4 NoServerShell is built in code, not applied",
+  "LabServerSession shares PIM-AWS-Lab-Admins with LabAdministrator: no split by person yet",
+  "ssmmessages:OpenDataChannel is scoped to session/${aws:userid}-* as in AWS samples; the session ids start with the role session name, and sessions opened anyway, so this statement was not seen to restrict anything",
+  "the 60-minute maxSessionDuration and 20-minute idle timeout were configured but not observed (a printing loop is not idle input)",
+  "a new AWS sign-in attempt after removal was not captured cleanly (the device-code page said the code was wrong); the refusal evidence is the fresh-credentials error and the DISABLED user"
+ ]
+}
