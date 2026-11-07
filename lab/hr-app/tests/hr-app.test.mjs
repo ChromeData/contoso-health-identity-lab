@@ -198,3 +198,18 @@ test('hire refuses an account name that is already taken (other split, or a leav
   assert.throws(() => hire(r, { ...ok, givenName: 'Mary Ann', surname: 'Kim' }, cat), /hyphen/);
   assert.equal(hire(r, { ...ok, givenName: 'Mary-Ann', surname: 'Kim' }, cat).worker.employeeId, '100493');
 });
+
+test('change: a future last day is refused (Leaver switches the account off now); today or earlier is fine', () => {
+  const { r, cat } = fresh();
+  assert.throws(() => change(r, '100310', { status: 'leaver', endDate: '2026-12-01' }, cat, '2026-11-06'), /switches the account off now/);
+  assert.equal(change(r, '100310', { status: 'leaver', endDate: '2026-11-06' }, cat, '2026-11-06').kind, 'left');
+  assert.equal(change(r, '100310', { status: 'leaver', endDate: '2026-11-01' }, cat, '2026-11-06').kind, 'left');
+});
+
+test('change: a manager who reports to the worker (a loop) is refused', () => {
+  const { r, cat } = fresh();
+  // Marcus Bello (100310) reports to Grace Mwangi (200015), who reports to Helen Carter (300001).
+  assert.throws(() => change(r, '200015', { manager: '100310' }, cat), /reports to this worker/);
+  assert.throws(() => change(r, '300001', { manager: '100310' }, cat), /reports to this worker/);
+  assert.equal(change(r, '100310', { manager: '200021' }, cat).worker.manager, '200021');
+});

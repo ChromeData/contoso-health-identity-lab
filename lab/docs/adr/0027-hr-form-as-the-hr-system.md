@@ -33,7 +33,10 @@ SuccessFactors. HR can do three things:
 
 - **Hire:** first name, last name, department, job, manager, start date.
 - **Change:** a new department, job or manager (a mover).
-- **Leave:** set the status to Leaver and give the last working day.
+- **Leave:** set the status to Leaver and give the last working day. The
+  day must be today or earlier, because the sender switches the account
+  off at once and does not read the date. Scheduling a future leaver is
+  not built here.
 
 The department and job come from a list: the jobs IT has access rules for
 (`lab/iga/birthright-rules.json`) plus the jobs already on the roster. A real
