@@ -112,3 +112,18 @@ output "pipeline_config_vault_name" {
   description = "The pipeline config vault (null while enable_pipeline_config_vault is off). Workflows read it as vars.TF_PIPELINE_CONFIG_VAULT."
   value       = one(azurerm_key_vault.pipeline_config[*].name)
 }
+
+output "apply_azure_scope_id" {
+  description = "Where APPLY's Contributor and ABAC-limited RBAC Administrator are assigned (subscription or rg-identity-lab)."
+  value       = local.apply_azure_scope_id
+}
+
+output "lab_vm_operator_role_id" {
+  description = "Role definition resource id of Contoso Lab VM Operator (null while enable_lab_vm_operator is off)."
+  value       = one(azurerm_role_definition.lab_vm_operator[*].role_definition_resource_id)
+}
+
+output "cannot_delete_locks" {
+  description = "short name => lock id of each CanNotDelete lock APPLY cannot remove."
+  value       = { for k, l in azurerm_management_lock.cannot_delete : k => l.id }
+}

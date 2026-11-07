@@ -1,0 +1,17 @@
+2026-11-07T02:30:42Z-02:30:58Z  Workspace lock inheritance test (as the lab operator):
+  a throwaway Sentinel watchlist zzlockprobe created on loga-idlab; CanNotDelete lock
+  lock-probe-item8 on loga-idlab; DELETE watchlist -> 409 ScopeLocked; lock removed;
+  watchlist deleted; read back: only operator_ips remains, no lock on the RG.
+  => no lock on loga-idlab (it would block every Sentinel rule/watchlist delete in a PR apply).
+
+2026-11-07T02:39:58Z-02:42:51Z  envs/bootstrap (branch feat/azure-least-privilege, stacked on
+  feat/pipeline-secrets-keyvault), as the lab operator: full plan 5 to add / 0 / 0, applied:
+  role definition Contoso Lab VM Operator (6c1f3d2e-8a47-4b9e-9c35-2f6a0e7b4d91, assignable
+  on rg-identity-lab), its PIM policy (MFA + justification, PT2H, no approval), adm-labops
+  ELIGIBLE, CanNotDelete locks lock-kv-idlab-cannot-delete and lock-kv-idlab-cicd-cannot-delete.
+  02:51Z-02:55Z in-place update: + Microsoft.OperationalInsights/workspaces/query/read.
+
+APPLY's scope (apply_azure_scope) is NOT changed live: subscription Contributor stays until
+this PR merges and the owner/operator applies envs/bootstrap with apply_azure_scope =
+"resource_group". State census (envs/dev, 2026-11-07): 70 azurerm instances, all inside
+/resourceGroups/rg-identity-lab; only data source azurerm_client_config.

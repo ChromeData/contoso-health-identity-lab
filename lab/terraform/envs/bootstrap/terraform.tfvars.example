@@ -87,3 +87,10 @@ owner_allowed_principal_ids = [] # ["33333333-3333-3333-3333-333333333333", "444
 # apply; then delete the GitHub (and Dependabot) secrets of the same names.
 enable_pipeline_config_vault = false
 pipeline_config_vault_name   = "" # e.g. "kv-idlab-cicd-20f1" (= vars.TF_PIPELINE_CONFIG_VAULT)
+# Least privilege on Azure (least-privilege.tf). After the first envs/dev
+# apply, narrow APPLY to the lab RG; a custom operations role eligible through
+# PIM; delete locks APPLY cannot remove (never on loga-idlab: see the file).
+apply_azure_scope                   = "subscription" # "resource_group" once rg-identity-lab exists
+enable_lab_vm_operator              = false
+lab_vm_operator_eligible_object_ids = [] # ["33333333-3333-3333-3333-333333333333"] (adm-labops)
+cannot_delete_lock_resource_ids     = {} # { "kv-idlab" = "/subscriptions/<id>/resourceGroups/rg-identity-lab/providers/Microsoft.KeyVault/vaults/<kv>" }

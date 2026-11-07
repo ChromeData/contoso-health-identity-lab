@@ -293,3 +293,77 @@ variable "pipeline_config_location" {
   description = "Azure region of the pipeline config vault."
   default     = "eastus2"
 }
+
+# ---- Least privilege on Azure (least-privilege.tf, senior gap 8) ---------------
+
+variable "apply_azure_scope" {
+  type        = string
+  description = <<-EOT
+    Where the APPLY identity's Contributor and ABAC-limited RBAC Administrator
+    roles are assigned. "resource_group" = apply_resource_group_name only
+    (every Azure resource envs/dev manages is there). "subscription" (the
+    default) only for a first deployment, before envs/dev has created that RG.
+    Changing it replaces both assignments: apply when no pipeline apply runs.
+  EOT
+  default     = "subscription"
+
+  validation {
+    condition     = contains(["subscription", "resource_group"], var.apply_azure_scope)
+    error_message = "apply_azure_scope must be exactly subscription or resource_group."
+  }
+}
+
+variable "apply_resource_group_name" {
+  type        = string
+  description = "The envs/dev resource group (rg-identity-lab): APPLY's scope when apply_azure_scope = resource_group, and the scope of the Contoso Lab VM Operator role."
+  default     = "rg-identity-lab"
+}
+
+variable "enable_lab_vm_operator" {
+  type        = bool
+  description = "Create the custom role Contoso Lab VM Operator (read/start/restart/deallocate the lab VMs, query their logs; no write) on apply_resource_group_name, with a PIM policy (MFA + reason) and eligible-only assignments for lab_vm_operator_eligible_object_ids. Off by default."
+  default     = false
+}
+
+variable "lab_vm_operator_eligible_object_ids" {
+  type        = list(string)
+  description = "Object ids ELIGIBLE (never active) for Contoso Lab VM Operator, e.g. adm-labops. Keep real ids in terraform.tfvars."
+  default     = []
+
+  validation {
+    condition     = alltrue([for id in var.lab_vm_operator_eligible_object_ids : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))])
+    error_message = "lab_vm_operator_eligible_object_ids must be object id GUIDs."
+  }
+}
+
+variable "lab_vm_operator_activation_max_duration" {
+  type        = string
+  description = "Longest PIM activation of Contoso Lab VM Operator (ISO 8601), at most PT2H."
+  default     = "PT2H"
+
+  validation {
+    condition     = contains(["PT30M", "PT1H", "PT2H"], var.lab_vm_operator_activation_max_duration)
+    error_message = "lab_vm_operator_activation_max_duration must be PT30M, PT1H or PT2H."
+  }
+}
+
+variable "cannot_delete_lock_resource_ids" {
+  type        = map(string)
+  description = <<-EOT
+    short name => Azure resource id that gets a CanNotDelete lock APPLY cannot
+    remove, e.g. { "kv-idlab" = "/subscriptions/.../vaults/kv-idlab-20f1" }.
+    Do NOT put loga-idlab here: a lock on the workspace refuses deleting
+    every Sentinel rule and watchlist under it (least-privilege.tf header).
+    The evidence store has its own lock (enable_evidence_delete_lock, PR #223).
+  EOT
+  default     = {}
+
+  validation {
+    condition     = alltrue([for k, id in var.cannot_delete_lock_resource_ids : can(regex("^[a-z0-9-]{1,40}$", k)) && can(regex("^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[^/]+/providers/.+/.+$", id))])
+    error_message = "cannot_delete_lock_resource_ids: keys are short lower-case names, values full resource ids (/subscriptions/<id>/resourceGroups/<rg>/providers/...)."
+  }
+  validation {
+    condition     = alltrue([for id in values(var.cannot_delete_lock_resource_ids) : !can(regex("(?i)/Microsoft.OperationalInsights/workspaces/", id))])
+    error_message = "A CanNotDelete lock on a Log Analytics workspace blocks deleting its Sentinel rules and watchlists (checked live 2026-11-07): not allowed here."
+  }
+}
