@@ -51,6 +51,9 @@
                                        only); both workflows' safety properties
       Remove-DemoHire (lab/scripts/dc) one Workforce/Disabled account by employeeID,
                                        never protected or out-of-scope accounts
+      AdHardening (lab/scripts/dc/     ASCII-only files, Protected Users never takes
+        hardening)                     the NTLM-path admins, deny-logon template and
+                                       its read-back, GPO version bump, LAPS values
       ScriptAnalyzerScope              analyzer suppressions are per function,
                                        justified, never per file
     Passing proves the logic does what the comments say. It does not prove the

@@ -17,6 +17,7 @@ extension.
 | `configure-sync.py` | Steps 5 and 6 by Graph: Cloud Sync (scoped OUs, password hash, hire date) and the HR app's connectivity + mappings. Idempotent |
 | `run-on-dc.py` | Runs any of these scripts on DC01 with secret parameters as a managed run command: secrets come from the Keychain or Terraform state inside the helper, are scrubbed from output, never on a command line |
 | `04-Install-CloudSyncAgent.ps1` | Installs and registers the Entra provisioning agent (Cloud Sync) unattended: Microsoft-signature gate, gMSA, domain bind. Replaces the manual RDP step |
+| `hardening/` | AD hardening, RAN 2026-11-07: Tier 0/1/2 OUs and admins, Protected Users for the new admins only, a GPO that denies Tier 0 sign-in on Tier 1/2 computers, Windows LAPS for the DSRM password (AD, encrypted), PingCastle before/after. See `hardening/README.md` |
 | `Remove-DemoHire.ps1` | Demo retakes only (`lab/scripts/demo/reset-demo-hire.sh`): deletes the one AD account HR provisioning created for an employeeID, never outside `OU=Workforce` / `OU=Disabled`, never a protected (`adminCount=1`) account. Reports only unless `Apply=yes` |
 
 ## Run it

@@ -1,0 +1,40 @@
+run command lab-4aabb71e: lab/scripts/dc/hardening/Test-AdHardening.ps1 on vm-dc01
+Test-AdHardening at 2026-11-07 01:07:56Z on corp.contosohealthlab.com
+PASS OU OU=Tier0,DC=corp,DC=contosohealthlab,DC=com
+PASS OU OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+PASS OU OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+PASS OU OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+PASS OU OU=Devices,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+PASS t0-adm-01 in OU=Accounts,OU=Tier0
+PASS t0-adm-01 in Tier0-Admins
+PASS t0-adm-01 in Protected Users
+PASS t0-adm-01 cannot be delegated
+PASS t1-adm-01 in OU=Accounts,OU=Tier1
+PASS t1-adm-01 in Tier1-Admins
+PASS t1-adm-01 in Protected Users
+PASS t1-adm-01 cannot be delegated
+PASS t2-adm-01 in OU=Accounts,OU=Tier2
+PASS t2-adm-01 in Tier2-Admins
+PASS t2-adm-01 in Protected Users
+PASS t2-adm-01 cannot be delegated
+PASS tier0-admin-01 NOT in Protected Users (NTLM remote-session path)
+PASS tier0-admin-02 NOT in Protected Users (NTLM remote-session path)
+PASS contosoadmin NOT in Protected Users (NTLM remote-session path)
+PASS GPO Tier0 - Deny logon to Tier1 and Tier2 exists
+PASS deny GPO: 5 Deny rights x 4 Tier 0 SIDs
+PASS deny GPO linked to Tier1/Servers and Tier2/Devices only (corp.contosohealthlab.com/Tier1/Servers; corp.contosohealthlab.com/Tier2/Devices)
+PASS LAPS schema (msLAPS-EncryptedDSRMPassword)
+PASS GPO LAPS - DC01 DSRM password to AD exists
+PASS LAPS - DC01 DSRM password to AD: BackupDirectory=2 (AD), encryption on (BackupDirectory=2 encryption=1)
+PASS LAPS - DC01 DSRM password to AD: ADBackupDSRMPassword=1
+PASS GPO LAPS - Tier1 servers local admin to AD exists
+PASS LAPS - Tier1 servers local admin to AD: BackupDirectory=2 (AD), encryption on (BackupDirectory=2 encryption=1)
+PASS DC01 encrypted DSRM password in AD (expires 2026-12-07 01:02:04Z)
+PASS Cloud Sync agent service running
+PASS normal user signs in with Kerberos (ok)
+PASS normal user signs in with NTLM (ok)
+  temporary user zz-signin-9406 deleted
+PASS t2-adm-01 (Protected Users) signs in with Kerberos (ok)
+PASS t2-adm-01 (Protected Users) is refused over NTLM (Exception calling "Bind" with "0" argument(s): "The supplied credential is invalid.")
+RESULT 0 failure(s)
+state: Succeeded, exit code: 0
