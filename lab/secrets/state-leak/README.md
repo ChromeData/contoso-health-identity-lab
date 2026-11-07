@@ -21,7 +21,7 @@ or to a plan file.
 
 This replaces the Conjur version of the same measurement (PR #210, capture
 log L08). The lab dropped CyberArk on 2026-11-06
-([ADR 0027](../../docs/adr/0027-microsoft-native-pam.md)). The numbers are
+([ADR 0036](../../docs/adr/0036-microsoft-native-pam.md)). The numbers are
 the same, because the cause is in Terraform, not in the vault.
 
 ## Result

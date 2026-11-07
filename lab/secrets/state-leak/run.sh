@@ -43,7 +43,7 @@
 # refused: the finding is about Terraform, and the lab's CI runs Terraform.
 #
 # Replaces the Conjur version (lab/pam/conjur/state-leak, PR #210): the lab
-# dropped CyberArk on 2026-11-06 (ADR 0027). Same counter, same verdict.
+# dropped CyberArk on 2026-11-06 (ADR 0036). Same counter, same verdict.
 # =============================================================================
 set -euo pipefail
 umask 077
