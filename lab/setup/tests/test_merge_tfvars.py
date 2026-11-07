@@ -77,6 +77,20 @@ class MergeTests(unittest.TestCase):
         r = run('subscription_id = "a"\n', NEW, '--refuse-change', 'pipeline_config_vault_name')
         self.assertEqual(r.returncode, 0, r.stderr)
 
+    def test_inline_comment_is_not_a_change(self):
+        old = OLD.replace('"kv-custom-name"', '"kv-custom-name" # pipeline config vault')
+        r = run(old, NEW, '--refuse-change', 'pipeline_config_vault_name')
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_hash_inside_the_string_still_counts(self):
+        self.assertEqual(m.value_of('x = "a#b" # c\n'), '"a#b"')
+
+    def test_empty_example_name_may_be_filled_in(self):
+        old = OLD.replace('"kv-custom-name"', '""')
+        r = run(old, NEW, '--refuse-change', 'pipeline_config_vault_name')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('pipeline_config_vault_name = "kv-custom-name"', r.stdout)
+
     def test_multiline_map_and_list_are_copied_whole(self):
         old = OLD + '''lab_list = [
   "a", # one
