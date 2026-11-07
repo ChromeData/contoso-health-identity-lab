@@ -204,6 +204,8 @@ jobs:
           node --test lab/terraform/okta/tests/trust-claims.test.mjs
           # Contoso HR form (lab/hr-app, ADR 0027): roster rules, API, GitHub store (fake gh).
           node --test lab/hr-app/tests/hr-app.test.mjs
+          # Okta -> Entra migration tools: EL->Entra rule translation, tracker, System Log filter, the app's ID-token check (no network).
+          node --test lab/okta-migration/tests/lib.test.mjs
           bash lab/scripts/demo/tests/containment-drill.test.sh
           # The scanner positive control's own failure modes (stub scanners).
           bash lab/pipelines/scanner-selftest/tests/selftest.test.sh
