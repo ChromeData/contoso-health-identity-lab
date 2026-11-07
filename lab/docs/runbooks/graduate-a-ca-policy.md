@@ -110,15 +110,26 @@ with an end date; exemptions are group-based, never per-user).
 ### First graduation only: security defaults and CA001 in one window
 
 Security defaults and Conditional Access cannot both be on. Turn security
-defaults off **in the same change window as CA001 (MFA for all users), seconds
-before it is enforced**. On 2026-10-28 the lab turned security defaults off at
+defaults off **in the same change window as CA001 (MFA for all users), right
+before you approve its apply**. On 2026-10-28 the lab turned security defaults off at
 22:12Z and enforced CA001 at about 23:2xZ (E30a). For about 70 minutes no MFA
 policy was enforced. That was a sequencing mistake. The order is:
 
 1. Have the CA001 PR merged and its apply waiting at the gate.
 2. Turn security defaults off.
-3. Approve the CA001 apply at once. Confirm CA001 shows `enabled`.
-4. Only then graduate the other policies.
+3. Approve the CA001 apply at once.
+4. Watch the apply run. Confirm CA001 shows `enabled`.
+5. Only then graduate the other policies.
+
+The gap is minutes, not seconds. The approval comes first. Then the apply
+job in `terraform-apply.yml` starts a runner, signs in to Azure, runs
+`terraform init` and a fresh plan, and only then applies CA001. For all of
+that time no MFA policy is enforced.
+
+If the apply fails or stops at any step, CA001 is not enforced and security
+defaults stay off. Do not leave the tenant in that state. Turn security
+defaults back on at once (Entra admin center > Overview > Properties >
+Manage security defaults), then fix the apply and start the window again.
 
 ## 5. Merge and apply
 
