@@ -192,6 +192,30 @@ The repo is **public on purpose**, and the pipeline depends on it:
   neither of them. While it is unset, every approval issue and run summary
   says: "Author and approver are the same GitHub account (ChromeData);
   separation is by procedure only."
+
+  **Checked on 2026-11-07 (UTC) with the gh API, as ChromeData:**
+  - `PUT repos/.../environments/production` with required reviewer
+    ChromeData and `prevent_self_review: true` was refused: HTTP 422
+    "Please ensure the billing plan supports the required reviewers
+    protection rule." (The empty environment it left was deleted.)
+  - `GET repos/.../branches/main/protection` and `GET repos/.../rulesets`
+    were refused: HTTP 403 "Upgrade to GitHub Pro or make this repository
+    public to enable this feature." So the account is on GitHub Free, and on
+    this private repo `main` has no enforced branch protection or ruleset
+    today (5F describes the public-repo setup). A CODEOWNERS file plus a
+    required owner review is therefore not available either.
+  - Closest true alternative, free: the issue gate above, plus a separate
+    bot identity for the agents. `lab/scripts/operator/github-bot/` holds it:
+    the owner runs `new-bot-app.sh` once (a GitHub App: free, no seat),
+    agents then push, open PRs and merge with `bot-gh`, and the owner sets
+    `APPLY_BOT_LOGIN` to `<slug>[bot]` at a PR merge. From then on the gate
+    refuses a change the bot did not author and merge, and refuses an
+    approval by the bot, the author or the merger. The App has issues READ
+    only, so it cannot comment on an approval issue at all.
+  - What stays procedure, not platform: ChromeData is the repo admin and can
+    change the workflow or the Variable through a merged PR. An Environment
+    reviewer (GitHub Enterprise, or a public repo) is the only rule code
+    cannot remove.
 - **Branch protection / rulesets** (require PR, require status checks, require
   review) are free on public repos.
 - **Code scanning (SARIF upload)** — the Checkov results under the *Security &
