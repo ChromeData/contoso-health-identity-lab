@@ -24,6 +24,7 @@ def load(name, path):
 apply = load("apply_mod", os.path.join(ROOT, "apply.py"))
 mapping = load("mapping_mod", os.path.join(ROOT, "provisioning-mapping.py"))
 cleanup = load("cleanup_mod", os.path.join(ROOT, "demo", "cleanup.py"))
+prove = load("prove_mod", os.path.join(ROOT, "demo", "prove.py"))
 CFG = json.load(open(os.path.join(ROOT, "config.json")))
 
 
@@ -154,6 +155,43 @@ class Cleanup(unittest.TestCase):
     def test_demo_ritm_is_not_found(self):
         sn = FakeSn({"sc_req_item": [{"sys_id": "demo", "number": "RITM0010001", "_q": "number=RITM0010001"}]})
         self.assertEqual(cleanup.clean(sn, ["RITM0010001"]), ["not found RITM0010001"])
+
+
+class UndoGrants(unittest.TestCase):
+    """prove.py removes what a run granted, also after a half-way failure."""
+
+    def run_undo(self, before, now_held, pending_first=0):
+        posts, polls = [], {"n": pending_first}
+        prove.pkg = lambda sn, key: {"accessPackageId": "pkg-" + key}
+        prove.user_id = lambda upn: "oid-" + upn.split("@")[0]
+        prove.time.sleep = lambda s: None
+
+        def graph(method, url, body=None):
+            if method == "post":
+                posts.append(body)
+                return {"id": "rm"}
+            if "assignmentRequests" in url:
+                if polls["n"] > 0:
+                    polls["n"] -= 1
+                    return {"value": [{"requestType": "adminAdd", "state": "submitted", "assignment": {"targetId": "oid-test-user-a"}}]}
+                return {"value": []}
+            for (who, key), ids in now_held.items():
+                if f"pkg-{key}" in url and f"oid-{prove.UPN[who].split('@')[0]}" in url:
+                    return {"value": [{"id": i} for i in ids]}
+            return {"value": []}
+        prove.graph = graph
+        out = []
+        prove.undo_grants(None, before, "STAMP", out)
+        return posts, out
+
+    def test_removes_only_new_assignments(self):
+        posts, out = self.run_undo({("sofia", "icu_float"): {"old"}}, {("sofia", "icu_float"): {"old", "new"}, ("testa", "icu_float"): {"t1"}})
+        self.assertEqual(sorted(p["assignment"]["id"] for p in posts), ["new", "t1"], "what a person held before the run is never touched")
+        self.assertTrue(all(p["requestType"] == "adminRemove" and "STAMP" in p["justification"] for p in posts))
+
+    def test_waits_for_an_add_still_in_flight(self):
+        posts, out = self.run_undo({}, {("testa", "icu_float"): {"t1"}}, pending_first=2)
+        self.assertEqual([p["assignment"]["id"] for p in posts], ["t1"])
 
 
 if __name__ == "__main__":

@@ -237,6 +237,9 @@ jobs:
           # records apply.py writes (no delivery plan, names <= 40), the
           # provisioning-mapping change, cleanup's guards (stdlib only).
           python3 -I -m unittest discover -s lab/servicenow/tests -v
+          # ...and the server JavaScript that grants, removes and closes, in a
+          # node:vm sandbox with fake ServiceNow globals and a scripted Graph.
+          node --test lab/servicenow/tests/entra-access.test.mjs
 
       # The plain-English plan/apply summaries run with continue-on-error in
       # terraform-plan.yml / terraform-apply.yml (a summary bug must never

@@ -286,12 +286,14 @@ def build(cfg, sn, packages, client_id, dry=False):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--plan", action="store_true", help="read only: print what would change")
-    ap.add_argument("--client-id", help="the fulfilment app's client id (default: look it up in Graph by display name)")
+    ap.add_argument("--client-id", help="the fulfilment app's client id (default: look it up in Graph by display name; \"\" = not applied yet)")
     a = ap.parse_args()
     with open(os.path.join(HERE, "config.json")) as f:
         cfg = json.load(f)
     packages = resolve_packages(cfg)
-    client_id = a.client_id or resolve_client_id(cfg)
+    # --client-id "" is allowed on purpose: before the Terraform app exists the
+    # property stays EMPTY and ServiceNow fails closed with "not configured".
+    client_id = a.client_id if a.client_id is not None else resolve_client_id(cfg)
     plan = build(cfg, snlib.Client(), packages, client_id, dry=a.plan)
     print("\n".join(plan.log))
     if plan.missing:

@@ -54,6 +54,7 @@ var ContosoEntraAccess = Class.create();
 ContosoEntraAccess.GRAPH = 'https://graph.microsoft.com/v1.0';
 ContosoEntraAccess.EM = ContosoEntraAccess.GRAPH + '/identityGovernance/entitlementManagement';
 ContosoEntraAccess.CORRELATION = 'Entra ID Governance';
+ContosoEntraAccess.MAX_DAYS = 180;
 
 ContosoEntraAccess.prototype = {
     initialize: function () {
@@ -140,6 +141,20 @@ ContosoEntraAccess.prototype = {
     // manager approved). Writes the Entra request id to correlation_id; the
     // poller (checkInFlight) closes the ticket when Entra says Delivered.
     fulfil: function (ritm) {
+        // The event was queued when the manager approved. Read the ticket
+        // again NOW: a later rejection, a cancel or a close must win, and a
+        // ticket already sent to Entra is never sent twice.
+        var fresh = new GlideRecord('sc_req_item');
+        if (!fresh.get(ritm.getUniqueValue())) return null;
+        ritm = fresh;
+        // String(...): a GlideElement is an object, so `!ritm.active` would
+        // always be false.
+        if (String(ritm.approval) != 'approved' || String(ritm.active) != 'true' || !ritm.correlation_id.nil()) {
+            ritm.work_notes = 'Not sent to Entra: the request is no longer approved and open (approval ' +
+                ritm.approval + ', active ' + ritm.active + ')' + (ritm.correlation_id.nil() ? '.' : ', or it was already sent.');
+            ritm.update();
+            return null;
+        }
         var pkgKey = String(ritm.variables.app_access || '');
         try {
             var pkg = this.packages()[pkgKey];
@@ -172,10 +187,14 @@ ContosoEntraAccess.prototype = {
 
     // ---- leaver: remove what the person holds in the catalog ---------------------
     removeAll: function (task, personGr) {
+        // refs is filled after EACH successful removal request, so a later
+        // failure never hides a removal Entra already accepted: the poller
+        // still follows it, and the error is shown next to it.
+        var removed = [], refs = [], err = null;
         try {
             var oid = String(personGr.u_entra_object_id || '');
             if (!/^[0-9a-f-]{36}$/.test(oid)) throw 'The person has no Entra object id in ServiceNow.';
-            var mine = this.packages(), removed = [], refs = [];
+            var mine = this.packages();
             // Only the REQUESTABLE packages this catalog item hands out. Birthright
             // packages follow HR attributes and are removed by the Leaver
             // lifecycle workflow when HR disables the account.
@@ -193,22 +212,29 @@ ContosoEntraAccess.prototype = {
                     refs.push(pkg.accessPackageId + '/' + res.id);
                 }
             }
-            task.work_notes = removed.length
-                ? 'Sent to Microsoft Entra ID Governance: remove ' + removed.join(', ') + '.\nEntra request id(s): ' + refs.join(', ')
-                : 'Entra shows no requestable access package for this person: nothing to remove.';
-            if (refs.length) {
-                task.correlation_id = refs.join(',');
-                task.correlation_display = ContosoEntraAccess.CORRELATION;
-            } else {
-                task.state = 3;
-            }
-            task.update();
-            return refs;
         } catch (e) {
-            task.work_notes = 'Entra removal stopped: ' + e;
-            task.update();
-            return null;
+            err = String(e);
         }
+        var lines = [];
+        if (removed.length)
+            lines.push('Sent to Microsoft Entra ID Governance: remove ' + removed.join(', ') + '.\nEntra request id(s): ' + refs.join(', '));
+        if (err)
+            lines.push('Entra removal stopped: ' + err + (removed.length ? '\nThe removals above were accepted and are followed.' : ''));
+        if (!removed.length && !err)
+            lines.push('Entra shows no requestable access package for this person: nothing to remove.');
+        task.work_notes = lines.join('\n');
+        if (refs.length) {
+            task.correlation_id = refs.join(',');
+            task.correlation_display = ContosoEntraAccess.CORRELATION;
+        }
+        if (err) {
+            var q = this.queueId();
+            if (q) task.assignment_group = q;
+        } else if (!refs.length) {
+            task.state = 3;
+        }
+        task.update();
+        return err && !refs.length ? null : refs;
     },
 
     // ---- poller: close tickets Entra has finished -------------------------------
@@ -282,6 +308,11 @@ ContosoEntraAccess.prototype = {
         }
         var e = new GlideDateTime(); e.setDisplayValue(end + ' 23:59:59');
         if (!e.after(s)) throw 'The end date is before the start date.';
+        // The form promises 180 days at most (the ICU / Pharmacy request
+        // policies' own limit). Checked here too: an admin assignment carries
+        // the schedule it is given, so the limit is not left to Entra.
+        var max = new GlideDateTime(s); max.addDaysUTC(ContosoEntraAccess.MAX_DAYS);
+        if (e.after(max)) throw 'The end date is more than ' + ContosoEntraAccess.MAX_DAYS + ' days after the start. Ask again for a shorter time.';
         return {
             startDateTime: s.getValue().replace(' ', 'T') + 'Z',
             expiration: { type: 'afterDateTime', endDateTime: e.getValue().replace(' ', 'T') + 'Z' }
