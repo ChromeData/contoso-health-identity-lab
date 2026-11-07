@@ -50,6 +50,9 @@ function Write-Step([string]$Message) { Write-Output ("[connect-health] {0}" -f 
 # both, so neither version reads as "not installed". The same function is in
 # 12-Install-ConnectHealthAgent.ps1 and 19-Remove-Adfs.ps1 (run-on-dc.py
 # sends one file); lab/adfs/tests/ConnectHealth.Tests.ps1 keeps them equal.
+# PowerShell unrolls a function's output (one service = a scalar, none =
+# $null), and under Set-StrictMode -Version Latest .Count on those throws: so
+# every caller wraps the call in @(...).
 function Get-ConnectHealthAdfsService {
     @(Get-Service -Name 'AdHealthAdfs*', 'AzureADConnectHealthAgent' -ErrorAction SilentlyContinue)
 }
@@ -57,7 +60,7 @@ function Get-ConnectHealthAdfsService {
 if (-not (Get-Service adfssrv -ErrorAction SilentlyContinue)) { throw 'AD FS is not installed. Run 10-Install-Adfs.ps1 first.' }
 if ($InstallerUrl -notlike 'https://*') { throw 'InstallerUrl must be https.' }
 
-if ((Get-ConnectHealthAdfsService).Count -eq 0) {
+if (@(Get-ConnectHealthAdfsService).Count -eq 0) {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $dir = Join-Path $env:ProgramData 'ContosoAdfs'
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
