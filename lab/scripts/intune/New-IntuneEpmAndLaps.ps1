@@ -100,14 +100,32 @@ function Find-Policy([string]$name) {
     return @($r.value) | Select-Object -First 1
 }
 function Set-Policy([string]$name, [hashtable]$body, [string]$groupId) {
+    # Resolve or create the policy first, then check and repair its assignment
+    # on EVERY run: a run that created the policy but failed to assign it is
+    # finished by the next run, never reported as done.
     $existing = Find-Policy $name
-    if ($existing) { Write-Host "Exists, left as it is: $name ($($existing.id))"; return $existing.id }
-    if (-not $PSCmdlet.ShouldProcess($name, 'Create Intune policy')) { return $null }
-    $created = Invoke-MgGraphRequest -Method POST -Uri $base -Body ($body | ConvertTo-Json -Depth 30) -ContentType 'application/json'
-    $assign = @{ assignments = @(@{ target = @{ '@odata.type' = '#microsoft.graph.groupAssignmentTarget'; groupId = $groupId } }) }
-    Invoke-MgGraphRequest -Method POST -Uri "$base('$($created.id)')/assign" -Body ($assign | ConvertTo-Json -Depth 10) -ContentType 'application/json' | Out-Null
-    Write-Host "Created and assigned: $name ($($created.id))"
-    return $created.id
+    if ($existing) {
+        $id = $existing.id
+        Write-Host "Exists, settings left as they are: $name ($id)"
+    } else {
+        if (-not $PSCmdlet.ShouldProcess($name, 'Create Intune policy')) { return $null }
+        $id = (Invoke-MgGraphRequest -Method POST -Uri $base -Body ($body | ConvertTo-Json -Depth 30) -ContentType 'application/json').id
+        Write-Host "Created: $name ($id)"
+    }
+    $current = @((Invoke-MgGraphRequest -Method GET -Uri "$base('$id')/assignments").value)
+    $assigned = @($current | Where-Object { $_.target.groupId -eq $groupId }).Count -gt 0
+    if (-not $assigned) {
+        if (-not $PSCmdlet.ShouldProcess($name, "Assign to group $groupId")) { return $id }
+        # /assign replaces the whole list: keep any assignments already there.
+        $targets = @($current | ForEach-Object { @{ target = $_.target } }) + @(@{ target = @{ '@odata.type' = '#microsoft.graph.groupAssignmentTarget'; groupId = $groupId } })
+        Invoke-MgGraphRequest -Method POST -Uri "$base('$id')/assign" -Body (@{ assignments = $targets } | ConvertTo-Json -Depth 10) -ContentType 'application/json' | Out-Null
+        $check = @((Invoke-MgGraphRequest -Method GET -Uri "$base('$id')/assignments").value | Where-Object { $_.target.groupId -eq $groupId })
+        if ($check.Count -eq 0) { throw "$name ($id): assignment to $groupId did not stick" }
+        Write-Host "Assigned: $name -> $groupId (read back)"
+    } else {
+        Write-Host "Already assigned: $name -> $groupId"
+    }
+    return $id
 }
 
 # 1. Elevation settings: EPM on, default deny, report all elevations.

@@ -57,6 +57,11 @@ const mark = (step, what, extra = {}) => {
   fs.writeFileSync(path.join(OUT, 'proof.json'), JSON.stringify(proof, null, 1));
 };
 const snap = async (page, name) => { await redact(page).catch(() => {}); const f = path.join(OUT, `${name}.png`); await page.screenshot({ path: f }); return path.basename(f); };
+// Session pages show the remote desktop as a canvas. redact() blurs every
+// canvas (and the blur stays for the rest of the page's video), so session
+// pages are captured raw. They hold no input box with a secret: the password
+// is typed on the portal page, which is redacted.
+const rawSnap = async (page, name) => { const f = path.join(OUT, `${name}.png`); await page.screenshot({ path: f }); return path.basename(f); };
 const text = async (page) => (await pageText(page)).replace(/\s+/g, ' ');
 async function inFrames(page, fn) {
   for (const f of page.frames()) { const r = await fn(f).catch(() => null); if (r) return r; }
@@ -150,7 +155,7 @@ try {
     await sess.waitForLoadState('domcontentloaded');
     // The RDP desktop is a canvas; give Windows time to log on and draw.
     await sleep(45000);
-    mark('connect', 'session open on DC01 through Bastion (browser, recorded)', { host: new URL(sess.url()).host, connect_s: Math.round((Date.now() - tConn) / 1000), shot: await snap(sess, '06-session-desktop') });
+    mark('connect', 'session open on DC01 through Bastion (browser, recorded)', { host: new URL(sess.url()).host, connect_s: Math.round((Date.now() - tConn) / 1000), shot: await rawSnap(sess, '06-session-desktop') });
     // The Windows key does not reach the session from a headless browser
     // (2026-11-07 run: Meta+R opened Server Manager's Help menu instead of
     // Run). So click the taskbar's "Type here to search" box (bottom-left of
@@ -163,7 +168,7 @@ try {
     await sleep(5000);
     await sess.keyboard.type('whoami & hostname', { delay: 80 }); await sess.keyboard.press('Enter');
     await sleep(5000);
-    mark('connect', 'keystrokes sent: whoami & hostname (check the recording: the 2026-11-07 run did not reach a prompt)', { shot: await snap(sess, '07-session-whoami') });
+    mark('connect', 'keystrokes sent: whoami & hostname (check the recording: the 2026-11-07 run did not reach a prompt)', { shot: await rawSnap(sess, '07-session-whoami') });
     await sleep(10000);
     await sess.close();
     mark('connect', 'session tab closed: the session ends and Bastion uploads the recording', { session_s: Math.round((Date.now() - tConn) / 1000) });
@@ -195,19 +200,28 @@ try {
     // "View recording" opens the player in a NEW TAB (seen live 2026-11-07:
     // the list page itself does not change). Fall back to the same page.
     const [pop] = await Promise.all([mei.waitForEvent('page', { timeout: 20000 }).catch(() => null), link.click()]);
-    const player = pop || p;
-    if (pop) await pop.waitForLoadState('domcontentloaded').catch(() => {});
+    // Success needs a real player: a new tab on the Bastion's own host. If the
+    // portal cannot make the SAS URL (the listKeys case), no player opens.
+    if (!pop) throw new Error('no player tab opened after View recording (SAS URL refused? run capture.sh playback-on)');
+    await pop.waitForLoadState('domcontentloaded').catch(() => {});
+    if (!/\.bastion\.azure\.com$/i.test(new URL(pop.url()).host)) throw new Error(`the player tab is not on the Bastion host: ${new URL(pop.url()).host}`);
+    const player = pop;
     await sleep(20000);
-    // No redaction here: the player shows the recorded desktop, never a secret box.
-    const raw = async (pg, name) => { const f = path.join(OUT, `${name}.png`); await pg.screenshot({ path: f }); return path.basename(f); };
+    const raw = rawSnap;
+    // The player shows "m:ss / m:ss" bottom-left (seen 2026-11-07); playback
+    // must advance. verify: next run (the clock is assumed to be page text).
+    const clock = async () => { const m = (await text(player)).match(/(\d+):(\d{2})\s*\/\s*(\d+):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
     // The player opens paused at 0:00 with a play button bottom-left and a
     // seek bar along the bottom (seen live 2026-11-07). Press play, then jump
     // to about three quarters in, where the admin typed `whoami & hostname`.
     const vp = player.viewportSize() || { width: 1440, height: 900 };
     const play = await visible(player, (f) => f.getByRole('button', { name: /play/i }));
     if (play) await play.click(); else await player.mouse.click(33, vp.height - 32);
+    const c0 = await clock();
     await sleep(15000);
-    mark('playback', 'recording playing in the portal player', { host: new URL(player.url()).host, new_tab: !!pop, shot: await raw(player, '09-playback-start') });
+    const c1 = await clock();
+    if (c0 === null || c1 === null || !(c1 > c0)) throw new Error(`playback did not advance (clock ${c0} -> ${c1})`);
+    mark('playback', `recording playing in the portal player (clock ${c0}s -> ${c1}s)`, { host: new URL(player.url()).host, new_tab: !!pop, shot: await raw(player, '09-playback-start') });
     await player.mouse.click(Math.round(25 + (vp.width - 50) * 0.75), vp.height - 62);
     await sleep(6000);
     mark('playback', 'playback at about 75% (the whoami step)', { shot: await raw(player, '10-playback-whoami') });

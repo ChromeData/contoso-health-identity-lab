@@ -130,6 +130,30 @@ print(json.dumps({"properties":p}))' "$SUB" "$scope" "$role" "$pid" "$type" "$wh
     --body "$body" --query 'properties.status' -o tsv
 }
 
+# grant <label> <pim_request args...>: run one PIM request, log it, and stop
+# the run unless Azure accepted it. (A grant inside $(...) in a log line would
+# hide a refusal: log would still succeed.)
+grant() {
+  local label="$1"; shift
+  local st
+  st="$(pim_request "$@" 2>&1 | tail -1)" || die "$label: Azure refused the request (${st:0:200})"
+  case "$st" in
+    Provisioned|Granted|PendingProvisioning|PendingAdminDecision|ScheduleCreated) log "$label: $st" ;;
+    *) die "$label: unexpected status '${st:0:200}'" ;;
+  esac
+}
+# revoke <label> <pim_request args...>: AdminRemove; "already gone" is fine,
+# anything else is reported (the read-back below then decides success).
+revoke() {
+  local label="$1"; shift
+  local out
+  if out="$(pim_request "$@" 2>&1)"; then log "$label: removed ($out)"
+  elif grep -qiE 'RoleAssignmentDoesNotExist|RoleEligibilityScheduleNotFound|does not exist|NotFound' <<<"$out"; then log "$label: already gone"
+  else echo "WARNING: $label: ${out:0:200}" >&2; fi
+}
+# Ownership: the script only adopts or deletes objects tagged purpose=bastion-capture.
+tag_of() { az resource show --ids "$1" --query 'tags.purpose' -o tsv 2>/dev/null || true; }
+
 bastion_state() { az rest --url "$ARM$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION?api-version=$API_BASTION" \
   --query 'properties.provisioningState' -o tsv 2>/dev/null || echo absent; }
 
@@ -155,10 +179,25 @@ cmd_up() {
 
   # --- Network -----------------------------------------------------------------
   s=$(date +%s)
-  az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet -o none 2>/dev/null \
-    || az network vnet subnet create -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet --address-prefixes "$SUBNET_PREFIX" -o none
-  az network public-ip show -g "$RG" -n "$PIP" -o none 2>/dev/null \
-    || az network public-ip create -g "$RG" -n "$PIP" -l "$LOC" --sku Standard --allocation-method Static --tags "${TAGS[@]}" -o none
+  # A subnet has no tags, so ownership is tracked in the state file: adopt an
+  # existing AzureBastionSubnet only if an earlier 'up' of this script made it.
+  if az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet -o none 2>/dev/null; then
+    [[ "$(state_get subnet_created_by_capture)" == yes ]] \
+      || die "AzureBastionSubnet already exists and this script did not create it: not adopting it (a Bastion someone else runs?)"
+  else
+    az network vnet subnet create -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet --address-prefixes "$SUBNET_PREFIX" -o none
+    state_set subnet_created_by_capture yes
+  fi
+  local pip_id="$SCOPE_RG/providers/Microsoft.Network/publicIPAddresses/$PIP"
+  if az network public-ip show -g "$RG" -n "$PIP" -o none 2>/dev/null; then
+    [[ "$(tag_of "$pip_id")" == bastion-capture ]] || die "$PIP exists without tag purpose=bastion-capture: not adopting it"
+  else
+    az network public-ip create -g "$RG" -n "$PIP" -l "$LOC" --sku Standard --allocation-method Static --tags "${TAGS[@]}" -o none
+  fi
+  if [[ "$(bastion_state)" != absent ]]; then
+    [[ "$(tag_of "$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION")" == bastion-capture ]] \
+      || die "$BASTION exists without tag purpose=bastion-capture: not adopting it"
+  fi
   log "Subnet $SUBNET_PREFIX and public IP ready ($(( $(date +%s) - s )) s)"
 
   # --- Storage + identity --------------------------------------------------------
@@ -233,13 +272,13 @@ print(json.dumps({"properties":{"isVersioningEnabled":False,"cors":{"corsRules":
   local admin_oid reviewer_oid bastion_id
   admin_oid="$(oid_of "$ADMIN_UPN")"; reviewer_oid="$(oid_of "$REVIEWER_UPN")"
   bastion_id="$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION"
-  log "PIM: $ADMIN_UPN eligible for Reader on $RG (4 h): $(pim_request Eligibility "$SCOPE_RG" "$READER" "$admin_oid" AdminAssign 'Bastion capture: Tier-0 DC01 session through PIM (lab/bastion)')"
-  log "Reviewer: $REVIEWER_UPN active Storage Blob Data Reader on the container (4 h): $(pim_request Assignment "$ct_scope" "$BLOB_READER" "$reviewer_oid" AdminAssign 'Bastion capture: play back the recording (lab/bastion)')"
+  grant "PIM: $ADMIN_UPN eligible for Reader on $RG (4 h)" Eligibility "$SCOPE_RG" "$READER" "$admin_oid" AdminAssign 'Bastion capture: Tier-0 DC01 session through PIM (lab/bastion)'
+  grant "Reviewer: $REVIEWER_UPN active Storage Blob Data Reader on the container (4 h)" Assignment "$ct_scope" "$BLOB_READER" "$reviewer_oid" AdminAssign 'Bastion capture: play back the recording (lab/bastion)'
   # The portal's Session recordings blade also reads the storage account itself
   # (management plane): without Reader there it shows "Storage account not
   # found" and 0 recordings (seen live 2026-11-07).
-  log "Reviewer: $REVIEWER_UPN active Reader on $st (4 h): $(pim_request Assignment "$st_id" "$READER" "$reviewer_oid" AdminAssign 'Bastion capture: Session recordings reads the storage account (lab/bastion)')"
-  log "Reviewer: $REVIEWER_UPN active Reader on $BASTION (4 h): $(pim_request Assignment "$bastion_id" "$READER" "$reviewer_oid" AdminAssign 'Bastion capture: open Session recordings (lab/bastion)')"
+  grant "Reviewer: $REVIEWER_UPN active Reader on $st (4 h)" Assignment "$st_id" "$READER" "$reviewer_oid" AdminAssign 'Bastion capture: Session recordings reads the storage account (lab/bastion)'
+  grant "Reviewer: $REVIEWER_UPN active Reader on $BASTION (4 h)" Assignment "$bastion_id" "$READER" "$reviewer_oid" AdminAssign 'Bastion capture: open Session recordings (lab/bastion)'
   state_set up_at "$(date -u +%FT%TZ)"
   log "UP. Next: node lab/bastion/prove.mjs; then capture.sh down"
 }
@@ -252,30 +291,41 @@ cmd_down() {
   bastion_id="$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION"
   # Bastion first: it is the one that costs money.
   if [[ "$(bastion_state)" != absent ]]; then
+    [[ "$(tag_of "$bastion_id")" == bastion-capture ]] || die "$BASTION has no tag purpose=bastion-capture: not deleting someone else's Bastion"
     log "Deleting $BASTION"
     az rest --method DELETE --url "$ARM$bastion_id?api-version=$API_BASTION" -o none
     for _ in $(seq 1 80); do [[ "$(bastion_state)" == absent ]] && break; sleep 15; done
     [[ "$(bastion_state)" == absent ]] || die "Bastion still present: delete it by hand NOW (it bills \$0.45/h)"
   fi
   log "Bastion gone ($(( $(date +%s) - s0 )) s since 'down' started)"
-  az network public-ip delete -g "$RG" -n "$PIP" -o none 2>/dev/null || true
-  az network vnet subnet delete -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet -o none 2>/dev/null || true
+  local pip_id="$SCOPE_RG/providers/Microsoft.Network/publicIPAddresses/$PIP"
+  if az network public-ip show -g "$RG" -n "$PIP" -o none 2>/dev/null; then
+    if [[ "$(tag_of "$pip_id")" == bastion-capture ]]; then az network public-ip delete -g "$RG" -n "$PIP" -o none
+    else echo "WARNING: $PIP has no capture tag: left alone" >&2; fi
+  fi
+  if [[ "$(state_get subnet_created_by_capture)" == yes ]]; then
+    az network vnet subnet delete -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet -o none 2>/dev/null || true
+    az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet -o none 2>/dev/null || state_set subnet_created_by_capture no
+  else
+    log "AzureBastionSubnet was not created by this script: left alone"
+  fi
   if [[ -n "$st" ]]; then
     st_id="$(az storage account show -g "$RG" -n "$st" --query id -o tsv 2>/dev/null || true)"
     ct_scope="$st_id/blobServices/default/containers/$CONTAINER"
   fi
   local uami_pid; uami_pid="$(az identity show -g "$RG" -n "$UAMI" --query principalId -o tsv 2>/dev/null || true)"
   if [[ -n "$uami_pid" && -n "${ct_scope:-}" ]]; then
+    # shellcheck disable=SC2046  # one id per word, on purpose
     az role assignment delete --ids $(az role assignment list --scope "$ct_scope" --query "[?principalId=='$uami_pid'].id" -o tsv) -o none 2>/dev/null || true
   fi
   az identity delete -g "$RG" -n "$UAMI" -o none 2>/dev/null || true
   # Access: remove before the 4 h expiry. AdminRemove fails harmlessly if already gone.
-  pim_request Eligibility "$SCOPE_RG" "$READER" "$admin_oid" AdminRemove 'Bastion capture over' >/dev/null 2>&1 || true
+  revoke "Admin eligibility" Eligibility "$SCOPE_RG" "$READER" "$admin_oid" AdminRemove 'Bastion capture over'
   if [[ -n "${ct_scope:-}" ]]; then
-    pim_request Assignment "$ct_scope" "$BLOB_READER" "$reviewer_oid" AdminRemove 'Bastion capture over' >/dev/null 2>&1 || true
-    pim_request Assignment "$st_id" "$READER" "$reviewer_oid" AdminRemove 'Bastion capture over' >/dev/null 2>&1 || true
-    pim_request Assignment "$st_id" 81a9662b-bebf-436f-a333-f67b29880f12 "$reviewer_oid" AdminRemove 'Bastion capture over' >/dev/null 2>&1 || true
-    [[ -n "$st_id" ]] && az storage account update --ids "$st_id" --allow-shared-key-access false -o none 2>/dev/null || true
+    revoke "Reviewer blob reader" Assignment "$ct_scope" "$BLOB_READER" "$reviewer_oid" AdminRemove 'Bastion capture over'
+    revoke "Reviewer storage Reader" Assignment "$st_id" "$READER" "$reviewer_oid" AdminRemove 'Bastion capture over'
+    revoke "Reviewer key operator" Assignment "$st_id" 81a9662b-bebf-436f-a333-f67b29880f12 "$reviewer_oid" AdminRemove 'Bastion capture over'
+    [[ -n "$st_id" ]] && az storage account update --ids "$st_id" --allow-shared-key-access false -o none
   fi
   log "Public IP, subnet, identity, PIM eligibility and reviewer access removed"
   if [[ "$(state_get dc01_started_by_capture)" == yes ]]; then
@@ -285,6 +335,16 @@ cmd_down() {
   fi
   # Read back.
   log "Read back: bastion=$(bastion_state) pip=$(az network public-ip show -g "$RG" -n "$PIP" --query name -o tsv 2>/dev/null || echo absent) subnet=$(az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet --query name -o tsv 2>/dev/null || echo absent) admin-eligibility=$(az rest --url "$ARM$SCOPE_RG/providers/Microsoft.Authorization/roleEligibilitySchedules?api-version=2020-10-01&\$filter=principalId eq '$admin_oid'" --query 'length(value)' -o tsv)"
+  # Read back the access the recording account could still give: fail unless
+  # shared-key access is off and the reviewer holds nothing on it.
+  if [[ -n "${st_id:-}" ]]; then
+    local sk left
+    sk="$(az storage account show --ids "$st_id" --query allowSharedKeyAccess -o tsv)"
+    left="$(az role assignment list --scope "$st_id" --query "[?principalId=='$reviewer_oid'] | length(@)" -o tsv)"
+    [[ "$sk" == false && "$left" == 0 ]] \
+      || die "teardown incomplete on $st: allowSharedKeyAccess=$sk, reviewer role assignments left=$left (remove them by hand)"
+    log "Read back: $st allowSharedKeyAccess=false, reviewer role assignments on it: 0"
+  fi
   log "DOWN ($(( $(date +%s) - s0 )) s). Recordings kept in ${st:-?}/$CONTAINER (capture.sh purge-recordings deletes them)"
 }
 
@@ -295,7 +355,7 @@ cmd_playback_on() {
   reviewer_oid="$(oid_of "$REVIEWER_UPN")"
   az storage account update --ids "$st_id" --allow-shared-key-access true -o none
   log "Shared-key access ON for $st (the portal player builds an account-key SAS)"
-  log "Reviewer: Storage Account Key Operator Service Role on $st (1 h): $(KEY_HOURS=1 pim_request Assignment "$st_id" 81a9662b-bebf-436f-a333-f67b29880f12 "$reviewer_oid" AdminAssign 'Bastion capture: the portal player calls listKeys (lab/bastion)')"
+  KEY_HOURS=1 grant "Reviewer: Storage Account Key Operator Service Role on $st (1 h)" Assignment "$st_id" 81a9662b-bebf-436f-a333-f67b29880f12 "$reviewer_oid" AdminAssign 'Bastion capture: the portal player calls listKeys (lab/bastion)'
 }
 
 cmd_purge_recordings() {
