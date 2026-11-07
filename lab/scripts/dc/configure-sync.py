@@ -10,7 +10,8 @@ run reads the current state and only adds what is missing.
               AD2AADPasswordHash; Domain + AppKey secrets; SCOPED to the OUs
               given (containerFilter: Tier-0 and service accounts must never
               sync); password-hash CredentialData mappings; hire date
-              msDS-cloudExtensionAttribute1 -> EmployeeHireDate; start.
+              msDS-cloudExtensionAttribute1 -> EmployeeHireDate; leave date
+              msDS-cloudExtensionAttribute2 -> EmployeeLeaveDateTime; start.
 
   hrapp       HR -> AD (API-driven inbound provisioning, "API2AD", created by
               lab/scripts/mock-hr/New-InboundProvisioningApp.ps1):
@@ -19,13 +20,25 @@ run reads the current state and only adds what is missing.
               (printed by 02-Configure-Domain.ps1); userPrincipalName straight
               from the HR userName (the verified suffix, not the AD domain);
               the custom SCIM hireDate formatted into msDS-cloudExtensionAttribute1;
-              start.
+              the leave date into msDS-cloudExtensionAttribute2 (below); start.
+
+  leavedate   ONLY the two leave-date mappings, on jobs that already run (no
+              connectivity, scope or other mapping is touched):
+              HR job  msDS-cloudExtensionAttribute2 <- IIF([active]="False",
+                      the time this leaver reached the HR job, "")
+              Cloud Sync  msDS-cloudExtensionAttribute2 -> EmployeeLeaveDateTime
+              Why: the leaver lifecycle workflow (New-LifecycleWorkflows.ps1
+              -IncludeLeaveDateLeaver) triggers on employeeLeaveDateTime. The
+              HR connector sends a leaver only on or after the termination
+              date, so "the time the leaver arrived" is the leave time. It is
+              derived from SCIM active, so no change to the sender is needed.
 
 Usage (repo root, after az login as an admin):
   lab/scripts/dc/configure-sync.py cloudsync --domain corp.example.com \\
       --ou "OU=Workforce,DC=corp,DC=example,DC=com" --ou "OU=Disabled,DC=corp,DC=example,DC=com"
   lab/scripts/dc/configure-sync.py hrapp --domain corp.example.com --sp <spId> --job <jobId> \\
       --default-ou "OU=Workforce,DC=corp,DC=example,DC=com" --parent-dn-file parentDN.txt
+  lab/scripts/dc/configure-sync.py leavedate --domain corp.example.com --sp <hrSpId> --job <hrJobId>
 
 Facts this encodes (checked against the live tenant, 2026-10-27):
   * the API2AD job has no schema/parseExpression; the TEMPLATE endpoint
@@ -49,6 +62,12 @@ GB = "https://graph.microsoft.com/beta"
 AD2AAD_TEMPLATE = "1a4721b3-e57f-4451-ae87-ef078703ec94"
 HIRE = "urn:ietf:params:scim:schemas:extension:contoso:1.0:User:hireDate"
 EXT = "msDS-cloudExtensionAttribute1"
+LEAVE_EXT = "msDS-cloudExtensionAttribute2"
+# The leaver's arrival time, in the AD string format Learn gives for these
+# attributes ("yyyyMMddHHmmss.fZ"). Now() is UTC, "M/d/yyyy h:mm:ss tt"
+# (Learn, functions for attribute mappings). parseExpression evaluated it on
+# 2026-11-07: active False -> "20261107201430.0Z", active True -> "".
+LEAVE_EXPR = 'IIF([active]="False", FormatDateTime(Now(), , "M/d/yyyy h:mm:ss tt", "yyyyMMddHHmmss.fZ"), "")'
 
 
 def az(method, url, body=None, ok_missing=False):
@@ -131,12 +150,14 @@ def cloudsync(a):
     for o in addir["objects"]:
         if o["name"] in ("user", "inetOrgPerson"):
             add_attr(o, EXT, "department")
+            add_attr(o, LEAVE_EXT, "department")
     cred = {"expression": "[PasswordHash]", "name": "PasswordHash", "type": "Attribute", "parameters": []}
     hire = {"expression": f"[{EXT}]", "name": EXT, "type": "Attribute", "parameters": []}
     for om in rule["objectMappings"]:
         if om.get("name") in ("Provision Active Directory users", "Provision Active Directory inetOrgPersons"):
             set_mapping(om["attributeMappings"], "CredentialData", cred)
             set_mapping(om["attributeMappings"], "EmployeeHireDate", hire)
+    cloudsync_leave(rule)
     az("PUT", sch_url, sch)
     back = az("GET", sch_url)["synchronizationRules"][0].get("containerFilter")
     print("scope (containerFilter):", back)
@@ -147,6 +168,64 @@ def cloudsync(a):
         print(f"job {t}: started (interval {st['schedule'].get('interval')})")
 
 
+def cloudsync_leave(rule):
+    """Cloud Sync rule: AD msDS-cloudExtensionAttribute2 -> EmployeeLeaveDateTime."""
+    leave = {"expression": f"[{LEAVE_EXT}]", "name": LEAVE_EXT, "type": "Attribute", "parameters": []}
+    n = 0
+    for om in rule["objectMappings"]:
+        if om.get("name") in ("Provision Active Directory users", "Provision Active Directory inetOrgPersons"):
+            set_mapping(om["attributeMappings"], "EmployeeLeaveDateTime", leave)
+            n += 1
+    if not n:
+        raise SystemExit("Cloud Sync schema has no 'Provision Active Directory users' mapping: nothing changed")
+
+
+def hr_leave(sch, parse):
+    """HR job: msDS-cloudExtensionAttribute2 <- LEAVE_EXPR (declared on the AD side first)."""
+    ad = next(d for d in sch["directories"] if d["name"] != "API")
+    add_attr(ad["objects"][0], LEAVE_EXT, "department")
+    set_mapping(sch["synchronizationRules"][0]["objectMappings"][0]["attributeMappings"], LEAVE_EXT, parse(LEAVE_EXPR))
+
+
+def find_cloudsync_job(domain):
+    sps = az("GET", f"{GB}/servicePrincipals?$filter=displayName eq '{domain}'&$select=id")["value"]
+    if len(sps) != 1:
+        raise SystemExit(f"expected one Cloud Sync app named {domain}, found {len(sps)}")
+    base = f"{GB}/servicePrincipals/{sps[0]['id']}/synchronization"
+    jobs = [j["id"] for j in az("GET", base + "/jobs").get("value", []) if j["templateId"] == "AD2AADProvisioning"]
+    if len(jobs) != 1:
+        raise SystemExit(f"expected one AD2AADProvisioning job, found {len(jobs)}")
+    return f"{base}/jobs/{jobs[0]}/schema"
+
+
+def parser_for(base):
+    def parse(expr):
+        p = az("POST", base + "/templates/API2AD/schema/parseExpression",
+               {"expression": expr, "targetAttributeDefinition": None, "testInputObject": None})
+        if not p.get("parsingSucceeded"):
+            raise SystemExit(f"expression did not parse: {expr[:80]}")
+        return p["parsedExpression"]
+    return parse
+
+
+def leavedate(a):
+    base = f"{GB}/servicePrincipals/{a.sp}/synchronization"
+    hr_url = base + f"/jobs/{a.job}/schema"
+    hr = az("GET", hr_url)
+    hr_leave(hr, parser_for(base))
+    cs_url = find_cloudsync_job(a.domain)
+    cs = az("GET", cs_url)
+    addir = next(d for d in cs["directories"] if d["name"] == "Active Directory")
+    for o in addir["objects"]:
+        if o["name"] in ("user", "inetOrgPerson"):
+            add_attr(o, LEAVE_EXT, "department")
+    cloudsync_leave(cs["synchronizationRules"][0])
+    az("PUT", hr_url, hr)
+    print(f"HR job: {LEAVE_EXT} <- leave time when active is False")
+    az("PUT", cs_url, cs)
+    print(f"Cloud Sync: {LEAVE_EXT} -> EmployeeLeaveDateTime")
+
+
 def hrapp(a):
     base = f"{GB}/servicePrincipals/{a.sp}/synchronization"
     az("PATCH", base + "/connectivityParameters", {"value": [
@@ -154,13 +233,7 @@ def hrapp(a):
         {"key": "syncAgentADContainer", "value": a.default_ou}]})
     print("connectivity: domain + default OU set")
 
-    def parse(expr):
-        p = az("POST", base + "/templates/API2AD/schema/parseExpression",
-               {"expression": expr, "targetAttributeDefinition": None, "testInputObject": None})
-        if not p.get("parsingSucceeded"):
-            raise SystemExit(f"expression did not parse: {expr[:80]}")
-        return p["parsedExpression"]
-
+    parse = parser_for(base)
     sch_url = base + f"/jobs/{a.job}/schema"
     sch = az("GET", sch_url)
     api = next(d for d in sch["directories"] if d["name"] == "API")
@@ -174,8 +247,9 @@ def hrapp(a):
         if m["targetAttributeName"] == "userPrincipalName":
             m["source"] = {"expression": "[userName]", "name": "userName", "type": "Attribute", "parameters": []}
     set_mapping(maps, EXT, parse(f'FormatDateTime([{HIRE}], , "yyyy-MM-ddTHH:mm:ssZ", "yyyyMMddHHmmss.fZ")'))
+    hr_leave(sch, parse)
     az("PUT", sch_url, sch)
-    print("mappings: parentDistinguishedName, userPrincipalName <- userName, hireDate -> " + EXT)
+    print("mappings: parentDistinguishedName, userPrincipalName <- userName, hireDate -> " + EXT + ", leave time -> " + LEAVE_EXT)
     st = az("GET", base + f"/jobs/{a.job}")
     if st["schedule"]["state"] != "Active":
         az("POST", base + f"/jobs/{a.job}/start")
@@ -194,8 +268,12 @@ def main():
     h.add_argument("--job", required=True)
     h.add_argument("--default-ou", required=True)
     h.add_argument("--parent-dn-file", help="file holding the parentDistinguishedName expression from 02-Configure-Domain.ps1")
+    lv = sub.add_parser("leavedate")
+    lv.add_argument("--domain", required=True, help="the AD domain (= the Cloud Sync app's display name)")
+    lv.add_argument("--sp", required=True, help="HR inbound provisioning service principal id")
+    lv.add_argument("--job", required=True, help="HR inbound provisioning job id")
     a = ap.parse_args()
-    (cloudsync if a.cmd == "cloudsync" else hrapp)(a)
+    {"cloudsync": cloudsync, "hrapp": hrapp, "leavedate": leavedate}[a.cmd](a)
 
 
 if __name__ == "__main__":

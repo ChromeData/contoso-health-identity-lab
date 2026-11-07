@@ -1,5 +1,6 @@
 # Pester 5 tests for post-apply/New-LifecycleWorkflows.ps1 (offline preview
-# only - no tenant): the mover workflow is opt-in and has the right shape.
+# only - no tenant): the mover and the scheduled leave-date leaver are opt-in
+# and have the right shape.
 
 BeforeAll {
     . (Join-Path $PSScriptRoot 'TestHelpers.ps1')
@@ -47,5 +48,35 @@ Describe 'New-LifecycleWorkflows.ps1 -OfflinePreview' {
         ($tasks | ForEach-Object { $_['continueOnError'] }) | Should -Not -Contain $false
         (@($tasks[0]['arguments']) | Where-Object { $_['name'] -eq 'accessPackageId' })['value'] | Should -Be '<accessPackageId: ICU - Critical Care Apps>'
         (@($tasks[1]['arguments']) | Where-Object { $_['name'] -eq 'accessPackageId' })['value'] | Should -Be '<accessPackageId: Nurse - Clinical Apps>'
+    }
+
+    It '-IncludeLeaveDateLeaver adds a scheduled leaver: employeeLeaveDateTime day 0, disabled users only, package and group removal, no disable' {
+        $r = @(& $script:Lcw -OfflinePreview -IncludeLeaveDateLeaver)
+        @($r | Where-Object Action -EQ 'offline-preview').Count | Should -Be 3
+        $bodies = @(foreach ($l in $global:LcwOut) { if ($l -match '^\s*\{' -and $l -match '"category"') { $l | ConvertFrom-Json -AsHashtable } })
+        $w = @($bodies | Where-Object { $_['displayName'] -eq 'Contoso - Leaver (HR leave date, scheduled)' })
+        $w.Count | Should -Be 1
+        $w = $w[0]
+        $w['category'] | Should -Be 'leaver'
+        $w['isSchedulingEnabled'] | Should -BeTrue
+        $tr = $w['executionConditions']['trigger']
+        $tr['@odata.type'] | Should -Be '#microsoft.graph.identityGovernance.timeBasedAttributeTrigger'
+        $tr['timeBasedAttribute'] | Should -Be 'employeeLeaveDateTime'
+        $tr['offsetInDays'] | Should -Be 0
+        # A rehired (enabled) worker with an old leave date is never processed.
+        $w['executionConditions']['scope']['rule'] | Should -Be '(accountEnabled eq false)'
+        $defs = @($w['tasks'] | ForEach-Object { $_['taskDefinitionId'] })
+        $defs | Should -Contain '<taskDefinitionId: Remove all access package assignments for user>'
+        $defs | Should -Contain '<taskDefinitionId: Remove user from all groups>'
+        ($defs -join ' ') | Should -Not -Match 'Disable user account'
+        (@($w['tasks']) | ForEach-Object { $_['continueOnError'] }) | Should -Not -Contain $false
+    }
+
+    It '-ScheduleIntervalHours prints the tenant schedule PATCH; 0 (default) leaves it alone' {
+        & $script:Lcw -OfflinePreview -ScheduleIntervalHours 1 | Out-Null
+        ($global:LcwOut -join "`n") | Should -Match 'PATCH \S+/lifecycleWorkflows/settings \{ workflowScheduleIntervalInHours = 1 \}'
+        $global:LcwOut.Clear()
+        & $script:Lcw -OfflinePreview | Out-Null
+        ($global:LcwOut -join "`n") | Should -Not -Match 'workflowScheduleIntervalInHours'
     }
 }

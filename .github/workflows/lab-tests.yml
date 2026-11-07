@@ -213,6 +213,8 @@ jobs:
           # Splunk live feed: watermark, de-dup, HEC failures, LaunchAgent template,
           # preflight verdict (fake Log Analytics, an HEC stub on 127.0.0.1; stdlib only).
           python3 -I -m unittest discover -s lab/scripts/monitoring/tests -p 'test_feed_splunk_live.py' -v
+          # Leave-date mappings for the scheduled HR leaver (configure-sync.py leavedate; no tenant).
+          python3 -I -m unittest discover -s lab/scripts/dc/tests -p 'test_configure_sync_leavedate.py' -v
           # Pure parts of the lab passkey tool (no browser, Graph or Keychain);
           # node is preinstalled on ubuntu-latest, node:test needs no package.
           node --test lab/scripts/demo/tests/passkey.test.mjs

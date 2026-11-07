@@ -244,6 +244,36 @@
     Package requested for the new role / removed from the old one. Defaults
     "ICU - Critical Care Apps" / "Nurse - Clinical Apps" (03-Mover.ps1's swap).
 
+.PARAMETER IncludeLeaveDateLeaver
+    Also create the SCHEDULED leaver "Contoso - Leaver (HR leave date,
+    scheduled)" (default off). It closes the leaver gap with no hand step:
+      HR terminates in OrangeHRM -> connector -> hr-feed -> HR-SYNC sends
+      active:false -> the HR job writes AD accountDisabled AND
+      msDS-cloudExtensionAttribute2 = the time the leaver arrived
+      (lab/scripts/dc/configure-sync.py leavedate) -> Cloud Sync carries both
+      up (accountEnabled false, employeeLeaveDateTime) -> this workflow runs
+      on the next tenant schedule run.
+    Trigger: time based, employeeLeaveDateTime, offset 0 days. Scope:
+    (accountEnabled eq false), so a rehired (enabled) worker is never
+    processed; Lifecycle Workflows checks the scope again just before it
+    runs (Learn, execution conditions). Scheduling ON. Tasks: revoke
+    refresh tokens, cancel pending package requests, remove all access
+    package assignments, remove from all groups, remove direct licenses.
+    No disable task: HR already disabled the AD account (the source of
+    authority). Worst case = Cloud Sync cycle (20 min) + the schedule
+    interval (-ScheduleIntervalHours).
+    This replaces the automatic policy's 72 h grace for leavers: the policy
+    removes a package 72 h after the user stops matching; this workflow
+    removes it at its next run.
+
+.PARAMETER LeaveDateLeaverWorkflowName
+    Default "Contoso - Leaver (HR leave date, scheduled)".
+
+.PARAMETER ScheduleIntervalHours
+    Tenant-wide Lifecycle Workflows schedule (workflowScheduleIntervalInHours,
+    1-24, default in Entra 3). 0 (the default) leaves it as it is. 1 is the
+    shortest the service supports; it also makes the joiner run hourly.
+
 .PARAMETER OfflinePreview
     Build and print both workflow bodies with placeholder ids. No Graph
     connection, nothing sent. Use it with no tenant to review the JSON.
@@ -353,6 +383,17 @@ param(
     [Parameter()]
     [ValidateNotNullOrEmpty()]
     [string]$MoverFromPackage = 'Nurse - Clinical Apps',
+
+    [Parameter()]
+    [switch]$IncludeLeaveDateLeaver,
+
+    [Parameter()]
+    [ValidateNotNullOrEmpty()]
+    [string]$LeaveDateLeaverWorkflowName = 'Contoso - Leaver (HR leave date, scheduled)',
+
+    [Parameter()]
+    [ValidateRange(0, 24)]
+    [int]$ScheduleIntervalHours = 0,
 
     [Parameter()]
     [switch]$OfflinePreview
@@ -683,6 +724,33 @@ $leaverBody = [ordered]@{
     tasks               = $leaverTasks
 }
 
+# ---- Scheduled leaver on employeeLeaveDateTime (-IncludeLeaveDateLeaver) -----
+$leaveDateLeaverBody = $null
+if ($IncludeLeaveDateLeaver) {
+    # The on-demand leaver's tasks minus "Disable user account": HR has
+    # already disabled the AD account, and the scope only admits disabled users.
+    $leaveDateLeaverBody = [ordered]@{
+        category            = 'leaver'
+        displayName         = $LeaveDateLeaverWorkflowName
+        description         = 'HR leaver, no hand step: runs on employeeLeaveDateTime (set by HR inbound provisioning, carried by Cloud Sync) for disabled users. Managed by lab/scripts/powershell/post-apply/New-LifecycleWorkflows.ps1.'
+        isEnabled           = $true
+        isSchedulingEnabled = $true
+        executionConditions = [ordered]@{
+            '@odata.type' = '#microsoft.graph.identityGovernance.triggerAndScopeBasedConditions'
+            scope         = [ordered]@{
+                '@odata.type' = '#microsoft.graph.identityGovernance.ruleBasedSubjectSet'
+                rule          = '(accountEnabled eq false)'
+            }
+            trigger       = [ordered]@{
+                '@odata.type'      = '#microsoft.graph.identityGovernance.timeBasedAttributeTrigger'
+                timeBasedAttribute = 'employeeLeaveDateTime'
+                offsetInDays       = 0
+            }
+        }
+        tasks               = @($leaverTasks | Select-Object -Skip 1)
+    }
+}
+
 # ---- Mover (-IncludeMover only) -----------------------------------------------
 $moverBody = $null
 if ($IncludeMover) {
@@ -768,7 +836,24 @@ $existing = @()
 if (-not $OfflinePreview) { $existing = @(Get-GraphCollection -Uri "$lcw/workflows") }
 
 $workflowIds = @{}
-foreach ($desired in @($joinerBody, $leaverBody, $moverBody | Where-Object { $null -ne $_ })) {
+# Tenant schedule (-ScheduleIntervalHours): one PATCH, only when it differs.
+if ($ScheduleIntervalHours -gt 0) {
+    if ($OfflinePreview) {
+        Write-Console "PATCH $lcw/settings { workflowScheduleIntervalInHours = $ScheduleIntervalHours }" -ForegroundColor DarkYellow
+    }
+    else {
+        $settings = Invoke-Graph -Method GET -Uri "$lcw/settings"
+        $have = [int]$settings['workflowScheduleIntervalInHours']
+        if ($have -eq $ScheduleIntervalHours) { Add-Result 'tenant schedule' '' 'up-to-date' "every $have h" }
+        elseif ($PSCmdlet.ShouldProcess('Lifecycle Workflows settings', "schedule every $have h -> $ScheduleIntervalHours h")) {
+            Invoke-Graph -Method PATCH -Uri "$lcw/settings" -Body @{ workflowScheduleIntervalInHours = $ScheduleIntervalHours } | Out-Null
+            Add-Result 'tenant schedule' '' 'settings-patched' "every $have h -> $ScheduleIntervalHours h"
+        }
+        else { Add-Result 'tenant schedule' '' 'whatif-patch' "every $have h -> $ScheduleIntervalHours h" }
+    }
+}
+
+foreach ($desired in @($joinerBody, $leaverBody, $leaveDateLeaverBody, $moverBody | Where-Object { $null -ne $_ })) {
     $name = $desired.displayName
     Write-Console "`n=== $name ===" -ForegroundColor Cyan
     $json = $desired | ConvertTo-Json -Depth 12
