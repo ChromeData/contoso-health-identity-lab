@@ -7,7 +7,7 @@ import {
   oktaElToEntra, protocolOf, isClinicApp, statusOf, buildRow, toCsv, toMarkdown, toHtml,
   systemLogFilter, entraSigninKql, okta, graphAll, checkSwitchTarget, latestTest,
 } from '../lib.mjs';
-import { verifyIdToken, authorizeUrl, pkcePair, signinRecord, page, checkCallback, browserLoginId, loginCookieHeader } from '../clinic-results/app.mjs';
+import { verifyIdToken, authorizeUrl, pkcePair, signinRecord, page, checkCallback, browserLoginId, loginCookieHeader, loginCookies, LEGACY_LOGIN_COOKIE_CLEAR } from '../clinic-results/app.mjs';
 
 test('the clinic login-domain rule translates to an endsWith on the UPN', () => {
   assert.deepEqual(oktaElToEntra('String.substringAfter(user.login, "@") == "contosohealthlab.com"'), { rule: '(user.userPrincipalName -endsWith "@contosohealthlab.com")' });
@@ -191,4 +191,15 @@ test('the login-id cookie is sent to /login too (Path=/), or a second tab could 
   assert.doesNotMatch(h, /Path=\/callback/);
   assert.match(h, /HttpOnly/);
   assert.match(h, /SameSite=Lax/);
+});
+
+test('an old Path=/callback cookie sent first does not block the callback', () => {
+  const cur = 'b'.repeat(32), old = 'c'.repeat(32);
+  const sent = loginCookies(`cr_login=${old}; cr_sid=x; cr_login=${cur}`);
+  assert.deepEqual(sent, [old, cur]);
+  const p = { idp: 'okta', t: Date.now(), browser: cur };
+  const chosen = sent.find((v) => v === p.browser) || sent[0];
+  assert.ok(checkCallback(p, chosen, 'okta').ok);
+  assert.deepEqual(loginCookies(''), []);
+  assert.match(LEGACY_LOGIN_COOKIE_CLEAR, /Path=\/callback; Max-Age=0/);
 });
