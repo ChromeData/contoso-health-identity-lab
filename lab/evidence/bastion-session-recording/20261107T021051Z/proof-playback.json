@@ -1,0 +1,44 @@
+{
+ "started": "2026-11-07T02:46:11.207Z",
+ "steps": [
+  {
+   "step": "signin",
+   "what": "adm-ava.lin signed in to the Azure portal (passkey)",
+   "utc": "2026-11-07T02:46:20.734Z",
+   "t_s": 10
+  },
+  {
+   "step": "playback",
+   "what": "Session recordings lists the DC01 session",
+   "utc": "2026-11-07T02:46:54.349Z",
+   "t_s": 43,
+   "ok": true,
+   "list_wait_s": 24,
+   "shot": "08-recordings-list.png"
+  },
+  {
+   "step": "playback",
+   "what": "recording playing in the portal player",
+   "utc": "2026-11-07T02:47:30.633Z",
+   "t_s": 79,
+   "host": "bst-a932af89-0b57-4a3f-9898-9961f341d392.bastion.azure.com",
+   "new_tab": true,
+   "shot": "09-playback-start.png"
+  },
+  {
+   "step": "playback",
+   "what": "playback at about 75% (the whoami step)",
+   "utc": "2026-11-07T02:47:36.719Z",
+   "t_s": 86,
+   "shot": "10-playback-whoami.png"
+  },
+  {
+   "step": "playback",
+   "what": "playback near the end",
+   "utc": "2026-11-07T02:47:51.772Z",
+   "t_s": 101,
+   "shot": "11-playback-end.png"
+  }
+ ],
+ "ok": true
+}
