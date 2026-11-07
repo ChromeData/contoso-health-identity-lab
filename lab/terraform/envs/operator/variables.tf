@@ -42,6 +42,9 @@ variable "operator_graph_roles" {
                                           check their Graph context for this name)
       LifecycleWorkflows.Read.All         joiner/leaver workflows and runs
       RoleEligibilitySchedule.Read.Directory  who is eligible for which role
+      RoleManagement.Read.Directory       ACTIVE role assignments
+                                          (roleAssignmentScheduleInstances) for
+                                          08-Measure-KPIs.ps1 and 09-SoD-Report.ps1
       RoleManagementPolicy.Read.Directory     PIM activation rules, directory roles
       RoleManagementPolicy.Read.AzureADGroup  PIM activation rules, PIM groups
       PrivilegedEligibilitySchedule.Read.AzureADGroup  PIM-for-Groups eligibility
@@ -70,6 +73,7 @@ variable "operator_graph_roles" {
     "AccessReview.Read.All",
     "LifecycleWorkflows.Read.All",
     "RoleEligibilitySchedule.Read.Directory",
+    "RoleManagement.Read.Directory",
     "RoleManagementPolicy.Read.Directory",
     "RoleManagementPolicy.Read.AzureADGroup",
     "PrivilegedEligibilitySchedule.Read.AzureADGroup",

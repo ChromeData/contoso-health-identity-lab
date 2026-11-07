@@ -57,7 +57,7 @@ resource "azuread_conditional_access_policy" "operator_location" {
 
     locations {
       included_locations = ["All"]
-      excluded_locations = [azuread_named_location.operator_network[0].id]
+      excluded_locations = [azuread_named_location.operator_network[0].object_id] # bare GUID: .id is a path in AzureAD 3.x (as CA004)
     }
   }
 

@@ -33,6 +33,7 @@ mock_provider "azuread" {
         "User.DeleteRestore.All"                               = "eccc023d-eccf-4e7b-9683-8813ab36cecc"
         "AdministrativeUnit.ReadWrite.All"                     = "5eb59dd3-1da2-4329-8733-9dabdc435916"
         "RoleManagement.ReadWrite.Directory"                   = "9e3f62cf-ca93-4989-b6ce-bf83c28f9fe8"
+        "RoleManagement.Read.Directory"                        = "483bed4a-2ad3-4361-a73b-c83ccdbdc53c"
         "LifecycleWorkflows.ReadWrite.All"                     = "5c505cf0-8424-4b8e-aa14-ee06e3bb23e3"
         "UserAuthenticationMethod.ReadWrite.All"               = "50483e42-d915-4231-9639-7fdb7fd190e5"
         "User.ReadWrite.All"                                   = "741f803b-c850-494e-b5df-cde7c675a1ca"
@@ -55,6 +56,13 @@ mock_provider "azuread" {
   mock_resource "azuread_service_principal" {
     defaults = { object_id = "33333333-3333-3333-3333-333333333333" }
   }
+  mock_resource "azuread_named_location" {
+    # AzureAD 3.x: id is a path, object_id the bare GUID CA policies take.
+    defaults = {
+      id        = "/identity/conditionalAccess/namedLocations/66666666-6666-6666-6666-666666666666"
+      object_id = "66666666-6666-6666-6666-666666666666"
+    }
+  }
   mock_resource "azuread_directory_role" {
     defaults = { template_id = "5d6b6bb7-de71-4623-b4af-96380a352509" }
   }
@@ -69,9 +77,6 @@ mock_provider "azurerm" {
   }
   mock_resource "azurerm_role_definition" {
     defaults = { role_definition_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000001/providers/Microsoft.Authorization/roleDefinitions/99999999-9999-9999-9999-999999999999" }
-  }
-  mock_resource "azuread_named_location" {
-    defaults = { id = "66666666-6666-6666-6666-666666666666" }
   }
 }
 
@@ -134,6 +139,12 @@ run "grants_are_exactly_the_reviewed_lists" {
     # getRelyingPartyDetailedSummary. Nothing broader for reports is granted.
     condition     = contains(var.operator_graph_roles, "Reports.Read.All") && length([for r in var.operator_graph_roles : r if startswith(r, "Reports.") && r != "Reports.Read.All"]) == 0
     error_message = "AD FS migration report: Reports.Read.All only (no other Reports.* role)"
+  }
+  assert {
+    # 08-Measure-KPIs.ps1 and 09-SoD-Report.ps1 read ACTIVE directory role
+    # assignments (roleAssignmentScheduleInstances) app-only between sessions.
+    condition     = contains(var.operator_graph_roles, "RoleManagement.Read.Directory") && contains(var.operator_graph_roles, "RoleEligibilitySchedule.Read.Directory")
+    error_message = "directory roles: RoleManagement.Read.Directory standing (active assignments), plus eligibility read"
   }
   assert {
     # 09-SoD-Report.ps1 runs app-only as the operator between sessions and
@@ -316,6 +327,10 @@ run "workload_ca_when_licensed_starts_report_only" {
   assert {
     condition     = one(azuread_conditional_access_policy.operator_location[0].grant_controls).built_in_controls == tolist(["block"])
     error_message = "a workload identity policy can only block"
+  }
+  assert {
+    condition     = one(one(azuread_conditional_access_policy.operator_location[0].conditions).locations).excluded_locations == tolist(["66666666-6666-6666-6666-666666666666"])
+    error_message = "excluded_locations must be the named location object_id (GUID), not the path-form id"
   }
 }
 
