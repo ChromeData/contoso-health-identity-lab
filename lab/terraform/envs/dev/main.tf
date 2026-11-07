@@ -220,6 +220,13 @@ check "servicenow_provisioning_requires_sso_apps" {
   }
 }
 
+check "clinic_results_requires_sso_apps" {
+  assert {
+    condition     = !var.enable_clinic_results_app || (var.enable_premium && var.enable_sso_apps)
+    error_message = "enable_clinic_results_app = true has no effect unless enable_premium and enable_sso_apps are both true (Clinic Lab Results lives in modules/apps, CA061 in modules/conditional-access)."
+  }
+}
+
 check "okta_federation_requires_sso_apps" {
   assert {
     condition     = !var.enable_okta_federation || (var.enable_premium && var.enable_sso_apps)
@@ -423,6 +430,12 @@ module "conditional_access" {
   # strength (enable_phishing_resistant_all_users). Never All users.
   enable_shared_clinical_ca       = var.enable_shared_clinical_ca
   ca060_clinical_group_object_ids = [module.groups[0].all_nurses_group_object_id, module.groups[0].all_icu_group_object_id]
+
+  # CA061 Clinic Lab Results (Okta -> Entra wave 1): the same flag as the app
+  # itself - no app, no CA061. One app, its one group.
+  enable_clinic_results_ca = var.enable_clinic_results_app && var.enable_sso_apps
+  ca061_app_ids            = var.enable_clinic_results_app && var.enable_sso_apps ? [module.apps[0].clinic_results_client_id] : []
+  ca061_group_object_ids   = var.enable_clinic_results_app && var.enable_sso_apps ? [module.apps[0].clinic_results_users_group_object_id] : []
 }
 
 # -----------------------------------------------------------------------------
@@ -738,6 +751,11 @@ module "apps" {
   enable_okta_federation                = var.enable_okta_federation
   okta_org_domain                       = var.okta_org_domain
   okta_federation_users_group_object_id = module.groups[0].app_access_group_object_ids["okta"]
+
+  # Clinic Lab Results (default false): the first app moved off the clinic's
+  # Okta (lab/okta-migration wave 1). Its group lives in this module, like
+  # PAM-Operators; CA061 above targets it.
+  enable_clinic_results_app = var.enable_clinic_results_app
 
   # Contoso Claims Viewer (default false): the app migrated off AD FS
   # (lab/adfs, ADR 0009 phase 3). Its two groups come from AD through Cloud

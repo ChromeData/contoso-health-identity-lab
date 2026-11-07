@@ -37,6 +37,8 @@
 #          (Graph-managed like CA021)
 #   CA060  Shared clinical workstations: phishing-        [enable_shared_clinical_ca]  clinical.tf
 #          resistant strength, 8 h sign-in, no persistent browser
+#   CA061  Clinic Lab Results (moved from Okta): MFA,     [enable_clinic_results_ca]   clinical.tf
+#          sign-in every 8 h, the app group only
 #
 # LICENSING: Conditional Access requires Entra ID P1 for every user in scope;
 # custom authentication strengths need P1. CA006/CA007's user/sign-in RISK
@@ -112,6 +114,7 @@ locals {
   ca022_state = lookup(var.policy_states, "CA022", "enabledForReportingButNotEnforced")
   ca023_state = lookup(var.policy_states, "CA023", "enabledForReportingButNotEnforced")
   ca060_state = lookup(var.policy_states, "CA060", "enabledForReportingButNotEnforced")
+  ca061_state = lookup(var.policy_states, "CA061", "enabledForReportingButNotEnforced")
 
   # Admin groups CA002 and CA020 include next to the role condition (see
   # var.admin_scope_group_object_ids). null = leave included_groups unset,

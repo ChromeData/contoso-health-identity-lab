@@ -40,6 +40,17 @@
 #     "who read or tried to delete the evidence" is itself evidence.
 #   * Writers get Storage Blob Data Contributor with an ABAC condition that
 #     denies delete in the evidence container: add, never remove.
+#   * Deleting the ACCOUNT is blocked by a CanNotDelete management lock that
+#     envs/bootstrap adds (enable_evidence_delete_lock), not this module:
+#     CI's APPLY is Contributor, which can neither create nor remove locks.
+#   * THE LAB KEEPS THE POLICY UNLOCKED (program rule: the trial tenant must
+#     stay removable). Unlocked, an Owner or CI's Contributor can shorten or
+#     remove the policy, and Contributor can turn Shared Key back on. The
+#     lab store is write-once against the evidence writers only. The delete
+#     lock (BUILT, off until applied) stops CI deleting the account, but it
+#     does not stop CI changing the policy or the account settings.
+#     Production locks the policy, puts the account in a separate
+#     subscription the identity team holds no Owner on, and keeps the lock.
 #
 # FEATURES AZURE DOES NOT ALLOW WITH VERSION-LEVEL WORM (all left off here):
 #   point-in-time restore (restore_policy), last access time tracking,
