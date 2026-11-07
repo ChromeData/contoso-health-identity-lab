@@ -41,8 +41,9 @@ exist: the KPI baseline in `lab/evidence/kpis/` and the "before" assessment in
   same scripts, so the difference is the lab's work, not a change of ruler.
 - The evidence store is write-once: a file can be added, and a delete or an
   overwrite of a filed file is refused. In the lab the write-once policy stays
-  in its test setting (Unlocked), so an Owner could still shorten it, and a
-  delete lock stops the account being deleted. Production locks the policy for
+  in its test setting (Unlocked), so an Owner could still shorten it. A
+  delete lock on the account is BUILT but not applied yet: when it is on, it
+  stops the account being deleted. Production locks the policy for
   good and keeps the account in a subscription the identity team does not own.
   The pack's hash in the capture log lets anyone check the private
   pack was not edited.

@@ -44,8 +44,11 @@
 #     envs/bootstrap adds (enable_evidence_delete_lock), not this module:
 #     CI's APPLY is Contributor, which can neither create nor remove locks.
 #   * THE LAB KEEPS THE POLICY UNLOCKED (program rule: the trial tenant must
-#     stay removable). Unlocked, an Owner can shorten or remove it, so the lab
-#     store is write-once against writers and CI, not against an Owner.
+#     stay removable). Unlocked, an Owner or CI's Contributor can shorten or
+#     remove the policy, and Contributor can turn Shared Key back on. The
+#     lab store is write-once against the evidence writers only. The delete
+#     lock (BUILT, off until applied) stops CI deleting the account, but it
+#     does not stop CI changing the policy or the account settings.
 #     Production locks the policy, puts the account in a separate
 #     subscription the identity team holds no Owner on, and keeps the lock.
 #
