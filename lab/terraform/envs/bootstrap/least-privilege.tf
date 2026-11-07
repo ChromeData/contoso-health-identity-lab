@@ -71,6 +71,9 @@ locals {
 
   vm_operator_enabled = var.enable_lab_vm_operator
 
+  # ISO 8601 policy cap -> days for the eligibility schedule (same value).
+  vm_operator_eligibility_days = tonumber(trimsuffix(trimprefix(var.lab_vm_operator_eligibility_duration, "P"), "D"))
+
   # Verified against the live built-in definitions (az role definition list,
   # 2026-11-07): Virtual Machine Contributor uses these Compute action names;
   # Log Analytics Reader uses workspaces/analytics/query/action and
@@ -134,9 +137,13 @@ resource "azurerm_role_management_policy" "lab_vm_operator" {
     require_approval                   = false
   }
 
-  # Eligibility is reviewed, not timed (as modules/pim azure.tf).
+  # Eligibility EXPIRES (lab_vm_operator_eligibility_duration, default
+  # P180D, as PIM-AWS-Lab-Admins): these are direct, named assignments that no
+  # group access review covers, so the expiry is the review. Renewal is a
+  # reviewed bootstrap apply (the schedule below restarts from that apply).
   eligible_assignment_rules {
-    expiration_required = false
+    expiration_required = true
+    expire_after        = var.lab_vm_operator_eligibility_duration
   }
 
   # A direct ACTIVE assignment must expire: nobody holds this role standing.
@@ -155,6 +162,12 @@ resource "azurerm_pim_eligible_role_assignment" "lab_vm_operator" {
   role_definition_id = azurerm_role_definition.lab_vm_operator[0].role_definition_resource_id
   principal_id       = each.value
   justification      = "Lab operations: start/stop the lab VMs and read their logs, just in time (MFA + reason, ${var.lab_vm_operator_activation_max_duration} max)."
+
+  schedule {
+    expiration {
+      duration_days = local.vm_operator_eligibility_days
+    }
+  }
 
   depends_on = [azurerm_role_management_policy.lab_vm_operator]
 }

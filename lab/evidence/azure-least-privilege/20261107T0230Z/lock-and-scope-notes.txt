@@ -15,3 +15,4 @@ APPLY's scope (apply_azure_scope) is NOT changed live: subscription Contributor 
 this PR merges and the owner/operator applies envs/bootstrap with apply_azure_scope =
 "resource_group". State census (envs/dev, 2026-11-07): 70 azurerm instances, all inside
 /resourceGroups/rg-identity-lab; only data source azurerm_client_config.
+03:04:26Z-03:05:14Z Greptile P2 fix applied: eligibility now expires (policy P180D, schedule 180 days); plan 1 add / 1 change / 1 destroy (eligibility replaced).

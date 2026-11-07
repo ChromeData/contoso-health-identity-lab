@@ -492,6 +492,15 @@ run "lab_vm_operator_is_eligible_only_and_read_start_stop" {
     condition     = one(azurerm_role_management_policy.lab_vm_operator[0].active_assignment_rules).expiration_required
     error_message = "a direct active assignment of the role must expire"
   }
+  # No access review covers named eligibility: it expires instead (Greptile P2).
+  assert {
+    condition     = one(azurerm_role_management_policy.lab_vm_operator[0].eligible_assignment_rules).expiration_required && one(azurerm_role_management_policy.lab_vm_operator[0].eligible_assignment_rules).expire_after == "P180D"
+    error_message = "eligibility for the VM operator role must expire (default 180 days)"
+  }
+  assert {
+    condition     = one(one(azurerm_pim_eligible_role_assignment.lab_vm_operator["a0a0a0a0-0000-4000-8000-0000000000aa"].schedule).expiration).duration_days == 180
+    error_message = "each eligible assignment carries the same 180-day expiry"
+  }
 }
 
 run "lab_vm_operator_activation_cap" {

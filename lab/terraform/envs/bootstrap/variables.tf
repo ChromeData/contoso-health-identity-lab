@@ -347,6 +347,17 @@ variable "lab_vm_operator_activation_max_duration" {
   }
 }
 
+variable "lab_vm_operator_eligibility_duration" {
+  type        = string
+  description = "How long an ELIGIBLE assignment of Contoso Lab VM Operator lasts before it must be renewed (PIM policy cap and the schedule). No access review covers direct assignments, so this expiry is the review."
+  default     = "P180D"
+
+  validation {
+    condition     = contains(["P15D", "P30D", "P90D", "P180D", "P365D"], var.lab_vm_operator_eligibility_duration)
+    error_message = "lab_vm_operator_eligibility_duration must be one of PIM's values: P15D, P30D, P90D, P180D or P365D."
+  }
+}
+
 variable "cannot_delete_lock_resource_ids" {
   type        = map(string)
   description = <<-EOT
