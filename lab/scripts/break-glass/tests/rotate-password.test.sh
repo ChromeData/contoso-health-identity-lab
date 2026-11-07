@@ -14,7 +14,9 @@
 #     unknown (it never says "delete it");
 #   * a second --apply refuses to overwrite that -pending item;
 #   * --resume sends the SAME pending value and then promotes it;
-#   * the evidence record and capture-log row do not contain the login.
+#   * the evidence record and capture-log row do not contain the login;
+#   * a second run while the per-account lock is held changes nothing, and
+#     a finished run releases the lock.
 # Prints PASS/FAIL per assertion; exits 1 if anything failed.
 # =============================================================================
 set -euo pipefail
@@ -80,6 +82,8 @@ esac
 STUB
 chmod +x "$WORK/bin/az" "$WORK/bin/security"
 export PATH="$WORK/bin:$PATH"
+export BG_ROTATE_LOCK_DIR="$WORK"
+LOCK="$WORK/contoso-bg-rotate-bg-admin-01.lock"
 SVC=contoso-breakglass-bg-admin-01-password
 PEND="$SVC-pending"
 
@@ -118,6 +122,15 @@ if out="$("$SCRIPT" bg-admin-01 --resume 2>&1)"; then fail "--resume with nothin
 rm -f "$WORK/kc/$SVC"; touch "$WORK/graph/fail-patch-before"
 "$SCRIPT" bg-admin-01 --apply >/dev/null 2>&1 || true
 if [[ -s "$WORK/kc/$PEND" && "$(cat "$WORK/graph/password")" == "$live" ]]; then pass "refused reset: old password live, pending kept"; else fail "refused reset: old password live, pending kept"; fi
+
+# --- 6. the lock: a held lock refuses and changes nothing --------------------
+rm -f "$WORK/graph/fail-patch-before"
+if [[ ! -e "$LOCK" ]]; then pass "lock released after every run"; else fail "lock released after every run"; fi
+mkdir "$LOCK"; before_pw="$(cat "$WORK/graph/password")"
+if out="$("$SCRIPT" bg-admin-01 --resume 2>&1)"; then fail "--resume refuses while locked"; else pass "--resume refuses while locked"; fi
+if [[ -s "$WORK/kc/$PEND" && "$(cat "$WORK/graph/password")" == "$before_pw" && -d "$LOCK" ]]; then pass "locked run changed nothing and left the other run's lock"; else fail "locked run changed nothing and left the other run's lock"; fi
+if "$SCRIPT" bg-admin-01 >/dev/null 2>&1; then pass "dry run works while locked"; else fail "dry run works while locked"; fi
+rmdir "$LOCK"
 
 echo
 if [[ "$FAILS" -eq 0 ]]; then echo "rotate-password: all passed"; else echo "rotate-password: $FAILS failed"; exit 1; fi

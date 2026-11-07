@@ -76,6 +76,9 @@ unused.
 - **`--resume` fails too:** keep the item. Check the error (for example: no
   role, or Entra is down). Fix the cause, then run `--resume` again. The
   passkey still signs in while you do this.
+- **"another rotation holds the lock":** a second run of the same account
+  is open, or an earlier run was killed. Close the other run first. Only
+  when no other run is open, remove the lock folder the message names.
 - **Keychain read-back did not match:** nothing was sent to Entra. The
   script stops before the reset. Run `--resume` (it sends the saved
   value), or ask a second admin to check the item first.

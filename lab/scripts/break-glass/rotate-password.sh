@@ -89,6 +89,22 @@ echo "Password set:   ${before}$( [[ "$before" == "$created" ]] && echo '  <- ne
 echo "Signed in as:   ${who}"
 echo "Keychain item:  ${svc}"
 
+# One run per account at a time, from the pending check through promotion
+# and cleanup. Two runs at once could otherwise promote a stale value over a
+# newer one. mkdir is atomic. Dry runs change nothing, so they take no lock.
+lock="${BG_ROTATE_LOCK_DIR:-${TMPDIR:-/tmp}}/contoso-bg-rotate-${acct}.lock"
+tmp=""
+cleanup() { [[ -n "$tmp" ]] && rm -rf "$tmp"; [[ -n "${have_lock:-}" ]] && rmdir "$lock" 2>/dev/null; true; }
+trap cleanup EXIT
+if [[ "$mode" != "--dry-run" ]]; then
+  if ! mkdir "$lock" 2>/dev/null; then
+    echo "Refusing: another rotation of ${acct} holds the lock (${lock})." >&2
+    echo "Wait for it to finish. Remove the folder only if no other run is open." >&2
+    exit 1
+  fi
+  have_lock=yes
+fi
+
 has_pending=no
 if security find-generic-password -s "$pending" -a "$upn" >/dev/null 2>&1; then
   has_pending=yes
@@ -140,7 +156,6 @@ fi
 
 # --- 4. Reset in Entra through a private body file -------------------------
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
 printf '{"passwordProfile":{"forceChangePasswordNextSignIn":false,"password":"%s"}}' "$pw" > "$tmp/body.json"
 if ! az rest --method patch --url "https://graph.microsoft.com/v1.0/users/${uid}" \
       --headers 'Content-Type=application/json' --body "@$tmp/body.json" >/dev/null; then
