@@ -200,10 +200,23 @@ The repo is **public on purpose**, and the pipeline depends on it:
     runs `new-bot-app.sh` once, agents use `bot-gh`, and the owner sets
     `APPLY_BOT_LOGIN` to `<slug>[bot]` at a PR merge (the plan job then
     refuses a change the bot did not author and merge). A run that ChromeData
-    started (for example a merge before `APPLY_BOT_LOGIN` is set) cannot be
-    approved by ChromeData. Once the bot exists, start a new run as the bot
-    with a repository dispatch,
-    `bot-gh gh api repos/ChromeData/contoso-health-identity-lab/dispatches -f event_type=apply-main`.
+    started cannot be approved by ChromeData. The recovery depends on the
+    stage:
+    1. **Bot exists, `APPLY_BOT_LOGIN` not set yet** (the transition). The
+       gate does not check author or merger. Start a new run as the bot with
+       a repository dispatch,
+       `bot-gh gh api repos/ChromeData/contoso-health-identity-lab/dispatches -f event_type=apply-main`;
+       ChromeData then approves it.
+    2. **`APPLY_BOT_LOGIN` set.** The plan job refuses any run whose commit
+       came from a PR that the bot did not author AND merge, whoever starts
+       the run. That is on purpose: a dispatch must not launder an
+       owner-merged change past the separation check. So a dispatch does not
+       help here. Recovery: the bot lands the change again through its own PR
+       (`bot-gh` branch, PR and merge, for example a revert and a re-apply
+       PR), and that merge starts a run the owner can approve. Rule: once
+       `APPLY_BOT_LOGIN` is set, the owner never merges.
+    Set `APPLY_BOT_LOGIN` at a merge that the bot itself makes, so the first
+    gated run already passes the check.
     Why not `gh workflow run`: that needs the App permission Actions: write,
     and the bot has Actions: read. A repository dispatch needs only Contents:
     write, which the bot already has (GitHub docs, "Permissions required for

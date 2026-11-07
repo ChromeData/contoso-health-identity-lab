@@ -189,8 +189,11 @@ jobs:
   # (the merger) from approving it. AI agents push and merge as the lab's
   # GitHub App bot (lab/scripts/operator/github-bot/bot-gh), the owner
   # approves. If the owner's own login merges, the owner cannot approve that
-  # run: start a new run as the bot (`bot-gh gh api
-  # repos/ChromeData/contoso-health-identity-lab/dispatches -f event_type=apply-main`).
+  # run. While APPLY_BOT_LOGIN is unset: start a new run as the bot (`bot-gh
+  # gh api repos/ChromeData/contoso-health-identity-lab/dispatches -f
+  # event_type=apply-main`). Once it is set, the gate refuses an owner-merged
+  # commit on any trigger (on purpose); the bot lands the change again
+  # through its own PR (lab/pipelines/README.md section 3).
   plan:
     name: plan for review (read-only PLAN app, nothing applied)
     runs-on: ubuntu-latest

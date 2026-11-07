@@ -294,6 +294,16 @@ class SeparationTest(GateTest):
         self.bot_pr(merger="owner1")
         self.assertEqual(self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]").returncode, 1)
 
+    def test_dispatch_does_not_bypass_separation(self):
+        # PR #241 (Greptile): the bot's repository_dispatch recovery run must
+        # NOT let an owner-merged commit past APPLY_BOT_LOGIN; the docs send
+        # that case through a fresh bot-authored, bot-merged PR instead.
+        self.bot_pr(merger="owner1")
+        for event in ("repository_dispatch", "workflow_dispatch"):
+            r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME=event, GATE_MODE="check")
+            self.assertEqual(r.returncode, 1, event)
+            self.assertIn("merged by @owner1", r.stdout)
+
     def test_set_refuses_approver_who_is_merger(self):
         self.bot_pr()
         self.issue_comments([user("agent-bot[bot]", f"approve {CODE}")])
