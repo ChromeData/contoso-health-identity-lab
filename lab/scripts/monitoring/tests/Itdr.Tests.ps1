@@ -320,10 +320,28 @@ Describe 'Notify playbook: one ticket and one card per incident (review finding 
         ($t.actions.If_no_card_yet.expression | ConvertTo-Json -Depth 6 -Compress) | Should -Match 'teams-card-posted'
         $card = $t.actions.If_no_card_yet.actions
         $card.Mark_card_posted.runAfter.Post_card_to_SOC_channel | Should -Be @('Succeeded')
-        $card.Mark_card_posted.inputs.method | Should -Be 'PUT'
-        $card.Mark_card_posted.inputs.body.etag | Should -Be "@body('Read_incident_now')?['etag']"
-        $card.Mark_card_posted.inputs.body.properties | Should -Match 'teams-card-posted'
+        $card.Mark_card_posted.actions.Write_card_marker.inputs.method | Should -Be 'PUT'
+        $card.Mark_card_posted.actions.Write_card_marker.inputs.body.properties | Should -Match 'teams-card-posted'
         @($nAll | Where-Object { $_.Action.type -eq 'ApiConnection' -and $_.Action.inputs.path -like '/v1.0/teams/*' }).Count | Should -Be 1
+        @($nAll | Where-Object { $_.Name -eq 'Post_card_to_SOC_channel' })[0].Scope | Should -Be 'If_no_card_yet'
+    }
+
+    It 'retries the card marker with a FRESH incident read (new etag) and never re-posts the card (PR #230 review)' {
+        $loop = $na.If_Teams_configured.actions.If_no_card_yet.actions.Mark_card_posted
+        $loop.type | Should -Be 'Until'
+        [int]$loop.limit.count | Should -BeGreaterThan 1
+        $loop.limit.timeout | Should -Not -BeNullOrEmpty
+        $loop.expression | Should -Match "outputs\('Write_card_marker'\)\?\['statusCode'\]"
+        $inner = $loop.actions
+        $inner.Read_incident_for_marker.inputs.method | Should -Be 'GET'
+        $inner.Read_incident_for_marker.inputs.authentication.type | Should -Be 'ManagedServiceIdentity'
+        $inner.Write_card_marker.runAfter.Read_incident_for_marker | Should -Be @('Succeeded')
+        # The etag and properties come from the read INSIDE the loop, never the pre-post copy.
+        $inner.Write_card_marker.inputs.body.etag | Should -Be "@body('Read_incident_for_marker')?['etag']"
+        $inner.Write_card_marker.inputs.body.properties | Should -Not -Match 'Read_incident_now'
+        $inner.Write_card_marker.inputs.body.properties | Should -Match "body\('Read_incident_for_marker'\)"
+        # The Teams post is outside the loop: a retry writes the label only.
+        @($nAll | Where-Object { $_.Scope -eq 'Mark_card_posted' -and $_.Action.type -eq 'ApiConnection' }).Count | Should -Be 0
         @($nAll | Where-Object { $_.Name -eq 'Post_card_to_SOC_channel' })[0].Scope | Should -Be 'If_no_card_yet'
     }
 
@@ -646,5 +664,24 @@ Describe 'PowerShell script <_>' -ForEach $Scripts {
 
     It 'supports -WhatIf' {
         (Get-Command $path).Parameters.Keys | Should -Contain 'WhatIf'
+    }
+}
+
+Describe 'Splunk break-glass search: one result per throttle key (PR #230 review)' {
+    BeforeAll {
+        $bgSpl = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'splunk' 'detections' 'break-glass-signin.spl')
+    }
+
+    It 'every alert.suppress field is a stats BY field, so a new IP is never folded into a throttled row' {
+        $suppress = ([regex]::Match($bgSpl, 'alert\.suppress\.fields = ([A-Za-z,]+)')).Groups[1].Value -split ','
+        $suppress | Should -Contain 'IPAddress'
+        $statsLine = @($bgSpl -split "`n" | Where-Object { $_ -match '^\|\s*stats\s' })[-1]
+        $by = ([regex]::Match($statsLine, '\sBY\s+(.+)$')).Groups[1].Value -split '[,\s]+' | Where-Object { $_ }
+        foreach ($f in $suppress) { $by | Should -Contain $f -Because "throttle key $f must split results" }
+        $statsLine | Should -Not -Match 'latest\(IPAddress\)'
+    }
+
+    It 'a missing IPAddress is kept as empty, not dropped by stats BY' {
+        $bgSpl | Should -Match 'IPAddress=coalesce\(IPAddress, ""\)'
     }
 }

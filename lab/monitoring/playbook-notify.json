@@ -500,26 +500,54 @@
                       }
                     },
                     "Mark_card_posted": {
-                      "type": "Http",
+                      "type": "Until",
                       "runAfter": {
                         "Post_card_to_SOC_channel": [
                           "Succeeded"
                         ]
                       },
-                      "description": "Add the label teams-card-posted: Sentinel REST 'Incidents - Create Or Update' (PUT, api-version 2024-09-01) with the etag and the properties just read, plus the label (properties.labels, IncidentLabel {labelName, labelType}). The etag makes a stale write fail instead of overwriting a newer change.",
-                      "inputs": {
-                        "method": "PUT",
-                        "uri": "https://management.azure.com@{triggerBody()?['object']?['id']}?api-version=2024-09-01",
-                        "authentication": {
-                          "type": "ManagedServiceIdentity",
-                          "audience": "https://management.azure.com/"
+                      "description": "Write the teams-card-posted marker after a delivered card, retrying with a FRESH read of the incident when the write fails (stale etag, 412). At most 5 tries in 5 minutes. Only the marker is retried, never the Teams post (review finding on PR #230).",
+                      "expression": "@or(equals(outputs('Write_card_marker')?['statusCode'], 200), equals(outputs('Write_card_marker')?['statusCode'], 201))",
+                      "limit": {
+                        "count": 5,
+                        "timeout": "PT5M"
+                      },
+                      "actions": {
+                        "Read_incident_for_marker": {
+                          "type": "Http",
+                          "description": "Read the incident again for every marker attempt, so the PUT always carries the current etag and properties (an alert that joined, or an analyst edit, during the Teams post changes the etag).",
+                          "inputs": {
+                            "method": "GET",
+                            "uri": "https://management.azure.com@{triggerBody()?['object']?['id']}?api-version=2024-09-01",
+                            "authentication": {
+                              "type": "ManagedServiceIdentity",
+                              "audience": "https://management.azure.com/"
+                            }
+                          }
                         },
-                        "headers": {
-                          "Content-Type": "application/json"
-                        },
-                        "body": {
-                          "etag": "@body('Read_incident_now')?['etag']",
-                          "properties": "@setProperty(body('Read_incident_now')?['properties'], 'labels', union(coalesce(body('Read_incident_now')?['properties']?['labels'], json('[]')), json('[{\"labelName\":\"teams-card-posted\",\"labelType\":\"User\"}]')))"
+                        "Write_card_marker": {
+                          "type": "Http",
+                          "runAfter": {
+                            "Read_incident_for_marker": [
+                              "Succeeded"
+                            ]
+                          },
+                          "description": "Add the label teams-card-posted: Sentinel REST 'Incidents - Create Or Update' (PUT, api-version 2024-09-01) with the etag and properties just read, plus the label (properties.labels, IncidentLabel {labelName, labelType}). The etag makes a stale write fail (412) instead of overwriting a newer change; the loop then reads again and retries. The Teams post is outside the loop, so it is never repeated.",
+                          "inputs": {
+                            "method": "PUT",
+                            "uri": "https://management.azure.com@{triggerBody()?['object']?['id']}?api-version=2024-09-01",
+                            "authentication": {
+                              "type": "ManagedServiceIdentity",
+                              "audience": "https://management.azure.com/"
+                            },
+                            "headers": {
+                              "Content-Type": "application/json"
+                            },
+                            "body": {
+                              "etag": "@body('Read_incident_for_marker')?['etag']",
+                              "properties": "@setProperty(body('Read_incident_for_marker')?['properties'], 'labels', union(coalesce(body('Read_incident_for_marker')?['properties']?['labels'], json('[]')), json('[{\"labelName\":\"teams-card-posted\",\"labelType\":\"User\"}]')))"
+                            }
+                          }
                         }
                       }
                     }
