@@ -103,7 +103,15 @@ union
 | where UserId in (BreakGlassUserIds) or UserPrincipalName matches regex BreakGlassPattern
 | extend MatchedBy = iff(UserId in (BreakGlassUserIds), "object id", "naming convention")
 | extend Country = tostring(LocationDetails.countryOrRegion)
-| project TimeGenerated, SignInType, UserPrincipalName, UserId, MatchedBy, IPAddress, Country,
+// One row PER ACCOUNT (the newest of its rows, with a count): the NRT rule
+// makes one alert per row (AlertPerResult), so two break-glass accounts seen
+// in the same minute become two alerts, each groupable into its own
+// account's incident, instead of one alert naming both (review of #230).
+| summarize arg_max(TimeGenerated, SignInType, MatchedBy, IPAddress, Country, AppDisplayName,
+                    ClientAppUsed, ResultType, ResultDescription, ConditionalAccessStatus, CorrelationId),
+            SignIns = count(), SignInTypes = make_set(SignInType, 2)
+    by UserPrincipalName, UserId
+| project TimeGenerated, SignInType, SignInTypes, SignIns, UserPrincipalName, UserId, MatchedBy, IPAddress, Country,
           AppDisplayName, ClientAppUsed, ResultType, ResultDescription,
           ConditionalAccessStatus, CorrelationId
 | sort by TimeGenerated desc

@@ -250,7 +250,7 @@ Describe 'Containment playbook (lab/monitoring/playbook-contain.json)' {
         $if = $nwf.properties.definition.actions.If_Teams_configured
         ($if.expression | ConvertTo-Json -Depth 10 -Compress) | Should -Match 'teamsGroupId'
         ($if.expression | ConvertTo-Json -Depth 10 -Compress) | Should -Match 'teamsChannelId'
-        $post = $if.actions.Post_card_to_SOC_channel
+        $post = $if.actions.If_no_card_yet.actions.Post_card_to_SOC_channel
         $post.type | Should -Be 'ApiConnection'
         $post.inputs.host.connection.name | Should -Be "@parameters('`$connections')['teams']['connectionId']"
         $post.inputs.path | Should -Match '^/v1\.0/teams/conversation/adaptivecard/poster/Flow bot/location/'
@@ -294,21 +294,34 @@ Describe 'Notify playbook: one ticket and one card per incident (review finding 
         $na.If_ServiceNow_configured.actions.If_open_ticket_exists.runAfter.Find_open_ticket | Should -Be @('Succeeded')
     }
 
-    It 'a joined alert is a work note on the existing ticket and a comment on the incident, and marks the run JoinedAlert' {
+    It 'a joined alert is a work note on the existing ticket and a comment on the incident' {
         $yes = $na.If_ServiceNow_configured.actions.If_open_ticket_exists.actions
-        $yes.Set_JoinedAlert.inputs.value | Should -BeTrue
         $yes.Add_work_note_for_joined_alert.inputs.method | Should -Be 'PATCH'
         $yes.Add_work_note_for_joined_alert.inputs.uri | Should -Match "first\(body\('Find_open_ticket'\)\?\['result'\]\)\?\['sys_id'\]"
         $yes.Add_work_note_for_joined_alert.inputs.body.work_notes | Should -Match 'No new ticket was opened'
         $yes.Comment_joined_alert_on_Sentinel_incident.inputs.path | Should -Be '/Incidents/Comment'
     }
 
-    It 'posts the Teams card only for a new incident (JoinedAlert false), after the ServiceNow branch whatever its outcome' {
-        $na.Initialize_JoinedAlert.inputs.variables[0].value | Should -BeFalse
+    It 'runs one at a time, so two runs can never both miss the ticket or the card marker' {
+        $trig = $nwf.properties.definition.triggers.Microsoft_Sentinel_incident
+        $trig.runTimeConfiguration.concurrency.runs | Should -Be 1
+        $trig.runTimeConfiguration.concurrency.maximumWaitingRuns | Should -BeGreaterThan 0
+    }
+
+    It 'posts the card only while the incident (read now, not the trigger copy) lacks the teams-card-posted label, and writes the label only after a delivered card' {
         $t = $na.If_Teams_configured
-        ($t.expression.and | ConvertTo-Json -Depth 5 -Compress) | Should -Match ([regex]::Escape('{"equals":["@variables(''JoinedAlert'')",false]}'))
         $t.runAfter.If_ServiceNow_configured | Should -Be @('Succeeded', 'Failed', 'Skipped', 'TimedOut')
+        $t.actions.Read_incident_now.inputs.method | Should -Be 'GET'
+        $t.actions.Read_incident_now.inputs.authentication.type | Should -Be 'ManagedServiceIdentity'
+        $t.actions.If_no_card_yet.runAfter.Read_incident_now | Should -Be @('Succeeded')
+        ($t.actions.If_no_card_yet.expression | ConvertTo-Json -Depth 6 -Compress) | Should -Match 'teams-card-posted'
+        $card = $t.actions.If_no_card_yet.actions
+        $card.Mark_card_posted.runAfter.Post_card_to_SOC_channel | Should -Be @('Succeeded')
+        $card.Mark_card_posted.inputs.method | Should -Be 'PUT'
+        $card.Mark_card_posted.inputs.body.etag | Should -Be "@body('Read_incident_now')?['etag']"
+        $card.Mark_card_posted.inputs.body.properties | Should -Match 'teams-card-posted'
         @($nAll | Where-Object { $_.Action.type -eq 'ApiConnection' -and $_.Action.inputs.path -like '/v1.0/teams/*' }).Count | Should -Be 1
+        @($nAll | Where-Object { $_.Name -eq 'Post_card_to_SOC_channel' })[0].Scope | Should -Be 'If_no_card_yet'
     }
 
     It 'Informational incidents open no ticket and post no card (review finding B5)' {

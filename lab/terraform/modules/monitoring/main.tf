@@ -370,11 +370,15 @@ resource "azurerm_sentinel_alert_rule_nrt" "this" {
   custom_details             = length(each.value.custom_details) > 0 ? each.value.custom_details : null
   enabled                    = true
 
-  # One alert per run (the rows ingested in that minute); the provider
-  # requires the block for NRT rules. "AlertPerResult" would cap at 30 single
-  # alerts per run (Learn, NRT considerations) and buys nothing here.
+  # One alert per result ROW, and the query returns one row per account
+  # (break-glass-signin.kql summarizes by UserId): two break-glass accounts
+  # seen in the same minute become two alerts, each grouped into its own
+  # account's incident (review of #230; with SingleAlert one alert named
+  # both accounts and grouping could not split it). Learn, NRT
+  # considerations: "an alert for each event for up to 30 events" - far
+  # above the two break-glass accounts.
   event_grouping {
-    aggregation_method = "SingleAlert"
+    aggregation_method = "AlertPerResult"
   }
 
   dynamic "entity_mapping" {

@@ -2,7 +2,7 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "metadata": {
-    "description": "Contoso Health identity lab - Sentinel incident -> adaptive card in the SOC team's Identity-SecOps channel (Teams connector, posted as the Flow bot) + ServiceNow incident + incident comment. Deployed by lab/scripts/monitoring/Deploy-Playbook.ps1 (the ServiceNow secret comes from Key Vault at deploy time, never from the repo or CI). The Teams connection is OAuth: authorize it once after deploy as the SOC automation account (svc-soc-automation, the team owner), never as a person - lab/scripts/monitoring/authorize-teams-connection.mjs. Sets the ServiceNow correlation_id to the Sentinel incident name (GUID) so playbook-contain.json appends its containment record to the SAME ticket instead of opening a duplicate. One ticket and one card per incident: a run for an alert that joined an open incident finds that ticket by correlation_id and adds a work note instead (2026-11-07). Informational incidents open no ticket and post no card."
+    "description": "Contoso Health identity lab - Sentinel incident -> adaptive card in the SOC team's Identity-SecOps channel (Teams connector, posted as the Flow bot) + ServiceNow incident + incident comment. Deployed by lab/scripts/monitoring/Deploy-Playbook.ps1 (the ServiceNow secret comes from Key Vault at deploy time, never from the repo or CI). The Teams connection is OAuth: authorize it once after deploy as the SOC automation account (svc-soc-automation, the team owner), never as a person - lab/scripts/monitoring/authorize-teams-connection.mjs. Sets the ServiceNow correlation_id to the Sentinel incident name (GUID) so playbook-contain.json appends its containment record to the SAME ticket instead of opening a duplicate. One ticket and one card per incident: runs are serialised (concurrency 1); a run for an alert that joined an open incident finds that ticket by correlation_id and adds a work note, and a card is posted only while the incident lacks the label teams-card-posted (2026-11-07). Informational incidents open no ticket and post no card."
   },
   "parameters": {
     "playbookName": {
@@ -138,7 +138,14 @@
                   }
                 },
                 "path": "/incident-creation"
-              }
+              },
+              "runTimeConfiguration": {
+                "concurrency": {
+                  "runs": 1,
+                  "maximumWaitingRuns": 100
+                }
+              },
+              "description": "One run at a time (concurrency 1, up to 100 waiting; Learn, 'Workflow Definition Language: triggers', ApiConnectionWebhook runTimeConfiguration.concurrency). The creation-time and alert-added automation rules call this same playbook; serialised, a second run always sees the ticket and the card marker the first run wrote, so two runs can never both open a ticket or both post a card (review of #230)."
             }
           },
           "actions": {
@@ -147,28 +154,10 @@
               "runAfter": {},
               "inputs": "@if(equals(triggerBody()?['object']?['properties']?['severity'],'High'),'1',if(equals(triggerBody()?['object']?['properties']?['severity'],'Medium'),'2','3'))"
             },
-            "Initialize_JoinedAlert": {
-              "type": "InitializeVariable",
-              "description": "True once this run finds the incident's OPEN ServiceNow ticket: the run is for an alert that JOINED an existing incident (the alert-added automation rule), so it adds a work note and posts no second card and no second ticket (review finding D2, 2026-11-07).",
-              "runAfter": {
-                "Map_severity_to_priority": [
-                  "Succeeded"
-                ]
-              },
-              "inputs": {
-                "variables": [
-                  {
-                    "name": "JoinedAlert",
-                    "type": "boolean",
-                    "value": false
-                  }
-                ]
-              }
-            },
             "If_ServiceNow_configured": {
               "type": "If",
               "runAfter": {
-                "Initialize_JoinedAlert": [
+                "Map_severity_to_priority": [
                   "Succeeded"
                 ]
               },
@@ -255,20 +244,8 @@
                     ]
                   },
                   "actions": {
-                    "Set_JoinedAlert": {
-                      "type": "SetVariable",
-                      "inputs": {
-                        "name": "JoinedAlert",
-                        "value": true
-                      }
-                    },
                     "Add_work_note_for_joined_alert": {
                       "type": "Http",
-                      "runAfter": {
-                        "Set_JoinedAlert": [
-                          "Succeeded"
-                        ]
-                      },
                       "inputs": {
                         "method": "PATCH",
                         "uri": "https://@{parameters('snowInstance')}.service-now.com/api/now/table/incident/@{first(body('Find_open_ticket')?['result'])?['sys_id']}",
@@ -414,92 +391,148 @@
                         "Informational"
                       ]
                     }
-                  },
-                  {
-                    "equals": [
-                      "@variables('JoinedAlert')",
-                      false
-                    ]
                   }
                 ]
               },
               "actions": {
-                "Compose_incident_card": {
-                  "type": "Compose",
+                "Read_incident_now": {
+                  "type": "Http",
+                  "description": "Read the incident NOW (not the trigger's copy, which can be older than a previous run's marker): Sentinel REST 'Incidents - Get', api-version 2024-09-01, as the playbook's managed identity (Microsoft Sentinel Responder on the workspace, Deploy-Playbook.ps1). A failed read stops the branch: no card rather than a duplicate card.",
                   "inputs": {
-                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                    "type": "AdaptiveCard",
-                    "version": "1.4",
-                    "body": [
-                      {
-                        "type": "TextBlock",
-                        "size": "Large",
-                        "weight": "Bolder",
-                        "wrap": true,
-                        "text": "@{triggerBody()?['object']?['properties']?['severity']} - @{triggerBody()?['object']?['properties']?['title']}"
-                      },
-                      {
-                        "type": "FactSet",
-                        "facts": [
-                          {
-                            "title": "Incident",
-                            "value": "#@{triggerBody()?['object']?['properties']?['incidentNumber']}"
-                          },
-                          {
-                            "title": "Created (UTC)",
-                            "value": "@{triggerBody()?['object']?['properties']?['createdTimeUtc']}"
-                          },
-                          {
-                            "title": "Status",
-                            "value": "@{triggerBody()?['object']?['properties']?['status']}"
-                          }
-                        ]
-                      },
-                      {
-                        "type": "TextBlock",
-                        "wrap": true,
-                        "text": "@{triggerBody()?['object']?['properties']?['description']}"
-                      }
-                    ],
-                    "actions": [
-                      {
-                        "type": "Action.OpenUrl",
-                        "title": "Open in Sentinel",
-                        "url": "@{triggerBody()?['object']?['properties']?['incidentUrl']}"
-                      }
-                    ]
+                    "method": "GET",
+                    "uri": "https://management.azure.com@{triggerBody()?['object']?['id']}?api-version=2024-09-01",
+                    "authentication": {
+                      "type": "ManagedServiceIdentity",
+                      "audience": "https://management.azure.com/"
+                    }
                   }
                 },
-                "Post_card_to_SOC_channel": {
-                  "type": "ApiConnection",
-                  "description": "Teams connector 'Post card in a chat or channel' as the Flow bot to the SOC team's Identity-SecOps channel. The connection is OAuth and was authorized once as svc-soc-automation (the team owner); it holds no secret in this template, unlike the Workflows webhook URL it replaces (a bearer credential: anyone holding it could post).",
+                "If_no_card_yet": {
+                  "type": "If",
                   "runAfter": {
-                    "Compose_incident_card": [
+                    "Read_incident_now": [
                       "Succeeded"
                     ]
                   },
-                  "inputs": {
-                    "host": {
-                      "connection": {
-                        "name": "@parameters('$connections')['teams']['connectionId']"
+                  "description": "One card per incident, tracked by the card itself: the label teams-card-posted is written only AFTER a card was delivered. So a failed post is retried by the next joined alert, and with ServiceNow off a joined alert still posts no second card.",
+                  "expression": {
+                    "and": [
+                      {
+                        "not": {
+                          "contains": [
+                            "@string(coalesce(body('Read_incident_now')?['properties']?['labels'], json('[]')))",
+                            "\"labelName\":\"teams-card-posted\""
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Compose_incident_card": {
+                      "type": "Compose",
+                      "inputs": {
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "type": "AdaptiveCard",
+                        "version": "1.4",
+                        "body": [
+                          {
+                            "type": "TextBlock",
+                            "size": "Large",
+                            "weight": "Bolder",
+                            "wrap": true,
+                            "text": "@{triggerBody()?['object']?['properties']?['severity']} - @{triggerBody()?['object']?['properties']?['title']}"
+                          },
+                          {
+                            "type": "FactSet",
+                            "facts": [
+                              {
+                                "title": "Incident",
+                                "value": "#@{triggerBody()?['object']?['properties']?['incidentNumber']}"
+                              },
+                              {
+                                "title": "Created (UTC)",
+                                "value": "@{triggerBody()?['object']?['properties']?['createdTimeUtc']}"
+                              },
+                              {
+                                "title": "Status",
+                                "value": "@{triggerBody()?['object']?['properties']?['status']}"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "TextBlock",
+                            "wrap": true,
+                            "text": "@{triggerBody()?['object']?['properties']?['description']}"
+                          }
+                        ],
+                        "actions": [
+                          {
+                            "type": "Action.OpenUrl",
+                            "title": "Open in Sentinel",
+                            "url": "@{triggerBody()?['object']?['properties']?['incidentUrl']}"
+                          }
+                        ]
                       }
                     },
-                    "method": "post",
-                    "body": {
-                      "recipient": {
-                        "groupId": "@parameters('teamsGroupId')",
-                        "channelId": "@parameters('teamsChannelId')"
+                    "Post_card_to_SOC_channel": {
+                      "type": "ApiConnection",
+                      "description": "Teams connector 'Post card in a chat or channel' as the Flow bot to the SOC team's Identity-SecOps channel. The connection is OAuth and was authorized once as svc-soc-automation (the team owner); it holds no secret in this template, unlike the Workflows webhook URL it replaces (a bearer credential: anyone holding it could post).",
+                      "runAfter": {
+                        "Compose_incident_card": [
+                          "Succeeded"
+                        ]
                       },
-                      "messageBody": "@{outputs('Compose_incident_card')}"
+                      "inputs": {
+                        "host": {
+                          "connection": {
+                            "name": "@parameters('$connections')['teams']['connectionId']"
+                          }
+                        },
+                        "method": "post",
+                        "body": {
+                          "recipient": {
+                            "groupId": "@parameters('teamsGroupId')",
+                            "channelId": "@parameters('teamsChannelId')"
+                          },
+                          "messageBody": "@{outputs('Compose_incident_card')}"
+                        },
+                        "path": "/v1.0/teams/conversation/adaptivecard/poster/Flow bot/location/@{encodeURIComponent('Channel')}"
+                      }
                     },
-                    "path": "/v1.0/teams/conversation/adaptivecard/poster/Flow bot/location/@{encodeURIComponent('Channel')}"
+                    "Mark_card_posted": {
+                      "type": "Http",
+                      "runAfter": {
+                        "Post_card_to_SOC_channel": [
+                          "Succeeded"
+                        ]
+                      },
+                      "description": "Add the label teams-card-posted: Sentinel REST 'Incidents - Create Or Update' (PUT, api-version 2024-09-01) with the etag and the properties just read, plus the label (properties.labels, IncidentLabel {labelName, labelType}). The etag makes a stale write fail instead of overwriting a newer change.",
+                      "inputs": {
+                        "method": "PUT",
+                        "uri": "https://management.azure.com@{triggerBody()?['object']?['id']}?api-version=2024-09-01",
+                        "authentication": {
+                          "type": "ManagedServiceIdentity",
+                          "audience": "https://management.azure.com/"
+                        },
+                        "headers": {
+                          "Content-Type": "application/json"
+                        },
+                        "body": {
+                          "etag": "@body('Read_incident_now')?['etag']",
+                          "properties": "@setProperty(body('Read_incident_now')?['properties'], 'labels', union(coalesce(body('Read_incident_now')?['properties']?['labels'], json('[]')), json('[{\"labelName\":\"teams-card-posted\",\"labelType\":\"User\"}]')))"
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
                   }
                 }
               },
               "else": {
                 "actions": {}
               },
-              "description": "One card per incident: posted when the incident is new (no open ticket found). A run for an alert that joined an existing incident posts nothing here (JoinedAlert = true); the joined alert is a work note on the ticket and a comment on the incident. Updating the first card in place is NOT built: the Teams connector's update action needs the card's message id, which this playbook does not store. Runs after the ServiceNow branch even when it failed, so a ServiceNow outage never hides a new incident."
+              "description": "One card per incident: posted only while the incident has no teams-card-posted label (written after a delivered card). Updating the first card in place is NOT built: the Teams connector's update action needs the card's message id, which this playbook does not store. Runs after the ServiceNow branch even when it failed, so a ServiceNow outage never hides a new incident."
             }
           },
           "outputs": {}

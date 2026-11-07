@@ -193,3 +193,18 @@ run "drill_prefix_too_short_refused" {
   }
   expect_failures = [var.drill_account_prefixes]
 }
+
+# Review of #230: one alert must never name two break-glass accounts. The
+# query returns one row per account and the NRT rule alerts per row.
+run "break_glass_one_alert_per_account" {
+  command = apply
+
+  assert {
+    condition     = azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].event_grouping[0].aggregation_method == "AlertPerResult"
+    error_message = "The break-glass NRT rule must raise one alert per result row (one row per account)."
+  }
+  assert {
+    condition     = strcontains(azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].query, "by UserPrincipalName, UserId")
+    error_message = "break-glass-signin.kql must summarize to one row per account."
+  }
+}

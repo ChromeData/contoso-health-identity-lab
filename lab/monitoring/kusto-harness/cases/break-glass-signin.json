@@ -43,12 +43,22 @@
     {
       "id": "both-tables",
       "kind": "positive",
-      "label": "One interactive + one non-interactive sign-in: two rows from the union",
+      "label": "One interactive + one non-interactive sign-in by the same account: both legs of the union are read, and they come out as ONE row for the account (SignIns 2), so one alert (review of #230)",
       "tables": {
         "SigninLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}],
         "AADNonInteractiveUserSignInLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}]
       },
-      "expect": [{"SignInType": "interactive"}, {"SignInType": "non-interactive"}],
+      "expect": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "SignIns": 2}],
+      "expectRows": 1
+    },
+    {
+      "id": "two-accounts-same-minute",
+      "kind": "positive",
+      "label": "bg-admin-01 and bg-admin-02 in the same minute: two rows, so two alerts, each grouped into its own account's incident",
+      "tables": {
+        "SigninLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}, {"UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com"}]
+      },
+      "expect": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "SignIns": 1}, {"UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "SignIns": 1}],
       "expectRows": 2
     },
     {
