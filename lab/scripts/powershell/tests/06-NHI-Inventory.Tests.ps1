@@ -197,6 +197,26 @@ Describe '06-NHI-Inventory.ps1 -SecretsRegisterPath (non-Entra long-lived secret
         @($out.Findings | Where-Object DisplayName -eq 'a' | Where-Object FindingId -eq 'SECRET-NO-EXPIRY').Count | Should -Be 0
     }
 
+    It 'warns before an expiry: SECRET-EXPIRING inside -WarnDays (default 30), nothing outside it (review H1)' {
+        $reg = @{ secrets = @(
+                @{ name = 'soon'; system = 's'; store = 'kv:soon'; owner = 'iam'; expiresOn = '2026-11-20'; rotation = 'P90D'; status = 'present' },
+                @{ name = 'later'; system = 's'; store = 'kv:later'; owner = 'iam'; expiresOn = '2027-01-15'; rotation = 'P90D'; status = 'present' }) }
+        $f = @((Test-SecretsRegister -Register $reg -Now ([datetime]'2026-11-07')).Findings | ForEach-Object { "$($_.DisplayName):$($_.FindingId):$($_.Severity)" })
+        $f | Should -Contain 'soon:SECRET-EXPIRING:Medium'
+        $f | Should -Not -Contain 'later:SECRET-EXPIRING:Medium'
+        $f60 = @((Test-SecretsRegister -Register $reg -Now ([datetime]'2026-11-07') -WarnDays 70).Findings | ForEach-Object { "$($_.DisplayName):$($_.FindingId)" })
+        $f60 | Should -Contain 'later:SECRET-EXPIRING'
+    }
+
+    It 'the committed register: every PRESENT secret has an owner and a real expiry date, and the Key Vault secrets are all listed (review H1)' {
+        $r = Get-Content -LiteralPath $script:Register -Raw | ConvertFrom-Json -AsHashtable
+        $out = Test-SecretsRegister -Register $r -Now ([datetime]'2026-11-07')
+        foreach ($row in @($out.Rows | Where-Object Status -EQ 'present')) { $row.ExpiresOn | Should -Match '^\d{4}-\d{2}-\d{2}$' -Because "$($row.Name) is present" }
+        $stores = (@($out.Rows.Store) -join ' ')
+        # The Key Vault secret list read 2026-11-07 (names only).
+        foreach ($kv in 'aws-scim-token', 'dc01-admin-password', 'dc01-dsrm-password', 'servicenow-integration-password', 'servicenow-provisioning-password', 'svc-pam-discovery', 'svc-vault-rotator') { $stores | Should -Match ([regex]::Escape($kv)) }
+    }
+
     It 'refuses an invalid register (never "no secrets")' {
         { Test-SecretsRegister -Register @{ secrets = @(@{ name = 'x'; status = 'planned' }) } -Now (Get-Date) } | Should -Throw '*has no store*'
         { Test-SecretsRegister -Register @{ secrets = @() } -Now (Get-Date) } | Should -Throw '*no secrets*'
@@ -225,7 +245,9 @@ Describe '06-NHI-Inventory.ps1 -SecretsRegisterPath (non-Entra long-lived secret
             if ($e['status'] -eq 'present') {
                 $e['createdOn'] | Should -Match '^\d{4}-\d{2}-\d{2}$' -Because "$($e['name']) is present: its date can be read"
                 $e['expiresOn'] | Should -Match '^\d{4}-\d{2}-\d{2}$' -Because $e['name']
-                $e['dateSource'] | Should -Match 'createdOn: .*expiresOn = createdOn \+ P\d+D' -Because "$($e['name']) must say where its date came from"
+                # expiresOn is either computed (createdOn + the rotation ceiling) or read
+                # from the store itself (an Entra credential's endDateTime).
+                $e['dateSource'] | Should -Match 'createdOn: .*expiresOn( = createdOn \+ P\d+D|: read from the store)' -Because "$($e['name']) must say where its date came from"
             }
             else {
                 $e['createdOn'] | Should -Match '^unknown \(.+\)$' -Because $e['name']
