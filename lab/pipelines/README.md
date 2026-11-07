@@ -171,9 +171,14 @@ The repo is **public on purpose**, and the pipeline depends on it:
   re-checks the sha256 and applies exactly that file. The plan never leaves
   the runner (no artifact), because it holds variable values in clear text.
   Difference from an Environment reviewer: removing the gate takes a merged
-  PR, while an Environment reviewer cannot be removed by code. Restore
-  required reviewers (5E) when the repo goes public, and keep the
-  plan-first order (the reviewer then approves after the plan step).
+  PR, while an Environment reviewer cannot be removed by code. Restoring
+  required reviewers (5E) is NOT a settings-only change. GitHub checks an
+  Environment's reviewers before the job starts, so on today's single apply
+  job the reviewer would approve before the plan exists (the old order that
+  A2 removed). Keeping plan-first needs a redesigned job flow first: a plan
+  job with no reviewer, then an apply job on the reviewed Environment that
+  applies that exact saved plan. That redesign is not built (the plan must
+  not leave the runner today, because it holds variable values in clear text).
 
   **Who is who.** GitHub's Environment required reviewers and "Prevent
   self-review" are not available here: the repo is a private, user-owned
