@@ -55,15 +55,27 @@ tier flags; it still never reviews a birthright package.
 
 ## Day one: which mechanism delivers the birthright package (measured 2026-11-07)
 
-The joiner Lifecycle Workflow, not the automatic assignment policy. In the
-first HR-form hire (capture log E121, E121b) the user joined the policy's
-dynamic group at +4:36, the policy had created no assignment by +25 min, and
-the workflow's request task assigned the package at 01:11:01Z (audit,
-initiated by Lifecycle Workflows). The workflow runs on the tenant's 3-hour
-schedule, so day-one delivery takes up to about 3 hours. The automatic
-policy keeps access in line with HR attributes afterwards (movers, and
-removal after its 3-day grace). Details: `lab/scripts/mock-hr/README.md`,
-"Three gaps from the first HR-form run".
+This section is about **the Nursing package (`Nurse - Clinical Apps`) only**. For that package the
+joiner Lifecycle Workflow delivers day-one access, not the automatic
+assignment policy. In the first HR-form hire (capture log E121, E121b) the
+user joined the policy's dynamic group at +4:36, the policy had created no
+assignment by +25 min, and the workflow's request task assigned the package
+at 01:11:01Z (audit, initiated by Lifecycle Workflows). That workflow runs
+on the tenant's 3-hour schedule, so Nursing day-one delivery takes up to
+about 3 hours.
+
+The standard installer (`post-apply/New-LifecycleWorkflows.ps1`, called by
+`Invoke-PostApply.ps1`) creates ONE joiner: department `Nursing`, package
+`Nurse - Clinical Apps`. It creates no ICU joiner. So an ICU hire gets
+`ICU - Critical Care Apps` only from the automatic assignment policy, with
+no measured day-one time, unless you install a second joiner
+(`-JoinerWorkflowName`, `-JoinerDepartment ICU`, `-AccessPackageName`).
+The 3-hour figure does not apply to ICU.
+
+For every birthright package the automatic policy keeps access in line with
+HR attributes afterwards (movers, and removal after its 3-day grace).
+Details: `lab/scripts/mock-hr/README.md`, "Three gaps from the first HR-form
+run".
 
 ## Provider gaps, and how they are closed
 

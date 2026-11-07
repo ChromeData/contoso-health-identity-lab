@@ -322,5 +322,8 @@ the PowerShell lifecycle scripts only handle the cloud-side follow-through
    it keeps the package in line with HR attributes (movers, and the 3-day
    removal), with no measured day-one time. Microsoft documents only that its
    evaluation "can take several minutes". Do not say on camera that the
-   package arrives by itself in minutes.
+   package arrives by itself in minutes. All of this is for Nursing only:
+   the standard install creates one joiner (department Nursing, package
+   Nurse - Clinical Apps) and no ICU joiner. An ICU hire relies on the
+   automatic assignment policy alone, unless a second joiner is installed.
 

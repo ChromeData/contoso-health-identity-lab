@@ -242,6 +242,13 @@ check "nhi_governance_requires_premium" {
   }
 }
 
+check "lcw_leaver_trigger_requires_premium" {
+  assert {
+    condition     = !var.enable_lcw_leaver_trigger || var.enable_premium
+    error_message = "enable_lcw_leaver_trigger = true has no effect unless enable_premium = true (the All-Workforce trigger group lives in the premium-tier modules/groups; dynamic groups are P1). New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver will then refuse to run because the group does not exist."
+  }
+}
+
 # Containment is a Sentinel automation rule: on the Log Analytics path it can
 # never fire. modules/monitoring refuses the plan; this states why up front.
 check "itdr_containment_requires_sentinel" {

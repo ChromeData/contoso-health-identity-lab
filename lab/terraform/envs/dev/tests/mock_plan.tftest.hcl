@@ -830,6 +830,7 @@ run "flags_without_premium_warn" {
     enable_pim_demo_readers             = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
+    enable_lcw_leaver_trigger           = true
     enable_access_reviews_privileged    = true
     vault_feed_v2_columns               = true
   }
@@ -848,6 +849,7 @@ run "flags_without_premium_warn" {
     check.pim_aws_admin_requires_sso_apps,
     check.b2b_requires_governance,
     check.nhi_governance_requires_premium,
+    check.lcw_leaver_trigger_requires_premium,
     check.access_reviews_require_governance,
     check.vault_feed_v2_requires_itdr,
   ]

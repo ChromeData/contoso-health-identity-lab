@@ -285,8 +285,11 @@
 
 .PARAMETER LeaverTriggerGroupMailNickname
     mailNickname of the dynamic trigger group. Default all-workforce. The
-    script refuses a group that is not dynamic, whose processing is not On, or
-    whose rule does not require accountEnabled true.
+    script refuses a group that is not dynamic, whose processing is not On,
+    whose rule does not require accountEnabled true, or whose rule has any
+    clause other than the All-Workforce ones (dirSyncEnabled true, userType
+    Member, accountEnabled true, joined by -and). A department clause would
+    let a job move start the leaver.
 
 .PARAMETER OfflinePreview
     Build and print both workflow bodies with placeholder ids. No Graph
@@ -623,9 +626,24 @@ foreach ($nick in $JoinerGroupMailNicknames) {
     $groupIds[$nick] = [string]$grp['id']
 }
 
+# Returns $null when a dynamic rule is only AND-ed clauses from the
+# All-Workforce set (modules/groups/main.tf all_workforce rule), otherwise a
+# short reason. Comparison ignores case, spaces and parentheses.
+function Get-LeaverTriggerRuleProblem {
+    param([string]$Rule)
+    $allowed = @('user.dirsyncenabled-eqtrue', 'user.usertype-eq"member"', 'user.accountenabled-eqtrue')
+    $flat = ($Rule -replace '[()\s]', '').ToLowerInvariant()
+    if (-not $flat) { return 'is empty' }
+    if ($flat -match '-or|-not') { return 'uses -or or -not' }
+    $extra = @($flat -split '-and' | Where-Object { $_ -notin $allowed })
+    if ($extra) { return "has clauses a job move can change ($($extra -join ', '))" }
+    return $null
+}
+
 # The scheduled leaver's trigger group (-IncludeScheduledLeaver). Fail closed:
-# it must be exactly one DYNAMIC group whose rule requires accountEnabled true,
-# otherwise "removed from group" would not mean "HR disabled the account".
+# it must be exactly one DYNAMIC group whose rule requires accountEnabled true
+# and has no clause a job move can change, otherwise "removed from group" would
+# not mean "HR disabled the account".
 $leaverTriggerGroupId = $null
 if ($IncludeScheduledLeaver) {
     if ($OfflinePreview) { $leaverTriggerGroupId = "<groupId: $LeaverTriggerGroupMailNickname>" }
@@ -636,6 +654,15 @@ if ($IncludeScheduledLeaver) {
         $tg = $g[0]
         if (-not (@($tg['groupTypes']) -contains 'DynamicMembership')) { throw "Scheduled leaver: '$($tg['displayName'])' is not a dynamic group." }
         if ([string]$tg['membershipRule'] -notmatch 'user\.accountEnabled\s+-eq\s+true') { throw "Scheduled leaver: the rule of '$($tg['displayName'])' does not require accountEnabled true, so leaving it does not mean HR disabled the account: $($tg['membershipRule'])" }
+        # WHY an allow-list of clauses: "requires accountEnabled true" is not
+        # enough. A rule like (accountEnabled true) -and (department Nursing)
+        # also drops a person who moves to ICU, and the leaver workflow would
+        # then strip packages, groups and licenses from an active employee.
+        # Accept only AND-ed clauses that a job move never changes (the
+        # modules/groups All-Workforce rule); refuse -or, -not and any other
+        # attribute.
+        $ruleProblem = Get-LeaverTriggerRuleProblem -Rule ([string]$tg['membershipRule'])
+        if ($ruleProblem) { throw "Scheduled leaver: the rule of '$($tg['displayName'])' $ruleProblem, so leaving the group can mean a job move, not an HR disable: $($tg['membershipRule'])" }
         if ([string]$tg['membershipRuleProcessingState'] -ne 'On') { throw "Scheduled leaver: dynamic processing of '$($tg['displayName'])' is '$($tg['membershipRuleProcessingState'])', not On." }
         $leaverTriggerGroupId = [string]$tg['id']
         Write-Console "Scheduled leaver trigger group '$($tg['displayName'])' ($leaverTriggerGroupId)." -ForegroundColor DarkGray

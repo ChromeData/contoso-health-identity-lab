@@ -115,6 +115,16 @@ Describe 'New-LifecycleWorkflows.ps1 against a mocked tenant (guards for the E12
         { & $script:Lcw -IncludeScheduledLeaver -WhatIf } | Should -Throw '*does not require accountEnabled true*'
     }
 
+    It 'refuses a trigger group whose rule also filters on department (a job move would run the leaver)' {
+        $global:LcwGroupRule = '(user.accountEnabled -eq true) -and (user.department -eq "Nursing")'
+        { & $script:Lcw -IncludeScheduledLeaver -WhatIf } | Should -Throw '*job move*user.department*'
+    }
+
+    It 'refuses a trigger group whose rule uses -or' {
+        $global:LcwGroupRule = '(user.accountEnabled -eq true) -or (user.userType -eq "Guest")'
+        { & $script:Lcw -IncludeScheduledLeaver -WhatIf } | Should -Throw '*uses -or or -not*'
+    }
+
     It 'resolves the real trigger group id into the scheduled leaver scope' {
         $r = @(& $script:Lcw -IncludeScheduledLeaver -WhatIf)
         @($r | Where-Object { $_.Workflow -eq 'Contoso - Leaver (HR disabled, scheduled)' -and $_.Action -eq 'whatif-create' }).Count | Should -Be 1
