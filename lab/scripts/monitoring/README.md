@@ -20,7 +20,7 @@ detections need.
 
 | File | What it does |
 |---|---|
-| `Deploy-Playbook.ps1` | Deploys `lab/monitoring/playbook-notify.json` (Teams card to the SOC channel + ServiceNow ticket on every incident; for the break-glass rule also on every alert that joins an open incident - `modules/monitoring`, `notify_on_alert_added_rule_keys`). |
+| `Deploy-Playbook.ps1` | Deploys `lab/monitoring/playbook-notify.json` (Teams card to the SOC channel + ServiceNow ticket on every new incident, except Informational ones; for the break-glass rule an alert that joins an open incident runs it again, and it then adds a work note to that incident's open ticket, found by `correlation_id`, instead of a second card or ticket - `modules/monitoring`, `notify_on_alert_added_rule_keys`). Re-deploy it after this change merges. |
 | `authorize-teams-connection.mjs` | Authorizes a playbook's Teams API connection once, headless, as `svc-soc-automation` (ARM `listConsentLinks` / `confirmConsentCode`, staff sign-in toolkit), and fails unless the connection reads back Connected as that account. |
 | `answer-teams-card.mjs` | Drill aid: answers a containment card in Teams on the web as a lab TEST user (the playbook still decides whether that answer counts). |
 | `../demo/containment-drill.sh` | Arms the on-camera drill (throwaway user, one incident, the card waiting) and disarms it; see `lab/scripts/demo/README.md`. |

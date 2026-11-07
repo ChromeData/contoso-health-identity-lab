@@ -603,6 +603,9 @@ module "monitoring" {
   iac_principal_ids     = var.iac_principal_ids
   privileged_group_ids  = local.itdr_privileged_group_ids
   break_glass_group_ids = var.enable_premium ? [module.groups[0].break_glass_group_object_id] : []
+  # The break-glass USERS by object id: break-glass-signin.kql matches on
+  # them, so renaming an account does not blind it (review finding D3).
+  break_glass_user_ids = var.enable_premium ? module.groups[0].break_glass_user_object_ids : []
   # PIM-Azure-RG-Contributors: standing members are its intended path (the
   # group is eligible for the Azure role) - reported on its own, Medium path.
   azure_pim_group_ids = var.enable_premium ? [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null] : []

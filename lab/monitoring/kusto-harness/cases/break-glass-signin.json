@@ -22,7 +22,7 @@
       "label": "bg-admin-01 signs in interactively",
       "tables": {"SigninLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}]},
       "expect": [{"SignInType": "interactive", "UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com",
-                  "Country": "US", "ResultType": "0", "IPAddress": "198.51.100.20"}],
+                  "Country": "US", "ResultType": "0", "IPAddress": "198.51.100.20", "MatchedBy": "naming convention"}],
       "expectRows": 1
     },
     {
@@ -73,6 +73,31 @@
       "label": "A bg-admin sign-in generated 2 h ago and ingested only now STILL alerts: the Sentinel rule is NRT and judges rows by ingestion time, so the query carries no TimeGenerated or ingestion-time window a late row could fall out of (2026-11-05; formerly the negative 'older-than-lookback')",
       "tables": {"SigninLogs": [{"UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "TimeGenerated": "ago:2h"}]},
       "expect": [{"SignInType": "interactive", "UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "Country": "US", "ResultType": "0", "IPAddress": "198.51.100.20"}]
+    },
+    {
+      "id": "renamed-account-by-object-id",
+      "kind": "positive",
+      "label": "bg-admin-01 renamed to emergency-ops@ still alerts: its immutable object id is in the Terraform-rendered BreakGlassUserIds list (review finding D3, 2026-11-07)",
+      "lets": {"BreakGlassUserIds": ["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]},
+      "tables": {"SigninLogs": [{"UserPrincipalName": "emergency-ops@contosohealthlab.onmicrosoft.com", "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}]},
+      "expect": [{"UserPrincipalName": "emergency-ops@contosohealthlab.onmicrosoft.com", "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "MatchedBy": "object id"}],
+      "expectRows": 1
+    },
+    {
+      "id": "renamed-account-non-interactive",
+      "kind": "positive",
+      "label": "The renamed account's token refresh (non-interactive table) is matched by object id too",
+      "lets": {"BreakGlassUserIds": ["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]},
+      "tables": {"AADNonInteractiveUserSignInLogs": [{"UserPrincipalName": "emergency-ops@contosohealthlab.onmicrosoft.com", "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}]},
+      "expect": [{"SignInType": "non-interactive", "MatchedBy": "object id"}],
+      "expectRows": 1
+    },
+    {
+      "id": "id-list-does-not-widen",
+      "kind": "negative",
+      "label": "With the id list filled, an ordinary user (another object id, an ordinary name) still does not match",
+      "lets": {"BreakGlassUserIds": ["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]},
+      "tables": {"SigninLogs": [{"UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "UserId": "cccccccc-cccc-cccc-cccc-cccccccccccc"}]}
     }
   ]
 }

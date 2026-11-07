@@ -1,0 +1,238 @@
+{
+ "what": "kusto-harness cases run on the Log Analytics query engine (loga-idlab), read-only, rows bound by let",
+ "notAScheduledRule": true,
+ "started": "2026-11-07T01:24:48Z",
+ "finished": "2026-11-07T01:25:09Z",
+ "result": "PASS",
+ "counts": {
+  "PASS": 10,
+  "FAIL": 0,
+  "ERROR": 0,
+  "SKIPPED": 0
+ },
+ "rules": {
+  "break-glass-signin": "de1083de59e454c61bcce4d5cc8bed1a6dc7f438e45d930945e7a8999ffdbd7e"
+ },
+ "caseFiles": {
+  "break-glass-signin": "40da96e84abde2cec81cb36fba8b5c4185babf792efc4ffc5d3d880f1657dcde"
+ },
+ "cases": [
+  {
+   "id": "break-glass-signin/interactive-success",
+   "kind": "positive",
+   "label": "bg-admin-01 signs in interactively",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T00:54:48.01523Z",
+     "SignInType": "interactive",
+     "UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com",
+     "UserId": "",
+     "MatchedBy": "naming convention",
+     "IPAddress": "198.51.100.20",
+     "Country": "US",
+     "AppDisplayName": "Azure Portal",
+     "ClientAppUsed": "Browser",
+     "ResultType": "0",
+     "ResultDescription": "",
+     "ConditionalAccessStatus": "notApplied",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "break-glass-signin/non-interactive-string-location",
+   "kind": "positive",
+   "label": "A non-interactive token use by bg-admin-02: Country still resolves from the STRING LocationDetails",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T00:54:50.954979Z",
+     "SignInType": "non-interactive",
+     "UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com",
+     "UserId": "",
+     "MatchedBy": "naming convention",
+     "IPAddress": "198.51.100.20",
+     "Country": "US",
+     "AppDisplayName": "Azure Portal",
+     "ClientAppUsed": "Mobile Apps and Desktop clients",
+     "ResultType": "0",
+     "ResultDescription": "",
+     "ConditionalAccessStatus": "notApplied",
+     "CorrelationId": "22222222-2222-2222-2222-222222222222"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "break-glass-signin/failed-attempt-still-alerts",
+   "kind": "positive",
+   "label": "A failed attempt (wrong password / key) is still a break-glass alert",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T00:54:52.656976Z",
+     "SignInType": "interactive",
+     "UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com",
+     "UserId": "",
+     "MatchedBy": "naming convention",
+     "IPAddress": "198.51.100.20",
+     "Country": "US",
+     "AppDisplayName": "Azure Portal",
+     "ClientAppUsed": "Browser",
+     "ResultType": "50126",
+     "ResultDescription": "Invalid username or password or Invalid on-premise username or password.",
+     "ConditionalAccessStatus": "notApplied",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "break-glass-signin/both-tables",
+   "kind": "positive",
+   "label": "One interactive + one non-interactive sign-in: two rows from the union",
+   "status": "PASS",
+   "rowCount": 2,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T00:54:54.71338Z",
+     "SignInType": "interactive",
+     "UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com",
+     "UserId": "",
+     "MatchedBy": "naming convention",
+     "IPAddress": "198.51.100.20",
+     "Country": "US",
+     "AppDisplayName": "Azure Portal",
+     "ClientAppUsed": "Browser",
+     "ResultType": "0",
+     "ResultDescription": "",
+     "ConditionalAccessStatus": "notApplied",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111"
+    },
+    {
+     "TimeGenerated": "2026-11-07T00:54:54.71338Z",
+     "SignInType": "non-interactive",
+     "UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com",
+     "UserId": "",
+     "MatchedBy": "naming convention",
+     "IPAddress": "198.51.100.20",
+     "Country": "US",
+     "AppDisplayName": "Azure Portal",
+     "ClientAppUsed": "Mobile Apps and Desktop clients",
+     "ResultType": "0",
+     "ResultDescription": "",
+     "ConditionalAccessStatus": "notApplied",
+     "CorrelationId": "22222222-2222-2222-2222-222222222222"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "break-glass-signin/ordinary-user",
+   "kind": "negative",
+   "label": "An ordinary user's sign-in",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "break-glass-signin/near-miss-names",
+   "kind": "negative",
+   "label": "Names that only look like the convention (one digit, three digits, prefixed)",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "break-glass-signin/late-ingested-old-row",
+   "kind": "positive",
+   "label": "A bg-admin sign-in generated 2 h ago and ingested only now STILL alerts: the Sentinel rule is NRT and judges rows by ingestion time, so the query carries no TimeGenerated or ingestion-time window a late row could fall out of (2026-11-05; formerly the negative 'older-than-lookback')",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-06T23:25:00.665932Z",
+     "SignInType": "interactive",
+     "UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com",
+     "UserId": "",
+     "MatchedBy": "naming convention",
+     "IPAddress": "198.51.100.20",
+     "Country": "US",
+     "AppDisplayName": "Azure Portal",
+     "ClientAppUsed": "Browser",
+     "ResultType": "0",
+     "ResultDescription": "",
+     "ConditionalAccessStatus": "notApplied",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "break-glass-signin/renamed-account-by-object-id",
+   "kind": "positive",
+   "label": "bg-admin-01 renamed to emergency-ops@ still alerts: its immutable object id is in the Terraform-rendered BreakGlassUserIds list (review finding D3, 2026-11-07)",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T00:55:03.748892Z",
+     "SignInType": "interactive",
+     "UserPrincipalName": "emergency-ops@contosohealthlab.onmicrosoft.com",
+     "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+     "MatchedBy": "object id",
+     "IPAddress": "198.51.100.20",
+     "Country": "US",
+     "AppDisplayName": "Azure Portal",
+     "ClientAppUsed": "Browser",
+     "ResultType": "0",
+     "ResultDescription": "",
+     "ConditionalAccessStatus": "notApplied",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "break-glass-signin/renamed-account-non-interactive",
+   "kind": "positive",
+   "label": "The renamed account's token refresh (non-interactive table) is matched by object id too",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T00:55:05.804084Z",
+     "SignInType": "non-interactive",
+     "UserPrincipalName": "emergency-ops@contosohealthlab.onmicrosoft.com",
+     "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+     "MatchedBy": "object id",
+     "IPAddress": "198.51.100.20",
+     "Country": "US",
+     "AppDisplayName": "Azure Portal",
+     "ClientAppUsed": "Mobile Apps and Desktop clients",
+     "ResultType": "0",
+     "ResultDescription": "",
+     "ConditionalAccessStatus": "notApplied",
+     "CorrelationId": "22222222-2222-2222-2222-222222222222"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "break-glass-signin/id-list-does-not-widen",
+   "kind": "negative",
+   "label": "With the id list filled, an ordinary user (another object id, an ordinary name) still does not match",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  }
+ ]
+}

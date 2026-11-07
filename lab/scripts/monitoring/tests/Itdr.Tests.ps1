@@ -265,8 +265,56 @@ Describe 'Containment playbook (lab/monitoring/playbook-contain.json)' {
         $find = @($actions | Where-Object Name -EQ 'Find_ticket_by_correlation_id')[0]
         $find.Action.inputs.queries.sysparm_query | Should -Match "correlation_id=@\{triggerBody\(\)\?\['object'\]\?\['name'\]\}"
         $nwf = @($notify.resources | Where-Object { $_.type -eq 'Microsoft.Logic/workflows' })[0]
-        $body = $nwf.properties.definition.actions.If_ServiceNow_configured.actions.Create_ServiceNow_incident.inputs.body
+        $body = $nwf.properties.definition.actions.If_ServiceNow_configured.actions.If_open_ticket_exists.else.actions.Create_ServiceNow_incident.inputs.body
         $body.correlation_id | Should -Be "@{triggerBody()?['object']?['name']}"
+    }
+}
+
+Describe 'Notify playbook: one ticket and one card per incident (review finding D2)' {
+    BeforeAll {
+        $nwf = @($notify.resources | Where-Object { $_.type -eq 'Microsoft.Logic/workflows' })[0]
+        $na = $nwf.properties.definition.actions
+        $nAll = @(Get-WorkflowAction -Actions $na)
+        $sev = "@triggerBody()?['object']?['properties']?['severity']"
+    }
+
+    It 'looks for the OPEN ticket of this incident (correlation_id + active) before anything else in the ServiceNow branch' {
+        $sn = $na.If_ServiceNow_configured.actions
+        @($sn.Keys)[0] | Should -Be 'Find_open_ticket'
+        $sn.Find_open_ticket.inputs.method | Should -Be 'GET'
+        $sn.Find_open_ticket.inputs.queries.sysparm_query | Should -Be "correlation_id=@{triggerBody()?['object']?['name']}^active=true"
+        $sn.Find_open_ticket.runtimeConfiguration.secureData.properties | Should -Contain 'inputs'
+    }
+
+    It 'creates a ticket ONLY when none is open, and only after a successful lookup (a failed read never doubles tickets)' {
+        $creates = @($nAll | Where-Object { $_.Action.type -eq 'Http' -and $_.Action.inputs.method -eq 'POST' })
+        $creates.Count | Should -Be 1
+        $creates[0].Name | Should -Be 'Create_ServiceNow_incident'
+        $creates[0].Scope | Should -Be 'If_open_ticket_exists/else'
+        $na.If_ServiceNow_configured.actions.If_open_ticket_exists.runAfter.Find_open_ticket | Should -Be @('Succeeded')
+    }
+
+    It 'a joined alert is a work note on the existing ticket and a comment on the incident, and marks the run JoinedAlert' {
+        $yes = $na.If_ServiceNow_configured.actions.If_open_ticket_exists.actions
+        $yes.Set_JoinedAlert.inputs.value | Should -BeTrue
+        $yes.Add_work_note_for_joined_alert.inputs.method | Should -Be 'PATCH'
+        $yes.Add_work_note_for_joined_alert.inputs.uri | Should -Match "first\(body\('Find_open_ticket'\)\?\['result'\]\)\?\['sys_id'\]"
+        $yes.Add_work_note_for_joined_alert.inputs.body.work_notes | Should -Match 'No new ticket was opened'
+        $yes.Comment_joined_alert_on_Sentinel_incident.inputs.path | Should -Be '/Incidents/Comment'
+    }
+
+    It 'posts the Teams card only for a new incident (JoinedAlert false), after the ServiceNow branch whatever its outcome' {
+        $na.Initialize_JoinedAlert.inputs.variables[0].value | Should -BeFalse
+        $t = $na.If_Teams_configured
+        ($t.expression.and | ConvertTo-Json -Depth 5 -Compress) | Should -Match ([regex]::Escape('{"equals":["@variables(''JoinedAlert'')",false]}'))
+        $t.runAfter.If_ServiceNow_configured | Should -Be @('Succeeded', 'Failed', 'Skipped', 'TimedOut')
+        @($nAll | Where-Object { $_.Action.type -eq 'ApiConnection' -and $_.Action.inputs.path -like '/v1.0/teams/*' }).Count | Should -Be 1
+    }
+
+    It 'Informational incidents open no ticket and post no card (review finding B5)' {
+        foreach ($b in 'If_ServiceNow_configured', 'If_Teams_configured') {
+            ($na[$b].expression.and | ConvertTo-Json -Depth 5 -Compress) | Should -Match ([regex]::Escape('{"not":{"equals":["' + $sev + '","Informational"]}}')) -Because $b
+        }
     }
 }
 

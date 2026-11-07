@@ -44,6 +44,11 @@ index=entra (sourcetype="azure:loganalytics:signinlogs" OR sourcetype="azure:log
 ``` grouping by the Account + IP entities -> per-result throttle below).        ```
 ``` The @stanza / @conf lines are read by render-savedsearches.sh to build      ```
 ``` app/contoso_identity/default/savedsearches.conf; Splunk ignores them.       ```
+``` OBJECT IDS (2026-11-07): the KQL twin also matches the accounts' immutable ```
+``` object ids (UserId in BreakGlassUserIds), so a renamed account still       ```
+``` alerts in Sentinel. This Splunk stand-in has no break-glass id lookup yet, ```
+``` so it matches the naming convention only and says so in MatchedBy. The    ```
+``` UserId column is carried so a reviewer sees the id that matched there.    ```
 ``` ========================================================================== ```
 ``` @stanza Contoso - Break-glass account sign-in (any) ```
 ``` @conf description = Any sign-in (interactive or non-interactive, success or failure) by an emergency-access account. Always investigated by a second admin. KQL twin: lab/kql/break-glass-signin.kql ```
@@ -66,6 +71,7 @@ index=entra (sourcetype="azure:loganalytics:signinlogs" OR sourcetype="azure:log
 ``` @conf request.ui_dispatch_view = search ```
 | regex UserPrincipalName="(?i)^bg-admin-[0-9]{2}@"
 | eval SignInType=if(sourcetype=="azure:loganalytics:signinlogs", "interactive", "non-interactive")
+| eval MatchedBy="naming convention"
 | spath path=LocationDetails.countryOrRegion output=Country
 | sort 0 - _time
-| table TimeGenerated, SignInType, UserPrincipalName, IPAddress, Country, AppDisplayName, ClientAppUsed, ResultType, ResultDescription, ConditionalAccessStatus, CorrelationId
+| table TimeGenerated, SignInType, UserPrincipalName, UserId, MatchedBy, IPAddress, Country, AppDisplayName, ClientAppUsed, ResultType, ResultDescription, ConditionalAccessStatus, CorrelationId
