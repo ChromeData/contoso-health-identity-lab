@@ -17,7 +17,7 @@ Plain reading of the table: **Yes** means the lab did it in a real tenant and ha
 | Commercial PAM (CyberArk, Delinea, BeyondTrust) | 6 | Partly | Vault and Guacamole stand in for CyberArk; vocabulary map in `STAND-INS.md` |
 | Detection, SIEM, incident response | 6 | Yes | 24 detections as code, 17 scheduled in Sentinel, containment playbook; Splunk twins of the first 22 proven on a synthetic replay (22 of 22 fire, E61); Defender for Identity staged as the native AD-attack detector (ADR 0023), with the SecurityEvent rules as its portable twins |
 | Joiner, mover, leaver automation | 6 | Yes | Leaver gone from AD in 7 s, Entra under 3 min, AWS in 9 min (E52) |
-| Audit evidence for HIPAA, SOX, HITRUST | 6 | Yes | Evidence pack with SHA-256 manifest in tamper-proof storage, compliance crosswalk |
+| Audit evidence for HIPAA, SOX, HITRUST | 6 | Yes | Evidence pack with SHA-256 manifest in write-once storage (lab policy Unlocked by rule, plus a delete lock; production locks it), compliance crosswalk |
 | Infrastructure as code | 5 | Yes | Terraform for Entra, Azure, AWS, Okta; 64 reviewed changes applied by a password-free pipeline |
 | Passwordless, FIDO2 | 4 | Partly | Policies written (CA002, CA008, CA021); report-only until passkeys are registered |
 | SailPoint or Saviynt experience | 4 | Partly | midPoint stands in; the model (birthright, request, review, SoD) is the same |
