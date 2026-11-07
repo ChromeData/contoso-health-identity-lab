@@ -107,8 +107,8 @@ run "guardrails_deny_every_iam_write" {
     error_message = "the guardrails must deny every IAM write (no second role, user, key or trust edit), PassRole, Roles Anywhere and account closure"
   }
   assert {
-    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny" && (s.Resource == "*" || s.Sid == "NoAuditBucketTampering")])
-    error_message = "the guardrail policy may only Deny, account-wide (a Deny scoped to the operator's own role is bypassed by creating another role); the one exception is the audit-bucket statement"
+    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny" && (s.Resource == "*" || contains(["NoAuditBucketTampering", "NoSessionLogTampering"], s.Sid))])
+    error_message = "the guardrail policy may only Deny, account-wide (a Deny scoped to the operator's own role is bypassed by creating another role); the exceptions are the audit-bucket and session-log statements, scoped to those resources"
   }
   assert {
     condition     = jsondecode(aws_iam_role.entra_operator[0].assume_role_policy).Statement[0].Principal.Federated == aws_iam_openid_connect_provider.entra[0].arn
@@ -170,7 +170,7 @@ run "guardrails_v2_close_the_identity_center_path" {
     error_message = "no new member account (OrganizationAccountAccessRole), invitation, delegated administrator, SCP change, root session or recovery-contact change"
   }
   assert {
-    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny" && (s.Resource == "*" || s.Sid == "NoAuditBucketTampering") && !contains(s.Action, "*")])
+    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Effect == "Deny" && (s.Resource == "*" || contains(["NoAuditBucketTampering", "NoSessionLogTampering"], s.Sid)) && !contains(s.Action, "*")])
     error_message = "every guardrail statement is an account-wide Deny (the audit-bucket one aside, v3), and none denies everything"
   }
 }
@@ -206,5 +206,26 @@ run "guardrails_v3_protect_the_audit_trail" {
       contains(flatten([s.Action]), "cloudtrail:CreateTrail") || contains(flatten([s.Action]), "cloudtrail:LookupEvents") || contains(flatten([s.Action]), "s3:GetObject")
     ])
     error_message = "reads stay open: the operator still reads the trail (LookupEvents, log files) for evidence"
+  }
+}
+
+run "guardrails_v4_no_server_shell_without_pim" {
+  command = apply
+
+  variables {
+    enable_entra_operator = true
+  }
+
+  assert {
+    condition = length(setsubtract(
+      ["ssm:StartSession", "ssm:ResumeSession", "ssm:SendCommand", "ec2-instance-connect:SendSSHPublicKey", "ssm-guiconnect:StartConnection"],
+      one([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Action if s.Sid == "NoServerShell" && s.Effect == "Deny" && s.Resource == "*"])
+    )) == 0
+    error_message = "the operator must be denied every shell / run-command channel to a server, account-wide: servers are reached only through a PIM activation (LabServerSession)"
+  }
+  assert {
+    condition = alltrue([for r in one([for s in jsondecode(aws_iam_role_policy.entra_operator_guardrails[0].policy).Statement : s.Resource if s.Sid == "NoSessionLogTampering"]) :
+    endswith(r, ":document/SSM-SessionManagerRunShell") || strcontains(r, ":log-group:/contoso-lab/session-manager")])
+    error_message = "the session-log Deny covers exactly the preferences document and the session log group"
   }
 }
