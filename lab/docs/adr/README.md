@@ -47,6 +47,10 @@ incidents.
 | [0024](0024-lab-operator-workload-identity.md) | Unattended admin work runs as the lab operator: a certificate-only Entra workload identity (key in the Mac's Keychain), which AWS trusts through Entra web-identity federation. Tier 0, one kill switch for both clouds | Identity platform / Tier 0 |
 | [0025](0025-aws-admin-just-in-time-through-entra.md) | AWS administration is a 2-hour PIM-for-Groups activation in Entra (PIM-AWS-Lab-Admins -> SCIM -> IAM Identity Center permission set LabAdministrator), not the root user; the operator is denied IAM, Identity Center and account-creating Organizations writes, so it cannot mint another admin path | Identity platform / Tier 0 |
 | [0026](0026-positive-controls-every-check-seen-to-fail.md) | A check counts only after it has been seen to fail: tools are judged by counted output, never exit codes alone, and the merge gate's Checkov and TruffleHog run on every PR against a fixture they must catch and a clean twin they must pass; the verified-only TruffleHog mode stays a stated blind spot | Pipeline / all checks |
+| [0031](0031-log-retention.md) | Log retention: 30 days in the lab as a cost choice; production 90 days interactive, 2 years long-term, 6-year immutable export of audit logs | Detection / audit |
+| [0032](0032-vendor-and-medical-device-remote-access.md) | Vendor and medical-device remote access: named B2B guests with a sponsor, 30-day packages, PIM activation with approval, a brokered and recorded session to the imaging segment | Privileged access / third party |
+| [0033](0033-clinical-break-the-glass-and-epcs.md) | Clinical break-the-glass (EHR emergency chart access) reviewed by the Privacy Office within 24 h; EPCS signing with a FIDO2 or certificate strength and a two-person grant (21 CFR 1311) | Clinical / compliance |
+| [0034](0034-contractors-and-agency-staff.md) | Contractors and agency staff: worker type and sponsor from HR, end date at most 90 days, sponsor re-attestation every 30 days, no admin roles | Lifecycle (JML) |
 
 ## Format
 
