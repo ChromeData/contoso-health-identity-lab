@@ -39,9 +39,9 @@ function makeEnv({ graph, now = '2026-11-07 10:00:00' }) {
       const r = b === undefined ? (db[this._t] || {})[a] : rows.find((x) => String(x[a]) === String(b));
       return r ? this._wrap(r) : false;
     }
-    addQuery(f, v) { this._q.push([f, v]); return { addOrCondition() {} }; }
+    addQuery(f, op, v) { if (v === undefined) { v = op; op = '='; } this._q.push([f, op, v]); return { addOrCondition() {} }; }
     orderByDesc() {}
-    query() { this._rows = Object.values(db[this._t] || {}).filter((r) => this._q.every(([f, v]) => String(r[f]) === String(v))); this._i = -1; }
+    query() { this._rows = Object.values(db[this._t] || {}).filter((r) => this._q.every(([f, op, v]) => op === 'IN' ? String(v).split(',').includes(String(r[f])) : String(r[f]) === String(v))); this._i = -1; }
     next() { this._i++; return this._i < this._rows.length ? this._wrap(this._rows[this._i]) : false; }
     getUniqueValue() { return this._rec.sys_id; }
     getValue(f) { return this._rec[f] === undefined ? null : String(this._rec[f]); }
@@ -169,6 +169,7 @@ test('leaver: a later failure keeps the removal already accepted (tracked + show
   assert.deepEqual(plain(env.x.removeAll(env.rec('sc_task', 't1'), person)), ['pkg-icu/rm-1']);
   const t = env.db.sc_task.t1;
   assert.equal(t.correlation_id, 'pkg-icu/rm-1', 'the poller must still follow the accepted removal');
+  assert.equal(t.correlation_display, 'Entra ID Governance - partial');
   assert.equal(t.assignment_group, 'g1');
   assert.notEqual(String(t.state), '3', 'not closed while something failed');
   assert.match(t.notes.at(-1), /remove ICU - Float Access[\s\S]*Entra removal stopped: Graph GET -> 503/);
@@ -194,4 +195,26 @@ test('poller: delivered closes; a failed read or a failed request goes to IAM, n
     const get = env.calls.find((c) => c[0] === 'get');
     assert.match(get[1], /accessPackage%2Fid%20eq%20'pkg-icu'%20and%20id%20eq%20'req-1'/, 'every read names the package (catalog-role 403 otherwise)');
   }
+});
+
+test('partial leaver removal: the next poll sees Delivered but does NOT close the task', () => {
+  const env = makeEnv({ graph: () => ({ value: [{ state: 'delivered' }] }) });
+  env.db.sc_task.t1 = { sys_id: 't1', number: 'SCTASK0010099', state: '2', correlation_id: 'pkg-icu/rm-1', correlation_display: 'Entra ID Governance - partial' };
+  env.x._check(env.rec('sc_task', 't1'));
+  const t = env.db.sc_task.t1;
+  assert.notEqual(String(t.state), '3');
+  assert.equal(t.correlation_display, 'Entra ID Governance - needs IAM');
+  assert.equal(t.assignment_group, 'g1');
+  assert.match(t.notes.at(-1), /never sent: a person must finish it/);
+});
+
+test('poller looks at plain and partial tickets', () => {
+  const env = makeEnv({ graph: () => ({ value: [{ state: 'delivered' }] }) });
+  env.db.sc_req_item.r1 = ritm({ correlation_id: 'pkg-icu/req-1', correlation_display: 'Entra ID Governance' });
+  env.db.sc_task.t1 = { sys_id: 't1', active: 'true', correlation_display: 'Entra ID Governance - partial' };
+  env.db.sc_task.t2 = { sys_id: 't2', active: 'true', correlation_display: 'Entra ID Governance - needs IAM' };
+  const seen = [];
+  env.x._check = (gr) => seen.push(gr.getUniqueValue());
+  env.x.checkInFlight();
+  assert.deepEqual(plain(seen), ['r1', 't1'], 'needs-IAM tickets are left to people');
 });

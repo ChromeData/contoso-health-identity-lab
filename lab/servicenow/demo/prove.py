@@ -27,10 +27,11 @@ Evidence: lab/evidence/servicenow/<UTC>/ (readback.json, screenshots,
 SHA256SUMS). Screens show persona names and ticket numbers only; no pass,
 password or patient data is ever on screen or in a file.
 
-Cleanup (unless --keep): every assignment a step granted is removed again
-(adminRemove, justification names the proof; compared with what the people
-held before the run, and after any in-flight add settles, also when a step
-failed half-way), every test ticket is deleted, the PIM
+Cleanup (unless --keep): every Entra request THIS run submitted (the leaver
+setup's adminAdd, the adminAdd ServiceNow sent for this run's tickets) is
+followed to its assignment and removed again (adminRemove, justification
+names the proof), also when a step failed half-way; every test ticket is
+deleted, the PIM
 activation is left to expire (1 hour). The ServiceNow build itself stays.
 """
 import argparse
@@ -243,37 +244,44 @@ def report(sn, ev, shots):
     ev["shots"] = sorted(os.listdir(shots))
 
 
-# (person, package key) pairs a step may grant. Their delivered assignments
-# are read BEFORE the run; afterwards every assignment that was not there
-# before is removed, whatever step failed and wherever (Greptile #254:
-# "track grants as soon as they are submitted and undo them on failure").
-GRANT_PAIRS = [("sofia", "icu_float"), ("testa", "icu_float"), ("marcus", "pharmacy")]
+# Grants are undone by REQUEST, not by timing (Greptile #254, second pass):
+# only the Entra requests this run submitted - the leaver setup's own adminAdd
+# and the adminAdd ServiceNow sent for this run's tickets (read from the
+# ticket's correlation_id before the ticket is deleted) - are followed to
+# their assignment and removed. Access granted by anyone else, even while the
+# run was going, is never touched.
+SETTLED = ("delivered", "deliveryFailed", "denied", "canceled", "partiallyDelivered")
 
 
-def delivered(sn, who, key):
-    p = pkg(sn, key)["accessPackageId"]
-    return {a["id"] for a in graph("get", f"{EM}/assignments?$filter=accessPackage/id eq '{p}' and target/objectId eq '{user_id(UPN[who])}' and state eq 'delivered'")["value"]}
+def request_refs_of(sn, ev):
+    refs = []
+    for step in ev["steps"].values():
+        if step.get("setup_request"):
+            refs.append(step["setup_request"])
+        if step.get("ritm"):
+            for r in sn.query("sc_req_item", f"number={step['ritm']}^cat_item.name=Request app access", ["correlation_id"]):
+                refs += [c.split("/")[-1] for c in r["correlation_id"].split(",") if c]
+    return refs
 
 
-def pending(sn, who, key):
-    p = pkg(sn, key)["accessPackageId"]
-    oid = user_id(UPN[who])
-    reqs = graph("get", f"{EM}/assignmentRequests?$filter=accessPackage/id eq '{p}'&$expand=assignment&$top=50")["value"]
-    return [r for r in reqs if r.get("requestType") == "adminAdd" and r.get("state") in ("submitted", "accepted", "pendingApproval", "delivering", "scheduled")
-            and ((r.get("assignment") or {}).get("targetId") == oid)]
-
-
-def undo_grants(sn, before, stamp, out):
-    for who, key in GRANT_PAIRS:
-        # An add still in flight would become access after cleanup: wait for it.
+def undo_requests(request_ids, stamp, out):
+    for rid in request_ids:
         try:
-            wait(f"{who} {key} requests to settle", lambda: not pending(sn, who, key), timeout=480, every=20)
+            r = wait(f"Entra request {rid} to settle", lambda: (lambda x: x if x["state"] in SETTLED else None)(
+                graph("get", f"{EM}/assignmentRequests/{rid}?$expand=assignment")), timeout=480, every=20)
         except SystemExit as e:
-            out.append(f"WARNING {who} {key}: {e} - check by hand")
-        for asg in delivered(sn, who, key) - before.get((who, key), set()):
-            graph("post", f"{EM}/assignmentRequests", {"requestType": "adminRemove", "assignment": {"id": asg},
-                                                        "justification": f"Lab proof cleanup ({stamp}): access granted by the ServiceNow proof run"})
-            out.append(f"adminRemove {key} for {who} ({asg})")
+            out.append(f"WARNING {rid}: {e} - check by hand")
+            continue
+        if r.get("requestType") != "adminAdd" or r["state"] != "delivered" or not r.get("assignment"):
+            out.append(f"nothing to undo for {rid} ({r.get('requestType')}, {r['state']})")
+            continue
+        aid = r["assignment"]["id"]
+        if graph("get", f"{EM}/assignments/{aid}")["state"] != "delivered":
+            out.append(f"assignment {aid} already gone")
+            continue
+        graph("post", f"{EM}/assignmentRequests", {"requestType": "adminRemove", "assignment": {"id": aid},
+                                                    "justification": f"Lab proof cleanup ({stamp}): undo Entra request {rid} made by the ServiceNow proof run"})
+        out.append(f"adminRemove {aid} (undoes {rid})")
 
 
 ITEM_ID = ""
@@ -292,8 +300,6 @@ def main():
     os.makedirs(out, exist_ok=True)
     ev = {"run": stamp, "instance": snlib.INSTANCE, "steps": {}}
     tickets = []
-    before = {(w, k): delivered(sn, w, k) for w, k in GRANT_PAIRS}
-    ev["held_before"] = {f"{w}/{k}": len(v) for (w, k), v in before.items()}
     try:
         for name in a.only.split(","):
             step = {}
@@ -308,8 +314,9 @@ def main():
         with open(os.path.join(out, "readback.json"), "w") as f:
             json.dump(ev, f, indent=1, sort_keys=True)
         if not a.keep:
+            refs = request_refs_of(sn, ev)  # before the tickets that hold them are deleted
             ev["cleanup"] = cleanup.clean(sn, tickets)
-            undo_grants(sn, before, stamp, ev["cleanup"])
+            undo_requests(refs, stamp, ev["cleanup"])
             with open(os.path.join(out, "readback.json"), "w") as f:
                 json.dump(ev, f, indent=1, sort_keys=True)
         with open(os.path.join(out, "SHA256SUMS"), "w") as f:

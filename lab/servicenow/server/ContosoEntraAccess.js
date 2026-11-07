@@ -55,6 +55,8 @@ ContosoEntraAccess.GRAPH = 'https://graph.microsoft.com/v1.0';
 ContosoEntraAccess.EM = ContosoEntraAccess.GRAPH + '/identityGovernance/entitlementManagement';
 ContosoEntraAccess.CORRELATION = 'Entra ID Governance';
 ContosoEntraAccess.MAX_DAYS = 180;
+// Some removals accepted, some never sent: follow the accepted ones, never close.
+ContosoEntraAccess.PARTIAL = ContosoEntraAccess.CORRELATION + ' - partial';
 
 ContosoEntraAccess.prototype = {
     initialize: function () {
@@ -225,7 +227,7 @@ ContosoEntraAccess.prototype = {
         task.work_notes = lines.join('\n');
         if (refs.length) {
             task.correlation_id = refs.join(',');
-            task.correlation_display = ContosoEntraAccess.CORRELATION;
+            task.correlation_display = err ? ContosoEntraAccess.PARTIAL : ContosoEntraAccess.CORRELATION;
         }
         if (err) {
             var q = this.queueId();
@@ -242,7 +244,7 @@ ContosoEntraAccess.prototype = {
         var tables = ['sc_req_item', 'sc_task'];
         for (var t = 0; t < tables.length; t++) {
             var gr = new GlideRecord(tables[t]);
-            gr.addQuery('correlation_display', ContosoEntraAccess.CORRELATION);
+            gr.addQuery('correlation_display', 'IN', ContosoEntraAccess.CORRELATION + ',' + ContosoEntraAccess.PARTIAL);
             gr.addQuery('active', true);
             gr.query();
             while (gr.next()) this._check(gr);
@@ -273,6 +275,12 @@ ContosoEntraAccess.prototype = {
         var done = true;
         for (var j = 0; j < states.length; j++) if (states[j] != 'delivered') done = false;
         if (!done) return;
+        if (String(gr.correlation_display) == ContosoEntraAccess.PARTIAL) {
+            // The accepted part is done; the part that failed was never sent.
+            gr.correlation_display = ContosoEntraAccess.CORRELATION + ' - needs IAM';
+            this._toQueue(gr, 'Entra delivered the removals that were accepted. The rest failed earlier (see above) and was never sent: a person must finish it. Not closed.');
+            return;
+        }
         gr.state = 3; // Closed Complete
         gr.correlation_display = ContosoEntraAccess.CORRELATION + ' - delivered';
         gr.work_notes = 'Microsoft Entra ID Governance reports Delivered (request ' + ids.join(', ').replace(/[0-9a-f-]{36}\//g, '') + '). Closed automatically.';

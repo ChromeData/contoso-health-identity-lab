@@ -157,41 +157,52 @@ class Cleanup(unittest.TestCase):
         self.assertEqual(cleanup.clean(sn, ["RITM0010001"]), ["not found RITM0010001"])
 
 
-class UndoGrants(unittest.TestCase):
-    """prove.py removes what a run granted, also after a half-way failure."""
+class UndoRequests(unittest.TestCase):
+    """prove.py removes only what THIS run's requests granted (by request id)."""
 
-    def run_undo(self, before, now_held, pending_first=0):
-        posts, polls = [], {"n": pending_first}
-        prove.pkg = lambda sn, key: {"accessPackageId": "pkg-" + key}
-        prove.user_id = lambda upn: "oid-" + upn.split("@")[0]
+    def run_undo(self, requests, assignments, settle_after=0):
+        posts, polls = [], {"n": settle_after}
         prove.time.sleep = lambda s: None
 
         def graph(method, url, body=None):
             if method == "post":
                 posts.append(body)
                 return {"id": "rm"}
-            if "assignmentRequests" in url:
+            if "/assignmentRequests/" in url:
+                rid = url.split("/assignmentRequests/")[1].split("?")[0]
+                r = dict(requests[rid])
                 if polls["n"] > 0:
                     polls["n"] -= 1
-                    return {"value": [{"requestType": "adminAdd", "state": "submitted", "assignment": {"targetId": "oid-test-user-a"}}]}
-                return {"value": []}
-            for (who, key), ids in now_held.items():
-                if f"pkg-{key}" in url and f"oid-{prove.UPN[who].split('@')[0]}" in url:
-                    return {"value": [{"id": i} for i in ids]}
-            return {"value": []}
+                    r["state"] = "submitted"
+                return r
+            aid = url.rsplit("/", 1)[1]
+            return {"state": assignments[aid]}
         prove.graph = graph
         out = []
-        prove.undo_grants(None, before, "STAMP", out)
+        prove.undo_requests(list(requests), "STAMP", out)
         return posts, out
 
-    def test_removes_only_new_assignments(self):
-        posts, out = self.run_undo({("sofia", "icu_float"): {"old"}}, {("sofia", "icu_float"): {"old", "new"}, ("testa", "icu_float"): {"t1"}})
-        self.assertEqual(sorted(p["assignment"]["id"] for p in posts), ["new", "t1"], "what a person held before the run is never touched")
-        self.assertTrue(all(p["requestType"] == "adminRemove" and "STAMP" in p["justification"] for p in posts))
+    def test_removes_the_assignment_of_each_own_request(self):
+        posts, out = self.run_undo(
+            {"r1": {"requestType": "adminAdd", "state": "delivered", "assignment": {"id": "a1"}},
+             "r2": {"requestType": "adminAdd", "state": "deliveryFailed", "assignment": None}},
+            {"a1": "delivered"})
+        self.assertEqual([p["assignment"]["id"] for p in posts], ["a1"])
+        self.assertIn("undo Entra request r1", posts[0]["justification"])
 
     def test_waits_for_an_add_still_in_flight(self):
-        posts, out = self.run_undo({}, {("testa", "icu_float"): {"t1"}}, pending_first=2)
-        self.assertEqual([p["assignment"]["id"] for p in posts], ["t1"])
+        posts, out = self.run_undo({"r1": {"requestType": "adminAdd", "state": "delivered", "assignment": {"id": "a1"}}},
+                                   {"a1": "delivered"}, settle_after=2)
+        self.assertEqual(len(posts), 1)
+
+    def test_assignment_already_gone_is_left_alone(self):
+        posts, out = self.run_undo({"r1": {"requestType": "adminAdd", "state": "delivered", "assignment": {"id": "a1"}}}, {"a1": "expired"})
+        self.assertEqual(posts, [])
+
+    def test_refs_come_from_this_runs_tickets_and_setup_only(self):
+        sn = FakeSn({"sc_req_item": [{"correlation_id": "pkg/r9", "_q": "number=RITM0010099^cat_item.name=Request app access"}]})
+        ev = {"steps": {"uc1": {"ritm": "RITM0010099"}, "leaver": {"setup_request": "r5", "ritm": "RITM0010100"}}}
+        self.assertEqual(prove.request_refs_of(sn, ev), ["r9", "r5"])
 
 
 if __name__ == "__main__":
