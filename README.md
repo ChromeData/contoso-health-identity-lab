@@ -103,6 +103,7 @@ What ran on the author's machine (first on 2026-10-20 and 21 UTC, the detection 
 | [Field notes](lab/docs/field-notes.md) | What broke while building and running it in the tenant, how I found it, and the control I added |
 | [CISO brief](lab/docs/ciso-brief.md) | The ask: licensing, the open risk acceptance, named owners |
 | [Threat model](lab/docs/threat-model.md) | Public identity incidents, step by step, against the control and detection meant to stop each step, and the gap left |
+| [Break-glass password rotation](lab/docs/runbooks/break-glass-password-rotation.md) | How the owner rotates a seeded break-glass password straight into Keychain (BUILT; a read on 2026-11-07 showed it was never rotated, E11f) |
 | [Break-glass drill runbook](lab/docs/runbooks/break-glass-drill.md) | How the emergency-access accounts are proven every quarter (not yet run in the tenant) |
 
 Also: [roadmap](lab/docs/roadmap.md), [risk register](lab/docs/risk-register.md),
