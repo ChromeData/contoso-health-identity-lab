@@ -162,6 +162,45 @@ the PIM audit log. `aws_admin_require_approval = true` routes approval to
   `lab/terraform/aws`; those applies run with the `idlab-labadmin` profile
   (a LabAdministrator session). The patient-portal bucket stays operator-applied.
 
+## Session Manager: the same rule for servers (added 2026-11-07)
+
+**Status:** RAN · tenant 2026-11-07 (capture-log E125-E127), then switched
+off to save cost. Code: `lab/terraform/aws/session-manager.tf`.
+
+**Decision.** Server access in AWS follows the same rule as AWS admin: no
+standing access, a PIM activation first. The lab's AWS server has no inbound
+port, no SSH key and no public IP. The only way in is a Session Manager
+shell, logged command by command to CloudWatch Logs, and only the
+`LabServerSession` permission set can open one: shell document only, servers
+tagged `session-access = lab-server-session` only, own sessions only.
+`LabServerSession` is assigned only to the SCIM copy of `PIM-AWS-Lab-Admins`.
+
+**Why Session Manager and not a bastion or SSH.** No port to scan, no key to
+leak or rotate, a per-command log, and the identity on every session is the
+Entra person (`.../AWSReservedSSO_LabServerSession_.../adm-labops@...`). It
+is AWS's own tool for AWS servers (program brief 2026-11-06); Azure servers
+use Azure Bastion.
+
+**Consequences (seen live).**
+- The split by person is not done: the same PIM group holds
+  LabAdministrator and LabServerSession. A server-only group is the next
+  step.
+- The same residual as above, twice: issued 1-hour credentials outlive the
+  activation, and an open shell is not re-checked when the activation ends
+  (one stayed open more than 20 minutes after SCIM disabled the AWS user).
+  The preferences cap every shell at 60 minutes; `terminate-session` ends one
+  at once. Not built: an automatic "end open sessions when the activation
+  ends" action.
+- `ssm-user` can `sudo` on Amazon Linux. Every command is still logged.
+- The lab operator opened a shell with no activation in the live run
+  (standing AdministratorAccess). Guardrails v4 (`NoServerShell`,
+  `NoSessionLogTampering` in `entra-operator.tf`) close that in code; they
+  are BUILT, not applied, and go live with the next LabAdministrator apply.
+- Sources (checked 2026-11-06): AWS Systems Manager User Guide, "Additional
+  sample IAM policies for Session Manager" (ssm:resourceTag, own sessions
+  via aws:ssmmessages:session-id), "Session document schema", "Logging
+  session data", VPC endpoints for Systems Manager.
+
 ## Revisit trigger
 
 - A second human admin: turn on `aws_admin_require_approval`, and give that

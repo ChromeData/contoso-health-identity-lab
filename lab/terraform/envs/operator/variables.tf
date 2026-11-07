@@ -114,6 +114,20 @@ variable "operator_graph_roles" {
                                           body it sends is the Terraform-rendered,
                                           contract-checked one (deny on silence
                                           needs a reviewer AND a fallback).
+    Added 2026-11-07 for the AD FS -> Entra exercise (lab/adfs, ADR 0009):
+      Reports.Read.All                    READ the AD FS application migration
+                                          report as code: GET /beta/reports/
+                                          getRelyingPartyDetailedSummary(period='D7')
+                                          returned Authentication_MSGraphPermissionMissing
+                                          without it (2026-11-07). Microsoft Learn
+                                          (reportroot-getrelyingpartydetailedsummary)
+                                          lists Reports.Read.All as the least
+                                          privileged application permission, and
+                                          "Higher privileged: Not available".
+                                          Read only (usage and sign-in summaries;
+                                          no write exists under /reports). App role
+                                          id 230c1aed-a721-4c5d-9cb4-a90514e508ef,
+                                          read live from the Microsoft Graph SP.
   EOT
   type        = list(string)
   default = [
@@ -144,6 +158,7 @@ variable "operator_graph_roles" {
     "DelegatedPermissionGrant.ReadWrite.All",
     "SecurityEvents.Read.All",
     "AccessReview.ReadWrite.All",
+    "Reports.Read.All",
   ]
 }
 
