@@ -225,12 +225,12 @@ locals {
   # Rules whose look-back is longer than a Log Analytics alert allows
   # (P2D). Deployed on the Sentinel path only.
   # The v3 set (itdr_v3.tf) adds its own two.
-  sentinel_only_rule_keys = concat(["security_info_registered_risky", "sod_violation_granted"], local.v3_sentinel_only_rule_keys)
+  sentinel_only_rule_keys = concat(["security_info_registered_risky", "sod_violation_granted"], local.v3_sentinel_only_rule_keys, local.v4_sentinel_only_rule_keys)
 
   # Rules that never trigger the containment playbook, whatever
   # containment_rule_keys says (variables.tf refuses them there too).
   # The v3 Key Vault rule is added from itdr_v3.tf.
-  itdr_never_contain = concat(["sod_violation_granted", "vault_privileged_access_anomaly"], local.v3_never_contain)
+  itdr_never_contain = concat(["sod_violation_granted", "vault_privileged_access_anomaly"], local.v3_never_contain, local.v4_never_contain)
 
   # The operator_ips watchlist exists whenever the v2 set is on Sentinel,
   # even while dc_logon_outside_operator_allowlist is still excluded, so the

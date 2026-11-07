@@ -1,0 +1,125 @@
+{
+  "rule": "hr-leaver-lag",
+  "about": "HR leaver disabled in AD by inbound provisioning, still enabled in Entra 15 minutes later (review finding C5, 2026-11-07). Row shapes copied from live AADProvisioningLogs rows (2026-11-05 leaver of 400104, read as the operator on 2026-11-07); ids replaced by repeated-digit placeholders.",
+  "cases": [
+    {
+      "id": "no-cloud-disable-after-20-min",
+      "kind": "positive",
+      "label": "AD disabled 20 minutes ago, no Cloud Sync disable since: High",
+      "tables": {
+        "AADProvisioningLogs": [
+          {
+            "TimeGenerated": "ago:20m",
+            "ServicePrincipal": "{\"Id\": \"x\", \"Name\": \"Contoso HR Inbound Provisioning\"}",
+            "Action": "Update",
+            "SourceIdentity": "{\"Id\": \"400104\", \"Name\": \"\"}",
+            "TargetIdentity": "{\"Id\": \"dddddddd-dddd-dddd-dddd-dddddddddddd\", \"Name\": \"\"}",
+            "ProvisioningStatusInfo": "{\"Status\": \"success\"}",
+            "CycleId": "c1",
+            "ModifiedProperties": "[{\"displayName\": \"accountDisabled\", \"oldValue\": null, \"newValue\": \"True\"}, {\"displayName\": \"parentDistinguishedName\", \"oldValue\": null, \"newValue\": \"OU=Disabled,DC=corp,DC=contosohealthlab,DC=com\"}]"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "EmployeeId": "400104",
+          "AdObjectGuid": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+          "Reason": "AD disabled, Entra ID still enabled after 15 minutes"
+        }
+      ],
+      "expectRows": 1
+    },
+    {
+      "id": "inbound-write-failed",
+      "kind": "positive",
+      "label": "The inbound write to AD itself failed: High",
+      "tables": {
+        "AADProvisioningLogs": [
+          {
+            "TimeGenerated": "ago:20m",
+            "ServicePrincipal": "{\"Id\": \"x\", \"Name\": \"Contoso HR Inbound Provisioning\"}",
+            "Action": "Update",
+            "SourceIdentity": "{\"Id\": \"400104\", \"Name\": \"\"}",
+            "TargetIdentity": "{\"Id\": \"dddddddd-dddd-dddd-dddd-dddddddddddd\", \"Name\": \"\"}",
+            "ProvisioningStatusInfo": "{\"Status\": \"failure\"}",
+            "CycleId": "c1",
+            "ModifiedProperties": "[{\"displayName\": \"accountDisabled\", \"oldValue\": null, \"newValue\": \"True\"}, {\"displayName\": \"parentDistinguishedName\", \"oldValue\": null, \"newValue\": \"OU=Disabled,DC=corp,DC=contosohealthlab,DC=com\"}]"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "Reason": "inbound write to AD: failure"
+        }
+      ]
+    },
+    {
+      "id": "cloud-disabled-in-time",
+      "kind": "negative",
+      "label": "Cloud Sync disabled the Entra user 3 minutes after AD",
+      "tables": {
+        "AADProvisioningLogs": [
+          {
+            "TimeGenerated": "ago:20m",
+            "ServicePrincipal": "{\"Id\": \"x\", \"Name\": \"Contoso HR Inbound Provisioning\"}",
+            "Action": "Update",
+            "SourceIdentity": "{\"Id\": \"400104\", \"Name\": \"\"}",
+            "TargetIdentity": "{\"Id\": \"dddddddd-dddd-dddd-dddd-dddddddddddd\", \"Name\": \"\"}",
+            "ProvisioningStatusInfo": "{\"Status\": \"success\"}",
+            "CycleId": "c1",
+            "ModifiedProperties": "[{\"displayName\": \"accountDisabled\", \"oldValue\": null, \"newValue\": \"True\"}, {\"displayName\": \"parentDistinguishedName\", \"oldValue\": null, \"newValue\": \"OU=Disabled,DC=corp,DC=contosohealthlab,DC=com\"}]"
+          },
+          {
+            "TimeGenerated": "ago:17m",
+            "ServicePrincipal": "{\"Id\": \"y\", \"Name\": \"corp.contosohealthlab.com\"}",
+            "Action": "Update",
+            "SourceIdentity": "{\"Id\": \"dddddddd-dddd-dddd-dddd-dddddddddddd\", \"Name\": \"\"}",
+            "TargetIdentity": "{\"Id\": \"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee\", \"Name\": \"\"}",
+            "ProvisioningStatusInfo": "{\"Status\": \"success\"}",
+            "ModifiedProperties": "[{\"displayName\": \"AccountEnabled\", \"oldValue\": null, \"newValue\": \"False\"}]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "still-inside-15-minutes",
+      "kind": "negative",
+      "label": "AD disabled 5 minutes ago: not judged yet",
+      "tables": {
+        "AADProvisioningLogs": [
+          {
+            "TimeGenerated": "ago:5m",
+            "ServicePrincipal": "{\"Id\": \"x\", \"Name\": \"Contoso HR Inbound Provisioning\"}",
+            "Action": "Update",
+            "SourceIdentity": "{\"Id\": \"400104\", \"Name\": \"\"}",
+            "TargetIdentity": "{\"Id\": \"dddddddd-dddd-dddd-dddd-dddddddddddd\", \"Name\": \"\"}",
+            "ProvisioningStatusInfo": "{\"Status\": \"success\"}",
+            "CycleId": "c1",
+            "ModifiedProperties": "[{\"displayName\": \"accountDisabled\", \"oldValue\": null, \"newValue\": \"True\"}, {\"displayName\": \"parentDistinguishedName\", \"oldValue\": null, \"newValue\": \"OU=Disabled,DC=corp,DC=contosohealthlab,DC=com\"}]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "judged-in-an-earlier-run",
+      "kind": "negative",
+      "label": "AD disabled 50 minutes ago: an earlier run already judged it (one alert per leaver)",
+      "tables": {
+        "AADProvisioningLogs": [
+          {
+            "TimeGenerated": "ago:50m",
+            "ServicePrincipal": "{\"Id\": \"x\", \"Name\": \"Contoso HR Inbound Provisioning\"}",
+            "Action": "Update",
+            "SourceIdentity": "{\"Id\": \"400104\", \"Name\": \"\"}",
+            "TargetIdentity": "{\"Id\": \"dddddddd-dddd-dddd-dddd-dddddddddddd\", \"Name\": \"\"}",
+            "ProvisioningStatusInfo": "{\"Status\": \"success\"}",
+            "CycleId": "c1",
+            "ModifiedProperties": "[{\"displayName\": \"accountDisabled\", \"oldValue\": null, \"newValue\": \"True\"}, {\"displayName\": \"parentDistinguishedName\", \"oldValue\": null, \"newValue\": \"OU=Disabled,DC=corp,DC=contosohealthlab,DC=com\"}]"
+          }
+        ]
+      }
+    }
+  ]
+}

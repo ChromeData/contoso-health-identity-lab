@@ -1,13 +1,24 @@
 {
   "rule": "pim-activation",
-  "about": "PIM activation completed (PIM for Groups and PIM for roles). Activity strings: Learn 'Microsoft Entra audit log activity reference', PIM section (GroupManagement 'Add member to role completed (PIM activation)', '... requested (PIM activation)').",
+  "about": "PIM activation completed (PIM for Groups and PIM for roles). Activity strings: Learn 'Microsoft Entra audit log activity reference', PIM section (GroupManagement 'Add member to role completed (PIM activation)', '... requested (PIM activation)'). Since 2026-11-07 (review findings B5, B6) the Severity column decides: Tier 0 (group object id first, then names) Medium, High off-hours or from a new IP; others Informational, Low when unusual. Cases pin working hours with the WorkHoursLocal / WorkDaysLocal placeholders so the result never depends on the clock.",
   "defaults": {
     "AuditLogs": {
       "LoggedByService": "PIM",
       "Result": "success",
       "CorrelationId": "11111111-1111-1111-1111-111111111111",
-      "InitiatedBy": {"user": {"id": "22222222-2222-2222-2222-222222222222", "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "ipAddress": "203.0.113.10"}},
-      "AdditionalDetails": [{"key": "Justification", "value": "CHG0031001 onboarding batch"}]
+      "InitiatedBy": {
+        "user": {
+          "id": "22222222-2222-2222-2222-222222222222",
+          "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+          "ipAddress": "203.0.113.10"
+        }
+      },
+      "AdditionalDetails": [
+        {
+          "key": "Justification",
+          "value": "CHG0031001 onboarding batch"
+        }
+      ]
     }
   },
   "cases": [
@@ -15,82 +26,1042 @@
       "id": "pim-for-groups-activation",
       "kind": "positive",
       "label": "Dana activates membership of Privileged-IAM-Admins (PIM for Groups)",
-      "tables": {"AuditLogs": [{
-        "Category": "GroupManagement",
-        "OperationName": "Add member to role completed (PIM activation)",
-        "ActivityDisplayName": "Add member to role completed (PIM activation)",
-        "TargetResources": [
-          {"id": "33333333-3333-3333-3333-333333333333", "displayName": "Privileged-IAM-Admins", "type": "Group"},
-          {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Dana Okafor", "type": "User", "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"}
+      "lets": {
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
         ]
-      }]},
-      "expect": [{"ElevationType": "PIM for Groups", "ElevatedTo": "Privileged-IAM-Admins", "HighValue": true,
-                  "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com", "ActorIp": "203.0.113.10", "Result": "success"}]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "OperationName": "Add member to role completed (PIM activation)",
+            "ActivityDisplayName": "Add member to role completed (PIM activation)",
+            "TargetResources": [
+              {
+                "id": "33333333-3333-3333-3333-333333333333",
+                "displayName": "Privileged-IAM-Admins",
+                "type": "Group"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "ElevationType": "PIM for Groups",
+          "ElevatedTo": "Privileged-IAM-Admins",
+          "HighValue": true,
+          "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+          "ActorIp": "203.0.113.10",
+          "Result": "success",
+          "Severity": "Medium",
+          "Tier0By": "name"
+        }
+      ]
     },
     {
       "id": "pim-for-roles-activation",
       "kind": "positive",
       "label": "A directory role (Security Administrator) activated directly",
-      "tables": {"AuditLogs": [{
-        "Category": "RoleManagement",
-        "OperationName": "Add member to role completed (PIM activation)",
-        "ActivityDisplayName": "Add member to role completed (PIM activation)",
-        "TargetResources": [
-          {"id": "194ae4cb-b126-40b2-bd5b-6091b380977d", "displayName": "Security Administrator", "type": "Role"},
-          {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Dana Okafor", "type": "User", "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"}
+      "lets": {
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
         ]
-      }]},
-      "expect": [{"ElevationType": "PIM for roles", "ElevatedTo": "Security Administrator", "HighValue": true}]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "RoleManagement",
+            "OperationName": "Add member to role completed (PIM activation)",
+            "ActivityDisplayName": "Add member to role completed (PIM activation)",
+            "TargetResources": [
+              {
+                "id": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+                "displayName": "Security Administrator",
+                "type": "Role"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "ElevationType": "PIM for roles",
+          "ElevatedTo": "Security Administrator",
+          "HighValue": true,
+          "Severity": "Medium"
+        }
+      ]
     },
     {
       "id": "low-value-role-still-reported",
       "kind": "positive",
       "label": "An activation of a role outside the high-value list is still a row, HighValue false",
-      "tables": {"AuditLogs": [{
-        "Category": "RoleManagement",
-        "OperationName": "Add member to role completed (PIM activation)",
-        "ActivityDisplayName": "Add member to role completed (PIM activation)",
-        "TargetResources": [
-          {"id": "4a5d8f65-41da-4de4-8968-e035b65339cf", "displayName": "Reports Reader", "type": "Role"},
-          {"id": "22222222-2222-2222-2222-222222222222", "displayName": "Dana Okafor", "type": "User", "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"}
+      "lets": {
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
         ]
-      }]},
-      "expect": [{"ElevatedTo": "Reports Reader", "HighValue": false}]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "RoleManagement",
+            "OperationName": "Add member to role completed (PIM activation)",
+            "ActivityDisplayName": "Add member to role completed (PIM activation)",
+            "TargetResources": [
+              {
+                "id": "4a5d8f65-41da-4de4-8968-e035b65339cf",
+                "displayName": "Reports Reader",
+                "type": "Role"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "ElevatedTo": "Reports Reader",
+          "HighValue": false,
+          "Severity": "Informational"
+        }
+      ]
     },
     {
       "id": "request-is-not-the-grant",
       "kind": "negative",
       "label": "The activation REQUEST (not completed) is not alerted",
-      "tables": {"AuditLogs": [{
-        "Category": "GroupManagement",
-        "OperationName": "Add member to role requested (PIM activation)",
-        "ActivityDisplayName": "Add member to role requested (PIM activation)",
-        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "Privileged-IAM-Admins", "type": "Group"}]
-      }]}
+      "lets": {
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "OperationName": "Add member to role requested (PIM activation)",
+            "ActivityDisplayName": "Add member to role requested (PIM activation)",
+            "TargetResources": [
+              {
+                "id": "33333333-3333-3333-3333-333333333333",
+                "displayName": "Privileged-IAM-Admins",
+                "type": "Group"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "id": "core-directory-group-add",
       "kind": "negative",
       "label": "A Core Directory 'Add member to group' is not a PIM activation",
-      "tables": {"AuditLogs": [{
-        "Category": "GroupManagement",
-        "LoggedByService": "Core Directory",
-        "OperationName": "Add member to group",
-        "ActivityDisplayName": "Add member to group",
-        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "Privileged-IAM-Admins", "type": "Group"}]
-      }]}
+      "lets": {
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "LoggedByService": "Core Directory",
+            "OperationName": "Add member to group",
+            "ActivityDisplayName": "Add member to group",
+            "TargetResources": [
+              {
+                "id": "33333333-3333-3333-3333-333333333333",
+                "displayName": "Privileged-IAM-Admins",
+                "type": "Group"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "id": "older-than-lookback",
       "kind": "negative",
       "label": "A completed activation 2 h ago is outside the 1 h look-back",
-      "tables": {"AuditLogs": [{
-        "TimeGenerated": "ago:2h",
-        "Category": "GroupManagement",
-        "OperationName": "Add member to role completed (PIM activation)",
-        "ActivityDisplayName": "Add member to role completed (PIM activation)",
-        "TargetResources": [{"id": "33333333-3333-3333-3333-333333333333", "displayName": "Privileged-IAM-Admins", "type": "Group"}]
-      }]}
+      "lets": {
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "TimeGenerated": "ago:2h",
+            "Category": "GroupManagement",
+            "OperationName": "Add member to role completed (PIM activation)",
+            "ActivityDisplayName": "Add member to role completed (PIM activation)",
+            "TargetResources": [
+              {
+                "id": "33333333-3333-3333-3333-333333333333",
+                "displayName": "Privileged-IAM-Admins",
+                "type": "Group"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "tier0-by-group-object-id",
+      "kind": "positive",
+      "label": "A Tier-0 group with an unexpected display name is Tier 0 by its object id (review B6: the old name list matched no PIM-Tier0-* group). No sign-in history: NewIp unknown, so Medium",
+      "lets": {
+        "Tier0GroupIds": [
+          "77777777-7777-7777-7777-777777777777"
+        ],
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "OperationName": "Add member to group completed (PIM activation)",
+            "ActivityDisplayName": "Add member to group completed (PIM activation)",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+                "ipAddress": "203.0.113.10"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "77777777-7777-7777-7777-777777777777",
+                "displayName": "Renamed Tier0 Group",
+                "type": "Group"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "HighValue": true,
+          "Tier0By": "group object id",
+          "NewIp": "unknown",
+          "OffHours": false,
+          "Severity": "Medium"
+        }
+      ],
+      "expectRows": 1
+    },
+    {
+      "id": "tier0-group-name-prefix",
+      "kind": "positive",
+      "label": "PIM-Tier0-Privileged-Role-Admins with an empty id list is Tier 0 by name",
+      "lets": {
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "OperationName": "Add member to group completed (PIM activation)",
+            "ActivityDisplayName": "Add member to group completed (PIM activation)",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+                "ipAddress": "203.0.113.10"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "99999999-9999-9999-9999-999999999999",
+                "displayName": "PIM-Tier0-Privileged-Role-Admins",
+                "type": "Group"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "HighValue": true,
+          "Tier0By": "name",
+          "Severity": "Medium"
+        }
+      ]
+    },
+    {
+      "id": "tier0-off-hours-is-high",
+      "kind": "positive",
+      "label": "Tier 0 outside working hours is High (no hour is a working hour in this case)",
+      "lets": {
+        "Tier0GroupIds": [
+          "77777777-7777-7777-7777-777777777777"
+        ],
+        "WorkHoursLocal": [
+          25
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "OperationName": "Add member to group completed (PIM activation)",
+            "ActivityDisplayName": "Add member to group completed (PIM activation)",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+                "ipAddress": "203.0.113.10"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "77777777-7777-7777-7777-777777777777",
+                "displayName": "PIM-Tier0-Security-Admins",
+                "type": "Group"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "OffHours": true,
+          "Severity": "High"
+        }
+      ]
+    },
+    {
+      "id": "tier0-new-ip-is-high",
+      "kind": "positive",
+      "label": "Tier 0 from an IP the admin did not sign in from in the day before: High",
+      "lets": {
+        "Tier0GroupIds": [
+          "77777777-7777-7777-7777-777777777777"
+        ],
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "OperationName": "Add member to group completed (PIM activation)",
+            "ActivityDisplayName": "Add member to group completed (PIM activation)",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+                "ipAddress": "203.0.113.10"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "77777777-7777-7777-7777-777777777777",
+                "displayName": "PIM-Tier0-Security-Admins",
+                "type": "Group"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ],
+        "SigninLogs": [
+          {
+            "TimeGenerated": "ago:3h",
+            "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+            "UserId": "22222222-2222-2222-2222-222222222222",
+            "IPAddress": "198.51.100.50",
+            "ResultType": "0"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "NewIp": "yes",
+          "Severity": "High"
+        }
+      ]
+    },
+    {
+      "id": "tier0-known-ip-stays-medium",
+      "kind": "positive",
+      "label": "Tier 0 from an IP the admin used 3 h earlier: Medium",
+      "lets": {
+        "Tier0GroupIds": [
+          "77777777-7777-7777-7777-777777777777"
+        ],
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "OperationName": "Add member to group completed (PIM activation)",
+            "ActivityDisplayName": "Add member to group completed (PIM activation)",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+                "ipAddress": "203.0.113.10"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "77777777-7777-7777-7777-777777777777",
+                "displayName": "PIM-Tier0-Security-Admins",
+                "type": "Group"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ],
+        "SigninLogs": [
+          {
+            "TimeGenerated": "ago:3h",
+            "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+            "UserId": "22222222-2222-2222-2222-222222222222",
+            "IPAddress": "203.0.113.10",
+            "ResultType": "0"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "NewIp": "no",
+          "Severity": "Medium"
+        }
+      ]
+    },
+    {
+      "id": "helpdesk-routine-is-informational",
+      "kind": "positive",
+      "label": "PIM-Tier1-Helpdesk in working hours from a known IP: Informational (no ticket, no card)",
+      "lets": {
+        "Tier0GroupIds": [
+          "77777777-7777-7777-7777-777777777777"
+        ],
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "OperationName": "Add member to group completed (PIM activation)",
+            "ActivityDisplayName": "Add member to group completed (PIM activation)",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+                "ipAddress": "203.0.113.10"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "88888888-8888-8888-8888-888888888888",
+                "displayName": "PIM-Tier1-Helpdesk",
+                "type": "Group"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ],
+        "SigninLogs": [
+          {
+            "TimeGenerated": "ago:3h",
+            "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+            "UserId": "22222222-2222-2222-2222-222222222222",
+            "IPAddress": "203.0.113.10",
+            "ResultType": "0"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "HighValue": false,
+          "Severity": "Informational"
+        }
+      ]
+    },
+    {
+      "id": "helpdesk-off-hours-is-low",
+      "kind": "positive",
+      "label": "PIM-Tier1-Helpdesk outside working hours: Low",
+      "lets": {
+        "Tier0GroupIds": [
+          "77777777-7777-7777-7777-777777777777"
+        ],
+        "WorkHoursLocal": [
+          25
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "OperationName": "Add member to group completed (PIM activation)",
+            "ActivityDisplayName": "Add member to group completed (PIM activation)",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+                "ipAddress": "203.0.113.10"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "88888888-8888-8888-8888-888888888888",
+                "displayName": "PIM-Tier1-Helpdesk",
+                "type": "Group"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "HighValue": false,
+          "Severity": "Low"
+        }
+      ]
+    },
+    {
+      "id": "live-shape-group-typed-other",
+      "kind": "positive",
+      "label": "The shape the tenant really logs for PIM for Groups (2026-11-07): the group is type 'Other', next to a Role entry named 'Member'. ElevatedTo is the group, and it is Tier 0 by id (the old rule read 'Member', HighValue false)",
+      "lets": {
+        "Tier0GroupIds": [
+          "77777777-7777-7777-7777-777777777777"
+        ],
+        "WorkHoursLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "WorkDaysLocal": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "OperationName": "Add member to role completed (PIM activation)",
+            "ActivityDisplayName": "Add member to role completed (PIM activation)",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
+                "ipAddress": "203.0.113.10"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "displayName": "Member",
+                "type": "Role"
+              },
+              {
+                "id": "77777777-7777-7777-7777-777777777777",
+                "displayName": "PIM-AWS-Lab-Admins",
+                "type": "Other"
+              },
+              {
+                "id": "77777777-7777-7777-7777-777777777777",
+                "displayName": "PIM-AWS-Lab-Admins",
+                "type": "Other"
+              },
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "Dana Okafor",
+                "type": "User"
+              },
+              {
+                "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                "displayName": "",
+                "type": "Request"
+              },
+              {
+                "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                "displayName": "",
+                "type": "Other"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "ElevatedTo": "PIM-AWS-Lab-Admins",
+          "ElevationType": "PIM for Groups",
+          "HighValue": true,
+          "Tier0By": "group object id",
+          "Severity": "Medium"
+        }
+      ],
+      "expectRows": 1
     }
   ]
 }

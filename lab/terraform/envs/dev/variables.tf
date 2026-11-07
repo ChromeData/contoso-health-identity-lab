@@ -897,6 +897,30 @@ variable "enable_defender_for_identity" {
   default     = false
 }
 
+variable "enable_itdr_detections_v4" {
+  type        = bool
+  description = "Fourth ITDR set (modules/monitoring itdr_v4.tf, review findings B1, B2, C5, D1): operator sign-in outside its allowlist, operator permission changes, auth method added to a break-glass account, HR leaver lag, spray by ASN. Needs enable_itdr_detections and operator_principal_ids. Off: turn on in its own reviewed change."
+  default     = false
+}
+
+variable "operator_principal_ids" {
+  type        = list(string)
+  description = "The lab operator workload identity's ids (service principal object id, application object id, appId; ADR 0024, envs/operator outputs). Repo Variable TF_OPERATOR_PRINCIPAL_IDS (JSON list). Needed by enable_itdr_detections_v4."
+  default     = []
+}
+
+variable "trusted_egress_ranges" {
+  type        = list(string)
+  description = "The hospital's internet egress ranges (IPv4 CIDR); failed-signin-spike drops them from the brute-force shape only. None in the lab."
+  default     = []
+}
+
+variable "trusted_asns" {
+  type        = list(string)
+  description = "ASNs failed-signin-spray-by-asn ignores (the hospital's ISP). None in the lab."
+  default     = []
+}
+
 variable "enable_itdr_containment" {
   type        = bool
   description = <<-EOT

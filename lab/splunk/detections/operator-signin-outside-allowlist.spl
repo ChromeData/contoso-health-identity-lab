@@ -1,0 +1,44 @@
+index=entra sourcetype="azure:loganalytics:aadserviceprincipalsigninlogs" earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Contoso ITDR - Lab operator signs in from outside its allowlist ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/operator-signin-outside-allowlist.kql ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL. Written 2026-11-07 with the     ```
+``` fourth ITDR set (review findings B1, B2, C5, D1).                         ```
+``` DATA GAP, said plainly: neither the live feed (feed-splunk-live.py) nor ```
+``` the replay (ingest-from-loganalytics.sh) carries this table today, so this ```
+``` search has no rows to read. It runs and returns nothing until a feed sends ```
+``` the table with this sourcetype. ```
+``` | lookup contoso_operator_principals Id AS ServicePrincipalId OUTPUT Id AS SpMatch ```
+``` | lookup contoso_operator_principals Id AS AppId OUTPUT Id AS AppMatch ```
+``` | where isnotnull(SpMatch) OR isnotnull(AppMatch) ```
+``` | lookup contoso_operator_ips IpRange AS IPAddress OUTPUT IpRange AS AllowedRange ```
+``` | where isnull(AllowedRange) ```
+``` | stats count AS SignIns, sum(eval(if(ResultType=="0",1,0))) AS Succeeded, values(ResultType) AS ResultTypes, min(_time) AS FirstSeenEpoch, max(_time) AS LastSeenEpoch BY ServicePrincipalId, ServicePrincipalName, AppId, IPAddress ```
+``` | eval Severity=if(Succeeded > 0, "High", "Medium") ```
+``` | eval TimeGenerated=strftime(LastSeenEpoch, "%Y-%m-%dT%H:%M:%S%z"), FirstSeen=strftime(FirstSeenEpoch, "%Y-%m-%dT%H:%M:%S%z"), LastSeen=TimeGenerated ```
+``` | table TimeGenerated, Severity, ServicePrincipalName, ServicePrincipalId, AppId, IPAddress, SignIns, Succeeded, ResultTypes, FirstSeen, LastSeen ```
+``` ========================================================================== ```
+``` @stanza Contoso ITDR - Lab operator signs in from outside its allowlist ```
+``` @conf description = The lab operator service principal signed in from an IP outside the contoso_operator_ips lookup. KQL twin: lab/kql/operator-signin-outside-allowlist.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */15 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = IPAddress ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+Ids and allowlist: lookups contoso_operator_principals (Id) and
+contoso_operator_ips (IpRange CIDR), as transforms.conf defines; an empty
+allowlist lookup means every operator sign-in alerts, as in the KQL twin.

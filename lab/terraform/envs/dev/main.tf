@@ -582,6 +582,7 @@ module "monitoring" {
   # own flag).
   enable_itdr_detections_v2 = var.enable_itdr_detections_v2
   enable_itdr_detections_v3 = var.enable_itdr_detections_v3
+  enable_itdr_detections_v4 = var.enable_itdr_detections_v4
   vault_feed_v2_columns     = var.vault_feed_v2_columns
 
   # Defender for Identity (ADR 0023): the native AD-attack detector. The flag
@@ -606,6 +607,14 @@ module "monitoring" {
   # The break-glass USERS by object id: break-glass-signin.kql matches on
   # them, so renaming an account does not blind it (review finding D3).
   break_glass_user_ids = var.enable_premium ? module.groups[0].break_glass_user_object_ids : []
+  # Tier-0 PIM groups by object id: pim-activation.kql's HighValue (review
+  # finding B6; the old name list matched none of them).
+  tier0_group_ids = local.itdr_tier0_group_ids
+  # The lab operator's ids (ADR 0024) for the fourth ITDR set; the hospital's
+  # egress ranges and ASNs (none in the lab).
+  operator_principal_ids = var.operator_principal_ids
+  trusted_egress_ranges  = var.trusted_egress_ranges
+  trusted_asns           = var.trusted_asns
   # PIM-Azure-RG-Contributors: standing members are its intended path (the
   # group is eligible for the Azure role) - reported on its own, Medium path.
   azure_pim_group_ids = var.enable_premium ? [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null] : []
@@ -638,6 +647,16 @@ locals {
     # included) without the MFA + reason activation. Watched, not in CA scope.
     var.enable_pim_demo_readers ? [module.pim[0].demo_readers_group_object_id] : [],
     values(module.pim[0].approver_group_object_ids),
+  ) : []
+
+  # The Tier-0 subset of the PIM groups (pim-activation.kql HighValue):
+  # every PIM-Tier0-* group, AWS admin (ADR 0025), the Azure PIM group
+  # (Contributor on the RG that holds DC01) and Privileged-IAM-Admins.
+  itdr_tier0_group_ids = var.enable_premium ? concat(
+    [module.groups[0].priv_iam_admins_group_object_id],
+    [for name, id in module.pim[0].tier_group_object_ids : id if startswith(name, "PIM-Tier0-")],
+    [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null],
+    var.enable_pim_aws_admin ? [module.pim[0].aws_admin_group_object_id] : [],
   ) : []
 
   # ---- Access reviews (ADR 0012) -------------------------------------------

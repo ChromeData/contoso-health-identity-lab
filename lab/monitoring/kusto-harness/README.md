@@ -1,6 +1,6 @@
 # Kusto-emulator harness for `lab/kql`
 
-Runs the `lab/kql/*.kql` detections (24 since 2026-11-06) on a real KQL
+Runs the `lab/kql/*.kql` detections (29 since 2026-11-07) on a real KQL
 engine, the Azure Data Explorer Kusto emulator ("Kustainer") in a local
 container, against synthetic positive and negative events, and publishes a
 hashed run record.

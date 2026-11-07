@@ -52,7 +52,10 @@ BeforeDiscovery {
         'tier0-logon-without-checkout', 'ad-privileged-group-change', 'kerberoast-rc4-service-ticket',
         'dcsync-replication-request',
         # Third set (itdr_v3.tf, 2026-11-06): same structural checks.
-        'dormant-privileged-account-reactivation', 'keyvault-bulk-secret-read'
+        'dormant-privileged-account-reactivation', 'keyvault-bulk-secret-read',
+        # Fourth set (itdr_v4.tf, 2026-11-07, review findings B1, B2, C5, D1).
+        'operator-signin-outside-allowlist', 'operator-permissions-changed', 'break-glass-auth-method-added',
+        'hr-leaver-lag', 'failed-signin-spray-by-asn'
     )
     $script:IacAwareRules = @('app-credential-added', 'app-consent-granted', 'ca-policy-changed',
         'role-assigned-outside-pim', 'pim-group-member-added-outside-pim')

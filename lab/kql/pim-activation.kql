@@ -8,9 +8,35 @@
 //   membership, and the group actively holds User Administrator (see
 //   lab/terraform/modules/pim). Direct PIM *role* activations are matched too,
 //   so the rule keeps working if a role is ever made eligible directly.
-//   Zero standing admin exists outside the two break-glass accounts, so every
-//   activation is expected to be deliberate, approved, time-boxed (4h cap) and
-//   attached to a justification.
+//   Every activation is expected to be deliberate, time-boxed and carry a
+//   justification. The caps differ by tier (ADR 0020): Tier 0 up to 4 h
+//   with approval, Tier 1 (for example PIM-Tier1-Helpdesk) up to 8 h, PIM for
+//   AWS admin 2 h (ADR 0025). Standing admin power still exists outside PIM:
+//   the break-glass accounts, the build account until it is converted, and
+//   the lab's workload identities (ADR 0005, ADR 0024).
+//
+// SEVERITY (since 2026-11-07, review findings B5 and B6)
+//   Most activations are normal work. Paging on every one (the old static
+//   Medium, one incident and one ServiceNow ticket each) trains the SOC to
+//   ignore the rule. The Severity column now drives the alert:
+//     Tier 0 AND (outside working hours OR a new IP)  -> High
+//     Tier 0                                           -> Medium
+//     not Tier 0 AND (outside working hours OR new IP) -> Low
+//     not Tier 0                                       -> Informational
+//   Informational incidents open no ticket and post no Teams card
+//   (lab/monitoring/playbook-notify.json); they stay in the queue for the
+//   audit trail.
+//   Tier 0 (HighValue = true) is decided FIRST by the target group's
+//   immutable object id (Tier0GroupIds, rendered by modules/monitoring from
+//   the PIM-Tier0-* groups, PIM-AWS-Lab-Admins, the Azure PIM group and
+//   Privileged-IAM-Admins). The old list held display names only and matched
+//   none of the PIM-Tier0-* groups. Name matches stay as a fallback for a
+//   paste of this file (empty id list) and for direct role activations.
+//   Working hours: 07:00-18:59 Monday-Friday in the hospital's time zone
+//   (America/New_York), set in Terraform. New IP: the activating admin had successful sign-ins
+//   in the day before the last hour, and none of them came from this IP.
+//   An admin with no sign-in history in that window is "unknown", not new,
+//   so a rarely used account does not page on every activation.
 //
 // TABLE / SOURCE
 //   AuditLogs  (Microsoft Entra ID -> Diagnostic settings -> Log Analytics).
@@ -29,15 +55,18 @@
 //     analytics rule. Sentinel optional (31-day trial in the lab).
 //
 // FALSE-POSITIVE NOTES
-//   - Legitimate approved elevations ARE the normal signal — this rule is for
-//     visibility/audit, not pure "bad". Tune by sensitivity: alert hard when
-//     HighValue == true; log-only otherwise.
+//   - Legitimate approved elevations ARE the normal signal; that is why only
+//     Tier 0 is Medium or High (see SEVERITY above).
+//   - An on-call Tier-0 admin activating at night is High by design: a
+//     second person checks the ticket. Add the on-call rota to a watchlist
+//     before production use (not built).
 //   - Break-glass accounts are excluded from PIM by design (they hold standing
 //     role); they will not appear here — see break-glass-signin.kql instead.
 //
-// SUGGESTED SENTINEL RULE
-//   Frequency 5m · Lookback 1h · Trigger > 0 rows · Entities: Account=Actor,
-//   IP=ActorIp. (Tighten the role filter for the hard-alert copy.)
+// SENTINEL RULE (modules/monitoring)
+//   Frequency 5m · Lookback 1 day (the new-IP history; only activations from
+//   the last hour alert) · Trigger > 0 rows · one alert per row · Severity
+//   from the Severity column · Entities: Account=Actor (+ AadUserId), IP=ActorIp.
 //
 // AUTOMATED RESPONSE (Logic App - lab/monitoring/playbook-notify.json)
 //   One playbook shared by all five rules, Sentinel path only (the post-trial
@@ -55,8 +84,30 @@
 //   ServiceNow assignment_group routing.
 // =============================================================================
 
-AuditLogs
-| where TimeGenerated > ago(1h)
+// Immutable ids of the Tier-0 PIM groups (Terraform-rendered; empty = names only).
+let Tier0GroupIds = dynamic([]); // @@TIER0_GROUP_IDS@@
+// Fallback by name: Tier-0 directory roles (direct PIM role activations) and
+// the lab's Tier-0 group names.
+let Tier0RoleNames = dynamic(["Global Administrator", "Privileged Role Administrator",
+                              "Privileged Authentication Administrator", "Security Administrator",
+                              "Conditional Access Administrator", "Application Administrator",
+                              "Cloud Application Administrator", "Hybrid Identity Administrator",
+                              "Authentication Policy Administrator", "Privileged-IAM-Admins",
+                              "PIM-AWS-Lab-Admins"]);
+let Tier0NamePrefix = "PIM-Tier0-";
+let LocalTimeZone = "America/New_York";
+// Working hours and days, local time. Terraform renders them from
+// modules/monitoring (pim_work_hours_local, pim_work_days_local); an empty
+// list means the default: hours 7-18 (07:00 to 18:59), Monday-Friday
+// (dayofweek: 0 = Sunday).
+let WorkHoursLocal = dynamic([]); // @@PIM_WORK_HOURS@@
+let WorkDaysLocal = dynamic([]); // @@PIM_WORK_DAYS@@
+let WorkHours = iff(array_length(WorkHoursLocal) == 0, dynamic([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]), WorkHoursLocal);
+let WorkDays = iff(array_length(WorkDaysLocal) == 0, dynamic([1, 2, 3, 4, 5]), WorkDaysLocal);
+let AlertWindow = 1h;    // only activations this recent alert
+let History = 1d;        // sign-in history judged for "new IP"
+let Activations = AuditLogs
+| where TimeGenerated > ago(AlertWindow)
 | where LoggedByService == "PIM"
 | where Category in ("GroupManagement", "RoleManagement")
 // Completion event (the elevation that actually happened), e.g.
@@ -70,21 +121,49 @@ AuditLogs
 | extend ActorIp       = tostring(InitiatedBy.user.ipAddress)
 // Pick the elevated object by TYPE rather than by array index (ordering in
 // TargetResources is not guaranteed).
+// LIVE SHAPE (read 2026-11-07 on loga-idlab, every PIM for Groups activation
+// of the week): the group is NOT typed "Group". It comes as type "Other"
+// (twice, with the group's object id and display name), next to a type
+// "Role" entry named "Member" or "Owner" (the access being activated). The
+// old "type == Group" pick therefore never found the group: ElevatedTo read
+// "Member" and HighValue was false for every live activation. A named
+// "Other" entry now counts as the group; the Role entry counts only when no
+// group is present (a direct PIM role activation).
 | mv-apply tr = TargetResources on (
-    summarize TargetGroup = take_anyif(tostring(tr.displayName), tostring(tr.type) == "Group"),
-              TargetRole  = take_anyif(tostring(tr.displayName), tostring(tr.type) == "Role")
+    extend IsGroup = tostring(tr.type) == "Group" or (tostring(tr.type) == "Other" and isnotempty(tostring(tr.displayName)))
+    | summarize TargetGroup   = take_anyif(tostring(tr.displayName), IsGroup),
+                TargetGroupId = take_anyif(tostring(tr.id), IsGroup),
+                TargetRole    = take_anyif(tostring(tr.displayName), tostring(tr.type) == "Role")
   )
 | extend ElevatedTo = iff(isnotempty(TargetGroup), TargetGroup, TargetRole)
 | extend ElevationType = iff(isnotempty(TargetGroup), "PIM for Groups", "PIM for roles")
-// Highlight what is worth paging on: the role-bearing group, or a Tier-0/1 role.
-| extend HighValue = ElevatedTo in ("Privileged-IAM-Admins",
-                                    "Global Administrator",
-                                    "Privileged Role Administrator",
-                                    "Security Administrator",
-                                    "Application Administrator",
-                                    "User Administrator")
+| extend Tier0By = case(isnotempty(TargetGroupId) and TargetGroupId in (Tier0GroupIds), "group object id",
+                        ElevatedTo in (Tier0RoleNames) or ElevatedTo startswith Tier0NamePrefix, "name",
+                        "")
+| extend HighValue = isnotempty(Tier0By)
+| extend LocalTime = datetime_utc_to_local(TimeGenerated, LocalTimeZone)
+| extend LocalDay = toint(dayofweek(LocalTime) / 1d)   // 0 = Sunday
+| extend OffHours = not(set_has_element(WorkDays, LocalDay)) or not(set_has_element(WorkHours, hourofday(LocalTime)));
+// Each admin's IPs from successful sign-ins in the day BEFORE the alert
+// window (a sign-in just before the activation does not count as history).
+let KnownIps = SigninLogs
+| where TimeGenerated between (ago(History) .. ago(AlertWindow))
+| where ResultType == "0"
+| summarize KnownIps = make_set(IPAddress, 200) by ActorObjectId = UserId;
+Activations
+| join kind=leftouter KnownIps on ActorObjectId
+| extend NewIp = case(isempty(ActorIp), "unknown",
+                      // No history row: the leftouter join leaves KnownIps null.
+                      isnull(array_length(KnownIps)) or array_length(KnownIps) == 0, "unknown",
+                      set_has_element(KnownIps, ActorIp), "no",
+                      "yes")
+| extend Unusual = OffHours or NewIp == "yes"
+| extend Severity = case(HighValue and Unusual, "High",
+                         HighValue, "Medium",
+                         Unusual, "Low",
+                         "Informational")
 | project TimeGenerated, Actor, ActorObjectId, ActorIp, ElevationType, ElevatedTo,
-          HighValue, Result, ActivityDisplayName, CorrelationId,
+          HighValue, Tier0By, OffHours, NewIp, Severity, Result, ActivityDisplayName, CorrelationId,
           // Activation reason/justification + approver live in AdditionalDetails;
           // key casing varies by schema version — surface the raw bag for review.
           AdditionalDetails

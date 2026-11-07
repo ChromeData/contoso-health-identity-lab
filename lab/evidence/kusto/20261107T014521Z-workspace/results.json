@@ -1,0 +1,1149 @@
+{
+ "what": "kusto-harness cases run on the Log Analytics query engine (loga-idlab), read-only, rows bound by let",
+ "notAScheduledRule": true,
+ "started": "2026-11-07T01:45:23Z",
+ "finished": "2026-11-07T01:47:41Z",
+ "result": "INCOMPLETE",
+ "counts": {
+  "PASS": 51,
+  "FAIL": 0,
+  "ERROR": 0,
+  "SKIPPED": 1
+ },
+ "rules": {
+  "pim-activation": "b1dedb1eab53d5d740e478154a47e55547ce5e7fcffad5cea5313bd120be5056",
+  "failed-signin-spike": "30f06e763c52d4af9bd2339a80c0ad085321e53205df81dd2443dfd95434d046",
+  "operator-signin-outside-allowlist": "b26726a8570f66b91a89d84b481454bc30db0cb8c939fe4dff85a59d5ba8868d",
+  "operator-permissions-changed": "23f7632c6cc376116f2a1e24ff08cde0af4759ef66eaa1489a8411df4b3d5559",
+  "break-glass-auth-method-added": "bdc61c9a9a81046151827c0e90936446f90ff063a07467a3454b8d6cd4a98141",
+  "hr-leaver-lag": "46e556fb631587cc95d8bcc66e736fc94b9e6a5244b1714cf5786c0f6f1ee6d1",
+  "failed-signin-spray-by-asn": "2f07d2d9f5348b4307f389501f4c5f9cefcfdfbdead4c74890245a856a1c3212"
+ },
+ "caseFiles": {
+  "pim-activation": "04c347c5965732bc06e5b569ddca7a99fb92dddc5b55323535483f24d2738c3c",
+  "failed-signin-spike": "a129c5bcebc74ce409de3309a368f3d7fe7b602effeabe2d4c6f09fe5b267e45",
+  "operator-signin-outside-allowlist": "3d5eea7c2ef9154a081613642f2ffbe1388ff6d8399f9f943a76326715d060ab",
+  "operator-permissions-changed": "d8b7365b5af88919ac230bf19cfd57a66cf6ca7a88d811b2a48ed6427c3a8789",
+  "break-glass-auth-method-added": "d2461065f84d1b7b3831c1a114e57c6cd730a5a5fa27b9fe682a2e91b0e1975d",
+  "hr-leaver-lag": "882b38adbd36797912acd391f3dc1efbf8f464380f67499b26c880038605a25d",
+  "failed-signin-spray-by-asn": "69f81f33a99ea80389a5a52de2340dcb0df8cf58d9eb787ecd364b8cf92fddce"
+ },
+ "cases": [
+  {
+   "id": "pim-activation/pim-for-groups-activation",
+   "kind": "positive",
+   "label": "Dana activates membership of Privileged-IAM-Admins (PIM for Groups)",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:23.341563Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for Groups",
+     "ElevatedTo": "Privileged-IAM-Admins",
+     "HighValue": true,
+     "Tier0By": "name",
+     "OffHours": false,
+     "NewIp": "unknown",
+     "Severity": "Medium",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to role completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/pim-for-roles-activation",
+   "kind": "positive",
+   "label": "A directory role (Security Administrator) activated directly",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:25.611001Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for roles",
+     "ElevatedTo": "Security Administrator",
+     "HighValue": true,
+     "Tier0By": "name",
+     "OffHours": false,
+     "NewIp": "unknown",
+     "Severity": "Medium",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to role completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/low-value-role-still-reported",
+   "kind": "positive",
+   "label": "An activation of a role outside the high-value list is still a row, HighValue false",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:30.578296Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for roles",
+     "ElevatedTo": "Reports Reader",
+     "HighValue": false,
+     "Tier0By": "",
+     "OffHours": false,
+     "NewIp": "unknown",
+     "Severity": "Informational",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to role completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/request-is-not-the-grant",
+   "kind": "negative",
+   "label": "The activation REQUEST (not completed) is not alerted",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/core-directory-group-add",
+   "kind": "negative",
+   "label": "A Core Directory 'Add member to group' is not a PIM activation",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/older-than-lookback",
+   "kind": "negative",
+   "label": "A completed activation 2 h ago is outside the 1 h look-back",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/tier0-by-group-object-id",
+   "kind": "positive",
+   "label": "A Tier-0 group with an unexpected display name is Tier 0 by its object id (review B6: the old name list matched no PIM-Tier0-* group). No sign-in history: NewIp unknown, so Medium",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:40.863399Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for Groups",
+     "ElevatedTo": "Renamed Tier0 Group",
+     "HighValue": true,
+     "Tier0By": "group object id",
+     "OffHours": false,
+     "NewIp": "unknown",
+     "Severity": "Medium",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to group completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/tier0-group-name-prefix",
+   "kind": "positive",
+   "label": "PIM-Tier0-Privileged-Role-Admins with an empty id list is Tier 0 by name",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:42.966506Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for Groups",
+     "ElevatedTo": "PIM-Tier0-Privileged-Role-Admins",
+     "HighValue": true,
+     "Tier0By": "name",
+     "OffHours": false,
+     "NewIp": "unknown",
+     "Severity": "Medium",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to group completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/tier0-off-hours-is-high",
+   "kind": "positive",
+   "label": "Tier 0 outside working hours is High (no hour is a working hour in this case)",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:45.281253Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for Groups",
+     "ElevatedTo": "PIM-Tier0-Security-Admins",
+     "HighValue": true,
+     "Tier0By": "group object id",
+     "OffHours": true,
+     "NewIp": "unknown",
+     "Severity": "High",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to group completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/tier0-new-ip-is-high",
+   "kind": "positive",
+   "label": "Tier 0 from an IP the admin did not sign in from in the day before: High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:47.155312Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for Groups",
+     "ElevatedTo": "PIM-Tier0-Security-Admins",
+     "HighValue": true,
+     "Tier0By": "group object id",
+     "OffHours": false,
+     "NewIp": "yes",
+     "Severity": "High",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to group completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/tier0-known-ip-stays-medium",
+   "kind": "positive",
+   "label": "Tier 0 from an IP the admin used 3 h earlier: Medium",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:49.927987Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for Groups",
+     "ElevatedTo": "PIM-Tier0-Security-Admins",
+     "HighValue": true,
+     "Tier0By": "group object id",
+     "OffHours": false,
+     "NewIp": "no",
+     "Severity": "Medium",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to group completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/helpdesk-routine-is-informational",
+   "kind": "positive",
+   "label": "PIM-Tier1-Helpdesk in working hours from a known IP: Informational (no ticket, no card)",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:52.886167Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for Groups",
+     "ElevatedTo": "PIM-Tier1-Helpdesk",
+     "HighValue": false,
+     "Tier0By": "",
+     "OffHours": false,
+     "NewIp": "no",
+     "Severity": "Informational",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to group completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/helpdesk-off-hours-is-low",
+   "kind": "positive",
+   "label": "PIM-Tier1-Helpdesk outside working hours: Low",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:55.904861Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for Groups",
+     "ElevatedTo": "PIM-Tier1-Helpdesk",
+     "HighValue": false,
+     "Tier0By": "",
+     "OffHours": true,
+     "NewIp": "unknown",
+     "Severity": "Low",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to group completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "pim-activation/live-shape-group-typed-other",
+   "kind": "positive",
+   "label": "The shape the tenant really logs for PIM for Groups (2026-11-07): the group is type 'Other', next to a Role entry named 'Member'. ElevatedTo is the group, and it is Tier 0 by id (the old rule read 'Member', HighValue false)",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:15:58.783744Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for Groups",
+     "ElevatedTo": "PIM-AWS-Lab-Admins",
+     "HighValue": true,
+     "Tier0By": "group object id",
+     "OffHours": false,
+     "NewIp": "unknown",
+     "Severity": "Medium",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to role completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/password-spray",
+   "kind": "positive",
+   "label": "12 failures from one IP against 12 users: likely password spray",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:35:00Z",
+     "IPAddress": "198.51.100.66",
+     "Country": "NL",
+     "FailedCount": 12,
+     "TargetedUsers": 12,
+     "Pattern": "likely password spray",
+     "UserList": [
+      "user0@contosohealthlab.onmicrosoft.com",
+      "user1@contosohealthlab.onmicrosoft.com",
+      "user2@contosohealthlab.onmicrosoft.com",
+      "user3@contosohealthlab.onmicrosoft.com",
+      "user4@contosohealthlab.onmicrosoft.com",
+      "user5@contosohealthlab.onmicrosoft.com",
+      "user6@contosohealthlab.onmicrosoft.com",
+      "user7@contosohealthlab.onmicrosoft.com",
+      "user8@contosohealthlab.onmicrosoft.com",
+      "user9@contosohealthlab.onmicrosoft.com",
+      "user10@contosohealthlab.onmicrosoft.com",
+      "user11@contosohealthlab.onmicrosoft.com"
+     ],
+     "ErrorCodes": [
+      "50126"
+     ],
+     "Apps": [
+      "Microsoft Office"
+     ],
+     "FirstSeen": "2026-11-07T01:39:01.153061Z",
+     "LastSeen": "2026-11-07T01:39:01.153061Z"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/brute-force",
+   "kind": "positive",
+   "label": "10 failures from one IP against one user (exactly the threshold): likely brute force",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:35:00Z",
+     "IPAddress": "198.51.100.66",
+     "Country": "NL",
+     "FailedCount": 10,
+     "TargetedUsers": 1,
+     "Pattern": "likely brute force",
+     "UserList": [
+      "dana.okafor@contosohealthlab.onmicrosoft.com"
+     ],
+     "ErrorCodes": [
+      "50126"
+     ],
+     "Apps": [
+      "Microsoft Office"
+     ],
+     "FirstSeen": "2026-11-07T01:39:02.984574Z",
+     "LastSeen": "2026-11-07T01:39:02.984574Z"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/spray-of-five-users",
+   "kind": "positive",
+   "label": "10 failures over exactly 5 users is already a spray",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:35:00Z",
+     "IPAddress": "198.51.100.66",
+     "Country": "NL",
+     "FailedCount": 10,
+     "TargetedUsers": 5,
+     "Pattern": "likely password spray",
+     "UserList": [
+      "user0@contosohealthlab.onmicrosoft.com",
+      "user1@contosohealthlab.onmicrosoft.com",
+      "user2@contosohealthlab.onmicrosoft.com",
+      "user3@contosohealthlab.onmicrosoft.com",
+      "user4@contosohealthlab.onmicrosoft.com"
+     ],
+     "ErrorCodes": [
+      "50126",
+      "50053"
+     ],
+     "Apps": [
+      "Microsoft Office"
+     ],
+     "FirstSeen": "2026-11-07T01:39:04.696592Z",
+     "LastSeen": "2026-11-07T01:39:04.696592Z"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/below-threshold",
+   "kind": "negative",
+   "label": "9 failures from one IP",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/successes-do-not-count",
+   "kind": "negative",
+   "label": "12 SUCCESSFUL sign-ins (ResultType 0) from one IP",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/split-across-two-ips",
+   "kind": "negative",
+   "label": "12 failures split 6 + 6 across two source IPs",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/older-than-lookback",
+   "kind": "negative",
+   "label": "A 12-failure burst 2 h ago",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/burst-straddles-a-boundary",
+   "kind": "positive",
+   "label": "5 failures at -12 min and 5 at -9 min: 3 minutes apart, so always inside one hopping window (the old tumbling bins could split them 5 + 5 and miss)",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:30:00Z",
+     "IPAddress": "198.51.100.66",
+     "Country": "NL",
+     "FailedCount": 10,
+     "TargetedUsers": 1,
+     "Pattern": "likely brute force",
+     "UserList": [
+      "dana.okafor@contosohealthlab.onmicrosoft.com"
+     ],
+     "ErrorCodes": [
+      "50126"
+     ],
+     "Apps": [
+      "Microsoft Office"
+     ],
+     "FirstSeen": "2026-11-07T01:34:17.666883Z",
+     "LastSeen": "2026-11-07T01:37:17.666883Z"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/mfa-interrupts-do-not-count",
+   "kind": "negative",
+   "label": "12 MFA-required interrupts (50074, 50076) from one IP are not credential failures",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/trusted-egress-brute-force-dropped",
+   "kind": "negative",
+   "label": "10 failures for one user from the hospital's own NAT range: normal retries, not alerted",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spike/trusted-egress-spray-still-alerts",
+   "kind": "positive",
+   "label": "A spray (12 users) from the hospital's own NAT range still alerts",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:35:00Z",
+     "IPAddress": "198.51.100.66",
+     "Country": "NL",
+     "FailedCount": 12,
+     "TargetedUsers": 12,
+     "Pattern": "likely password spray",
+     "UserList": [
+      "user0@contosohealthlab.onmicrosoft.com",
+      "user1@contosohealthlab.onmicrosoft.com",
+      "user2@contosohealthlab.onmicrosoft.com",
+      "user3@contosohealthlab.onmicrosoft.com",
+      "user4@contosohealthlab.onmicrosoft.com",
+      "user5@contosohealthlab.onmicrosoft.com",
+      "user6@contosohealthlab.onmicrosoft.com",
+      "user7@contosohealthlab.onmicrosoft.com",
+      "user8@contosohealthlab.onmicrosoft.com",
+      "user9@contosohealthlab.onmicrosoft.com",
+      "user10@contosohealthlab.onmicrosoft.com",
+      "user11@contosohealthlab.onmicrosoft.com"
+     ],
+     "ErrorCodes": [
+      "50126"
+     ],
+     "Apps": [
+      "Microsoft Office"
+     ],
+     "FirstSeen": "2026-11-07T01:39:26.6618Z",
+     "LastSeen": "2026-11-07T01:39:26.6618Z"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "operator-signin-outside-allowlist/sign-in-from-unlisted-ip",
+   "kind": "positive",
+   "label": "A successful operator sign-in from 203.0.113.99 (TEST-NET-3, in no allowlist): High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:36:28.618641Z",
+     "Severity": "High",
+     "ServicePrincipalName": "Contoso Lab Operator (local Mac, certificate)",
+     "ServicePrincipalId": "88888888-8888-8888-8888-888888888888",
+     "AppId": "99999999-9999-9999-9999-999999999999",
+     "IPAddress": "203.0.113.99",
+     "SignIns": 1,
+     "Succeeded": 1,
+     "ResultTypes": [
+      "0"
+     ],
+     "FirstSeen": "2026-11-07T01:36:28.618641Z",
+     "LastSeen": "2026-11-07T01:36:28.618641Z"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "operator-signin-outside-allowlist/matched-by-app-id-only",
+   "kind": "positive",
+   "label": "Matched by appId when only the app id is listed",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:36:30.426384Z",
+     "Severity": "High",
+     "ServicePrincipalName": "Contoso Lab Operator (local Mac, certificate)",
+     "ServicePrincipalId": "88888888-8888-8888-8888-888888888888",
+     "AppId": "99999999-9999-9999-9999-999999999999",
+     "IPAddress": "203.0.113.99",
+     "SignIns": 1,
+     "Succeeded": 1,
+     "ResultTypes": [
+      "0"
+     ],
+     "FirstSeen": "2026-11-07T01:36:30.426384Z",
+     "LastSeen": "2026-11-07T01:36:30.426384Z"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "operator-signin-outside-allowlist/failures-only-medium",
+   "kind": "positive",
+   "label": "Two failed attempts (invalid client assertion) from an unlisted IP: Medium",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:36:32.378886Z",
+     "Severity": "Medium",
+     "ServicePrincipalName": "Contoso Lab Operator (local Mac, certificate)",
+     "ServicePrincipalId": "88888888-8888-8888-8888-888888888888",
+     "AppId": "99999999-9999-9999-9999-999999999999",
+     "IPAddress": "203.0.113.99",
+     "SignIns": 2,
+     "Succeeded": 0,
+     "ResultTypes": [
+      "7000274"
+     ],
+     "FirstSeen": "2026-11-07T01:36:32.378886Z",
+     "LastSeen": "2026-11-07T01:36:32.378886Z"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "operator-signin-outside-allowlist/allowlisted-ip",
+   "kind": "negative",
+   "label": "A sign-in from the watchlisted /32",
+   "status": "SKIPPED",
+   "reason": "watchlist / table variant / shim variant cases need run.sh"
+  },
+  {
+   "id": "operator-signin-outside-allowlist/other-service-principal",
+   "kind": "negative",
+   "label": "Another service principal from an unlisted IP is not this rule's business",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "operator-signin-outside-allowlist/empty-id-list-matches-nothing",
+   "kind": "negative",
+   "label": "With no operator ids rendered the rule matches nothing (the module refuses to deploy it that way)",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "operator-permissions-changed/app-role-granted-to-operator",
+   "kind": "positive",
+   "label": "Directory.ReadWrite.All granted to the operator: the client id is only in ServicePrincipal.ObjectID",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:16:40.043966Z",
+     "Severity": "High",
+     "OperationName": "Add app role assignment to service principal",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorUpn": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorApp": "",
+     "ActorSpId": "",
+     "ActorIsOperator": false,
+     "TargetNames": [
+      "Microsoft Graph"
+     ],
+     "MatchedIds": [
+      "88888888-8888-8888-8888-888888888888"
+     ],
+     "CorrelationId": ""
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "operator-permissions-changed/operator-adds-its-own-credential",
+   "kind": "positive",
+   "label": "The operator adds a certificate to itself: High, ActorIsOperator true",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:16:56.175857Z",
+     "Severity": "High",
+     "OperationName": "Add service principal credentials",
+     "Actor": "Contoso Lab Operator (local Mac, certificate)",
+     "ActorUpn": "",
+     "ActorApp": "Contoso Lab Operator (local Mac, certificate)",
+     "ActorSpId": "88888888-8888-8888-8888-888888888888",
+     "ActorIsOperator": true,
+     "TargetNames": [
+      "Contoso Lab Operator (local Mac, certificate)"
+     ],
+     "MatchedIds": [
+      "88888888-8888-8888-8888-888888888888"
+     ],
+     "CorrelationId": ""
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "operator-permissions-changed/app-role-removed-medium",
+   "kind": "positive",
+   "label": "An app role taken away from the operator shrinks reach: Medium",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:16:57.875351Z",
+     "Severity": "Medium",
+     "OperationName": "Remove app role assignment from service principal",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorUpn": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorApp": "",
+     "ActorSpId": "",
+     "ActorIsOperator": false,
+     "TargetNames": [
+      "Microsoft Graph"
+     ],
+     "MatchedIds": [
+      "88888888-8888-8888-8888-888888888888"
+     ],
+     "CorrelationId": ""
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "operator-permissions-changed/grant-to-another-app",
+   "kind": "negative",
+   "label": "An app role granted to another app",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "operator-permissions-changed/failed-change",
+   "kind": "negative",
+   "label": "A failed attempt changes nothing (Result failure)",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "break-glass-auth-method-added/app-mints-a-passkey",
+   "kind": "positive",
+   "label": "The operator app registers a FIDO2 key on bg-admin-01 (logged as 'User registered security info'): High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:17:05.967302Z",
+     "Severity": "High",
+     "ActivityDisplayName": "User registered security info",
+     "ResultReason": "User registered Fido2 Authentication Method",
+     "Result": "success",
+     "TargetUpn": "bg-admin-01@contosohealthlab.onmicrosoft.com",
+     "TargetObjectId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+     "Actor": "Contoso Lab Operator (local Mac, certificate)",
+     "ActorKind": "application",
+     "CorrelationId": ""
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "break-glass-auth-method-added/renamed-account-by-id",
+   "kind": "positive",
+   "label": "A renamed break-glass account is still matched by object id",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:17:09.046421Z",
+     "Severity": "High",
+     "ActivityDisplayName": "Admin registered security info",
+     "ResultReason": "Admin registered temporary access pass method for user",
+     "Result": "success",
+     "TargetUpn": "emergency-ops@contosohealthlab.onmicrosoft.com",
+     "TargetObjectId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorKind": "an admin",
+     "CorrelationId": ""
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "break-glass-auth-method-added/failed-attempt-medium",
+   "kind": "positive",
+   "label": "A failed registration attempt: Medium",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:17:12.509381Z",
+     "Severity": "Medium",
+     "ActivityDisplayName": "User registered security info",
+     "ResultReason": "User failed to register Fido2 Authentication Method",
+     "Result": "clientError",
+     "TargetUpn": "bg-admin-01@contosohealthlab.onmicrosoft.com",
+     "TargetObjectId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+     "Actor": "Contoso Lab Operator (local Mac, certificate)",
+     "ActorKind": "application",
+     "CorrelationId": ""
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "break-glass-auth-method-added/ordinary-user",
+   "kind": "negative",
+   "label": "A passkey registered on an ordinary user",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "break-glass-auth-method-added/other-category",
+   "kind": "negative",
+   "label": "A group change on bg-admin-01 is not security info",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "hr-leaver-lag/no-cloud-disable-after-20-min",
+   "kind": "positive",
+   "label": "AD disabled 20 minutes ago, no Cloud Sync disable since: High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:27:17.877764Z",
+     "Severity": "High",
+     "Reason": "AD disabled, Entra ID still enabled after 15 minutes",
+     "EmployeeId": "400104",
+     "AdObjectGuid": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+     "EntraObjectId": "",
+     "InboundStatus": "success",
+     "LeaverTime": "2026-11-07T01:27:17.877764Z"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "hr-leaver-lag/inbound-write-failed",
+   "kind": "positive",
+   "label": "The inbound write to AD itself failed: High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:27:20.506722Z",
+     "Severity": "High",
+     "Reason": "inbound write to AD: failure",
+     "EmployeeId": "400104",
+     "AdObjectGuid": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+     "EntraObjectId": "",
+     "InboundStatus": "failure",
+     "LeaverTime": "2026-11-07T01:27:20.506722Z"
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "hr-leaver-lag/cloud-disabled-in-time",
+   "kind": "negative",
+   "label": "Cloud Sync disabled the Entra user 3 minutes after AD",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "hr-leaver-lag/still-inside-15-minutes",
+   "kind": "negative",
+   "label": "AD disabled 5 minutes ago: not judged yet",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "hr-leaver-lag/judged-in-an-earlier-run",
+   "kind": "negative",
+   "label": "AD disabled 50 minutes ago: an earlier run already judged it (one alert per leaver)",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spray-by-asn/spray-over-many-ips",
+   "kind": "positive",
+   "label": "12 users, one failure each, each from a different IP of AS64511: Medium",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:47:31.6558767Z",
+     "Severity": "Medium",
+     "Asn": "64511",
+     "DistinctUsers": 12,
+     "FailedCount": 12,
+     "Users": [
+      "user0@contosohealthlab.onmicrosoft.com",
+      "user1@contosohealthlab.onmicrosoft.com",
+      "user2@contosohealthlab.onmicrosoft.com",
+      "user3@contosohealthlab.onmicrosoft.com",
+      "user4@contosohealthlab.onmicrosoft.com",
+      "user5@contosohealthlab.onmicrosoft.com",
+      "user6@contosohealthlab.onmicrosoft.com",
+      "user7@contosohealthlab.onmicrosoft.com",
+      "user8@contosohealthlab.onmicrosoft.com",
+      "user9@contosohealthlab.onmicrosoft.com",
+      "user10@contosohealthlab.onmicrosoft.com",
+      "user11@contosohealthlab.onmicrosoft.com"
+     ],
+     "Compromised": [],
+     "Ips": [
+      "198.51.100.0",
+      "198.51.100.1",
+      "198.51.100.2",
+      "198.51.100.3",
+      "198.51.100.4",
+      "198.51.100.5",
+      "198.51.100.6",
+      "198.51.100.7",
+      "198.51.100.8",
+      "198.51.100.9",
+      "198.51.100.10",
+      "198.51.100.11"
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spray-by-asn/spray-with-a-hit",
+   "kind": "positive",
+   "label": "Same spray, and user1 then signs in successfully from that ASN: High",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:47:33.9159543Z",
+     "Severity": "High",
+     "Asn": "64511",
+     "DistinctUsers": 12,
+     "FailedCount": 12,
+     "Users": [
+      "user0@contosohealthlab.onmicrosoft.com",
+      "user1@contosohealthlab.onmicrosoft.com",
+      "user2@contosohealthlab.onmicrosoft.com",
+      "user3@contosohealthlab.onmicrosoft.com",
+      "user4@contosohealthlab.onmicrosoft.com",
+      "user5@contosohealthlab.onmicrosoft.com",
+      "user6@contosohealthlab.onmicrosoft.com",
+      "user7@contosohealthlab.onmicrosoft.com",
+      "user8@contosohealthlab.onmicrosoft.com",
+      "user9@contosohealthlab.onmicrosoft.com",
+      "user10@contosohealthlab.onmicrosoft.com",
+      "user11@contosohealthlab.onmicrosoft.com"
+     ],
+     "Compromised": [
+      "user1@contosohealthlab.onmicrosoft.com"
+     ],
+     "Ips": [
+      "198.51.100.0",
+      "198.51.100.1",
+      "198.51.100.2",
+      "198.51.100.3",
+      "198.51.100.4",
+      "198.51.100.5",
+      "198.51.100.6",
+      "198.51.100.7",
+      "198.51.100.8",
+      "198.51.100.9",
+      "198.51.100.10",
+      "198.51.100.11"
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spray-by-asn/non-interactive-leg-counts",
+   "kind": "positive",
+   "label": "6 users in SigninLogs + 6 others in the non-interactive table = 12 distinct users",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:47:35.8441146Z",
+     "Severity": "Medium",
+     "Asn": "64511",
+     "DistinctUsers": 12,
+     "FailedCount": 12,
+     "Users": [
+      "user0@contosohealthlab.onmicrosoft.com",
+      "user1@contosohealthlab.onmicrosoft.com",
+      "user2@contosohealthlab.onmicrosoft.com",
+      "user3@contosohealthlab.onmicrosoft.com",
+      "user4@contosohealthlab.onmicrosoft.com",
+      "user5@contosohealthlab.onmicrosoft.com",
+      "other0@contosohealthlab.onmicrosoft.com",
+      "other1@contosohealthlab.onmicrosoft.com",
+      "other2@contosohealthlab.onmicrosoft.com",
+      "other3@contosohealthlab.onmicrosoft.com",
+      "other4@contosohealthlab.onmicrosoft.com",
+      "other5@contosohealthlab.onmicrosoft.com"
+     ],
+     "Compromised": [],
+     "Ips": [
+      "198.51.100.0",
+      "198.51.100.1",
+      "198.51.100.2",
+      "198.51.100.3",
+      "198.51.100.4",
+      "198.51.100.5"
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spray-by-asn/nine-users",
+   "kind": "negative",
+   "label": "9 users is under the threshold",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spray-by-asn/trusted-asn",
+   "kind": "negative",
+   "label": "The hospital's own ASN is ignored",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spray-by-asn/mfa-interrupts",
+   "kind": "negative",
+   "label": "12 users hitting MFA prompts (50074) are not failures",
+   "status": "PASS",
+   "rowCount": 0,
+   "rows": [],
+   "failures": []
+  }
+ ]
+}

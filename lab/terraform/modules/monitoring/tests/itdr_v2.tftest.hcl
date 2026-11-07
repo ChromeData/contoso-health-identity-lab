@@ -219,6 +219,9 @@ run "v2_rules_render_id_lists" {
     break_glass_group_ids     = ["44444444-4444-4444-4444-444444444444"]
     privileged_user_ids       = ["55555555-5555-5555-5555-555555555555"]
     azure_pim_group_ids       = ["66666666-6666-6666-6666-666666666666"]
+    # Core-rule lists (2026-11-07): set too, so "no empty placeholder" holds.
+    tier0_group_ids       = ["77777777-7777-7777-7777-777777777777"]
+    trusted_egress_ranges = ["198.51.100.0/24"]
   }
 
   assert {

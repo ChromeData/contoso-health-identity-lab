@@ -1,0 +1,142 @@
+{
+  "rule": "operator-signin-outside-allowlist",
+  "about": "The lab operator's service principal (by object id / appId) signs in from outside the operator_ips watchlist (review finding B1, 2026-11-07). Watchlist cases need the emulator (run.sh); on the workspace engine they are SKIPPED, and cases without a watchlist read the workspace's own operator_ips, so they use a documentation-range IP no allowlist holds.",
+  "defaults": {
+    "AADServicePrincipalSignInLogs": {
+      "TimeGenerated": "ago:10m",
+      "ServicePrincipalId": "88888888-8888-8888-8888-888888888888",
+      "AppId": "99999999-9999-9999-9999-999999999999",
+      "ServicePrincipalName": "Contoso Lab Operator (local Mac, certificate)",
+      "ResultType": "0",
+      "IPAddress": "203.0.113.99"
+    }
+  },
+  "cases": [
+    {
+      "id": "sign-in-from-unlisted-ip",
+      "kind": "positive",
+      "label": "A successful operator sign-in from 203.0.113.99 (TEST-NET-3, in no allowlist): High",
+      "lets": {
+        "OperatorPrincipalIds": [
+          "88888888-8888-8888-8888-888888888888",
+          "99999999-9999-9999-9999-999999999999"
+        ]
+      },
+      "tables": {
+        "AADServicePrincipalSignInLogs": [
+          {}
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "IPAddress": "203.0.113.99",
+          "SignIns": 1,
+          "Succeeded": 1
+        }
+      ],
+      "expectRows": 1
+    },
+    {
+      "id": "matched-by-app-id-only",
+      "kind": "positive",
+      "label": "Matched by appId when only the app id is listed",
+      "lets": {
+        "OperatorPrincipalIds": [
+          "99999999-9999-9999-9999-999999999999"
+        ]
+      },
+      "tables": {
+        "AADServicePrincipalSignInLogs": [
+          {}
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High"
+        }
+      ]
+    },
+    {
+      "id": "failures-only-medium",
+      "kind": "positive",
+      "label": "Two failed attempts (invalid client assertion) from an unlisted IP: Medium",
+      "lets": {
+        "OperatorPrincipalIds": [
+          "88888888-8888-8888-8888-888888888888"
+        ]
+      },
+      "tables": {
+        "AADServicePrincipalSignInLogs": [
+          {
+            "_repeat": 2,
+            "ResultType": "7000274"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "Medium",
+          "SignIns": 2,
+          "Succeeded": 0
+        }
+      ]
+    },
+    {
+      "id": "allowlisted-ip",
+      "kind": "negative",
+      "label": "A sign-in from the watchlisted /32",
+      "lets": {
+        "OperatorPrincipalIds": [
+          "88888888-8888-8888-8888-888888888888"
+        ]
+      },
+      "watchlists": {
+        "operator_ips": [
+          {
+            "SearchKey": "198.51.100.7/32",
+            "IpRange": "198.51.100.7/32",
+            "Owner": "pam-operators",
+            "ExpiresOn": "2099-12-31"
+          }
+        ]
+      },
+      "tables": {
+        "AADServicePrincipalSignInLogs": [
+          {
+            "IPAddress": "198.51.100.7"
+          }
+        ]
+      }
+    },
+    {
+      "id": "other-service-principal",
+      "kind": "negative",
+      "label": "Another service principal from an unlisted IP is not this rule's business",
+      "lets": {
+        "OperatorPrincipalIds": [
+          "88888888-8888-8888-8888-888888888888"
+        ]
+      },
+      "tables": {
+        "AADServicePrincipalSignInLogs": [
+          {
+            "ServicePrincipalId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "AppId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            "ServicePrincipalName": "Some other app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "empty-id-list-matches-nothing",
+      "kind": "negative",
+      "label": "With no operator ids rendered the rule matches nothing (the module refuses to deploy it that way)",
+      "tables": {
+        "AADServicePrincipalSignInLogs": [
+          {}
+        ]
+      }
+    }
+  ]
+}

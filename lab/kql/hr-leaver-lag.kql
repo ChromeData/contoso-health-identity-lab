@@ -1,0 +1,89 @@
+// =============================================================================
+// Detection: HR leaver still enabled in Entra ID 15 minutes later (leaver lag)
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, fourth set)
+// SPL twin:  lab/splunk/detections/hr-leaver-lag.spl
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   HR made someone a leaver: the inbound provisioning app ("Contoso HR
+//   Inbound Provisioning", API to on-premises AD) disabled the AD account.
+//   Cloud Sync must then copy AccountEnabled = False to Entra ID. When that
+//   has not happened 15 minutes later, the terminated person can still sign
+//   in to the cloud. In the lab this happens when DC01 or its provisioning
+//   agent is off (capture log E52: "DC01 auto-shutdown had quarantined Cloud
+//   Sync"). Review finding C5, 2026-11-07.
+//   Also caught: the inbound write itself failed (the AD account was never
+//   disabled).
+//
+// TABLE / SOURCE
+//   AADProvisioningLogs (rows read live as the operator on 2026-11-07):
+//     inbound leaver = ServicePrincipal.Name "Contoso HR Inbound
+//       Provisioning", ModifiedProperties accountDisabled -> True.
+//       TargetIdentity.Id = the AD objectGUID; SourceIdentity.Id = the
+//       employee number.
+//     cloud disable  = ServicePrincipal.Name = the AD domain (Cloud Sync,
+//       corp.contosohealthlab.com), SourceIdentity.Id = the same AD
+//       objectGUID, ModifiedProperties AccountEnabled -> False.
+//   Lag = an inbound leaver row 15-30 minutes old with no cloud-disable row
+//   for that objectGUID at or after it. Each leaver is judged in exactly one
+//   15-minute run (the rule runs every 15 minutes), so it alerts once.
+//
+// LICENSE
+//   Entra ID P1 (provisioning log export). Inbound provisioning: Entra ID
+//   Governance or P1 per Microsoft's licensing page.
+//
+// MITRE ATT&CK
+//   T1078 Valid Accounts (an account that should be closed still works).
+//
+// FALSE-POSITIVE NOTES
+//   - A leaver dated in the future (last working day later) is disabled by
+//     HR on that day, not now; the inbound row only appears when HR sends it.
+//   - Cloud Sync's normal cycle is about 2 minutes (ADR 0027 hire timings);
+//     15 minutes is about 7 cycles.
+//
+// SEVERITY (the Severity column)
+//   High   : the inbound write failed, or no cloud disable after 15 minutes.
+//
+// AUTOMATED RESPONSE
+//   Notify playbook. The runbook step is jml-exception.md "Urgent leaver":
+//   disable in the cloud directly and revoke sessions.
+// =============================================================================
+
+let Lag = 15m;
+let JudgeWindow = 15m;   // = the rule's frequency: each leaver judged once
+let InboundApp = "Contoso HR Inbound Provisioning";
+let CloudSyncApp = "corp.contosohealthlab.com";
+let Inbound = AADProvisioningLogs
+| where TimeGenerated between (ago(Lag + JudgeWindow) .. ago(Lag))
+| where tostring(parse_json(ServicePrincipal).Name) == InboundApp
+| mv-apply mp = todynamic(ModifiedProperties) on (
+    where tostring(mp.displayName) =~ "accountDisabled" and tostring(mp.newValue) =~ "True"
+    | take 1
+  )
+| where isnotempty(mp)
+| extend AdObjectGuid = tostring(parse_json(TargetIdentity).Id)
+| extend EmployeeId = tostring(parse_json(SourceIdentity).Id)
+| extend InboundStatus = tostring(parse_json(ProvisioningStatusInfo).Status)
+| project LeaverTime = TimeGenerated, AdObjectGuid, EmployeeId, InboundStatus, CycleId;
+let CloudDisabled = AADProvisioningLogs
+| where TimeGenerated > ago(Lag + JudgeWindow)
+| where tostring(parse_json(ServicePrincipal).Name) == CloudSyncApp
+| mv-apply mp = todynamic(ModifiedProperties) on (
+    where tostring(mp.displayName) =~ "AccountEnabled" and tostring(mp.newValue) =~ "False"
+    | take 1
+  )
+| where isnotempty(mp)
+| project CloudTime = TimeGenerated, AdObjectGuid = tostring(parse_json(SourceIdentity).Id),
+          EntraObjectId = tostring(parse_json(TargetIdentity).Id);
+Inbound
+| join kind=leftouter (CloudDisabled) on AdObjectGuid
+| summarize CloudDisabledAt = minif(CloudTime, CloudTime >= LeaverTime),
+            EntraObjectId = take_anyif(EntraObjectId, CloudTime >= LeaverTime)
+    by LeaverTime, AdObjectGuid, EmployeeId, InboundStatus
+| extend Reason = case(InboundStatus != "success", strcat("inbound write to AD: ", InboundStatus),
+                       isnull(CloudDisabledAt), "AD disabled, Entra ID still enabled after 15 minutes",
+                       "")
+| where isnotempty(Reason)
+| extend Severity = "High"
+| extend TimeGenerated = LeaverTime
+| project TimeGenerated, Severity, Reason, EmployeeId, AdObjectGuid, EntraObjectId, InboundStatus, LeaverTime
+| sort by TimeGenerated desc

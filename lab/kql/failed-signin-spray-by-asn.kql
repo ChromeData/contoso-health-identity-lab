@@ -1,0 +1,68 @@
+// =============================================================================
+// Detection: Password spray across many IPs of one network (distinct users per ASN)
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, fourth set)
+// SPL twin:  lab/splunk/detections/failed-signin-spray-by-asn.spl
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   A slow or distributed password spray: credential failures against 10 or
+//   more DISTINCT users within one hour from one autonomous system (ASN),
+//   with few tries per user. A spray from a botnet or a cloud provider's
+//   addresses stays under failed-signin-spike's 10-per-IP threshold on every
+//   single IP, but not per network (review finding D1, 2026-11-07).
+//
+// TABLE / SOURCE
+//   SigninLogs and AADNonInteractiveUserSignInLogs (both carry
+//   AutonomousSystemNumber, Microsoft Learn column lists). The non-interactive
+//   table matters: a spray against legacy or token endpoints may never show
+//   in SigninLogs.
+//
+// LICENSE
+//   Entra ID P1 for the sign-in log export.
+//
+// MITRE ATT&CK
+//   T1110.003 Brute Force: Password Spraying.
+//
+// FALSE-POSITIVE NOTES
+//   - The hospital's own ASN (all staff behind one ISP): exclude it with
+//     TrustedAsns (rendered by modules/monitoring from var.trusted_asns).
+//   - A broken app with a stale password across many service accounts: the
+//     Users list shows it at once.
+//
+// SEVERITY (the Severity column)
+//   High   : a user in the set ALSO signed in successfully from the same ASN
+//            in the hour (the spray may have worked).
+//   Medium : failures only.
+//
+// AUTOMATED RESPONSE
+//   Notify playbook. No containment (no single account).
+// =============================================================================
+
+let LookBack = 1h;
+let MinDistinctUsers = 10;
+let MaxTriesPerUser = 3;     // a spray tries each user a few times only
+let CredentialFailureCodes = dynamic(["50126", "50053", "50055", "50056", "50057", "50034"]);
+let TrustedAsns = dynamic([]); // @@TRUSTED_ASNS@@
+let SignIns = union
+    (SigninLogs | where TimeGenerated > ago(LookBack)
+        | project TimeGenerated, UserPrincipalName, IPAddress, ResultType, Asn = tostring(AutonomousSystemNumber)),
+    (AADNonInteractiveUserSignInLogs | where TimeGenerated > ago(LookBack)
+        | project TimeGenerated, UserPrincipalName, IPAddress, ResultType, Asn = tostring(AutonomousSystemNumber))
+| where isnotempty(Asn) and not(Asn in (TrustedAsns));
+let Failures = SignIns
+| where ResultType in (CredentialFailureCodes)
+| summarize Tries = count(), Ips = make_set(IPAddress, 20) by Asn, UserPrincipalName
+| where Tries <= MaxTriesPerUser
+| summarize DistinctUsers = dcount(UserPrincipalName), Users = make_set(UserPrincipalName, 50),
+            FailedCount = sum(Tries), Ips = make_set(Ips, 50)
+    by Asn
+| where DistinctUsers >= MinDistinctUsers;
+let Successes = SignIns
+| where ResultType == "0"
+| summarize SucceededUsers = make_set(UserPrincipalName, 50) by Asn;
+Failures
+| join kind=leftouter Successes on Asn
+| extend Compromised = set_intersect(Users, coalesce(SucceededUsers, dynamic([])))
+| extend Severity = iff(array_length(Compromised) > 0, "High", "Medium")
+| extend TimeGenerated = now()
+| project TimeGenerated, Severity, Asn, DistinctUsers, FailedCount, Users, Compromised, Ips
+| sort by DistinctUsers desc
