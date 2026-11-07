@@ -248,6 +248,33 @@ in a scratch copy and never commit a tofu-written one.
 
 ---
 
+## Why the Entra client secret stays (checked 2026-11-07)
+
+`okta-clinic-idp` holds the lab's **last Entra client secret** (one, ends
+2027-04-26). It cannot be swapped for a certificate today:
+
+- Okta's generic OIDC identity provider can sign in with `private_key_jwt`,
+  but Microsoft Entra ID needs the `x5t#S256` header in that client
+  assertion, and Okta does not send it. Entra refuses the token (AADSTS700027).
+  Okta's own article says the integration is not supported and the fix is a
+  client secret ("Error invalid social token and Azure error 700027 when using
+  private key JWT with Okta OIDC identity provider and Microsoft Entra ID",
+  support.okta.com, last updated 2026-08-04).
+- There is no federated credential path either: Okta is not a workload that
+  holds a token Entra can trust.
+
+**The way to zero (DESIGNED, not built):** switch the federation from OIDC to
+**SAML 2.0**. Entra signs the SAML response with a certificate it holds; Okta
+needs only the public signing certificate. Steps: a non-gallery SAML app in
+`modules/apps` (same one assigned group), `okta_idp_saml` + `okta_idp_saml_key`
+here, the routing rule moved to the new IdP, one clinic sign-in proved, then
+`okta-clinic-idp` and its secret deleted. It changes the live clinic sign-in,
+so it waits until after the recording.
+
+Until then the secret is bounded (180 days at most), entered once into
+Okta, never in this repo, and listed with its owner and end date in
+`lab/iga/nhi-secrets-register.json`.
+
 ## Production option (described, not built)
 
 - Remote state with encryption at rest and access limited to the IdP owners

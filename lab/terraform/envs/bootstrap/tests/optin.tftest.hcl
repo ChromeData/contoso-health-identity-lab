@@ -64,7 +64,11 @@ mock_provider "azurerm" {
     defaults = {
       id              = "/subscriptions/22222222-2222-2222-2222-222222222222"
       subscription_id = "22222222-2222-2222-2222-222222222222"
+      tenant_id       = "33333333-3333-3333-3333-333333333333"
     }
+  }
+  mock_resource "azurerm_key_vault" {
+    defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab-cicd/providers/Microsoft.KeyVault/vaults/kv-idlab-cicd-test" }
   }
   mock_data "azurerm_storage_account" {
     defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab-tfstate/providers/Microsoft.Storage/storageAccounts/stidlabtfstate" }
@@ -109,6 +113,10 @@ run "defaults_add_nothing" {
   assert {
     condition     = length(module.azure_guardrails) == 0 && output.azure_guardrails == null
     error_message = "no Azure Policy guardrail is assigned by default"
+  }
+  assert {
+    condition     = length(azurerm_key_vault.pipeline_config) == 0 && length(azurerm_role_assignment.pipeline_config_reader) == 0 && output.pipeline_config_vault_name == null
+    error_message = "the pipeline config vault must not exist by default"
   }
   # config-drift.yml (schedule on main) signs in as PLAN: the main-ref
   # subject must be in every bootstrap apply, or it fails with AADSTS700213.
@@ -346,4 +354,48 @@ run "azure_guardrails_effect_typo_is_refused" {
   }
 
   expect_failures = [var.standing_owner_effect]
+}
+
+# Pipeline config vault (pipeline-config.tf): the five privacy values the
+# workflows read over OIDC instead of from GitHub secrets.
+run "pipeline_config_vault_opt_in" {
+  command = plan
+
+  variables {
+    enable_pipeline_config_vault = true
+    pipeline_config_vault_name   = "kv-idlab-cicd-test"
+    log_analytics_workspace_id   = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.OperationalInsights/workspaces/loga-idlab"
+  }
+
+  assert {
+    condition     = azurerm_key_vault.pipeline_config[0].rbac_authorization_enabled && azurerm_key_vault.pipeline_config[0].purge_protection_enabled
+    error_message = "the pipeline config vault is RBAC-only and purge-protected"
+  }
+  assert {
+    condition     = azurerm_resource_group.pipeline_config[0].name == "rg-identity-lab-cicd"
+    error_message = "the vault lives in its own RG, not in rg-identity-lab (APPLY's) or the locked tfstate RG"
+  }
+  # Exactly PLAN and APPLY, read-only (Key Vault Secrets User by id), nobody else.
+  assert {
+    condition = (
+      length(azurerm_role_assignment.pipeline_config_reader) == 2
+      && alltrue([for a in azurerm_role_assignment.pipeline_config_reader : endswith(a.role_definition_id, "/4633458b-17de-408a-b874-0445c86b69e6")])
+    )
+    error_message = "only PLAN and APPLY may read the vault, with Key Vault Secrets User"
+  }
+  assert {
+    condition     = length(azurerm_monitor_diagnostic_setting.pipeline_config) == 1
+    error_message = "every read is logged to loga-idlab when the workspace is known"
+  }
+}
+
+run "pipeline_config_vault_needs_a_valid_name" {
+  command = plan
+
+  variables {
+    enable_pipeline_config_vault = true
+    pipeline_config_vault_name   = ""
+  }
+
+  expect_failures = [azurerm_key_vault.pipeline_config]
 }

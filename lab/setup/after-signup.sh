@@ -165,6 +165,8 @@ azure_openai_resource_id     = "${AZURE_OPENAI_RESOURCE_ID:-}"
 log_analytics_workspace_id   = "$LAW_ID"
 enable_app_management_roles     = $APP_ROLES
 enable_identity_protection_logs = $IDP_LOGS
+enable_pipeline_config_vault    = true
+pipeline_config_vault_name      = "${PIPELINE_CONFIG_VAULT:-kv-idlab-cicd-${STATE_SA: -4}}"
 EOF
 fi
 # The lock blocks the role assignments bootstrap creates: lift it around the apply.
@@ -186,10 +188,21 @@ fi
 
 # =============================================================================
 if step_on C; then
-say "C. GitHub: variables, privacy secrets, the prod environment"
+say "C. GitHub: variables, the prod environment; privacy values to Key Vault"
 R="$GITHUB_OWNER/$GITHUB_REPO"
 setvar() { run gh variable set "$1" --repo "$R" --body "$2"; }
-setsec() { run gh secret set "$1" --repo "$R" --body "$2"; run gh secret set "$1" --repo "$R" --app dependabot --body "$2"; }
+# The five privacy values go to the pipeline config vault (envs/bootstrap
+# pipeline-config.tf), not to GitHub secrets: the workflows read them over
+# OIDC (.github/scripts/pipeline-config.sh). The value travels on stdin to
+# `az --file`, never in argv; a dry run prints the name only.
+CFG_VAULT="$("$TF" -chdir="$ROOT/lab/terraform/envs/bootstrap" output -raw pipeline_config_vault_name 2>/dev/null || echo "<pipeline_config_vault_name>")"
+setcfg() {
+  if [ "$YES" = 1 ]; then
+    printf '%s' "$2" | az keyvault secret set --vault-name "$CFG_VAULT" --name "$1" --file /dev/stdin -o none
+    printf '   $ (Key Vault %s) %s = <value>\n' "$CFG_VAULT" "$1"
+  else printf '   (dry) Key Vault %s: %s = <value>\n' "$CFG_VAULT" "$1"; fi
+}
+setvar TF_PIPELINE_CONFIG_VAULT "$CFG_VAULT"
 setvar AZURE_TENANT_ID "$TENANT_ID"
 setvar AZURE_SUBSCRIPTION_ID "$AZURE_SUBSCRIPTION_ID"
 setvar TFSTATE_RG "$STATE_RG"; setvar TFSTATE_STORAGE_ACCOUNT "$STATE_SA"
@@ -208,11 +221,11 @@ if [ -n "${AZURE_OPENAI_ENDPOINT:-}" ]; then
   setvar AZURE_OPENAI_ENDPOINT "$AZURE_OPENAI_ENDPOINT"; setvar AZURE_OPENAI_DEPLOYMENT "${AZURE_OPENAI_DEPLOYMENT:-gpt-5-mini}"
   setvar AZURE_OPENAI_MAX_COMPLETION_TOKENS "${AZURE_OPENAI_MAX_COMPLETION_TOKENS:-12000}"; setvar AZURE_OPENAI_REASONING_EFFORT "${AZURE_OPENAI_REASONING_EFFORT:-low}"
 fi
-setsec TF_OPERATOR_IP_RANGES "[\"${OPERATOR_IP}/32\"]"
-setsec TF_ALERT_EMAIL "$ALERT_EMAIL"
-setsec TF_SAML_CERT_NOTIFICATION_EMAILS "[\"$ALERT_EMAIL\"]"
-setsec TF_PIM_ALERT_MAILBOX "${PIM_ALERT_MAILBOX:-security@$ONMICROSOFT_DOMAIN}"   # an alias on the admin mailbox (Exchange admin > mailbox > Manage email address types)
-setsec TF_APP_OWNER_OBJECT_IDS "[\"$ADMIN_OBJECT_ID\"]"
+setcfg tf-operator-ip-ranges "[\"${OPERATOR_IP}/32\"]"
+setcfg tf-alert-email "$ALERT_EMAIL"
+setcfg tf-saml-cert-notification-emails "[\"$ALERT_EMAIL\"]"
+setcfg tf-pim-alert-mailbox "${PIM_ALERT_MAILBOX:-security@$ONMICROSOFT_DOMAIN}"   # an alias on the admin mailbox (Exchange admin > mailbox > Manage email address types)
+setcfg tf-app-owner-object-ids "[\"$ADMIN_OBJECT_ID\"]"
 note "prod environment: you as required reviewer, main as the only deployment branch"
 if [ "$YES" = 1 ]; then
   ME_ID="$(gh api user --jq .id)"

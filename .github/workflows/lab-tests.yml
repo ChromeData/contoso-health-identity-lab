@@ -198,6 +198,8 @@ jobs:
         run: |
           set -euo pipefail
           bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
+          # Pipeline config from Key Vault: fail closed, mask per element (fake az).
+          bash .github/scripts/tests/pipeline-config.test.sh
           bash lab/scripts/demo/tests/reset-demo-hire.test.sh
           bash lab/scripts/demo/tests/close-build-noise.test.sh
           node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs lab/scripts/demo/signin/tests/identity.test.mjs

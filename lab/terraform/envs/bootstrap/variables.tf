@@ -250,3 +250,35 @@ variable "owner_allowed_principal_ids" {
   EOT
   default     = []
 }
+
+# ---- Pipeline config vault (pipeline-config.tf) -------------------------------
+
+variable "enable_pipeline_config_vault" {
+  type        = bool
+  description = <<-EOT
+    Create the pipeline config Key Vault (pipeline-config.tf): the five privacy
+    values the Terraform workflows read at run time over GitHub OIDC instead of
+    from GitHub secrets. PLAN and APPLY get Key Vault Secrets User on it; the
+    values are written by the operator or a human Secrets Officer
+    (lab/scripts/operator/set-pipeline-config.sh). Off by default.
+  EOT
+  default     = false
+}
+
+variable "pipeline_config_vault_name" {
+  type        = string
+  description = "Globally unique name of the pipeline config vault (3-24 letters, digits, dashes), e.g. kv-idlab-cicd-20f1. Must equal the workflows' vars.TF_PIPELINE_CONFIG_VAULT (default kv-idlab-cicd-20f1)."
+  default     = ""
+}
+
+variable "pipeline_config_resource_group_name" {
+  type        = string
+  description = "Resource group for the pipeline config vault. Its own RG: the tfstate RG is ReadOnly-locked and rg-identity-lab belongs to envs/dev's APPLY identity."
+  default     = "rg-identity-lab-cicd"
+}
+
+variable "pipeline_config_location" {
+  type        = string
+  description = "Azure region of the pipeline config vault."
+  default     = "eastus2"
+}

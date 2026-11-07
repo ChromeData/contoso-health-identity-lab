@@ -387,36 +387,34 @@ privacy-only exceptions follow the list):
       `TF_VAR_require_scim_credentials=true` so a CI apply that would create
       it empty fails instead.
 
-**Repository *secrets* (Settings → Secrets and variables → Actions →
-Secrets).** Not credentials: both workflows read them as `secrets.*` only
-because GitHub masks secrets in run logs but prints variables in every step's
-env header, and the repo is public.
-- [ ] `TF_OPERATOR_IP_RANGES`  JSON list, e.g. `["203.0.113.7/32"]` — Key Vault
-      firewall, the DC and Intune VM NSGs, the evidence store firewall and,
-      with `enable_dc`, the Sentinel `operator_ips` watchlist. Each entry a
-      single IPv4 host as /32: required when `enable_dc = true` (DC01 NSG and
-      the `operator_ips` watchlist), and never wider than /24 otherwise;
-      `0.0.0.0/0` fails validation. Unset = `[]` (no public vault access, no
-      inbound to the VMs). The Terraform variable is also `sensitive`, so the
-      plan comment hides it.
-- [ ] `TF_ALERT_EMAIL`         post-trial alert address (also `sensitive` in
-      Terraform). Unset = no notifications.
-- [ ] `TF_PIM_ALERT_MAILBOX`   one security mailbox for PIM notifications
-      (`pim_alert_mailbox`, `sensitive`). Both workflows map it to
-      `TF_VAR_pim_alert_mailbox`. Unset = no PIM mailbox (tenant default
-      notifications only).
-- [ ] `TF_APP_OWNER_OBJECT_IDS` (JSON list) and
-      `TF_SAML_CERT_NOTIFICATION_EMAILS` (JSON list) for `modules/apps`:
-      secrets only so the public logs mask a person's object id and mailbox.
-- [ ] If you set any of these, also create it as a **Dependabot** secret
-      (Settings → Secrets and variables → Dependabot) with the same name and
-      value. Dependabot-triggered PR runs see only Dependabot secrets, so
-      without them the weekly Dependabot plan falls back to `[]`/'' and shows
-      false Key Vault firewall / NSG / action-group removals.
-      `terraform-plan.yml` flags this with a warning banner in the plan
-      comment. (verify: `id-token: write` and repo Variables are honoured in
-      Dependabot-triggered `pull_request` runs; if not, azure/login fails and
-      the plan check is red on Dependabot PRs.)
+**No repository secrets.** The workflows hold no stored value of any kind.
+The five privacy values below are not credentials; they used to be repo
+secrets (and Dependabot copies) only so GitHub masked them. They now live in
+the **pipeline config vault** (`envs/bootstrap` `pipeline-config.tf`,
+repo Variable `TF_PIPELINE_CONFIG_VAULT`, default `kv-idlab-cicd-20f1`).
+Step *Pipeline config from Key Vault* (`.github/scripts/pipeline-config.sh`)
+reads them after the OIDC sign-in, as PLAN or APPLY (Key Vault Secrets User on
+that vault only), masks each value and each list element, and exports them
+as `TF_VAR_*`. A value it cannot read stops the job: the old secrets fell
+back to `[]`/'' and planned removals. Every read is an `AuditEvent` in
+loga-idlab. Write a value with
+`printf '%s' '<value>' | lab/scripts/operator/set-pipeline-config.sh <vault> <name>`
+(stdin only, shape-checked).
+
+| Key Vault secret | Terraform variable | Shape |
+|---|---|---|
+| `tf-operator-ip-ranges` | `operator_ip_ranges` | JSON list, e.g. `["203.0.113.7/32"]`: Key Vault firewall, the DC and Intune VM NSGs, the evidence store firewall and the Sentinel `operator_ips` watchlist. Each entry one IPv4 /32 with `enable_dc`; never wider than /24; `0.0.0.0/0` fails validation. |
+| `tf-alert-email` | `alert_email` | one address (post-trial alerts) |
+| `tf-app-owner-object-ids` | `app_owner_object_ids` | JSON list of the human app owners' object ids (`modules/apps`) |
+| `tf-saml-cert-notification-emails` | `saml_cert_notification_emails` | JSON list of SAML certificate expiry mailboxes |
+| `tf-pim-alert-mailbox` | `pim_alert_mailbox` | one security mailbox for PIM notifications |
+
+All five are also `sensitive` in Terraform, so the plan comment hides them.
+Dependabot PR runs use the same OIDC sign-in and the same vault, so there is
+no Dependabot secret to keep in step either. (verify: `id-token: write` and
+repo Variables are honoured in Dependabot-triggered `pull_request` runs; if
+not, azure/login fails and the plan check is red on Dependabot PRs, as
+before.)
 
 Policy knobs (staging flags, CA states, blocked countries) are **not**
 variables: they live in the committed `lab/terraform/envs/dev/lab.tfvars`, so

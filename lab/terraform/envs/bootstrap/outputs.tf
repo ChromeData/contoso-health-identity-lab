@@ -107,3 +107,8 @@ output "azure_guardrails" {
     effects                           = module.azure_guardrails[0].effects
   } : null
 }
+
+output "pipeline_config_vault_name" {
+  description = "The pipeline config vault (null while enable_pipeline_config_vault is off). Workflows read it as vars.TF_PIPELINE_CONFIG_VAULT."
+  value       = one(azurerm_key_vault.pipeline_config[*].name)
+}
