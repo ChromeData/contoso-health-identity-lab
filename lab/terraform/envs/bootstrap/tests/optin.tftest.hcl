@@ -369,6 +369,58 @@ run "azure_guardrails_effect_typo_is_refused" {
   expect_failures = [var.standing_owner_effect]
 }
 
+# Evidence delete lock: off by default, CanNotDelete on the ACCOUNT (not the
+# resource group) when on, and refused without the account name.
+run "evidence_delete_lock_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(azurerm_management_lock.evidence_cannot_delete) == 0
+    error_message = "No lock unless enable_evidence_delete_lock is set"
+  }
+}
+
+run "evidence_delete_lock_opt_in" {
+  command = plan
+
+  variables {
+    enable_evidence_delete_lock   = true
+    evidence_storage_account_name = "stidlabevidence"
+  }
+
+  # A distinct evidence-account id, so a lock aimed at the tfstate account
+  # (the shared mock default) fails the exact-scope assert below.
+  override_data {
+    target = data.azurerm_storage_account.evidence
+    values = {
+      id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Storage/storageAccounts/stidlabevidence"
+    }
+  }
+
+  assert {
+    condition     = length(azurerm_management_lock.evidence_cannot_delete) == 1 && azurerm_management_lock.evidence_cannot_delete[0].lock_level == "CanNotDelete"
+    error_message = "enable_evidence_delete_lock adds one CanNotDelete lock"
+  }
+  assert {
+    condition     = azurerm_management_lock.evidence_cannot_delete[0].scope == "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Storage/storageAccounts/stidlabevidence"
+    error_message = "The lock is scoped to exactly the evidence storage account: not the tfstate account, never the whole resource group"
+  }
+  assert {
+    condition     = length(azurerm_role_assignment.evidence_writer) == 0
+    error_message = "The lock alone grants EVIDENCE nothing (that is enable_evidence_pack)"
+  }
+}
+
+run "evidence_delete_lock_needs_the_storage_account" {
+  command = plan
+
+  variables {
+    enable_evidence_delete_lock = true
+  }
+
+  expect_failures = [data.azurerm_storage_account.evidence]
+}
+
 # Pipeline config vault (pipeline-config.tf): the five privacy values the
 # workflows read over OIDC instead of from GitHub secrets.
 run "pipeline_config_vault_opt_in" {

@@ -24,6 +24,7 @@ output "policy_ids" {
     admin_session_controls         = one(azuread_conditional_access_policy.admin_session_controls[*].id)
     pam_session_admin_strength     = one(azuread_conditional_access_policy.pam_session_admin_strength[*].id)
     shared_clinical_workstation    = one(azuread_conditional_access_policy.shared_clinical_workstation[*].id)
+    clinic_results                 = one(azuread_conditional_access_policy.clinic_results[*].id)
   }
 }
 
@@ -53,6 +54,7 @@ output "policy_display_names" {
     CA022 = one(azuread_conditional_access_policy.pam_session_admin_strength[*].display_name)
     CA023 = var.enable_protected_actions_ca ? local.ca023_display_name : null
     CA060 = one(azuread_conditional_access_policy.shared_clinical_workstation[*].display_name)
+    CA061 = one(azuread_conditional_access_policy.clinic_results[*].display_name)
   }
 }
 

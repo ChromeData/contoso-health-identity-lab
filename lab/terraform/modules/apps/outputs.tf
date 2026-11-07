@@ -153,6 +153,13 @@ output "nhi_inventory" {
       credential_expires          = null
       outbound_secret             = "servicenow-provisioning-password (Key Vault; ServiceNow integration user, web-service access only - nhi-secrets-register)"
     } : null
+    clinic_lab_results = var.enable_clinic_results_app ? {
+      service_principal_object_id = azuread_service_principal.clinic_results[0].object_id
+      owners                      = local.app_owners
+      credential_type             = "none (public client: auth code + PKCE, loopback redirect, no secret or certificate)"
+      credential_expires          = null
+      outbound_secret             = "none"
+    } : null
     okta_clinic_idp = var.enable_okta_federation ? {
       service_principal_object_id = azuread_service_principal.okta_idp[0].object_id
       owners                      = local.app_owners
@@ -295,4 +302,43 @@ output "okta_idp_client_secret_command" {
     for app in azuread_application.okta_idp :
     "Add-MgApplicationPassword -ApplicationId ${app.object_id} -PasswordCredential @{ displayName = 'Okta IdP - entered once into lab/terraform/okta'; endDateTime = (Get-Date).ToUniversalTime().AddDays(${var.okta_idp_secret_lifetime_days}) } | Select-Object -ExpandProperty SecretText"
   ])
+}
+
+# ---- Clinic Lab Results (clinic_results.tf) -------------------------------------
+# All null while enable_clinic_results_app is off.
+
+output "clinic_results_client_id" {
+  description = "Client id of Clinic Lab Results (null while off). CA061 targets it; lab/okta-migration/cutover.mjs reads it from Graph by display name."
+  value       = one(azuread_application.clinic_results[*].client_id)
+}
+
+output "clinic_results_users_group_object_id" {
+  description = "Object id of App-ClinicResults-Users, the ONE principal on Clinic Lab Results and CA061's user scope (null while off). Pilot members are added post-apply."
+  value       = one(azuread_group.clinic_results_users[*].object_id)
+}
+
+# ---- Contoso Claims Viewer (claims_viewer.tf) -----------------------------------
+# All null while enable_claims_viewer_app is off.
+
+output "claims_viewer_client_id" {
+  description = "Client id of the Claims Viewer app (lab/adfs/claims-viewer/fetch-metadata.sh entra needs it as CLIENT_ID)."
+  value       = one(data.azuread_application.claims_viewer[*].client_id)
+}
+
+output "claims_viewer_service_principal_object_id" {
+  description = "Object id of the Claims Viewer enterprise app."
+  value       = one(azuread_service_principal.claims_viewer[*].object_id)
+}
+
+output "claims_viewer_saml_signing_cert_activation_command" {
+  description = "POST-APPLY: make the new certificate the active Claims Viewer signing key (azuread 3.10 cannot set preferredTokenSigningKeyThumbprint). Run it BEFORE fetch-metadata.sh entra, so the metadata carries the active key."
+  value = one([
+    for i, sp in azuread_service_principal.claims_viewer :
+    "Update-MgServicePrincipal -ServicePrincipalId ${sp.object_id} -PreferredTokenSigningKeyThumbprint ${azuread_service_principal_token_signing_certificate.claims_viewer[i].thumbprint}"
+  ])
+}
+
+output "claims_viewer_role_assignments" {
+  description = "Group object id -> app role value on the Claims Viewer (the converted AD FS rules 3a/3b)."
+  value       = { for k, a in azuread_app_role_assignment.claims_viewer : a.principal_object_id => local.claims_viewer_roles[k].value }
 }

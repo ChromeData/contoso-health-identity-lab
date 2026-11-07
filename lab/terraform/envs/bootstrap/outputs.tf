@@ -108,6 +108,11 @@ output "azure_guardrails" {
   } : null
 }
 
+output "evidence_delete_lock_id" {
+  description = "Id of the CanNotDelete lock on the WORM evidence account (null until enable_evidence_delete_lock)."
+  value       = one(azurerm_management_lock.evidence_cannot_delete[*].id)
+}
+
 output "pipeline_config_vault_name" {
   description = "The pipeline config vault (null while enable_pipeline_config_vault is off). Workflows read it as vars.TF_PIPELINE_CONFIG_VAULT."
   value       = one(azurerm_key_vault.pipeline_config[*].name)
