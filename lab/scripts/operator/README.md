@@ -17,6 +17,27 @@ lab/scripts/operator/op aws sts get-caller-identity
 touches your own `az login` (the operator has its own az profile in
 `~/.contoso-operator/azure`).
 
+## Write sessions (ADR 0030)
+
+Every day the operator can only READ (Graph reads, Azure Reader, the state
+data role, Key Vault Secrets User). Work that writes (demo resets, TAPs,
+group changes, Key Vault secret writes, `az vm run-command`, bootstrap
+applies) needs a **write session**. Only the owner opens one, signed in as
+himself, never as the operator:
+
+```bash
+# open: at most 8 hours, with a reason
+tofu -chdir=lab/terraform/envs/operator apply \
+  -var 'operator_write_session={opened_utc="2026-11-07T14:00:00Z",expires_utc="2026-11-07T18:00:00Z",reason="recording day: demo resets"}'
+# close: same root, no session variable
+tofu -chdir=lab/terraform/envs/operator apply
+```
+
+The Azure part ends at `expires_utc` by itself (time-bound PIM). The Graph
+part ends only with the closing apply: close in the same sitting.
+`envs/bootstrap` role-assignment changes are owner applies again (the
+operator has no Owner).
+
 ## Turn it off
 
 ```bash
@@ -28,7 +49,7 @@ lab/scripts/operator/kill-switch.sh --undo
 
 1. `lab/scripts/operator/new-operator-cert.sh` — new key (Keychain) and
    public certificate (`~/.contoso-operator/operator.crt`), valid 179 days.
-2. As the admin: `tofu -chdir=lab/terraform/envs/operator init -backend-config=storage_account_name=<sa>`,
+2. As the owner (never as the operator, ADR 0030): `tofu -chdir=lab/terraform/envs/operator init -backend-config=storage_account_name=<sa>`,
    then `apply` with `terraform.tfvars` from the example.
 3. As an AWS admin: in `lab/terraform/aws`, set `enable_entra_operator = true`
    and the three ids from step 2's outputs, then

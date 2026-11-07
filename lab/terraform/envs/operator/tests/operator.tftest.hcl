@@ -3,8 +3,10 @@
 #
 # What these pin: the credential is a CERTIFICATE (no secret, no federated
 # credential); tokens are v2 and the App ID URI is api://<client id> (what the
-# AWS trust expects); every Graph role and Azure role in the defaults is
-# granted, and nothing else; single-tenant only.
+# AWS trust expects); single-tenant only. ADR 0030: standing rights are
+# read-only (no Owner, no Graph write); writes exist only in an open,
+# at-most-8-hour session; the session role can't touch locks, role
+# assignments or evidence; the workload CA policy is off and report-only.
 
 mock_provider "azuread" {
   mock_data "azuread_service_principal" {
@@ -60,6 +62,15 @@ mock_provider "azurerm" {
   mock_data "azurerm_subscription" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000001" }
   }
+  mock_data "azurerm_role_definition" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000001/providers/Microsoft.Authorization/roleDefinitions/b86a8fe4-44ce-4948-aee5-eccb2c155cd7" }
+  }
+  mock_resource "azurerm_role_definition" {
+    defaults = { role_definition_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000001/providers/Microsoft.Authorization/roleDefinitions/99999999-9999-9999-9999-999999999999" }
+  }
+  mock_resource "azuread_named_location" {
+    defaults = { id = "66666666-6666-6666-6666-666666666666" }
+  }
 }
 
 variables {
@@ -97,41 +108,191 @@ run "grants_are_exactly_the_reviewed_lists" {
   command = apply
 
   assert {
+    # No session open (the default): only the standing, read-only set.
     condition     = toset(keys(azuread_app_role_assignment.operator)) == toset(var.operator_graph_roles)
-    error_message = "every reviewed Graph role, and only those, is granted"
+    error_message = "without a write session, exactly the standing Graph roles are granted"
   }
   assert {
-    # ADR 0025: the operator may make someone ELIGIBLE for a PIM group, never
-    # ACTIVE (activation stays the user's own MFA-backed request).
-    condition     = contains(var.operator_graph_roles, "PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup") && !contains(var.operator_graph_roles, "PrivilegedEligibilitySchedule.Read.AzureADGroup") && length([for r in var.operator_graph_roles : r if startswith(r, "PrivilegedAssignmentSchedule.")]) == 0
-    error_message = "PIM groups: eligibility write only (it includes the read); no PrivilegedAssignmentSchedule role, which could make a member ACTIVE without an activation"
+    condition     = length([for r in keys(azuread_app_role_assignment.operator) : r if can(regex("ReadWrite|DeleteRestore|Create$", r))]) == 0
+    error_message = "ADR 0030: no standing Graph WRITE permission"
   }
   assert {
-    # Secure Score history (the KPI one-pager's "after" scan) is a READ: the
-    # operator gets SecurityEvents.Read.All, never .ReadWrite.All, which could
-    # change alerts and incidents the SOC works from.
-    condition     = contains(var.operator_graph_roles, "SecurityEvents.Read.All") && !contains(var.operator_graph_roles, "SecurityEvents.ReadWrite.All")
+    # ADR 0025: eligibility write only in a session; no PrivilegedAssignmentSchedule
+    # role anywhere, which could make a member ACTIVE without an activation.
+    condition     = contains(var.operator_session_graph_roles, "PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup") && length([for r in concat(var.operator_graph_roles, var.operator_session_graph_roles) : r if startswith(r, "PrivilegedAssignmentSchedule.")]) == 0
+    error_message = "PIM groups: eligibility write in the session set only; never a PrivilegedAssignmentSchedule role"
+  }
+  assert {
+    condition     = contains(var.operator_graph_roles, "SecurityEvents.Read.All") && !contains(concat(var.operator_graph_roles, var.operator_session_graph_roles), "SecurityEvents.ReadWrite.All")
     error_message = "Secure Score: SecurityEvents.Read.All only (no SecurityEvents.ReadWrite.All)"
   }
   assert {
-    # Creating the Terraform-rendered review series (New-AccessReviewDefinitions.ps1)
-    # needs AccessReview.ReadWrite.All; the read-only reports check their Graph
-    # context for AccessReview.Read.All by name, so both are granted.
-    condition     = contains(var.operator_graph_roles, "AccessReview.ReadWrite.All") && contains(var.operator_graph_roles, "AccessReview.Read.All")
-    error_message = "access reviews: ReadWrite (create the rendered series) plus Read (the report scripts' scope check)"
+    condition     = contains(var.operator_session_graph_roles, "AccessReview.ReadWrite.All") && contains(var.operator_graph_roles, "AccessReview.Read.All")
+    error_message = "access reviews: Read standing (the report scripts' scope check), ReadWrite in a session"
   }
   assert {
-    condition     = toset(keys(azurerm_role_assignment.operator)) == toset(["Owner", "Storage Blob Data Contributor", "Key Vault Secrets Officer"])
-    error_message = "Azure roles must be the three reviewed ones"
+    condition     = toset(keys(azurerm_role_assignment.operator)) == toset(["Reader", "Storage Blob Data Contributor", "Key Vault Secrets User"])
+    error_message = "standing Azure roles: Reader, Storage Blob Data Contributor, Key Vault Secrets User (no Owner, ADR 0030)"
   }
   assert {
     condition     = alltrue([for r in azurerm_role_assignment.operator : r.scope == "/subscriptions/00000000-0000-0000-0000-000000000001"])
     error_message = "Azure roles are granted on the lab subscription only"
   }
   assert {
+    condition     = length(azurerm_pim_active_role_assignment.operator_session) == 0 && length(terraform_data.operator_write_session_window) == 0
+    error_message = "no write session by default: no time-bound Azure assignment"
+  }
+  assert {
     condition     = toset(keys(azuread_directory_role_assignment.operator)) == toset(["Security Reader"])
     error_message = "the only directory role is Security Reader"
   }
+  assert {
+    # The app REQUESTS every permission it may hold, so a session never
+    # changes the app object.
+    condition     = length(one(azuread_application.operator.required_resource_access).resource_access) == length(distinct(concat(var.operator_graph_roles, var.operator_session_graph_roles)))
+    error_message = "the app requests the standing and the session permissions"
+  }
+}
+
+# The session role can never remove a lock, write a role assignment, or
+# erase evidence (finding E1: fork F3's CanNotDelete lock depends on this).
+run "session_role_cannot_touch_locks_roles_or_evidence" {
+  command = plan
+
+  assert {
+    condition = alltrue([for a in [
+      "Microsoft.Authorization/*/Delete",
+      "Microsoft.Authorization/*/Write",
+      "Microsoft.Authorization/elevateAccess/Action",
+      "Microsoft.Storage/storageAccounts/delete",
+      "Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies/delete",
+      "Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies/write",
+      "Microsoft.OperationalInsights/workspaces/delete",
+    ] : contains(one(azurerm_role_definition.operator_session.permissions).not_actions, a)])
+    error_message = "the session role must exclude lock/role-assignment writes and deletes, and the evidence and log deletes"
+  }
+  assert {
+    condition     = azurerm_role_definition.operator_session.assignable_scopes == tolist(["/subscriptions/00000000-0000-0000-0000-000000000001"])
+    error_message = "the session role is assignable on the lab subscription only"
+  }
+}
+
+run "session_open_adds_writes_time_bound" {
+  command = apply
+
+  variables {
+    operator_write_session = {
+      opened_utc  = "2099-01-01T09:00:00Z"
+      expires_utc = "2099-01-01T13:00:00Z"
+      reason      = "test: recording day resets"
+    }
+  }
+
+  assert {
+    condition     = toset(keys(azuread_app_role_assignment.operator)) == toset(concat(var.operator_graph_roles, var.operator_session_graph_roles))
+    error_message = "an open session grants the standing set plus the session writes"
+  }
+  assert {
+    condition     = toset(keys(azurerm_pim_active_role_assignment.operator_session)) == toset(["Contoso Lab Operator Session", "Key Vault Secrets Officer"])
+    error_message = "an open session adds the custom session role and Key Vault Secrets Officer"
+  }
+  assert {
+    condition     = alltrue([for a in azurerm_pim_active_role_assignment.operator_session : one(one(a.schedule).expiration).end_date_time == "2099-01-01T13:00:00Z"])
+    error_message = "every Azure session assignment ends at expires_utc (time-bound active)"
+  }
+  assert {
+    condition     = !contains(keys(azurerm_role_assignment.operator), "Owner")
+    error_message = "a session never brings back Owner"
+  }
+}
+
+run "session_longer_than_8h_is_refused" {
+  command = plan
+
+  variables {
+    operator_write_session = {
+      opened_utc  = "2099-01-01T09:00:00Z"
+      expires_utc = "2099-01-01T17:00:01Z"
+      reason      = "test: too long a window"
+    }
+  }
+
+  expect_failures = [var.operator_write_session]
+}
+
+run "expired_session_fails_the_plan" {
+  command = plan
+
+  variables {
+    operator_write_session = {
+      opened_utc  = "2000-01-01T09:00:00Z"
+      expires_utc = "2000-01-01T10:00:00Z"
+      reason      = "test: a stale session"
+    }
+  }
+
+  expect_failures = [terraform_data.operator_write_session_window]
+}
+
+run "standing_owner_is_refused" {
+  command = plan
+
+  variables {
+    operator_azure_roles = ["Owner", "Storage Blob Data Contributor"]
+  }
+
+  expect_failures = [var.operator_azure_roles]
+}
+
+run "standing_graph_write_is_refused" {
+  command = plan
+
+  variables {
+    operator_graph_roles = ["Directory.Read.All", "AppRoleAssignment.ReadWrite.All"]
+  }
+
+  expect_failures = [var.operator_graph_roles]
+}
+
+run "workload_ca_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(azuread_conditional_access_policy.operator_location) == 0 && length(azuread_named_location.operator_network) == 0
+    error_message = "the workload CA policy is DESIGNED and off (no Workload ID Premium licence)"
+  }
+}
+
+run "workload_ca_when_licensed_starts_report_only" {
+  command = apply
+
+  variables {
+    enable_operator_workload_ca = true
+    operator_allowed_ip_ranges  = ["203.0.113.10/32"]
+  }
+
+  assert {
+    condition     = azuread_conditional_access_policy.operator_location[0].state == "enabledForReportingButNotEnforced"
+    error_message = "the workload CA policy starts report-only (ADR 0003)"
+  }
+  assert {
+    condition     = one(one(azuread_conditional_access_policy.operator_location[0].conditions).client_applications).included_service_principals == tolist(["33333333-3333-3333-3333-333333333333"])
+    error_message = "the policy targets exactly the operator service principal"
+  }
+  assert {
+    condition     = one(azuread_conditional_access_policy.operator_location[0].grant_controls).built_in_controls == tolist(["block"])
+    error_message = "a workload identity policy can only block"
+  }
+}
+
+run "workload_ca_needs_ip_ranges" {
+  command = plan
+
+  variables {
+    enable_operator_workload_ca = true
+  }
+
+  expect_failures = [var.enable_operator_workload_ca]
 }
 
 # ADR 0018 (Tier-0 identities): the operator never has an Entra owner - an

@@ -10,3 +10,15 @@ tenant_id       = "00000000-0000-0000-0000-000000000000"
 
 # Public certificate from lab/scripts/operator/new-operator-cert.sh
 operator_certificate_path = "~/.contoso-operator/operator.crt"
+
+# Write session (ADR 0030): leave unset. The owner sets it for one apply to
+# open a session (at most 8 hours) and applies again without it to close.
+# operator_write_session = {
+#   opened_utc  = "2026-11-07T14:00:00Z"
+#   expires_utc = "2026-11-07T18:00:00Z"
+#   reason      = "recording day: demo resets and TAPs"
+# }
+
+# CA090 (DESIGNED): needs a Workload ID Premium licence. Keep false.
+# enable_operator_workload_ca = false
+# operator_allowed_ip_ranges  = ["203.0.113.10/32"]

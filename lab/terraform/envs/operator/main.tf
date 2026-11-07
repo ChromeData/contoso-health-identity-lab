@@ -20,23 +20,25 @@
 # a separate workload identity keeps CA020 intact and makes every unattended
 # action attributable to "the operator" in the sign-in and audit logs.
 #
-# RISK (accepted for the lab, ADR 0024): this is a TIER 0 identity.
-# AppRoleAssignment.ReadWrite.All can grant any Graph permission to anything,
-# and subscription Owner can grant any Azure role. Its power equals the human
-# admin's, minus the portal. Compensating controls:
-#   * certificate only, 90-day validity (new-operator-cert.sh), private key in
-#     the login Keychain of one Mac; rotating = new cert + re-apply
-#   * single-tenant app; the AWS role trusts only this exact subject and lives
-#     only in the lab AWS account
-#   * every sign-in is a service principal sign-in in Entra's log (Log
-#     Analytics via envs/bootstrap's diagnostic setting) and every AWS session
-#     is an AssumeRoleWithWebIdentity event in CloudTrail
+# RISK (ADR 0024, cut down by ADR 0030 on 2026-11-06):
+#   * STANDING, every day: read-only Graph permissions, Azure Reader, the
+#     state data role and Key Vault Secrets User. No Owner, no role-assignment
+#     or lock rights, no Graph write.
+#   * WRITE SESSION, only when the owner opens one (write-session.tf): the
+#     Graph writes (AppRoleAssignment.ReadWrite.All and
+#     RoleManagement.ReadWrite.Directory make it TIER 0 for that window) and a
+#     custom Azure role that is Contributor minus the evidence-store and log
+#     deletes, as time-bound PIM assignments that end by themselves.
+#   Compensating controls:
+#   * certificate only, private key in the login Keychain of one Mac
+#   * single-tenant app; the AWS role trusts only this exact subject
+#   * every sign-in is a service principal sign-in in Entra's log, every AWS
+#     session an AssumeRoleWithWebIdentity event in CloudTrail
 #   * one kill switch for both clouds: lab/scripts/operator/kill-switch.sh
-#     disables the service principal (no new Entra tokens = no new AWS
-#     sessions either)
-#   * this root is applied by a HUMAN only. The operator can technically write
-#     it (Owner + Graph), so - like envs/bootstrap - this is a change-control
-#     boundary, not a privilege boundary.
+#   * this root is applied by the OWNER only. Without Owner on Azure, the
+#     operator cannot apply it outside a session (role assignments need
+#     roleAssignments/write). Inside a session the Graph writes could still
+#     change its own grants: ADR 0030 records that as residual risk.
 # =============================================================================
 
 data "azurerm_subscription" "current" {}
@@ -51,6 +53,16 @@ locals {
   # lab/iga/nhi-owners.json. [] (not null): an owner added in the portal is
   # removed by the next apply, and 06-NHI-Inventory.ps1 flags it until then.
   operator_owners = []
+
+  # Graph grants that exist right now: the standing read set, plus the write
+  # set while a session is open. Keyed by permission name, so closing a
+  # session destroys exactly the write grants and nothing else.
+  write_session_open    = var.operator_write_session != null
+  operator_graph_grants = toset(concat(var.operator_graph_roles, local.write_session_open ? var.operator_session_graph_roles : []))
+
+  # The app registration REQUESTS every permission it may ever hold, so a
+  # session does not change the app object; requesting is not granting.
+  operator_graph_requested = toset(concat(var.operator_graph_roles, var.operator_session_graph_roles))
 }
 
 data "azuread_service_principal" "msgraph" {
@@ -61,7 +73,7 @@ resource "azuread_application" "operator" {
   display_name     = var.operator_display_name
   sign_in_audience = "AzureADMyOrg"
   owners           = local.operator_owners
-  notes            = "Lab operator: unattended automation from the admin's Mac (certificate, Keychain). Managed by lab/terraform/envs/operator, human-applied. Kill switch: lab/scripts/operator/kill-switch.sh"
+  notes            = "Lab operator: unattended automation from the admin's Mac (certificate, Keychain). Standing rights are read-only; writes only in an owner-opened session (ADR 0030). Managed by lab/terraform/envs/operator, owner-applied. Kill switch: lab/scripts/operator/kill-switch.sh"
 
   # v2 access tokens (iss = login.microsoftonline.com/<tenant>/v2.0, aud =
   # this app's client id). The AWS IAM OIDC provider is registered for exactly
@@ -74,7 +86,7 @@ resource "azuread_application" "operator" {
     resource_app_id = local.microsoft_graph_app_id
 
     dynamic "resource_access" {
-      for_each = toset(var.operator_graph_roles)
+      for_each = local.operator_graph_requested
       content {
         id   = data.azuread_service_principal.msgraph.app_role_ids[resource_access.value]
         type = "Role"
@@ -112,7 +124,7 @@ resource "azuread_application_certificate" "operator" {
 }
 
 resource "azuread_app_role_assignment" "operator" {
-  for_each = toset(var.operator_graph_roles)
+  for_each = local.operator_graph_grants
 
   app_role_id         = data.azuread_service_principal.msgraph.app_role_ids[each.value]
   principal_object_id = azuread_service_principal.operator.object_id
@@ -126,7 +138,7 @@ resource "azurerm_role_assignment" "operator" {
   role_definition_name = each.value
   principal_id         = azuread_service_principal.operator.object_id
   principal_type       = "ServicePrincipal"
-  description          = "Lab operator (lab/terraform/envs/operator, human-applied)."
+  description          = "Lab operator STANDING role (lab/terraform/envs/operator, owner-applied, ADR 0030)."
 }
 
 resource "azuread_directory_role" "operator" {
