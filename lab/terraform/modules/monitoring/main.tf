@@ -513,7 +513,11 @@ resource "azurerm_sentinel_automation_rule" "notify_on_alert_added" {
 # D2, 2026-11-07: drills had left 50 incidents and 32 tickets open,
 # recheck-summary item 2). Condition: an Account entity whose name starts
 # with a drill account prefix (default itdr-drill-, the throwaway accounts
-# containment-drill.sh creates), on an incident from this module's rules.
+# containment-drill.sh creates), on an incident from ANY analytics rule.
+# There is no rule-id condition: containment-drill.sh raises its incidents
+# from a temporary rule with a fresh id that is not one of this module's
+# rules, so a rule-id filter would leave drill incidents unlabelled (review
+# of PR #230). A drill-account prefix is specific enough on its own.
 # The label only MARKS the incident: the drill still runs its containment
 # path (closing at creation would skip it). After the drill,
 # lab/scripts/demo/close-build-noise.sh closes every open incident labelled
@@ -523,7 +527,7 @@ resource "azurerm_sentinel_automation_rule" "notify_on_alert_added" {
 # Rules - Create Or Update" (api-version 2024-09-01, read 2026-11-07):
 # AccountName, StartsWith, labels[].labelName.
 resource "azurerm_sentinel_automation_rule" "label_drill" {
-  count = var.enable_sentinel && length(var.drill_account_prefixes) > 0 && length(local.sentinel_rule_ids) > 0 ? 1 : 0
+  count = var.enable_sentinel && length(var.drill_account_prefixes) > 0 ? 1 : 0
 
   name                       = uuidv5("url", "https://contoso-health-identity-lab/automation/label-drill")
   log_analytics_workspace_id = azurerm_sentinel_log_analytics_workspace_onboarding.this[0].workspace_id
@@ -535,14 +539,6 @@ resource "azurerm_sentinel_automation_rule" "label_drill" {
   triggers_when = "Created"
 
   condition_json = jsonencode([
-    {
-      conditionType = "Property"
-      conditionProperties = {
-        propertyName   = "IncidentRelatedAnalyticRuleIds"
-        operator       = "Contains"
-        propertyValues = values(local.sentinel_rule_ids)
-      }
-    },
     {
       conditionType = "Property"
       conditionProperties = {
