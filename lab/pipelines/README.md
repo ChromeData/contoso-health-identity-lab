@@ -233,7 +233,7 @@ Dependabot has no pip entry, so bump that pin by hand.
 **Dependabot** is configured in [`../../.github/dependabot.yml`](../../.github/dependabot.yml):
 weekly, grouped `github-actions` bumps (SHA and the `# vX.Y.Z` comment
 together) plus Terraform provider bumps for `envs/dev`, `envs/bootstrap`,
-`aws` and the three `k8s` roots (`platform`, `identity`, `aks-mapping`). Pin
+`aws` and the three `k8s` roots (`platform`, `identity`, `keyvault-trust`). Pin
 bumps arrive as reviewable PRs, without reintroducing floating tags. The image
 digests in the Kubernetes segment (kind node, busybox, Vault Agent) are bumped
 by hand.
@@ -569,11 +569,9 @@ a user, `mallory`). `terraform plan -detailed-exitcode` must then exit 2
   job for those files; it is left as is. `terraform-apply.yml` excludes
   `lab/terraform/k8s/**`, so merging k8s-only changes does not start a
   reviewer-gated no-op apply.
-- **`aks-mapping` is never applied, by anything.** The third root under
-  `lab/terraform/k8s` holds the Entra Workload ID federated credential that
-  replaces the Vault role on AKS. `pipeline.sh` runs only fmt, validate and
-  the mocked `terraform test` on it, in its Terraform stage. It holds no
-  credential and runs no plan against a tenant. `terraform-apply.yml`'s
-  `!lab/terraform/k8s/**` keeps it out of the Entra apply. It can't be applied
-  here at all: Entra must fetch the cluster's OIDC keys, and kind's issuer
-  isn't public.
+- **`keyvault-trust` is applied only by the operator's local pipeline run.**
+  The third root under `lab/terraform/k8s` holds the Entra Workload ID
+  federated credential and the one-secret Key Vault grant (ADR 0027). No
+  workflow applies it: `k8s-identity.yml` runs the static stages only, and
+  `terraform-apply.yml`'s `!lab/terraform/k8s/**` keeps it out of the Entra
+  apply. CI holds no identity that could create an app registration.

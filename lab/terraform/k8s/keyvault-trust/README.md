@@ -1,99 +1,71 @@
-# k8s/aks-mapping — the Entra Workload ID side of the same trust (plan-only)
+# k8s/keyvault-trust — the Entra and Key Vault side of the workload's identity
 
-**Never applied here, said up front.** This root is checked with `fmt`,
-`validate` and a mocked `terraform test`, and nothing more. There is no AKS
-cluster and no Entra app registration behind it. It exists so the mapping
-from the lab's Vault role to **Microsoft Entra Workload ID** is real, typed,
-tested code rather than a slide.
+**Applied for real, one run at a time.** `lab/k8s/ci/pipeline.sh` applies this
+root in stage 4, as the lab operator, and destroys it at teardown. Until
+2026-11-06 it was `aks-mapping`, a plan-only mapping of the HashiCorp Vault
+role. ADR 0027 replaced Vault with Azure Key Vault, and the kind cluster now
+publishes its service-account issuer on a public HTTPS URL. So the same
+federated credential is now used, not just written.
 
-It is the Entra equivalent of the Vault role `nightly-report` built in
-[`../identity`](../identity/README.md): one **federated identity credential
-(FIC)** on an app registration that trusts the AKS cluster's projected
-service-account tokens for exactly `clinical-apps/nightly-report`.
-
-| Object | Terraform | Value |
+| Object | Terraform | What it is |
 |---|---|---|
-| Federated identity credential | `azuread_application_federated_identity_credential.nightly_report` | issuer = `var.aks_oidc_issuer_url` (HTTPS, not an obviously private host); subject = `system:serviceaccount:clinical-apps:nightly-report`; audiences = `["api://AzureADTokenExchange"]`; on application `/applications/<var.application_object_id>` |
-| Output `entra_trust` | | issuer + subject + audiences Entra will accept |
-| Output `kubernetes_side` | | SA annotation `azure.workload.identity/client-id=<var.application_client_id>`, pod label `azure.workload.identity/use: "true"`, projected token audience |
+| App registration | `azuread_application.nightly_report` | `k8s-nightly-report-<run id>`. No password, no certificate. It can sign in only with a federated token. |
+| Service principal | `azuread_service_principal.nightly_report` | The app's identity in the tenant (the RBAC assignee). |
+| Federated identity credential | `azuread_application_federated_identity_credential.nightly_report` | Trusts ONE issuer (`var.issuer_url`, this run's storage static website), ONE subject (`system:serviceaccount:clinical-apps:nightly-report`), ONE audience (`api://AzureADTokenExchange`). Entra matches all three exactly. |
+| Role assignment | `azurerm_role_assignment.secret_reader` | **Key Vault Secrets User** (`4633458b-…`, by id) on `<vault id>/secrets/clinical-db`: one secret, not the vault. |
 
-Provider: `hashicorp/azuread ~> 3.10` (the lab's constraint), locked at
-**3.10.0** for `linux_amd64` + `darwin_arm64`.
+Providers: `hashicorp/azuread` 3.10.0 and `hashicorp/azurerm` 4.81.0 (the
+lab's locked builds), hashes for `linux_amd64` and `darwin_arm64`.
 
-## Why it is never applied
+## How a pod uses it
 
-Entra does not call the cluster. It validates the projected token on its
-own: it reads `<issuer>/.well-known/openid-configuration`, follows `jwks_uri`,
-and checks the token's signature with those keys. So the issuer must be a
-public HTTPS URL. The kind cluster's issuer is
-`https://kubernetes.default.svc.cluster.local`, which nothing outside the
-cluster can resolve, so a FIC pointing at it would be accepted by Entra and
-then fail every token exchange. The issuer variable rejects that (and
-loopback, private or link-local IPv4 literals, `*.local`, `*.internal`,
-plain HTTP). That is a denylist, not proof the issuer is public: a DNS name
-that resolves to a private address still passes.
+1. The Secrets Store CSI Driver requests a token for the pod's service
+   account, audience `api://AzureADTokenExchange`.
+2. The Azure provider sends it to Entra as a client assertion.
+3. Entra reads `<issuer>/.well-known/openid-configuration`, follows
+   `jwks_uri`, checks the signature, then issuer, subject and audience
+   against this credential. It returns a Key Vault access token.
+4. Key Vault checks Azure RBAC: this service principal may read one secret.
 
-(It can be made to work with kind by publishing the cluster's discovery
-document and JWKS on a public HTTPS host and setting the API server's
-`--service-account-issuer` to it. That is a real technique, not done here.)
+Sources (Microsoft Learn): "Workload identity federation", "Access Azure Key
+Vault with the CSI Driver Identity Provider" (Workload ID), "Grant
+permission to applications to access an Azure key vault using Azure RBAC".
 
-## Vault role ↔ Entra FIC
+## Why the role is on one secret (the trade-off)
 
-| Vault role `nightly-report` (built and tested in this lab) | Entra FIC (this root, plan-only) |
+Microsoft Learn recommends a vault per application per environment, with
+roles at **vault** scope, and calls per-secret assignments "not
+recommended" outside a few exceptions. The lab does both: the vault exists
+for one run and holds this app's secret plus a decoy, and the role is on the
+one secret. That lets the e2e test prove that a second secret in the same
+vault is refused. Production: a vault per app per environment, role at vault
+scope.
+
+## Vault role ↔ this root (for reviewers who knew the Vault version)
+
+| Vault (retired 2026-11-06) | Here |
 |---|---|
-| `bound_service_account_names` + `bound_service_account_namespaces` = one SA in one namespace | `subject = system:serviceaccount:clinical-apps:nightly-report`, matched as an exact string |
-| `audience = "vault"` | `audiences = ["api://AzureADTokenExchange"]` |
-| Vault asks the API server (`TokenReview`) at every login: live. A projected token whose SA was deleted cannot log in any more (a Vault token already issued still lives out its ≤ 15 min TTL) | Entra checks the signature against the issuer's public JWKS: offline. A projected token stays exchangeable until its own `exp`, SA deleted or not (verify: current Entra behaviour) |
-| `kubernetes_host` = the in-cluster API server | `issuer` = the cluster's public OIDC issuer URL |
-| policy `nightly-report-read` (read on one path) | Key Vault RBAC: *Key Vault Secrets User* on the one secret, assigned to this app's service principal (not built here) |
-| Vault token TTL 15 min | Entra access token; lifetime set by Entra, not per FIC (verify: about an hour) |
-| Vault Agent renders the file; the app never holds a login-capable token | The workload identity webhook projects the Entra-audience token into the pod and sets `AZURE_*` env vars; or the Key Vault CSI driver does the exchange and mounts the secret as a file |
+| Role bound to one SA + namespace + audience `vault` | Federated credential: exact subject + audience `api://AzureADTokenExchange` |
+| Vault calls TokenReview at every login (live) | Entra checks the issuer's JWKS (offline): a token stays exchangeable until its `exp`, service account deleted or not (verify: current Entra behaviour) |
+| Policy `nightly-report-read` on one path | Key Vault Secrets User on one secret |
+| Vault token TTL 15 min | Entra access token; its lifetime is set by Entra (the e2e test prints it) |
 
-**Both trust namespace + name, not the SA's UID.** Vault's
-`alias_name_source = serviceaccount_uid` keeps a recreated SA's Vault
-*entity* separate, but `bound_service_account_names` still authorises by
-name; the FIC does the same with `sub`. Deleting and recreating
-`nightly-report` gets the same access on both.
+Both trust namespace + name, not the service account's UID.
 
-## Decisions
-
-| Decision | Why | Alternative not taken |
-|---|---|---|
-| App registration + `azuread_application_federated_identity_credential` | Same provider and resource the lab already uses for GitHub OIDC (`modules/pipeline-identity`) | User-assigned managed identity + `azurerm_federated_identity_credential`: the more common AKS carrier, and a managed identity cannot have a client secret at all. On an app registration, "no password credentials" must be reviewed separately: a FIC does not stop someone adding a secret to the same app |
-| Subject and namespace are `locals`, not variables | They must equal what `../identity` binds; the test checks `../identity/main.tf` statically | Variables: one typo and the FIC trusts a different SA |
-| No defaults on the three variables | There is no real cluster or app here; a plausible-looking default would read like one | Defaults: misleading |
-| Issuer validated: HTTPS, and not loopback / private or link-local IPv4 / `kubernetes.default.svc` / `*.local` / `*.internal` | Entra must fetch the JWKS; a private issuer is a silent, permanent failure. A denylist only: a name resolving to a private address passes | No validation |
-| Object id validated as a bare GUID | `main.tf` adds `/applications/`, so a resource id here is caught. A client id is not: it is a GUID too, and nothing offline can tell the two apart (against a real tenant the apply would fail: no application has that object id; verify) | Taking the resource id as input: one more string to get wrong |
-
-## Offline checks
+## Run the checks offline
 
 ```bash
-terraform -chdir=lab/terraform/k8s/aks-mapping init -backend=false
-terraform -chdir=lab/terraform/k8s/aks-mapping validate
-terraform -chdir=lab/terraform/k8s/aks-mapping test     # mocked azuread provider
+terraform -chdir=lab/terraform/k8s/keyvault-trust init -backend=false -lockfile=readonly
+terraform -chdir=lab/terraform/k8s/keyvault-trust validate
+terraform -chdir=lab/terraform/k8s/keyvault-trust test     # mocked azuread + azurerm, 6 runs
 ```
 
-`tests/aks_mapping.tftest.hcl` pins: subject exactly
-`system:serviceaccount:clinical-apps:nightly-report`; exactly one audience,
-`api://AzureADTokenExchange`; issuer HTTPS and passed through verbatim;
-`application_id` in the `/applications/<object id>` form; the Kubernetes half
-(SA annotation, pod label); `../identity` still binds
-`clinical-apps/nightly-report`; plain-HTTP, kind, loopback and private-IP
-issuers and a resource id where the object id belongs are rejected. The
-placeholder GUIDs are one digit repeated, the only made-up GUIDs the
-public-repo release gate accepts. The core assertions
-were checked to fail against broken copies (namespace changed, audience
-`vault`, a second audience, client id passed as `application_id`).
+`tests/keyvault_trust.tftest.hcl` pins: the subject, the one audience, the
+issuer verbatim, the role (by id) on the one secret, the assignee, that
+`../identity` still creates `clinical-apps/nightly-report`, and that the
+kind default issuer, a trailing slash and plain HTTP are refused.
 
-A real `terraform plan` would need an Entra sign-in from the environment
-(`ARM_TENANT_ID` + OIDC from CI, like `envs/dev`). Nothing in this lab runs
-one.
+## On AKS
 
-## Sources
-
-- Resource schema: `terraform providers schema -json` for `hashicorp/azuread`
-  3.10.0 (`application_id`, `audiences`, `display_name`, `issuer`, `subject`).
-- Microsoft Learn: *Use Microsoft Entra Workload ID with AKS*;
-  *Workload identity federation*; *Create an OIDC issuer for AKS*.
-  verify: re-read before recording; the issuer URL shape and token lifetimes
-  are Microsoft's to change.
+Set `issuer_url` to the cluster's `oidcIssuerProfile.issuerUrl` and drop
+the throwaway vault for a vault per app. Nothing else changes.

@@ -37,6 +37,15 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: contoso-k8s
+networking:
+  # A FIXED loopback port for the API server instead of kind's random one.
+  # Loopback only (never the LAN). Fixed so a port forward that has to be
+  # set up by hand (seen on the lab Mac 2026-11-07: Colima's own forwarder
+  # stopped forwarding new ports; `ssh -F <(colima ssh-config) -L
+  # 127.0.0.1:16443:127.0.0.1:16443 colima` works around it) knows the port
+  # before the cluster exists.
+  apiServerAddress: "127.0.0.1"
+  apiServerPort: 16443
 nodes:
   - role: control-plane
     # Pinned by tag AND digest. The digest is the multi-arch index (linux/amd64

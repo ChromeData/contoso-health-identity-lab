@@ -348,8 +348,12 @@ access_token_scoped() {
   # is never printed): for Key Vault, issued to THIS app, in THIS tenant.
   [[ -s "$T/at-claims.json" ]] || return 1
   info "$(jq -r '"aud=\(.aud) appid=\(.appid // .azp | .[0:8])... tid=\(.tid | .[0:8])... idtyp=\(.idtyp // "?") lifetime=\(.exp - .iat)s"' "$T/at-claims.json")"
+  # aud: a v1 token names Key Vault by URL; a v2 token (what the lab tenant
+  # issued in the first live run, 2026-11-07) by the application id of
+  # Microsoft's "Azure Key Vault" first-party app, cfa8b339-82a2-471a-a3c9-0fc0be7a4093.
   jq -e --arg c "$WORKLOAD_CLIENT_ID" --arg t "$AZ_TENANT_ID" \
-    '(.aud == "https://vault.azure.net" or .aud == "https://vault.azure.net/") and ((.appid // .azp) == $c) and .tid == $t and (.exp - .iat) > 0' \
+    '(.aud == "https://vault.azure.net" or .aud == "https://vault.azure.net/" or .aud == "cfa8b339-82a2-471a-a3c9-0fc0be7a4093")
+     and ((.appid // .azp) == $c) and .tid == $t and (.exp - .iat) > 0' \
     "$T/at-claims.json" >/dev/null
 }
 

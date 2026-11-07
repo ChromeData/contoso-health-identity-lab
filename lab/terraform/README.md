@@ -74,9 +74,9 @@ lab/terraform/
 │       ├── outputs.tf
 │       └── tests/                    ← mocked `terraform test` plan of the composition
 ├── k8s/                              ← kind cluster segment, local state, built + destroyed per run (see "Kubernetes workload identity")
-│   ├── platform/                     ← stage 1: namespaces + Pod Security labels, Vault Helm release; tests/ (mocked, run by CI)
-│   ├── identity/                     ← stage 2: Vault k8s auth/role/policy, service accounts, group RBAC, admission policy; tests/
-│   └── aks-mapping/                  ← PLAN-ONLY, never applied: Entra federated identity credential (azuread); tests/ (mocked)
+│   ├── keyvault-trust/               ← operator-applied per run: Entra app + federated credential, Key Vault Secrets User on one secret; tests/
+│   ├── platform/                     ← namespaces + Pod Security labels, CSI driver + Azure Key Vault provider; tests/ (mocked, run by CI)
+│   └── identity/                     ← service accounts, SecretProviderClass, group RBAC, admission policy; tests/
 ├── okta/                             ← HUMAN-applied, separate product: the Okta side of the clinic coexistence (ADR 0022)
 │   ├── .terraform.lock.hcl           ← okta/okta 4.20.0 hashes (HashiCorp Terraform 1.16.5, 3 platforms) - committed
 │   ├── versions.tf / providers.tf / variables.tf / main.tf / outputs.tf
@@ -303,7 +303,7 @@ latest changes.
 | `envs/bootstrap` | ok | **Success** | clean |
 | `aws` (separate root, hashicorp/aws 6.69.1) | ok | **Success** | clean |
 | `okta` (separate root, okta/okta 4.20.0) | ok | **Success** | clean |
-| `k8s/platform`, `k8s/identity`, `k8s/aks-mapping` | ok | **Success** | clean |
+| `k8s/platform`, `k8s/identity`, `k8s/aks-mapping` (now `k8s/keyvault-trust`) | ok | **Success** | clean |
 
 What the committed code itself enforces (`validation` / `precondition` /
 `check` blocks and plain expressions, so you can check each in the file named):
@@ -371,9 +371,9 @@ directories, before `modules/apps/tests/okta.tftest.hcl` and the `okta` root.)
 | `modules/monitoring` | `itdr.tftest.hcl`, `itdr_v2.tftest.hcl` | 32 | Defaults create nothing; ITDR rules map the `.kql` columns; telemetry before Sentinel; containment only on High ITDR incidents, only with Sentinel and never on the SoD or vault rules; Log Analytics path skips the Sentinel-only rules; DC01 DCR events; ids rendered and display names refused; `operator_ips` watchlist ranges, expiry and owner rules; `vault_feed_v2_columns` |
 | `modules/pim` | `pim.tftest.hcl` | 46 | Defaults keep only the original binding; PIM-Demo-Readers holds exactly Global Reader + Security Reader, PT8H MFA activation with no approval, mailed, reviewed, outside the CA scope and the tier map; tier groups and their notifications; one approver warns; the `c1` context replaces MFA only once CA021 is enforced, and the two-apply switchover; Global Administrator refused in a tier group; Tier-0 roles cannot sit in Tier 1; approval cannot be waived on Tier 0; Tier-0 eligibility capped at 180 days; help-desk AU scoping; the Global Administrator policy bodies; Azure PIM shape; Privileged-IAM-Admins can hold neither Global Administrator nor a Tier-0 role |
 | `modules/pipeline-identity` | `plan_roles.tftest.hcl` | 5 | PLAN's opt-in Graph roles are an allow-list of read roles: ReadWrite, Invite, Create, Send and Manage roles refused |
-| `k8s/platform` | `platform.tftest.hcl` | 5 | Pod Security labels; Vault release pinned; injector webhook fails closed; weak root token and non-kind context refused |
-| `k8s/identity` | `identity.tftest.hcl` | 11 | Vault role trusts one service account; read-only policy on one path; no API token mounted; human RBAC has no secrets and no cluster scope; admission policy binds the workload to one digest and the pipeline |
-| `k8s/aks-mapping` | `aks_mapping.tftest.hcl` | 7 | The federated credential trusts exactly the workload; plain-http, kind, loopback and private-IP issuers refused |
+| `k8s/platform` | `platform.tftest.hcl` | 3 | Pod Security labels; CSI driver chart and every image pinned; one token audience; Secret sync off; rotation on; non-kind context refused |
+| `k8s/identity` | `identity.tftest.hcl` | 8 | SecretProviderClass serves one Key Vault secret through Workload ID, no Secret sync; no API token mounted; human RBAC has no secrets and no cluster scope; admission policy binds the workload to one digest and the pipeline |
+| `k8s/keyvault-trust` | `keyvault_trust.tftest.hcl` | 6 | The federated credential trusts exactly the workload; Key Vault Secrets User on one secret; kind, trailing-slash and plain-http issuers refused |
 
 Run them with `terraform`, not `tofu`: OpenTofu's mock providers fill in
 computed ids at plan time, which hid an "Invalid count argument" error in
@@ -384,7 +384,7 @@ first plan) caught. The `aws/` root documents its own checks in
 Run every directory the way CI does:
 
 ```bash
-for d in envs/dev envs/bootstrap aws okta k8s/platform k8s/identity k8s/aks-mapping modules/*; do
+for d in envs/dev envs/bootstrap aws okta k8s/platform k8s/identity k8s/keyvault-trust modules/*; do
   terraform -chdir="$d" init -backend=false -input=false >/dev/null &&
   terraform -chdir="$d" validate &&
   { [ -d "$d/tests" ] || continue; terraform -chdir="$d" test $( [ -f "$d/lab.tfvars" ] && echo -var-file=lab.tfvars ); }
@@ -761,44 +761,32 @@ working.
 
 ## Kubernetes workload identity (`k8s/`)
 
-A self-contained segment, **not** part of the apply order above. Two applied
-roots, with no Azure or Entra provider, configure a throwaway **kind**
-cluster (the AKS stand-in, see [`../docs/STAND-INS.md`](../docs/STAND-INS.md))
-that `lab/k8s/ci/pipeline.sh` builds, tests and destroys in one run, on a
-laptop or in `.github/workflows/k8s-identity.yml`. A third root,
-`k8s/aks-mapping` (`hashicorp/azuread`), is **plan-only and never applied**
-by anything: it writes the Entra Workload ID equivalent of the Vault role and
-is checked offline only (`fmt`, `validate`, mocked `test`), because Entra
-must fetch the cluster's OIDC issuer keys and kind's issuer is not public.
+A self-contained segment, **not** part of the apply order above. Three
+roots under `k8s/`, all applied by
+`lab/k8s/ci/pipeline.sh` as the lab operator, per run, against a throwaway
+**kind** cluster (the AKS stand-in, see [`../docs/STAND-INS.md`](../docs/STAND-INS.md))
+and throwaway Azure objects, then destroyed. Since ADR 0027 the secret store
+is **Azure Key Vault**, reached through **Microsoft Entra Workload ID** and the
+**Secrets Store CSI Driver** (the in-cluster HashiCorp Vault is retired).
 Design, decisions and how to run it: [`../k8s/README.md`](../k8s/README.md).
 
-- **Two stages** because the vault provider cannot be configured before Vault
-  exists: `k8s/platform` (helm + kubernetes providers: namespaces, Vault Helm
-  release), then `k8s/identity` (vault + kubernetes providers: Kubernetes auth
-  role bound to one service account with audience `vault`, read-one-path
-  policy, service accounts, group Roles/RoleBindings, and the
-  ValidatingAdmissionPolicy `clinical-apps-workload-identity` that binds the
-  `nightly-report` identity to one image digest and to the pipeline).
-- **Local state, no backend:** the cluster lives for one run. The secret's
-  value is seeded by the pipeline over Vault's HTTP API, never a Terraform
-  argument, so it is not in state. The Vault dev root token is an
-  `ephemeral`, `sensitive` variable that reaches Helm only through the
-  write-only `set_wo` (stage 1) and the Vault provider block (stage 2), so it
-  is in neither plan nor state; it does live inside the throwaway cluster (the
-  vault-0 StatefulSet env, Helm's release Secret, the dev-mode startup log)
-  until teardown (full list: [`k8s/platform/README.md`](k8s/platform/README.md#decisions)).
-  The local state is gitignored (`*.tfstate*`) anyway.
-- **Lock files** are committed like the other roots, but for `linux_amd64` +
-  `darwin_arm64` only (the CI runner and the dev Mac); `aks-mapping` locks
-  `hashicorp/azuread` 3.10.0, the version the lab's other Entra roots lock.
-- **Tested twice:** the three k8s roots' mocked tests
-  (`k8s/platform/tests/platform.tftest.hcl`,
-  `k8s/identity/tests/identity.tftest.hcl`,
-  `k8s/aks-mapping/tests/aks_mapping.tftest.hcl`, 23 runs) run in stage 2 of
-  `pipeline.sh` and in `lab-tests.yml` with every other directory. `terraform-plan.yml`'s `fmt -check -recursive` and Checkov
-  also cover `k8s/`, since they scan all of `lab/terraform/**`; the `envs/dev`
-  plan and apply do not include it (separate roots), and no workflow plans
-  `aks-mapping` against a tenant.
+- **`k8s/keyvault-trust`** (azuread + azurerm): the app registration (no
+  credential), one federated credential for
+  `system:serviceaccount:clinical-apps:nightly-report`, and Key Vault Secrets
+  User on ONE secret. `k8s/platform` (helm + kubernetes): namespaces and the
+  CSI driver + Azure provider. `k8s/identity` (kubernetes): service accounts,
+  the SecretProviderClass, group Roles/RoleBindings and the
+  ValidatingAdmissionPolicy `clinical-apps-workload-identity`.
+- **Local state, no backend:** each run's state lives as long as the run.
+  The secret's value is set in Key Vault by az, never a Terraform argument,
+  and no client secret exists, so no state holds a secret (stage 12 counts).
+- **Lock files** are committed for `linux_amd64` + `darwin_arm64`;
+  `keyvault-trust` locks azuread 3.10.0 and azurerm 4.81.0, the builds the
+  rest of the lab locks.
+- **Tested:** the three roots' mocked tests (17 runs) run in stage 2 of
+  `pipeline.sh` and in `lab-tests.yml`. `terraform-apply.yml`'s
+  `!lab/terraform/k8s/**` keeps them out of the Entra apply. The live run is
+  RAN · tenant (lab/evidence/k8s-keyvault/20261107T013045Z/, 66/66).
 
 ---
 

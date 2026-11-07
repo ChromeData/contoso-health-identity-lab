@@ -201,6 +201,13 @@ resource "kubernetes_namespace_v1" "clinical_apps" {
       "pod-security.kubernetes.io/audit-version"   = local.psa_version
     })
   }
+
+  # Destroy order, not create order, is the point: the workload namespace is
+  # destroyed BEFORE the CSI driver. A pod with a CSI volume can only be
+  # unmounted while the driver runs; with the driver gone first, the pod and
+  # then the namespace stay Terminating (seen in the first live run,
+  # 2026-11-07: destroy timed out after 5 min on namespace clinical-apps).
+  depends_on = [helm_release.csi_secrets_store_provider_azure]
 }
 
 # -----------------------------------------------------------------------------
