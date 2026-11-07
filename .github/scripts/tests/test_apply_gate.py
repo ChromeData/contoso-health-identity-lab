@@ -229,6 +229,16 @@ class GateTest(unittest.TestCase):
         self.assertNotIn("Does NOT match", body)
         self.assertNotIn("issues/7/comments", self.read("calls.log"))
 
+    def test_bot_repository_dispatch_skips_comparison_in_check_mode(self):
+        # The bot's recovery run (repository_dispatch apply-main, PR #241):
+        # same rule as a workflow_dispatch, and the summary names the event.
+        self.pr_comments([self.pr_plan_comment("0" * 64)])
+        r = self.run_gate(GITHUB_EVENT_NAME="repository_dispatch", GATE_MODE="check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = self.read("summary_out.md")
+        self.assertIn("manual repository_dispatch run", out)
+        self.assertNotIn("Does NOT match", out)
+
     # ---- fail closed ---------------------------------------------------------
     def test_missing_plan_sha_fails(self):
         r = self.run_gate(PLAN_SHA256=None)

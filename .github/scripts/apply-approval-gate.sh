@@ -134,14 +134,17 @@ fi
 # ---- Compare the saved plan's change set with the PR plan comment -----------
 compare_line=""
 mismatch=false
-if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ]; then
-  # The manual recovery path. A dispatch on a merged main commit still finds
-  # that commit's PR, but the owner ran it by hand to apply what is there now,
-  # so the PR comparison is skipped (it would refuse again). The issue says so
-  # and shows the full saved plan, which is what the code approves.
+if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] || [ "${GITHUB_EVENT_NAME:-}" = "repository_dispatch" ]; then
+  # The manual recovery path: a workflow_dispatch (the owner), or a
+  # repository_dispatch "apply-main" (the bot's recovery run; it needs only
+  # Contents: write, lab/pipelines/README.md section 3). A dispatch on a
+  # merged main commit still finds that commit's PR, but it was started by
+  # hand to apply what is there now, so the PR comparison is skipped (it
+  # would refuse again). The summary says so and shows the full saved plan,
+  # which is what the reviewer approves.
   from_pr=""
   [ -z "$pr_number" ] || from_pr=" (the commit came from PR #$pr_number; its plan comment is not compared)"
-  compare_line="**Not compared:** this is a manual workflow_dispatch run$from_pr. Read the saved plan below; it is what will be applied."
+  compare_line="**Not compared:** this is a manual ${GITHUB_EVENT_NAME} run$from_pr. Read the saved plan below; it is what will be applied."
 elif [ -n "$pr_number" ]; then
   comments_json=$(gh api "repos/$REPO/issues/$pr_number/comments" --paginate | jq -s 'add // []') \
     || { echo "Refused: could not read the comments of PR #$pr_number"; exit 1; }
