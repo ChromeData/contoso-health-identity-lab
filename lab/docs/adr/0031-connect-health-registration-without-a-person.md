@@ -55,10 +55,16 @@ itself.
    own client id `cf6d7e68-f018-4e0a-a7b3-126e053fb88d` and scope, and puts the
    access token in the Keychain. `run-on-dc.py` passes it to
    `12b-Register-ConnectHealthAgent.ps1` as a **protected** parameter. The
-   Keychain item is deleted in a trap. No refresh token is requested.
+   Keychain item is deleted in a trap. No refresh token is requested. The
+   script reports success only after a read-back: no failed registration in
+   the agent's log, the agent's TenantId marker saved, the agent service
+   Running. Otherwise it throws (the cmdlet itself printed "Configuration
+   Failed" and still exited 0 on DC01, evidence 05d).
 5. **Close at once:** `register.sh close` disables the account and revokes its
    sessions right after the registration. The flag-off PR then deletes the
-   account and the role.
+   account and the role. Terraform ignores `account_enabled` on this user
+   (`lifecycle.ignore_changes`), so no other apply in between can switch the
+   closed account back on.
 
 ## Consequences
 

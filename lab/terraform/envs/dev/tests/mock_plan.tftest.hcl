@@ -823,6 +823,15 @@ run "connect_health_registration_window_open" {
     error_message = "the window creates exactly adm-connecthealth-reg on the onmicrosoft domain"
   }
   assert {
+    # ignore_changes = [account_enabled] (so a later apply cannot undo
+    # register.sh close) must not change the create: the account starts
+    # enabled, or the passkey enrollment cannot sign in. The ignore_changes
+    # line itself is held by lab/adfs/connect-health/tests/
+    # registration-lifecycle.test.mjs (terraform test cannot see lifecycle).
+    condition     = azuread_user.connect_health_registration[0].account_enabled == true
+    error_message = "the window creates adm-connecthealth-reg enabled"
+  }
+  assert {
     condition     = length(azuread_directory_role_assignment.connect_health_registration) == 1 && azuread_directory_role_assignment.connect_health_registration[0].role_id == "8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2"
     error_message = "the window grants Hybrid Identity Administrator (8ac3fc64-...) and nothing else"
   }

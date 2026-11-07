@@ -25,6 +25,9 @@
          old signing key cannot be recovered from AD (the Golden SAML key is
          destroyed, not just unused).
       5. The gMSA gmsa-adfs, the DNS A record and the TLS certificate.
+         Revoke the gMSA's "Generate security audits" right FIRST
+         (10b-Set-AdfsAuditRight.ps1 -Mode Revoke, README step 10): it
+         finds the SID through the gMSA, which this step deletes.
       6. The "Application Generated" audit subcategory goes back to off (the
          Windows default on a DC).
 

@@ -55,6 +55,18 @@ resource "azuread_user" "connect_health_registration" {
   # the account signs in with its passkey only.
 
   lifecycle {
+    # register.sh close disables the account through Graph the moment the
+    # registration is done, BEFORE the flag-off PR merges. Without this line
+    # any other envs/dev apply in that gap would see accountEnabled = false
+    # as drift and switch the account back ON, with its Hybrid Identity
+    # Administrator role and passkey intact. Terraform still creates it
+    # enabled (ignore_changes does not touch the create); it only stops
+    # Terraform from undoing the close. It weakens nothing: Terraform was
+    # never the control that keeps the account off (close and the flag-off
+    # PR are; the time box below fails every plan once the window is over),
+    # and the flag-off PR still deletes the user whatever its state.
+    ignore_changes = [account_enabled]
+
     precondition {
       condition     = var.onmicrosoft_domain != ""
       error_message = "enable_connect_health_registration needs onmicrosoft_domain (the account must not depend on custom DNS)."

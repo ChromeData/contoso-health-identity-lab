@@ -29,19 +29,35 @@
     and leaves the other entries as they were. A LAB SHORTCUT: production
     runs AD FS on a dedicated server, where this GPO is not involved.
 
-    Idempotent: Grant when already granted (or Revoke when already absent)
-    changes nothing and says so.
+    Idempotent, and a re-run REPAIRS a half-done change. The change has
+    three writes (template, AD versionNumber, GPT.INI) and then gpupdate. If
+    a run stopped after the template write, the template alone is no proof:
+    DCs apply a GPO only when its version moves. So when the template
+    already says the right thing, the script still checks (a) AD
+    versionNumber = GPT.INI Version, (b) the security extension is listed in
+    gPCMachineExtensionNames, (c) secedit's effective line on DC01 matches
+    the mode. Only if all three hold does it change nothing and say so.
+    Otherwise it bumps the version again (AD and GPT.INI), runs gpupdate and
+    reads the right back, exactly like a first run.
 
 .PARAMETER Mode
     Grant or Revoke.
 
 .PARAMETER GmsaName
     Default gmsa-adfs (the account 10-Install-Adfs.ps1 creates).
+
+.PARAMETER GmsaSid
+    Revoke only, and only if the gMSA is already deleted (README step 10
+    revokes BEFORE 19-Remove-Adfs.ps1 -Apply yes, so this is the recovery
+    path): the gMSA's SID (S-1-5-21-...), from the template line in
+    03b-audit-right-grant-readback.log or the Grant run's lineAfter. Without
+    it the script resolves the SID from AD and stops if the account is gone.
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][ValidateSet('Grant', 'Revoke')][string]$Mode,
-    [string]$GmsaName = 'gmsa-adfs'
+    [string]$GmsaName = 'gmsa-adfs',
+    [ValidatePattern('^(|S-1-5-21-\d+-\d+-\d+-\d+)$')][string]$GmsaSid = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -70,7 +86,12 @@ $cs = Get-CimInstance Win32_ComputerSystem
 if ($cs.DomainRole -lt 4) { throw 'Not a domain controller. This script is for DC01 only.' }
 
 $domain = Get-ADDomain
-$gmsaSid = (Get-ADServiceAccount $GmsaName).SID.Value
+if ($GmsaSid) {
+    if ($Mode -ne 'Revoke') { throw '-GmsaSid is for Revoke after the gMSA is deleted. Grant resolves the live account.' }
+    $gmsaSid = $GmsaSid
+} else {
+    $gmsaSid = (Get-ADServiceAccount $GmsaName).SID.Value   # throws if the gMSA is gone: pass -GmsaSid
+}
 $gpoDn = "CN={$DdcpGuid},CN=Policies,CN=System,$($domain.DistinguishedName)"
 $sysvol = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters').SysVol
 $gpt = Join-Path $sysvol ("{0}\Policies\{{{1}}}" -f $domain.DNSRoot, $DdcpGuid)
@@ -87,20 +108,49 @@ $before = $lines[$idx]
 $entries = @(($before -split '=', 2)[1].Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $mine = "*$gmsaSid"
 $has = $entries -contains $mine
-if (($Mode -eq 'Grant' -and $has) -or ($Mode -eq 'Revoke' -and -not $has)) {
-    $eff = Get-EffectiveAuditLine
-    if ($Mode -eq 'Grant' -and (Test-AuditRight $eff)) { Restart-Service adfssrv }   # make sure the running service has the right
-    [pscustomobject]@{ mode = $Mode; changed = $false; line = $before; effectiveOnDc01 = $eff; holds = (Test-AuditRight $eff) } | ConvertTo-Json
-    return
+function Get-GpoVersionState {
+    # AD half and SYSVOL half of the GPO version, and the security CSE.
+    $o = Get-ADObject -Identity $gpoDn -Properties versionNumber, gPCMachineExtensionNames
+    $iniPath = Join-Path $gpt 'GPT.INI'
+    $iniVer = $null
+    if (Test-Path -LiteralPath $iniPath) {
+        $m = [regex]::Match([IO.File]::ReadAllText($iniPath), 'Version=(\d+)')
+        if ($m.Success) { $iniVer = [long]$m.Groups[1].Value }
+    }
+    [pscustomobject]@{
+        ad      = $o
+        adVer   = [long]$o.versionNumber
+        iniVer  = $iniVer
+        cseOk   = "$($o.gPCMachineExtensionNames)".Contains($SecurityCse)
+    }
 }
-if ($Mode -eq 'Grant') { $entries += $mine } else { $entries = @($entries | Where-Object { $_ -ne $mine }) }
-if (-not $entries) { throw 'Refusing to leave SeAuditPrivilege empty.' }
-$lines[$idx] = 'SeAuditPrivilege = ' + ($entries -join ',')
-[IO.File]::WriteAllText($inf, ($lines -join "`r`n"), [Text.Encoding]::Unicode)
+
+$templateDone = (($Mode -eq 'Grant' -and $has) -or ($Mode -eq 'Revoke' -and -not $has))
+if ($templateDone) {
+    # The template already says the right thing. That is proof of a finished
+    # change only if the version halves agree, the CSE is listed and DC01
+    # enforces it. Otherwise an earlier run stopped half way: repair below.
+    $st = Get-GpoVersionState
+    $eff = Get-EffectiveAuditLine
+    $effOk = ((Test-AuditRight $eff) -eq ($Mode -eq 'Grant'))
+    if ($st.cseOk -and ($st.adVer -eq $st.iniVer) -and $effOk) {
+        if ($Mode -eq 'Grant') { Restart-Service adfssrv }   # make sure the running service has the right
+        [pscustomobject]@{ mode = $Mode; changed = $false; line = $before; effectiveOnDc01 = $eff; holds = (Test-AuditRight $eff) } | ConvertTo-Json
+        return
+    }
+    Write-Output ("[audit-right] template already updated, but the change is unfinished (AD version {0}, GPT.INI version {1}, security CSE listed: {2}, effective matches: {3}); repairing" -f $st.adVer, $st.iniVer, $st.cseOk, $effOk)
+} else {
+    if ($Mode -eq 'Grant') { $entries += $mine } else { $entries = @($entries | Where-Object { $_ -ne $mine }) }
+    if (-not $entries) { throw 'Refusing to leave SeAuditPrivilege empty.' }
+    $lines[$idx] = 'SeAuditPrivilege = ' + ($entries -join ',')
+    [IO.File]::WriteAllText($inf, ($lines -join "`r`n"), [Text.Encoding]::Unicode)
+}
 
 # Computer-side change: bump only the low 16 bits of versionNumber, and GPT.INI to match.
-$ad = Get-ADObject -Identity $gpoDn -Properties versionNumber, gPCMachineExtensionNames
-$cur = [int]$ad.versionNumber
+# Start from the higher half, so a repair never moves a version backwards.
+$st = Get-GpoVersionState
+$ad = $st.ad
+$cur = [long][Math]::Max($st.adVer, [long]$st.iniVer)
 $computer = ($cur -band 0xFFFF) + 1
 if ($computer -gt 0xFFFF) { $computer = 1 }
 $next = ($cur -band 0xFFFF0000) -bor $computer
@@ -122,6 +172,7 @@ if ($Mode -eq 'Grant') { Restart-Service adfssrv }   # the service picks up the 
 [pscustomobject]@{
     mode            = $Mode
     changed         = $true
+    repaired        = $templateDone
     gpo             = 'Default Domain Controllers Policy'
     lineBefore      = $before
     lineAfter       = $lines[$idx]

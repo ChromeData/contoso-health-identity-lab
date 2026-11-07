@@ -104,7 +104,7 @@ Total: **$0 to about $4 a day**, under the program's $5/day rule. Nothing to del
 | 3b Audit right | under 1 min | `gmsa-adfs$` holds "Generate security audits" (read back with `secedit`) |
 | 4 Relying party, rules, groups, pilot | about 1 min | 5 rules, "Permit specific group" |
 | 5a Agent install | about 1 min | agent 4.5.2487.0 installed; first try failed (exit 1603), fixed in `12-Install-ConnectHealthAgent.ps1` |
-| 6 Sign-ins and "before" claims | about 1 min | 5 sign-ins; AD FS wrote 5 x event 1200 and 5 x 1202 to the Security log |
+| 6 Sign-ins and "before" claims | about 1 min | 5 sign-ins, "before" claims with `signatureValid: true`. AD FS audit events: NOT proved. The only capture (`06b-adfs-audit-events.txt`) counted 0 events 1200/1202 in its last 20 minutes; see the evidence folder's `CORRECTION.md` |
 
 ## Run order (STE)
 
@@ -115,7 +115,7 @@ The E5 trial ends about 2026-11-26. Steps 2 to 6 feed the readiness report, so d
    `node --input-type=module -e "import {keychainWrite, randomPassword} from './lab/scripts/demo/signin/lib.mjs'; keychainWrite('contoso-lab-pw-adfs-pilot', 'adfs-pilot@contosohealthlab.com', 'AD FS pilot (lab/adfs)', randomPassword())"`
 3. Install AD FS:
    `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/10-Install-Adfs.ps1 --param DomainName=corp.contosohealthlab.com --param 'DomainAdminUser=CORP\contosoadmin' --secret DomainAdminPassword=keychain:contoso-lab-dc01-admin`
-   - 3b. If it prints `gmsaHasSeAudit: false`: `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/10b-Set-AdfsAuditRight.ps1 --param Mode=Grant`. It adds `CORP\gmsa-adfs$` to "Generate security audits" in the Default Domain Controllers Policy (one line of one Tier-0 GPO), runs `gpupdate` and reads the right back. Undo it in step 10 with `--param Mode=Revoke`.
+   - 3b. If it prints `gmsaHasSeAudit: false`: `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/10b-Set-AdfsAuditRight.ps1 --param Mode=Grant`. It adds `CORP\gmsa-adfs$` to "Generate security audits" in the Default Domain Controllers Policy (one line of one Tier-0 GPO), runs `gpupdate` and reads the right back. Undo it in step 10 with `--param Mode=Revoke`, before `19-Remove-Adfs.ps1 -Apply yes` deletes the gMSA.
 4. Add the relying party, rules, groups and pilot user:
    `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/11-Add-ClaimsViewerRp.ps1 --param DomainName=corp.contosohealthlab.com --param UpnSuffix=contosohealthlab.com --param "RulesText=$(cat lab/adfs/claims-viewer.rules.txt)" --secret PilotPassword=keychain:contoso-lab-pw-adfs-pilot`
 5. Install the Connect Health agent: `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/12-Install-ConnectHealthAgent.ps1`.
@@ -126,7 +126,13 @@ The E5 trial ends about 2026-11-26. Steps 2 to 6 feed the readiness report, so d
 7. PR: `enable_adfs_https = true`. After its apply: `claims-viewer/fetch-metadata.sh pin` (ADFS_IP = DC01's public IP), then `fetch-metadata.sh adfs`, `cutover.sh adfs`, and `node lab/adfs/compare/capture.mjs adfs-pilot@contosohealthlab.com before.json` (browser, through the app).
 8. PR: `enable_claims_viewer_app = true` with the two group object ids. After its apply: run the output `claims_viewer_saml_signing_cert_activation_command`, then `enroll.mjs adfs-pilot@contosohealthlab.com` (authenticator for Entra MFA).
 9. **Cutover and proof:** `fetch-metadata.sh entra` (TENANT_ID, CLIENT_ID), `cutover.sh entra`, `capture.mjs … after.json`, `python3 lab/adfs/compare/compare_claims.py before.json after.json`. It must print `"same": true`. **Roll-back** at any point: `cutover.sh adfs` (the AD FS relying party is still there).
-10. **Decommission** after the quiet period: `19-Remove-Adfs.ps1 -DomainName … -QuietHours 24` (report), then `-Apply yes`. Undo step 3b (`10b-Set-AdfsAuditRight.ps1 --param Mode=Revoke`). PR: `enable_adfs_https = false` only. `enable_claims_viewer_app` stays true: the Entra app is now the app's only IdP.
+10. **Decommission** after the quiet period. Keep this order: `10b-Set-AdfsAuditRight.ps1` finds the gMSA's SID in AD, and `19-Remove-Adfs.ps1 -Apply yes` deletes the gMSA.
+    1. Run `19-Remove-Adfs.ps1 -DomainName … -QuietHours 24` (report only). The quiet-period gate must pass.
+    2. Undo step 3b: `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/10b-Set-AdfsAuditRight.ps1 --param Mode=Revoke`. It removes the gMSA's SID from "Generate security audits" and reads the right back.
+    3. Run `19-Remove-Adfs.ps1 … -Apply yes` right after step 2. Its gate runs again, but the proof of the quiet period is step 1's report: sign-ins after step 2 may not be audited.
+    4. PR: `enable_adfs_https = false` only. `enable_claims_viewer_app` stays true: the Entra app is now the app's only IdP.
+
+    If the gMSA is already deleted, step 2 stops. Then add `--param GmsaSid=S-1-5-21-…`: the gMSA's SID from the Grant run's `lineAfter` (or `line`).
 
 ## Safety notes
 
