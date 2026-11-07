@@ -1066,7 +1066,7 @@
     {
       "id": "history-anchored-to-the-activation",
       "kind": "positive",
-      "label": "Activation 50 min ago from 203.0.113.10, which the admin used 24 h 30 min ago (inside THAT activation's 23-hour history) and 198.51.100.50 3 h ago: NewIp no, Medium. A now()-anchored history would drop the older sign-in, read NewIp yes and flip the same activation to High in a later run (review of #233)",
+      "label": "Activation 50 min ago from 203.0.113.10, which the admin used 23 h 30 min ago (inside THAT activation's 22-hour history) and 198.51.100.50 3 h ago: NewIp no, Medium. A now()-anchored history would drop the older sign-in, read NewIp yes and flip the same activation to High in a later run (review of #233)",
       "lets": {
         "Tier0GroupIds": [
           "77777777-7777-7777-7777-777777777777"
@@ -1138,7 +1138,7 @@
         ],
         "SigninLogs": [
           {
-            "TimeGenerated": "ago:1470m",
+            "TimeGenerated": "ago:1410m",
             "UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com",
             "UserId": "22222222-2222-2222-2222-222222222222",
             "IPAddress": "203.0.113.10",
