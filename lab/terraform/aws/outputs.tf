@@ -124,3 +124,20 @@ output "access_analyzer_arn" {
   description = "ARN of the external-access IAM Access Analyzer (null unless enable_audit_baseline). Findings: aws accessanalyzer list-findings-v2 --analyzer-arn <arn>."
   value       = one(aws_accessanalyzer_analyzer.external_access[*].arn)
 }
+
+# ---- Session Manager (null unless enable_session_manager) ---------------------
+
+output "session_node_instance_id" {
+  description = "Instance id of the Session Manager server (aws ssm start-session --target <this>)."
+  value       = one(aws_instance.ssm_node[*].id)
+}
+
+output "session_log_group_name" {
+  description = "CloudWatch Logs group that holds every session transcript."
+  value       = one(aws_cloudwatch_log_group.ssm_sessions[*].name)
+}
+
+output "server_session_permission_set_arn" {
+  description = "ARN of the LabServerSession permission set."
+  value       = one(aws_ssoadmin_permission_set.server_session[*].arn)
+}
