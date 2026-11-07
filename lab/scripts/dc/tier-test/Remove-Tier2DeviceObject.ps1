@@ -11,7 +11,10 @@ param([string]$Name = 'T2DEV01')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($Name -ne 'T2DEV01') { throw 'This script removes only the test device T2DEV01.' }
-$c = Get-ADComputer -Filter "Name -eq '$Name'" -ErrorAction SilentlyContinue
+# -ErrorAction Stop: a failed directory query must stop the script. A filter
+# query that works and finds nothing returns $null without an error, so
+# "already removed" below is only ever said after a real, empty answer.
+$c = Get-ADComputer -Filter "Name -eq '$Name'" -ErrorAction Stop
 if (-not $c) { Write-Output "${Name}: no AD object (already removed)."; return }
 if ($c.DistinguishedName -notlike "CN=$Name,OU=Devices,OU=Tier2,*") { throw "Refusing: $($c.DistinguishedName) is not in Tier2\Devices." }
 # Remove-ADObject -Recursive: a joined Windows computer gets child objects

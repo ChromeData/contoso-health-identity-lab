@@ -31,9 +31,20 @@ day) and peering traffic (cents). The run is about 1-2 hours, then `delete`.
 Everything lives in ONE resource group (rg-identity-lab-tiertest) except the
 peering on DC01's VNet, which `delete` removes first.
 
-SECRETS: the local admin password is made here, written to the Keychain
-(contoso-lab-tiertest-admin) over stdin, and sent to ARM in a request BODY,
-never argv. It is never printed. Same rules as run-on-dc.py.
+SECRETS: the local admin password is made here and sent to ARM in a request
+BODY, never argv. It is never printed. Same rules as run-on-dc.py.
+  * `build` REFUSES when the VM already exists. A second PUT on a live VM
+    would try to change its password; if Azure then refused the request, the
+    Keychain would hold a password the VM never got, and the old one would be
+    lost. Run `delete` first.
+  * The password is written to the Keychain (contoso-lab-tiertest-admin,
+    over stdin) only AFTER Azure accepts the VM request (HTTP 200/201). From
+    that moment the VM can hold that password, even if provisioning later
+    fails, so it must be saved before the wait.
+  * `test-passwords` makes the three DISPOSABLE test-account passwords
+    (README "Credentials"): contoso-lab-tiertest-t0 / -t2 / -join. It needs
+    no Azure. The accounts are made and deleted on DC01 by
+    New-TierTestAccounts.ps1 / Remove-TierTestAccounts.ps1.
 """
 import argparse
 import json
@@ -71,12 +82,26 @@ def sh(*args):
     return subprocess.run(args, check=True, capture_output=True, text=True).stdout.strip()
 
 
-rod = import_module("run-on-dc")   # reuse its TLS context
-CTX = rod.tls_context()
-SUB = sh("az", "account", "show", "--query", "id", "-o", "tsv")
-TOKEN = sh("az", "account", "get-access-token", "--resource", "https://management.azure.com",
-           "--query", "accessToken", "-o", "tsv")
+LAB_SUB = "de0b2a93-1c62-47b3-aaaf-1bdd1939a274"
+# Filled by connect() at run time, not at import, so the tests can import
+# this file without az (tests/test_tier2_device.py).
+CTX = None
+SUB = None
+TOKEN = None
 SECRET_VALUES = []
+# Disposable test accounts (README "Credentials"): Keychain service -> account.
+TEST_PASSWORDS = {"contoso-lab-tiertest-t0": "t0-tiertest",
+                  "contoso-lab-tiertest-t2": "t2-tiertest",
+                  "contoso-lab-tiertest-join": "tiertest-join"}
+
+
+def connect():
+    global CTX, SUB, TOKEN
+    rod = import_module("run-on-dc")   # reuse its TLS context
+    CTX = rod.tls_context()
+    SUB = sh("az", "account", "show", "--query", "id", "-o", "tsv")
+    TOKEN = sh("az", "account", "get-access-token", "--resource", "https://management.azure.com",
+               "--query", "accessToken", "-o", "tsv")
 
 
 def arm(method, path, body=None, ok404=False):
@@ -109,22 +134,38 @@ def wait(path, api, want="Succeeded", tries=90):
     raise SystemExit(f"{path}: not {want} after {tries * 10}s")
 
 
-def keychain_password():
-    # 24 chars, every class, no shell-special quoting issues; stored over stdin.
+def new_password():
+    # 24 chars, every class, no shell-special quoting issues.
     alphabet = string.ascii_letters + string.digits + "-_.~+="
     while True:
         pw = "".join(secrets.choice(alphabet) for _ in range(24))
         if any(c.islower() for c in pw) and any(c.isupper() for c in pw) and any(c.isdigit() for c in pw) \
                 and any(c in "-_.~+=" for c in pw):
-            break
+            return pw
+
+
+def save_to_keychain(service, account, label, pw):
     # security -i reads commands from stdin: the password never reaches argv.
-    cmd = f'add-generic-password -U -s {KEYCHAIN} -a {ADMIN} -l "Tier 2 test device local admin (temporary)" -w "{pw}"\n'
-    subprocess.run(["security", "-i"], input=cmd, text=True, check=True, capture_output=True)
-    return pw
+    # Failure output is not shown: it would echo the command line (the password).
+    cmd = f'add-generic-password -U -s {service} -a {account} -l "{label}" -w "{pw}"\n'
+    r = subprocess.run(["security", "-i"], input=cmd, text=True, capture_output=True)
+    if r.returncode != 0:
+        raise SystemExit(f"Keychain write for {service} failed (exit {r.returncode}); output hidden (it holds the password).")
+
+
+def test_passwords():
+    for service, account in TEST_PASSWORDS.items():
+        save_to_keychain(service, account, f"Tier GPO proof disposable account {account} (temporary)", new_password())
+        print(f"Keychain {service}: new password for {account}")
 
 
 def build():
     rgp = f"/resourceGroups/{RG}"
+    vm = f"{rgp}/providers/Microsoft.Compute/virtualMachines/{VM}"
+    code, _ = arm("GET", f"{vm}?api-version={CMP_API}", ok404=True)
+    if code != 404:
+        raise SystemExit(f"Refusing: {VM} already exists in {RG}. Its password stays as it is in the Keychain. "
+                         "Run `delete` first, then `build`.")
     print(f"resource group {RG} ({LOC})")
     arm("PUT", f"{rgp}?api-version={RG_API}", {"location": LOC, "tags": TAGS})
 
@@ -164,11 +205,10 @@ def build():
             "privateIPAllocationMethod": "Dynamic"}}]}})
     wait(nic, NET_API)
 
-    pw = keychain_password()
+    pw = new_password()
     SECRET_VALUES.append(pw)
-    vm = f"{rgp}/providers/Microsoft.Compute/virtualMachines/{VM}"
     print(f"VM {VM} {SIZE} (Windows Server 2022 Azure Edition, Trusted Launch, like DC01)")
-    arm("PUT", f"{vm}?api-version={CMP_API}", {"location": LOC, "tags": TAGS, "properties": {
+    status, _ = arm("PUT", f"{vm}?api-version={CMP_API}", {"location": LOC, "tags": TAGS, "properties": {
         "hardwareProfile": {"vmSize": SIZE},
         "storageProfile": {
             "imageReference": {"publisher": "MicrosoftWindowsServer", "offer": "WindowsServer",
@@ -184,6 +224,10 @@ def build():
         "networkProfile": {"networkInterfaces": [{"id": f"/subscriptions/{SUB}{nic}",
                                                   "properties": {"deleteOption": "Delete"}}]},
         "diagnosticsProfile": {"bootDiagnostics": {"enabled": True}}}})
+    if status not in (200, 201):
+        raise SystemExit(f"VM PUT: unexpected HTTP {status}; nothing saved to the Keychain")
+    # Accepted: the VM may now hold this password. Save it before the wait.
+    save_to_keychain(KEYCHAIN, ADMIN, "Tier 2 test device local admin (temporary)", pw)
     wait(vm, CMP_API)
     _, j = arm("GET", f"{nic}?api-version={NET_API}")
     ip = j["properties"]["ipConfigurations"][0]["properties"]["privateIPAddress"]
@@ -216,8 +260,12 @@ def delete():
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=["build", "delete"])
+    ap.add_argument("action", choices=["build", "delete", "test-passwords"])
     a = ap.parse_args()
-    if SUB != "de0b2a93-1c62-47b3-aaaf-1bdd1939a274":
+    if a.action == "test-passwords":
+        test_passwords()
+        sys.exit(0)
+    connect()
+    if SUB != LAB_SUB:
         raise SystemExit(f"Refusing: az is on subscription {SUB}, not the lab subscription.")
     build() if a.action == "build" else delete()

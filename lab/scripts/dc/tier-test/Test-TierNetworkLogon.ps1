@@ -11,8 +11,13 @@
     comes from the DEVICE: its "Deny access to this computer from the
     network" right (SeDenyNetworkLogonRight) holds Tier0-Admins.
 
+    Accounts: the DISPOSABLE t0-tiertest / t2-tiertest (README
+    "Credentials"). DC01 is Tier 0, so a Tier 0 password is not exposed by
+    being here; the disposable accounts are used so both tests prove the
+    same accounts.
+
 .PARAMETER T0Password / T2Password
-    PROTECTED parameters only (keychain:contoso-lab-ad-t0-adm-01 / -t2-adm-01).
+    PROTECTED parameters only (keychain:contoso-lab-tiertest-t0 / -t2).
 #>
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'Protected run-command parameters.')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'Only way to make a PSCredential from a protected parameter.')]
@@ -20,12 +25,14 @@
 param(
     [Parameter(Mandatory)][string]$T0Password,
     [Parameter(Mandatory)][string]$T2Password,
-    [string]$Device = 'T2DEV01.corp.contosohealthlab.com'
+    [string]$Device = 'T2DEV01.corp.contosohealthlab.com',
+    [string]$T0User = 'CORP\t0-tiertest',
+    [string]$T2User = 'CORP\t2-tiertest'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $out = @()
-foreach ($c in @(@{ u = 'CORP\t0-adm-01'; p = $T0Password; tier = 'Tier 0'; want = 'refused' }, @{ u = 'CORP\t2-adm-01'; p = $T2Password; tier = 'Tier 2'; want = 'works' })) {
+foreach ($c in @(@{ u = $T0User; p = $T0Password; tier = 'Tier 0'; want = 'refused' }, @{ u = $T2User; p = $T2Password; tier = 'Tier 2'; want = 'works' })) {
     $cred = New-Object System.Management.Automation.PSCredential ($c.u, (ConvertTo-SecureString $c.p -AsPlainText -Force))
     $name = 'TT' + [guid]::NewGuid().ToString('N').Substring(0, 6)
     try {
