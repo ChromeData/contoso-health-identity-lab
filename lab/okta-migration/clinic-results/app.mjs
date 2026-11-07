@@ -151,6 +151,9 @@ export function serve({ port = PORT, conf = CONF } = {}) {
         const p = pending.get(url.searchParams.get('state'));
         if (!p) return send(400, 'unknown state');
         pending.delete(url.searchParams.get('state'));
+        // A sign-in started before a cut-over (or rollback) must not finish
+        // against the IdP the app no longer trusts: start again.
+        if (p.idp !== c.active) return send(409, `<p>The app now trusts ${esc(c.active)}; this sign-in was started with ${esc(p.idp)}. <a href="/login">Sign in again</a>.</p>`);
         const idp = c[p.idp];
         const tok = await getJson(idp.token_endpoint, {
           method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
@@ -165,13 +168,21 @@ export function serve({ port = PORT, conf = CONF } = {}) {
         return send(302, '', { location: '/', 'set-cookie': `cr_sid=${id}; HttpOnly; SameSite=Lax; Path=/` });
       }
       if (url.pathname === '/logout') { if (sid) sessions.delete(sid); return send(302, '', { location: '/', 'set-cookie': 'cr_sid=; Max-Age=0; Path=/' }); }
-      if (url.pathname === '/') { const s = sid && sessions.get(sid); return send(200, page(s ? { ...s, active: c.active } : { active: c.active })); }
+      if (url.pathname === '/') {
+        let s = sid && sessions.get(sid);
+        // A session from the IdP the app no longer trusts ends here.
+        if (s && s.idp !== c.active) { sessions.delete(sid); s = null; }
+        return send(200, page(s ? { ...s, active: c.active } : { active: c.active }));
+      }
       return send(404, 'not found');
     } catch (e) {
       return send(500, `<pre>${esc(e.message)}</pre>`);
     }
   });
-  return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
+  return new Promise((resolve, reject) => {
+    server.once('error', (e) => reject(e.code === 'EADDRINUSE' ? new Error(`port ${port} is in use (is app.mjs already running? stop it first)`) : e));
+    server.listen(port, '127.0.0.1', () => resolve(server));
+  });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

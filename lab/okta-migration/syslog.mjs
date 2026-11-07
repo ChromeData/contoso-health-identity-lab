@@ -23,6 +23,7 @@
 import fs from 'node:fs';
 import { okta, systemLogFilter, entraSigninKql, nowIso } from './lib.mjs';
 import { CONF } from './clinic-results/app.mjs';
+import { graphAll } from './lib.mjs';
 import { graph } from '../scripts/demo/signin/lib.mjs';
 
 const a = process.argv.slice(2);
@@ -40,7 +41,9 @@ const filter = systemLogFilter(app.id);
 const sso = await o.list(`/api/v1/logs?since=${encodeURIComponent(since)}&limit=200&sortOrder=ASCENDING&filter=${encodeURIComponent(filter)}`);
 const admin = await o.list(`/api/v1/logs?since=${encodeURIComponent(since)}&limit=200&sortOrder=ASCENDING&filter=${encodeURIComponent(`eventType sw "application." and target.id eq "${app.id}"`)}`);
 
-const conf = fs.existsSync(CONF) ? JSON.parse(fs.readFileSync(CONF, 'utf8')) : null;
+// The app config belongs to ONE app: use it only when it is this app's.
+const rawConf = fs.existsSync(CONF) ? JSON.parse(fs.readFileSync(CONF, 'utf8')) : null;
+const conf = rawConf && rawConf.app === label ? rawConf : null;
 const cutovers = (conf?.history || []).filter((h) => h.to === 'entra').map((h) => h.at);
 const lastCut = cutovers.length ? cutovers[cutovers.length - 1] : null;
 const rollbacks = (conf?.history || []).filter((h) => h.to === 'okta').map((h) => h.at);
@@ -53,15 +56,15 @@ let entraRows = [], entraNote = '';
 const entraId = conf?.entra?.client_id;
 if (entraId) {
   try {
-    const r = graph('GET', `https://graph.microsoft.com/v1.0/auditLogs/signIns?$filter=appId eq '${entraId}' and createdDateTime ge ${since.replace(/\.\d+Z$/, 'Z')}&$top=50&$select=createdDateTime,userPrincipalName,status,conditionalAccessStatus,appliedConditionalAccessPolicies,authenticationRequirement`);
-    entraRows = r.value.map((s) => ({
+    const r = graphAll(graph, `https://graph.microsoft.com/v1.0/auditLogs/signIns?$filter=appId eq '${entraId}' and createdDateTime ge ${since.replace(/\.\d+Z$/, 'Z')}&$top=100&$select=createdDateTime,userPrincipalName,status,conditionalAccessStatus,appliedConditionalAccessPolicies,authenticationRequirement`);
+    entraRows = r.map((s) => ({
       time: s.createdDateTime, user: s.userPrincipalName, result: s.status?.errorCode === 0 ? 'SUCCESS' : `error ${s.status?.errorCode}`,
       ca: s.conditionalAccessStatus, mfa: s.authenticationRequirement,
       policies: (s.appliedConditionalAccessPolicies || []).filter((p) => p.result === 'success' || p.result === 'failure').map((p) => `${p.displayName.split(' - ')[0]}:${p.result}`).join(' '),
       phase: phase(s.createdDateTime),
     })).sort((x, y) => x.time.localeCompare(y.time));
   } catch (e) { entraNote = `Entra sign-in log not readable: ${String(e.message).split('\n')[0].slice(0, 200)}`; }
-} else entraNote = 'no Entra app in the config yet (cutover.mjs prestage after the Entra PR is applied)';
+} else entraNote = rawConf && rawConf.app !== label ? `the app config is for "${rawConf.app}", not this app: no Entra or cut-over data for it` : 'no Entra app in the config yet (cutover.mjs prestage after the Entra PR is applied)';
 
 const out = {
   generated: nowIso(), app: label, okta_app_id: app.id, window_days: days,

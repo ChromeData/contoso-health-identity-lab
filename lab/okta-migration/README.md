@@ -52,9 +52,11 @@ node lab/okta-migration/inventory.mjs            # the row moves to "cut over"
 Rollback: set `"cutover": false` in `waves.json`, then
 `node lab/okta-migration/cutover.mjs rollback`. The app trusts Okta again,
 the Okta tile comes back, and a test sign-in runs. The command prints the
-time it took. In an incident, apply first with
-`-var 'waves_override={"Clinic Lab Results"={cutover=false,retired=false}}'`
-and make the PR after.
+time it took. In an incident, run
+`node lab/okta-migration/cutover.mjs rollback --emergency` before the PR: it
+does the full rollback (the app trusts Okta again, the Okta apply carries
+`waves_override`, a test sign-in runs), then make the PR that sets
+`"cutover": false`.
 
 ## How the cut-over works
 

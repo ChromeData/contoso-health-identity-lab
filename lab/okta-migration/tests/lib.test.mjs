@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import {
   oktaElToEntra, protocolOf, isClinicApp, statusOf, buildRow, toCsv, toMarkdown, toHtml,
-  systemLogFilter, entraSigninKql, okta,
+  systemLogFilter, entraSigninKql, okta, graphAll,
 } from '../lib.mjs';
 import { verifyIdToken, authorizeUrl, pkcePair, signinRecord, page } from '../clinic-results/app.mjs';
 
@@ -137,4 +137,10 @@ test('the sign-in record holds no token, and the page escapes the user name', ()
   assert.ok(page({ user: '<script>x</script>', idp: 'entra', issuer: 'i' }).includes('&lt;script&gt;'));
   assert.match(page({ user: 'u', idp: 'entra', issuer: 'i' }), /through <b>Microsoft Entra ID<\/b>/);
   assert.match(page({ active: 'okta' }), /trusts <b>Okta<\/b>/);
+});
+
+test('Graph lists follow every nextLink page, and refuse an endless one', () => {
+  const pages = { a: { value: [1, 2], '@odata.nextLink': 'b' }, b: { value: [3], '@odata.nextLink': 'c' }, c: { value: [] } };
+  assert.deepEqual(graphAll((m, u) => pages[u], 'a'), [1, 2, 3]);
+  assert.throws(() => graphAll(() => ({ value: [1], '@odata.nextLink': 'x' }), 'x', 3), /more than 3 pages/);
 });

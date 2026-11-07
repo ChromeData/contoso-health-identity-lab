@@ -6,7 +6,7 @@
 //   node lab/okta-migration/cutover.mjs prestage            # runbook step 1-2
 //   node lab/okta-migration/cutover.mjs test [--idp okta|entra] [--as <upn>]
 //   node lab/okta-migration/cutover.mjs cutover             # step 3
-//   node lab/okta-migration/cutover.mjs rollback            # step 3, reversed
+//   node lab/okta-migration/cutover.mjs rollback [--emergency]  # step 3, reversed
 //   (--app "<Okta label>", default "Clinic Lab Results")
 //
 // WHAT EACH STEP DOES (runbook Phase 2, lab/docs/okta-migration-runbook.md):
@@ -37,13 +37,23 @@
 // environment only - never argv, never printed).
 // =============================================================================
 import { execFileSync } from 'node:child_process';
+import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
-import { HERE, REPO, OKTA_ROOT, okta, oktaOrg, nowIso } from './lib.mjs';
+import { HERE, REPO, OKTA_ROOT, okta, nowIso, graphAll } from './lib.mjs';
 import { CONF, CONF_DIR, readConf, serve } from './clinic-results/app.mjs';
 import { graph } from '../scripts/demo/signin/lib.mjs';
 
 const WAVES = path.join(HERE, 'waves.json');
+
+// The test starts its own copy of the app on 8471. Check the port BEFORE any
+// live change, so a running app.mjs can never leave a cut-over half done.
+function portFree(port = 8471) {
+  return new Promise((resolve) => {
+    const s = net.createServer().once('error', () => resolve(false)).once('listening', () => s.close(() => resolve(true)));
+    s.listen(port, '127.0.0.1');
+  });
+}
 const RESULTS = path.join(HERE, 'results');
 const GRAPH_APP_ID = '00000003-0000-0000-c000-000000000000';
 const SCOPES = 'openid profile email';
@@ -122,10 +132,10 @@ function ensurePilots(spId, pilots) {
   const out = [];
   for (const upn of pilots) {
     const u = graph('GET', `users/${encodeURIComponent(upn)}?$select=id,userPrincipalName`);
-    const members = graph('GET', `groups/${gid}/members?$select=id&$top=999`).value.map((m) => m.id);
+    const members = graphAll(graph, `groups/${gid}/members?$select=id&$top=999`).map((m) => m.id);
     if (members.includes(u.id)) { out.push(`${upn} already in ${assigned[0].principalDisplayName}`); continue; }
     graph('POST', `groups/${gid}/members/$ref`, { '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${u.id}` });
-    const again = graph('GET', `groups/${gid}/members?$select=id&$top=999`).value.map((m) => m.id);
+    const again = graphAll(graph, `groups/${gid}/members?$select=id&$top=999`).map((m) => m.id);
     if (!again.includes(u.id)) throw new Error(`${upn} not in the group after the add`);
     out.push(`${upn} added to ${assigned[0].principalDisplayName} (read back)`);
   }
@@ -150,6 +160,7 @@ async function prestage() {
 }
 
 async function test({ idp, as }) {
+  if (!(await portFree())) throw new Error('port 8471 is in use (app.mjs running?): stop it first');
   const conf = readConf();
   const want = idp || conf.active;
   if (!conf[want]) throw new Error(`no ${want} block in the config: run prestage`);
@@ -164,10 +175,10 @@ async function test({ idp, as }) {
   }
   const signinsFile = path.join(CONF_DIR, 'signins.jsonl');
   const before = fs.existsSync(signinsFile) ? fs.readFileSync(signinsFile, 'utf8').split('\n').filter(Boolean).length : 0;
-  const server = await serve({ conf: confFile });
   const started = Date.now();
-  let verdict;
+  let verdict, server = null;
   try {
+    server = await serve({ conf: confFile });
     const { signIn } = await import('../scripts/demo/signin/signin.mjs');
     const s = await signIn(upn, 'http://localhost:8471/login', {
       headless: true, fresh: true,
@@ -183,7 +194,7 @@ async function test({ idp, as }) {
   } catch (e) {
     verdict = { result: 'FAIL', idp: want, staging: want !== conf.active, app: appLabel, user: upn, error: String(e.message).slice(0, 400), at: nowIso(), seconds: Math.round((Date.now() - started) / 1000) };
   } finally {
-    server.close();
+    if (server) server.close();
     if (confFile !== CONF) fs.rmSync(confFile, { force: true });
   }
   fs.mkdirSync(RESULTS, { recursive: true });
@@ -197,9 +208,9 @@ async function test({ idp, as }) {
 // Apply the Okta root for this app only. Targeted on purpose: the IdP in
 // the same root holds a client secret that is supplied only at a full apply
 // (TF_VAR_entra_client_secret), and the cut-over must never touch the IdP.
-function applyOkta() {
+function applyOkta(override) {
   const env = { ...process.env, OKTA_API_TOKEN: process.env.OKTA_API_TOKEN || execFileSync('security', ['find-generic-password', '-s', 'contoso-lab-okta-token', '-w'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() };
-  const out = execFileSync('terraform', ['apply', '-input=false', '-no-color', '-auto-approve', '-target=okta_app_oauth.clinic_results'], { cwd: OKTA_ROOT, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const out = execFileSync('terraform', ['apply', '-input=false', '-no-color', '-auto-approve', '-target=okta_app_oauth.clinic_results', ...(override ? [`-var=waves_override=${override}`] : [])], { cwd: OKTA_ROOT, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const line = (out.match(/Apply complete![^\n]*/) || ['(no summary)'])[0];
   if (!/0 added, [01] changed, 0 destroyed/.test(line)) throw new Error(`unexpected Okta apply result: ${line}`);
   return line;
@@ -209,9 +220,13 @@ async function switchTo(target) {
   const t0 = Date.now();
   const p = plan();
   const wantCutover = target === 'entra';
-  if (p.cutover !== wantCutover) throw new Error(`waves.json says cutover = ${p.cutover} for "${appLabel}": set it to ${wantCutover} first (the reviewed change), then run ${cmd} again`);
+  // --emergency (rollback only): restore Okta now, before the waves.json PR.
+  // The Okta apply then carries waves_override; make the PR right after.
+  const emergency = target === 'okta' && args.includes('--emergency');
+  if (p.cutover !== wantCutover && !emergency) throw new Error(`waves.json says cutover = ${p.cutover} for "${appLabel}": set it to ${wantCutover} first (the reviewed change), then run ${cmd} again${target === 'okta' ? ' - or, in an incident, rollback --emergency' : ''}`);
   const conf = readConf();
   if (!conf.entra) throw new Error('no Entra block in the config: run prestage after the Entra PR is applied');
+  if (!(await portFree())) throw new Error('port 8471 is in use (app.mjs running?): stop it first - nothing was changed');
   if (conf.active === target) log(`the app already trusts ${target}`);
   // Order matters. Cut-over: app to Entra FIRST, then hide the Okta tile -
   // nobody is left with a tile that leads to an app that no longer trusts
@@ -221,7 +236,8 @@ async function switchTo(target) {
   conf.active = target;
   writeConf(conf);
   log(`app config: active = ${target} (Okta block kept for rollback)`);
-  log(`okta root: ${applyOkta()}`);
+  log(`okta root: ${applyOkta(emergency ? JSON.stringify({ [appLabel]: { cutover: false, retired: false } }) : null)}`);
+  if (emergency) log('EMERGENCY rollback applied with waves_override: now make the PR that sets waves.json cutover = false');
   const o = okta();
   const a = await oktaApp(o);
   log(`okta app now: status ${a.status}, hidden on the dashboard: ${a.visibility.hide.web}`);
@@ -246,5 +262,5 @@ async function status() {
 }
 
 const main = { status, prestage, test: () => test({ idp: opt('--idp'), as: opt('--as') }), cutover: () => switchTo('entra'), rollback: () => switchTo('okta') }[cmd];
-if (!main) { console.error('usage: cutover.mjs status|prestage|test [--idp okta|entra] [--as upn]|cutover|rollback [--app "<label>"]'); process.exit(2); }
+if (!main) { console.error('usage: cutover.mjs status|prestage|test [--idp okta|entra] [--as upn]|cutover|rollback [--emergency] [--app "<label>"]'); process.exit(2); }
 main().then((r) => { if (r && r.result === 'FAIL') process.exit(1); }).catch((e) => { console.error(`[cutover] ERROR: ${e.message}`); process.exit(1); });

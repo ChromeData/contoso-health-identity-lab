@@ -33,7 +33,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   HERE, okta, isClinicApp, protocolOf, entraTargetFor, oktaElToEntra, buildRow,
-  toCsv, toMarkdown, toHtml, systemLogFilter, nowIso,
+  toCsv, toMarkdown, toHtml, systemLogFilter, nowIso, graphAll,
 } from './lib.mjs';
 import { CONF } from './clinic-results/app.mjs';
 import { graph } from '../scripts/demo/signin/lib.mjs';
@@ -131,10 +131,10 @@ function entraFor(name) {
   if (!sp) return { displayName: name, appId, servicePrincipalId: null, assignedPrincipals: 0, assignedGroups: [], groupMembers: 0, ca: [] };
   const asg = graph('GET', `servicePrincipals/${sp.id}/appRoleAssignedTo?$select=principalId,principalType,principalDisplayName`).value;
   let members = 0;
-  for (const g of asg.filter((x) => x.principalType === 'Group')) members += graph('GET', `groups/${g.principalId}/members?$select=id&$top=999`).value.length;
+  for (const g of asg.filter((x) => x.principalType === 'Group')) members += graphAll(graph, `groups/${g.principalId}/members?$select=id&$top=999`).length;
   const ca = caPolicies.filter((p) => (p.conditions?.applications?.includeApplications || []).includes(appId)).map((p) => `${p.displayName.split(' - ')[0]} (${p.state === 'enabled' ? 'on' : p.state === 'disabled' ? 'off' : 'report-only'})`);
   let signins = null;
-  try { signins = graph('GET', `auditLogs/signIns?$filter=appId eq '${appId}' and createdDateTime ge ${since.replace(/\.\d+Z$/, 'Z')}&$top=200&$select=id`).value.length; } catch { signins = null; }
+  try { signins = graphAll(graph, `auditLogs/signIns?$filter=appId eq '${appId}' and createdDateTime ge ${since.replace(/\.\d+Z$/, 'Z')}&$top=200&$select=id`).length; } catch { signins = null; }
   return { displayName: sp.displayName, appId, servicePrincipalId: sp.id, assignmentRequired: sp.appRoleAssignmentRequired, assignedPrincipals: asg.length, assignedGroups: asg.map((x) => x.principalDisplayName), groupMembers: members, ca, signins7d: signins };
 }
 

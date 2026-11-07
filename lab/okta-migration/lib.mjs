@@ -86,6 +86,18 @@ export function okta({ org = oktaOrg(), token = oktaToken(), fetchFn = fetch } =
   };
 }
 
+// ---- Graph, every page ---------------------------------------------------------
+// Graph lists are paged (@odata.nextLink); a first page alone would report a
+// partial count as the full window. graphFn = the toolkit's graph(method, url).
+export function graphAll(graphFn, url, maxPages = 50) {
+  const out = []; let u = url;
+  for (let i = 0; u; i++) {
+    if (i >= maxPages) throw new Error(`more than ${maxPages} pages at ${url.split('?')[0]}: narrow the window`);
+    const r = graphFn('GET', u); out.push(...(r.value || [])); u = r['@odata.nextLink'] || null;
+  }
+  return out;
+}
+
 // ---- Okta EL -> Entra dynamic membership rule ---------------------------------
 
 // Translates the Okta group-rule expressions this estate uses (and the common
