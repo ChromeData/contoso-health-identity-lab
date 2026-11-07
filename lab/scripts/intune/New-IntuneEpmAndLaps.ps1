@@ -99,6 +99,17 @@ function Find-Policy([string]$name) {
     $r = Invoke-MgGraphRequest -Method GET -Uri "$base`?`$filter=name eq '$name'&`$select=id,name"
     return @($r.value) | Select-Object -First 1
 }
+# True when an assignment targets exactly this group. Targets such as
+# allDevicesAssignmentTarget have no groupId key; under StrictMode a bare
+# .groupId read on them could throw, so read the key only if it is there.
+function Test-TargetsGroup($assignment, [string]$groupId) {
+    $t = $assignment['target']
+    if ($null -eq $t) { return $false }
+    if ($t -is [System.Collections.IDictionary]) { return $t.Contains('groupId') -and $t['groupId'] -eq $groupId }
+    $prop = $t.PSObject.Properties['groupId']
+    return ($null -ne $prop) -and ($prop.Value -eq $groupId)
+}
+
 function Set-Policy([string]$name, [hashtable]$body, [string]$groupId) {
     # Resolve or create the policy first, then check and repair its assignment
     # on EVERY run: a run that created the policy but failed to assign it is
@@ -113,13 +124,13 @@ function Set-Policy([string]$name, [hashtable]$body, [string]$groupId) {
         Write-Host "Created: $name ($id)"
     }
     $current = @((Invoke-MgGraphRequest -Method GET -Uri "$base('$id')/assignments").value)
-    $assigned = @($current | Where-Object { $_.target.groupId -eq $groupId }).Count -gt 0
+    $assigned = @($current | Where-Object { Test-TargetsGroup $_ $groupId }).Count -gt 0
     if (-not $assigned) {
         if (-not $PSCmdlet.ShouldProcess($name, "Assign to group $groupId")) { return $id }
         # /assign replaces the whole list: keep any assignments already there.
-        $targets = @($current | ForEach-Object { @{ target = $_.target } }) + @(@{ target = @{ '@odata.type' = '#microsoft.graph.groupAssignmentTarget'; groupId = $groupId } })
+        $targets = @($current | ForEach-Object { @{ target = $_['target'] } }) + @(@{ target = @{ '@odata.type' = '#microsoft.graph.groupAssignmentTarget'; groupId = $groupId } })
         Invoke-MgGraphRequest -Method POST -Uri "$base('$id')/assign" -Body (@{ assignments = $targets } | ConvertTo-Json -Depth 10) -ContentType 'application/json' | Out-Null
-        $check = @((Invoke-MgGraphRequest -Method GET -Uri "$base('$id')/assignments").value | Where-Object { $_.target.groupId -eq $groupId })
+        $check = @((Invoke-MgGraphRequest -Method GET -Uri "$base('$id')/assignments").value | Where-Object { Test-TargetsGroup $_ $groupId })
         if ($check.Count -eq 0) { throw "$name ($id): assignment to $groupId did not stick" }
         Write-Host "Assigned: $name -> $groupId (read back)"
     } else {
