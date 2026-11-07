@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T03:11:39Z",
+  "generatedAt": "2026-11-07T04:10:31Z",
   "org": "integrator-8288815.okta.com",
   "apps": [
     {
@@ -190,7 +190,7 @@
             ]
           }
         ],
-        "sso7d": 3,
+        "sso7d": 4,
         "entraPattern": "App registration (same client type and redirect URIs) + enterprise app"
       },
       "entra": null,

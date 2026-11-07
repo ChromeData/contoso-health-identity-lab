@@ -7,7 +7,7 @@ import {
   oktaElToEntra, protocolOf, isClinicApp, statusOf, buildRow, toCsv, toMarkdown, toHtml,
   systemLogFilter, entraSigninKql, okta, graphAll, checkSwitchTarget, latestTest,
 } from '../lib.mjs';
-import { verifyIdToken, authorizeUrl, pkcePair, signinRecord, page, checkCallback, browserLoginId } from '../clinic-results/app.mjs';
+import { verifyIdToken, authorizeUrl, pkcePair, signinRecord, page, checkCallback, browserLoginId, loginCookieHeader } from '../clinic-results/app.mjs';
 
 test('the clinic login-domain rule translates to an endsWith on the UPN', () => {
   assert.deepEqual(oktaElToEntra('String.substringAfter(user.login, "@") == "contosohealthlab.com"'), { rule: '(user.userPrincipalName -endsWith "@contosohealthlab.com")' });
@@ -183,4 +183,12 @@ test('a second login tab reuses the browser login id, so the first tab still fin
   assert.notEqual(browserLoginId('short'), 'short');
   const p1 = { idp: 'okta', t: Date.now(), browser: first }, p2 = { idp: 'okta', t: Date.now(), browser: browserLoginId(first) };
   assert.ok(checkCallback(p1, first, 'okta').ok && checkCallback(p2, first, 'okta').ok);
+});
+
+test('the login-id cookie is sent to /login too (Path=/), or a second tab could not reuse it', () => {
+  const h = loginCookieHeader('a'.repeat(32));
+  assert.match(h, /; Path=\/;/);
+  assert.doesNotMatch(h, /Path=\/callback/);
+  assert.match(h, /HttpOnly/);
+  assert.match(h, /SameSite=Lax/);
 });

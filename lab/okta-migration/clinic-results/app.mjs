@@ -112,6 +112,11 @@ export function browserLoginId(existing, make = () => b64u(crypto.randomBytes(24
   return existing && /^[A-Za-z0-9_-]{32}$/.test(existing) ? existing : make();
 }
 
+// The login-id cookie. Path=/ on purpose: /login must SEE it to reuse it
+// (a cookie scoped to /callback is never sent to /login). HttpOnly, Lax,
+// 10 minutes - it names a browser, it is not a session.
+export const loginCookieHeader = (id) => `cr_login=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600`;
+
 export function readConf(file = CONF) {
   if (!fs.existsSync(file)) throw new Error(`no IdP config at ${file}: run node lab/okta-migration/cutover.mjs prestage`);
   const c = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -164,7 +169,7 @@ export function serve({ port = PORT, conf = CONF } = {}) {
         const state = b64u(crypto.randomBytes(16)); const nonce = b64u(crypto.randomBytes(16));
         const browser = browserLoginId((req.headers.cookie || '').match(/(?:^|;\s*)cr_login=([A-Za-z0-9_-]+)/)?.[1]);
         pending.set(state, { verifier, nonce, idp: c.active, t: Date.now(), browser });
-        return send(302, '', { location: authorizeUrl(c[c.active], { state, nonce, challenge, redirect: `http://localhost:${port}/callback` }), 'set-cookie': `cr_login=${browser}; HttpOnly; SameSite=Lax; Path=/callback; Max-Age=600` });
+        return send(302, '', { location: authorizeUrl(c[c.active], { state, nonce, challenge, redirect: `http://localhost:${port}/callback` }), 'set-cookie': loginCookieHeader(browser) });
       }
       if (url.pathname === '/callback') {
         if (url.searchParams.get('error')) return send(400, `<p>Sign-in refused by the IdP: ${esc(url.searchParams.get('error'))}: ${esc(url.searchParams.get('error_description') || '')}</p>`);
