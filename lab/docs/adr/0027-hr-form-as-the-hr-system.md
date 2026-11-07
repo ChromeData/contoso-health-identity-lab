@@ -147,7 +147,7 @@ the HR send.
 | 01:34:26 | 8:22 | Removed from All-Nurses and the auto-assignment group |
 | 01:39:03 | 12:59 | The form's status for this save reads "delivered" |
 | 01:37:10 | 11:06 | ServiceNow: user disabled |
-| __AWSL__ | __AWSLD__ | AWS: user disabled (SCIM) |
+| 01:55:21 | 29:17 | AWS: user disabled (SCIM) |
 
 With the agent answering, the leaver took 49 seconds from the send to
 "Account enabled: No" in Entra. The failure shows the safety net works:
