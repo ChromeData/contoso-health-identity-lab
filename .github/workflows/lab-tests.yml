@@ -212,6 +212,9 @@ jobs:
           # Pure parts of the lab passkey tool (no browser, Graph or Keychain);
           # node is preinstalled on ubuntu-latest, node:test needs no package.
           node --test lab/scripts/demo/tests/passkey.test.mjs
+          # Connect Health registration token helper (ADR 0031): PKCE, the
+          # authorize URL, and the claim checks that refuse a non-MFA token.
+          node --test lab/adfs/connect-health/tests/get-agent-token.test.mjs
           # The PAM harness's scripted-session client verdicts (fake Guacamole
           # tunnel on 127.0.0.1, stdlib only): the nightly pam-harness run is
           # not on pull requests, so this is where a PR breaking them fails.

@@ -798,6 +798,53 @@ run "no_dc_keeps_slash24_out_of_the_watchlist" {
   }
 }
 
+# Connect Health registration window (ADR 0031). Off in lab.tfvars: no
+# account, no role, no output. On with a future end time: exactly one cloud
+# account on the onmicrosoft domain with Hybrid Identity Administrator (the
+# window touches no Conditional Access code at all: modules/conditional-access
+# is unchanged in its PR). On with a past or missing end time: the plan FAILS (the time
+# box), so a forgotten window blocks the next apply instead of lingering.
+run "connect_health_registration_off_by_default" {
+  command = plan
+  assert {
+    condition     = length(azuread_user.connect_health_registration) == 0 && length(azuread_directory_role_assignment.connect_health_registration) == 0 && output.connect_health_registration_upn == null
+    error_message = "lab.tfvars keeps the Connect Health registration window OFF: no account, no role."
+  }
+}
+
+run "connect_health_registration_window_open" {
+  command = plan
+  variables {
+    enable_connect_health_registration    = true
+    connect_health_registration_until_utc = "2099-01-01T00:00:00Z"
+  }
+  assert {
+    condition     = length(azuread_user.connect_health_registration) == 1 && azuread_user.connect_health_registration[0].user_principal_name == "adm-connecthealth-reg@${var.onmicrosoft_domain}"
+    error_message = "the window creates exactly adm-connecthealth-reg on the onmicrosoft domain"
+  }
+  assert {
+    condition     = length(azuread_directory_role_assignment.connect_health_registration) == 1 && azuread_directory_role_assignment.connect_health_registration[0].role_id == "8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2"
+    error_message = "the window grants Hybrid Identity Administrator (8ac3fc64-...) and nothing else"
+  }
+}
+
+run "connect_health_registration_window_over_fails" {
+  command = plan
+  variables {
+    enable_connect_health_registration    = true
+    connect_health_registration_until_utc = "2020-01-01T00:00:00Z"
+  }
+  expect_failures = [azuread_user.connect_health_registration]
+}
+
+run "connect_health_registration_without_end_time_fails" {
+  command = plan
+  variables {
+    enable_connect_health_registration = true
+  }
+  expect_failures = [azuread_user.connect_health_registration]
+}
+
 # A flag switched on without its prerequisite plans NOTHING for that feature
 # (count = 0) - the root checks turn that silent no-op into a visible warning.
 run "flags_without_premium_warn" {

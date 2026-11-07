@@ -1,0 +1,13 @@
+run command lab-7bf6e0e4: lab/adfs/scripts/10b-Set-AdfsAuditRight.ps1 on vm-dc01
+
+--- stderr ---
+Read-back mismatch: effective line 'SeAuditPrivilege = 
+*S-1-5-19,*S-1-5-20,gmsa-adfs$,*S-1-5-80-2246541699-21809830-3603976364-117610243-975697593'.
+At C:\Packages\Plugins\Microsoft.CPlat.Core.RunCommandHandlerWindows\2.0.23\Downloads\Script_lab-7bf6e0e4_0.ps1:105 
+char:37
++ ... -ne $now) { throw "Read-back mismatch: effective line '$effective'."  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Read-back misma...243-975697593'.:String) [], RuntimeException
+    + FullyQualifiedErrorId : Read-back mismatch: effective line 'SeAuditPrivilege = *S-1-5-19,*S-1-5-20,gmsa-adfs$,*S 
+   -1-5-80-2246541699-21809830-3603976364-117610243-975697593'.
+state: Failed, exit code: 1

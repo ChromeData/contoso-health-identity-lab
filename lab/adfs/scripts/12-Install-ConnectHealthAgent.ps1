@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Installs (does NOT register) the Microsoft Entra Connect Health agent for
-    AD FS on DC01. Registration is a human step: README step 5.
+    AD FS on DC01. Registration is README step 5b (ADR 0031).
 
 .DESCRIPTION
     Runs INSIDE DC01 as SYSTEM (lab/scripts/dc/run-on-dc.py).
@@ -13,15 +13,14 @@
     has it). Microsoft Learn, "Install the Microsoft Entra Connect Health
     agents" and "AD FS application migration", checked 2026-11-07.
 
-    Why registration is NOT scripted: Register-MicrosoftEntraConnectHealthAgent
-    signs in as a Global Administrator or Hybrid Identity Administrator. With
-    -Credential it needs an account "which does not have multifactor
-    authentication enabled" (same Learn page). In this tenant CA001 requires
-    MFA for every user except the two break-glass accounts. So an unattended
-    password-only registration is refused, and break-glass accounts are not
-    for routine work. The interactive form (no -Credential) opens a Microsoft
-    sign-in window on the server, where an admin completes MFA. That needs an
-    RDP session and a person.
+    Why registration is a separate step: Register-MicrosoftEntraConnectHealthAgent
+    signs in as a Global Administrator or Hybrid Identity Administrator.
+    Learn's unattended form (-Credential, an account "which does not have
+    multifactor authentication enabled") cannot work here: the agent
+    registers through Azure Resource Manager, which requires MFA for user
+    creates whatever Conditional Access says. So registration is
+    12b-Register-ConnectHealthAgent.ps1, fed a passkey-MFA token by
+    lab/adfs/connect-health/register.sh (ADR 0031), or a person at the server.
 
     Steps:
       1. TLS 1.2. Download from Microsoft's published link (default below).
@@ -47,8 +46,10 @@ function Write-Step([string]$Message) { Write-Output ("[connect-health] {0}" -f 
 if (-not (Get-Service adfssrv -ErrorAction SilentlyContinue)) { throw 'AD FS is not installed. Run 10-Install-Adfs.ps1 first.' }
 if ($InstallerUrl -notlike 'https://*') { throw 'InstallerUrl must be https.' }
 
-$svcName = 'AdHealthAdfsDiagnosticsService'
-if (-not (Get-Service $svcName -ErrorAction SilentlyContinue)) {
+# Agent 3.x installs AdHealthAdfs* services; 4.x may name them
+# AzureADConnectHealth*. Either one means the agent is installed.
+$svcPattern = @('AdHealthAdfs*', 'AzureADConnectHealth*')
+if (-not (Get-Service $svcPattern -ErrorAction SilentlyContinue)) {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $dir = Join-Path $env:ProgramData 'ContosoAdfs'
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -63,11 +64,16 @@ if (-not (Get-Service $svcName -ErrorAction SilentlyContinue)) {
         throw "Refusing the installer: signature '$($sig.Status)', signer '$signer'."
     }
     Write-Step "signature Valid ($signer); installing quietly"
-    $p = Start-Process -FilePath $exe -ArgumentList '/quiet' -Wait -PassThru
+    # AdfsMonitoringEnabled=1: without a monitored role the MSI's launch
+    # condition stops with "Please select at least one service" (exit 1603,
+    # seen on DC01 2026-11-07 with agent 4.5.2487.0). SkipRegistration=1: the
+    # bundle would otherwise try to sign in during setup; registration is its
+    # own step (README step 5). Same switches as Learn's quiet AD DS install.
+    $p = Start-Process -FilePath $exe -ArgumentList '/quiet', 'AdfsMonitoringEnabled=1', 'SkipRegistration=1' -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw "Installer exit code $($p.ExitCode)." }
 } else { Write-Step 'agent already installed' }
 
-$services = Get-Service 'AdHealthAdfs*' | ForEach-Object { [pscustomobject]@{ name = $_.Name; status = $_.Status.ToString() } }
+$services = Get-Service $svcPattern -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ name = $_.Name; status = $_.Status.ToString() } }
 # A registered agent keeps its identity under this key (verify: the value
 # name; the script reports, it does not decide on it).
 $reg = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\ADHealthAgent' -ErrorAction SilentlyContinue
@@ -75,5 +81,5 @@ $reg = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\ADHealthAgent' -ErrorAction Si
     installed  = $true
     services   = $services
     registered = [bool]($reg -and ($reg.PSObject.Properties.Name -contains 'TenantId'))
-    next       = 'README step 5: RDP to DC01, run Register-MicrosoftEntraConnectHealthAgent, sign in as a Hybrid Identity Administrator with MFA.'
+    next       = 'README step 5b: lab/adfs/connect-health/register.sh (ADR 0031), after the flag-on PR is applied.'
 } | ConvertTo-Json -Depth 4

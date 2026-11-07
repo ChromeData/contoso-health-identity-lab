@@ -1,9 +1,11 @@
 # AD FS → Entra: move one real app, with its claim rules
 
-**Status: BUILT.** The code and tests are in this folder and in
-`modules/apps/claims_viewer.tf`. Local checks ran (capture log L10). **Nothing has
-run on DC01 or in the tenant.** Two owner decisions come first (see "Blocked on").
-ADR 0009 stays a design record until step 9 below has run.
+**Status: RAN · DC01 for steps 1-6 (2026-11-07, capture log E140); the Entra side is BUILT.**
+AD FS is installed on DC01 and the Claims Viewer relying party issues all five
+claim rules (5 real sign-ins, `"signatureValid": true`). The Connect Health
+agent is installed but **not registered** (step 5b waits for a reviewed PR,
+ADR 0031), so the migration report has nothing yet. Steps 7-10 have not run.
+ADR 0009 stays a design record until step 9 has run.
 
 ## What this does, in plain words
 
@@ -58,7 +60,10 @@ ADR 0009 stays a design record until step 9 below has run.
 
 AD FS on a domain controller is a supported install since Windows Server 2012
 R2. It keeps Tier 0 with Tier 0: the AD FS signing key is as powerful as a DC.
-Production puts AD FS on its own servers behind a Web Application Proxy.
+**This is a lab shortcut, not the production design.** Production uses a
+dedicated AD FS server (in practice a farm of two or more), never a domain
+controller, with a Web Application Proxy in front of it for internet sign-ins.
+`10-Install-Adfs.ps1` prints this on every run.
 
 ## Cost (eastus2 retail prices, read 2026-11-07)
 
@@ -73,25 +78,33 @@ Production puts AD FS on its own servers behind a Web Application Proxy.
 
 Total: **$0 to about $4 a day**, under the program's $5/day rule. Nothing to delete except AD FS itself (step 10).
 
-## Blocked on (owner decisions)
+## What was blocked, and what is left
 
-1. **AD FS on DC01: yes or no.** DC01 is Tier 0 and runs Cloud Sync for the
-   recording. AD FS adds a service on 443 and does not touch AD DS or Cloud
-   Sync. Do it outside recording days.
-2. **Connect Health registration needs a person.** `Register-MicrosoftEntraConnectHealthAgent`
-   signs in as a Global or Hybrid Identity Administrator. Unattended, it needs
-   an account "which does *not* have multifactor authentication enabled"
-   (Learn). CA001 requires MFA for everyone except break-glass. So: RDP to
-   DC01, run it, and sign in with MFA (about 5 minutes). The alternative is a
-   CA001 exclusion for a registration account, which is the lead's call and
-   not recommended.
-3. **Optional:** to read the report as code (`GET /beta/reports/getRelyingPartyDetailedSummary`),
-   the operator needs `Reports.Read.All` (envs/operator, human-applied). Today the call
-   returns `Authentication_MSGraphPermissionMissing`. Without it, use the
-   portal page.
-4. **Colima:** the default Colima VM forwards no ports to the Mac right now (a
-   plain test container on 127.0.0.1:18080 was unreachable, while the same
-   request inside the VM worked). Restart Colima before step 7.
+1. **AD FS on DC01:** the owner said yes (2026-11-07). Done.
+2. **Connect Health registration without a person:** solved in code, not run.
+   Learn's unattended form (`-Credential`, an account without MFA) cannot work:
+   the agent registers through Azure Resource Manager, and ARM requires MFA
+   for every user create "regardless of ... user exclusions". So no
+   Conditional Access exclusion is made. Instead a time-boxed account signs in
+   with a passkey and the agent takes its token (`-AadToken`, a parameter of
+   agent 4.5.2487.0 that Learn does not describe). See ADR 0031 and
+   `connect-health/register.sh`. It needs the PR that turns
+   `enable_connect_health_registration` on, merged and applied.
+3. **Reading the report as code:** the operator needs `Reports.Read.All`
+   (envs/operator, human-applied; its own PR). Until then, use the portal page.
+4. **Colima:** the default Colima VM forwards no ports to the Mac. Restart
+   Colima before step 7.
+
+## Measured on DC01 (2026-11-07, as the operator, no person)
+
+| Step | Time | Result |
+|---|---|---|
+| 1 Start DC01 (`preflight.sh`) | about 3 min | READY |
+| 3 Install AD FS | 2 min 10 s | farm `sts.corp.contosohealthlab.com`, gMSA, service Running |
+| 3b Audit right | under 1 min | `gmsa-adfs$` holds "Generate security audits" (read back with `secedit`) |
+| 4 Relying party, rules, groups, pilot | about 1 min | 5 rules, "Permit specific group" |
+| 5a Agent install | about 1 min | agent 4.5.2487.0 installed; first try failed (exit 1603), fixed in `12-Install-ConnectHealthAgent.ps1` |
+| 6 Sign-ins and "before" claims | about 1 min | 5 sign-ins; AD FS wrote 5 x event 1200 and 5 x 1202 to the Security log |
 
 ## Run order (STE)
 
@@ -102,17 +115,18 @@ The E5 trial ends about 2026-11-26. Steps 2 to 6 feed the readiness report, so d
    `node --input-type=module -e "import {keychainWrite, randomPassword} from './lab/scripts/demo/signin/lib.mjs'; keychainWrite('contoso-lab-pw-adfs-pilot', 'adfs-pilot@contosohealthlab.com', 'AD FS pilot (lab/adfs)', randomPassword())"`
 3. Install AD FS:
    `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/10-Install-Adfs.ps1 --param DomainName=corp.contosohealthlab.com --param 'DomainAdminUser=CORP\contosoadmin' --secret DomainAdminPassword=keychain:contoso-lab-dc01-admin`
-   - 3b. If it prints `gmsaHasSeAudit: false`: add `CORP\gmsa-adfs$` to "Generate security audits" in the Default Domain Controllers Policy (owner's call: a Tier-0 GPO change), then `gpupdate /force`. Write down the change. Undo it in step 10.
+   - 3b. If it prints `gmsaHasSeAudit: false`: `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/10b-Set-AdfsAuditRight.ps1 --param Mode=Grant`. It adds `CORP\gmsa-adfs$` to "Generate security audits" in the Default Domain Controllers Policy (one line of one Tier-0 GPO), runs `gpupdate` and reads the right back. Undo it in step 10 with `--param Mode=Revoke`.
 4. Add the relying party, rules, groups and pilot user:
    `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/11-Add-ClaimsViewerRp.ps1 --param DomainName=corp.contosohealthlab.com --param UpnSuffix=contosohealthlab.com --param "RulesText=$(cat lab/adfs/claims-viewer.rules.txt)" --secret PilotPassword=keychain:contoso-lab-pw-adfs-pilot`
-5. Install the Connect Health agent: `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/12-Install-ConnectHealthAgent.ps1`. Then decision 2: the person registers it.
+5. Install the Connect Health agent: `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/12-Install-ConnectHealthAgent.ps1`.
+   - 5b. Register it with no person (ADR 0031): open a PR that sets `enable_connect_health_registration = true` and `connect_health_registration_until_utc` (at most 24 h out). After its apply: `lab/adfs/connect-health/register.sh enroll`, then `register.sh register`, then `register.sh close`. Then open the PR that sets the flag to `false`. If the agent build has lost `-AadToken`, the script stops; the fallback is a person at DC01 (interactive sign-in, about 5 min).
 6. Make sign-in traffic and the "before" claims:
    `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/13-Get-AdfsClaims.ps1 --param FederationServiceName=sts.corp.contosohealthlab.com --param UserName=adfs-pilot@contosohealthlab.com --param Count=5 --secret UserPassword=keychain:contoso-lab-pw-adfs-pilot | sed -n '/^{/,/^}/p' > before-adfs.json` (run-on-dc.py prints a start and an end line around the script's JSON; `sed` keeps the JSON only). Check it: `python3 -m json.tool before-adfs.json`.
    Open Entra > Enterprise apps > Usage & insights > **AD FS application migration**. Record the status and the claim-rule findings. Microsoft notes that changes can take up to 24 hours to show.
 7. PR: `enable_adfs_https = true`. After its apply: `claims-viewer/fetch-metadata.sh pin` (ADFS_IP = DC01's public IP), then `fetch-metadata.sh adfs`, `cutover.sh adfs`, and `node lab/adfs/compare/capture.mjs adfs-pilot@contosohealthlab.com before.json` (browser, through the app).
 8. PR: `enable_claims_viewer_app = true` with the two group object ids. After its apply: run the output `claims_viewer_saml_signing_cert_activation_command`, then `enroll.mjs adfs-pilot@contosohealthlab.com` (authenticator for Entra MFA).
 9. **Cutover and proof:** `fetch-metadata.sh entra` (TENANT_ID, CLIENT_ID), `cutover.sh entra`, `capture.mjs … after.json`, `python3 lab/adfs/compare/compare_claims.py before.json after.json`. It must print `"same": true`. **Roll-back** at any point: `cutover.sh adfs` (the AD FS relying party is still there).
-10. **Decommission** after the quiet period: `19-Remove-Adfs.ps1 -DomainName … -QuietHours 24` (report), then `-Apply yes`. Undo step 3b. PR: `enable_adfs_https = false` only. `enable_claims_viewer_app` stays true: the Entra app is now the app's only IdP.
+10. **Decommission** after the quiet period: `19-Remove-Adfs.ps1 -DomainName … -QuietHours 24` (report), then `-Apply yes`. Undo step 3b (`10b-Set-AdfsAuditRight.ps1 --param Mode=Revoke`). PR: `enable_adfs_https = false` only. `enable_claims_viewer_app` stays true: the Entra app is now the app's only IdP.
 
 ## Safety notes
 
