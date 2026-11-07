@@ -187,7 +187,7 @@
  "names": {
   "ADCS": "Certificates (AD CS)",
   "PIM": "Timed admin rights (PIM)",
-  "WORM": "Tamper-proof storage",
+  "WORM": "Write-once storage",
   "KPI": "Scorecards, before and after",
   "LA": "Alarm system (Sentinel)",
   "NHI": "Robot accounts",
