@@ -53,6 +53,18 @@ tier flags; it still never reviews a birthright package.
   monthly. With the lifecycle setting below, the guest is blocked and then
   deleted when their last assignment ends.
 
+## Day one: which mechanism delivers the birthright package (measured 2026-11-07)
+
+The joiner Lifecycle Workflow, not the automatic assignment policy. In the
+first HR-form hire (capture log E121, E121b) the user joined the policy's
+dynamic group at +4:36, the policy had created no assignment by +25 min, and
+the workflow's request task assigned the package at 01:11:01Z (audit,
+initiated by Lifecycle Workflows). The workflow runs on the tenant's 3-hour
+schedule, so day-one delivery takes up to about 3 hours. The automatic
+policy keeps access in line with HR attributes afterwards (movers, and
+removal after its 3-day grace). Details: `lab/scripts/mock-hr/README.md`,
+"Three gaps from the first HR-form run".
+
 ## Provider gaps, and how they are closed
 
 The azuread provider 3.10 schema was checked on 2026-10-20 and has **no**

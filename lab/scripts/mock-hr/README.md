@@ -286,3 +286,41 @@ their core attributes and `accountEnabled`. Entra rejects cloud edits to those
 on synced users, so mover/leaver changes always start **here, in the feed** -
 the PowerShell lifecycle scripts only handle the cloud-side follow-through
 (access packages, sessions, app deprovisioning).
+
+## Three gaps from the first HR-form run (2026-11-07, E121, E122, E121b)
+
+1. **The manager had no mail, so the TAP email task failed.** For synced
+   users Entra's `mail` comes from AD, and the HR job wrote AD mail only on
+   create, with the AD domain. Fix: `lab/scripts/dc/configure-sync.py hrapp
+   --mail-domain <verified domain>`, then re-send the manager's row (any HR
+   save of that worker). `New-LifecycleWorkflows.ps1 -RunJoinerFor` now warns
+   when the joiner's manager has no mail. The address has no mailbox in the
+   lab, so nobody receives that email. Never say on camera that the manager
+   gets it.
+2. **A leaver kept the access package until IT acted.** HR's leaver disables
+   the account everywhere, but the package stayed until `04-Leaver.ps1` ran.
+   The automatic assignment policy removes it by itself only after its 3-day
+   grace period (ADR 0012, on purpose: it protects clinicians from a wrong HR
+   record). Fix: a second leaver workflow that runs by itself, triggered when
+   the user drops out of the dynamic group All-Workforce (enabled, synced
+   members). It has the same six tasks as the on-demand leaver. Turn it on:
+   `enable_lcw_leaver_trigger = true` (envs/dev, a reviewed PR), then
+   `post-apply/New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver -EnableJoinerSchedule`.
+   It runs at the next scheduled evaluation, every 3 hours by default (the
+   tenant's setting read 2026-11-07: 3). The on-demand leaver stays for
+   "terminate now".
+3. **Which mechanism really gives the nurse package on day one.** Measured:
+   the user joined the policy's dynamic group at +4:36, but the automatic
+   assignment policy had created no assignment by +25 min. The joiner
+   workflow's "Request user access package assignment" task did it
+   (audit: "Administrator directly assigns user to access package", initiated
+   by Lifecycle Workflows, 01:11:01Z), and it was delivered at +30:11. So in
+   this lab the **joiner workflow is the day-one mechanism**. Its timing
+   depends on the 3-hour schedule: E121's run came 25 minutes after the hire
+   only because a scheduled evaluation fell then; the worst case is about 3
+   hours. The automatic assignment policy is the **steady-state** mechanism:
+   it keeps the package in line with HR attributes (movers, and the 3-day
+   removal), with no measured day-one time. Microsoft documents only that its
+   evaluation "can take several minutes". Do not say on camera that the
+   package arrives by itself in minutes.
+
