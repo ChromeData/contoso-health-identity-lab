@@ -72,6 +72,7 @@ locals {
 }
 
 resource "azurerm_role_definition" "operator_session" {
+  #checkov:skip=CKV_AZURE_39:Not an owner role. actions "*" is narrowed by NotActions that remove every Microsoft.Authorization write and delete (no role assignments, no locks) plus the evidence and log deletes; tests/operator.tftest.hcl pins those NotActions. Assigned only time-bound in an owner-opened session (ADR 0030).
   name        = "Contoso Lab Operator Session"
   scope       = data.azurerm_subscription.current.id
   description = "Lab operator WRITE SESSION role (ADR 0030): Contributor minus evidence-store and audit-log deletes. Assigned only time-bound, by envs/operator."
