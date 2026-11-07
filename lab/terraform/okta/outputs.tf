@@ -51,3 +51,30 @@ output "routed_login_domain" {
   description = "The login domain suffix the routing rule matches (everyone else falls through to Okta's Default Rule)."
   value       = var.clinic_login_domain
 }
+
+# ---- The clinic's other apps (clinic-apps.tf) -----------------------------------
+
+output "clinic_results_app_id" {
+  description = "Okta app id of Clinic Lab Results (wave 1). The System Log query (lab/okta-migration/syslog.mjs) filters on it."
+  value       = okta_app_oauth.clinic_results.id
+}
+
+output "clinic_results_client_id" {
+  description = "OIDC client id of the Okta Clinic Lab Results app (public client; not a secret). cutover.mjs reads it from the Okta API, not from here."
+  value       = okta_app_oauth.clinic_results.client_id
+}
+
+output "clinic_results_okta_status" {
+  description = "Where wave 1 stands on the Okta side: active-visible (before), active-hidden (cut over, one sign-in cycle), inactive (retired)."
+  value       = local.clinic_results.retired ? "inactive" : (local.clinic_results.cutover ? "active-hidden" : "active-visible")
+}
+
+output "clinic_billing_app_id" {
+  description = "Okta app id of Clinic Billing (wave 2, SAML)."
+  value       = okta_app_saml.clinic_billing.id
+}
+
+output "clinical_apps_policy_id" {
+  description = "Id of the Clinic clinical apps authentication policy (two factors, re-auth 8 h, catch-all DENY)."
+  value       = okta_app_signon_policy.clinical_apps.id
+}

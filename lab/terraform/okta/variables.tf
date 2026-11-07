@@ -196,3 +196,108 @@ variable "routing_rule_name" {
     error_message = "routing_rule_name must not be empty."
   }
 }
+
+# ---- The clinic's other apps (clinic-apps.tf) -----------------------------------
+
+variable "clinic_results_label" {
+  type        = string
+  description = "Label of the clinic's OIDC app (wave 1). The Entra app that replaces it has the same display name (modules/apps clinic_results_display_name): the tracker joins the two by it."
+  default     = "Clinic Lab Results"
+
+  validation {
+    condition     = length(trimspace(var.clinic_results_label)) > 0
+    error_message = "clinic_results_label must not be empty."
+  }
+}
+
+variable "clinic_results_redirect_uri" {
+  type        = string
+  description = "The app's loopback redirect (lab/okta-migration/clinic-results listens on it). Must equal the Entra app's redirect (modules/apps clinic_results_redirect_uris)."
+  default     = "http://localhost:8471/callback"
+
+  validation {
+    condition     = can(regex("^http://(localhost|127\\.0\\.0\\.1):[0-9]{2,5}/[A-Za-z0-9/_-]*$", var.clinic_results_redirect_uri))
+    error_message = "clinic_results_redirect_uri must be a loopback http URI with a port and a path."
+  }
+}
+
+variable "clinic_results_login_uri" {
+  type        = string
+  description = "Where the Okta dashboard tile sends the user: the app's own sign-in start (it then redirects to the IdP it trusts)."
+  default     = "http://localhost:8471/login"
+
+  validation {
+    condition     = can(regex("^http://(localhost|127\\.0\\.0\\.1):[0-9]{2,5}/[A-Za-z0-9/_-]*$", var.clinic_results_login_uri))
+    error_message = "clinic_results_login_uri must be a loopback http URI with a port and a path."
+  }
+}
+
+variable "clinic_billing_label" {
+  type        = string
+  description = "Label of the clinic's SAML app (wave 2). Its service provider does not exist in the lab."
+  default     = "Clinic Billing"
+}
+
+variable "clinic_billing_group_name" {
+  type        = string
+  description = "Okta group Clinic Billing is assigned to; membership by the department group rule."
+  default     = "Clinic-Billing"
+}
+
+variable "clinic_billing_department" {
+  type        = string
+  description = "The user.department value the Clinic-Billing group rule matches (HR-owned attribute)."
+  default     = "Clinic Billing"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9 &-]+$", var.clinic_billing_department))
+    error_message = "clinic_billing_department must be plain text (letters, digits, spaces, & and -): it is placed inside an Okta EL string."
+  }
+}
+
+variable "clinic_billing_acs_url" {
+  type        = string
+  description = "Clinic Billing's SAML Assertion Consumer Service URL. A placeholder in the lab: no billing system exists."
+  default     = "https://billing.clinic.example/saml/acs"
+
+  validation {
+    condition     = startswith(var.clinic_billing_acs_url, "https://") && !strcontains(var.clinic_billing_acs_url, "*")
+    error_message = "clinic_billing_acs_url must be an https URL without a wildcard."
+  }
+}
+
+variable "clinic_billing_entity_id" {
+  type        = string
+  description = "Clinic Billing's SAML audience (SP entity id). The Entra app in wave 2 must use the same value."
+  default     = "https://billing.clinic.example/saml/metadata"
+}
+
+variable "admin_console_phishing_resistant" {
+  type        = bool
+  description = <<-EOT
+    Add a first rule to the Okta Admin Console's authentication policy that
+    demands a phishing-resistant, device-bound factor (Okta Verify FastPass
+    or a passkey) at every console sign-in. Off by default: it changes how
+    the owner signs in to the Okta Admin Console, so the owner turns it on
+    after checking FastPass works on the device they use. Rollback: false +
+    apply (the API token keeps working either way).
+  EOT
+  default     = false
+}
+
+variable "waves_override" {
+  type        = map(object({ cutover = bool, retired = bool }))
+  description = <<-EOT
+    Per Okta app label, overrides the cutover / retired switches of
+    lab/okta-migration/waves.json. For the mocked tests, and for an
+    emergency rollback applied before the waves.json PR lands (then make
+    the PR). Empty by default: waves.json is the source.
+  EOT
+  default     = {}
+}
+
+variable "okta_admin_console_app_id" {
+  type        = string
+  description = "App id of the org's Okta Admin Console (0oa...; Applications > Okta Admin Console, or lab/okta-migration/inventory.json). Needed only with admin_console_phishing_resistant. Org-specific: terraform.tfvars."
+  default     = ""
+}
