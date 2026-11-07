@@ -7,7 +7,7 @@
 #   (dynamic-db/setup.sh does this for you)
 #
 #   vault        HashiCorp Vault Community, database secrets engine
-#                -> CyberArk zero-standing-privilege database access
+#                -> zero-standing-privilege database access
 #                   (Secure Infrastructure Access) / Secrets Manager dynamic
 #                   secrets. Its own instance, so the AD-backed vault in the
 #                   shared stack is never reconfigured by this segment and the

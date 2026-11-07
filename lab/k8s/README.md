@@ -24,10 +24,10 @@ can read exactly one secret path. Around that one exchange:
 | What runs here | Stands in for |
 |---|---|
 | **kind** cluster `contoso-k8s` (one node, Kubernetes 1.36) | **AKS** |
-| HashiCorp **Vault** Kubernetes auth + **Vault Agent Injector** | **CyberArk Secrets Manager**: Conjur `authn-k8s` + Secrets Provider for Kubernetes. On AKS without CyberArk: **Microsoft Entra Workload ID** + the **Key Vault CSI driver** |
+| HashiCorp **Vault** Kubernetes auth + **Vault Agent Injector** | **Microsoft Entra Workload ID** + **Azure Key Vault** through the **Key Vault CSI driver** on AKS (the target, ADR 0027) |
 | Kubernetes groups via `kubectl --as-group` (impersonation) | **Entra ID groups** through AKS's Entra integration |
 
-Nothing in this folder talks to Azure, Entra or CyberArk. It runs for $0 on a
+Nothing in this folder talks to Azure or Entra. It runs for $0 on a
 laptop or a GitHub-hosted runner, and the cluster is deleted after every run.
 The Entra side of the same trust is written as Terraform in
 [`lab/terraform/k8s/aks-mapping`](../terraform/k8s/aks-mapping/README.md) and
@@ -418,7 +418,7 @@ root that only exists to make the AKS mapping typed, tested code (section 4).
 | Standing group membership | **PIM for Groups**: the deployer group is eligible, activated for hours with approval, the same pattern the lab uses for Tier-0 |
 | Launcher group `kubeadm:cluster-admins` (the kind admin = the pipeline) | The GitOps controller's or release pipeline's own identity, never a human group, in `nightly_report_launcher_groups` |
 | Vault Kubernetes auth (TokenReview) | **Microsoft Entra Workload ID**: OIDC issuer + workload identity enabled on the cluster, a **federated identity credential** trusting `system:serviceaccount:clinical-apps:nightly-report` with audience `api://AzureADTokenExchange`, the ServiceAccount annotated with the identity's client ID, pods labelled `azure.workload.identity/use: "true"`. [`aks-mapping`](../terraform/k8s/aks-mapping/README.md) writes it on an **app registration** (`azuread_application_federated_identity_credential`, the lab's `modules/pipeline-identity` pattern); the other common carrier is a **user-assigned managed identity** (`azurerm_federated_identity_credential`), which cannot hold a client secret at all. Same issuer + subject + audience either way |
-| Vault KV + Agent Injector | **Azure Key Vault** (RBAC mode, *Key Vault Secrets User* scoped to the one secret, or at vault scope with the lab's ABAC secret-name condition as in `lab/terraform/modules/keyvault`) through the **Key Vault provider for the Secrets Store CSI driver** add-on, sync to Kubernetes Secrets left off. Or keep Vault / CyberArk on AKS, authenticating the same way |
+| Vault KV + Agent Injector | **Azure Key Vault** (RBAC mode, *Key Vault Secrets User* scoped to the one secret, or at vault scope with the lab's ABAC secret-name condition as in `lab/terraform/modules/keyvault`) through the **Key Vault provider for the Secrets Store CSI driver** add-on, sync to Kubernetes Secrets left off. |
 | ValidatingAdmissionPolicy | The same object (upstream API); **Azure Policy for Kubernetes** (Gatekeeper) for organisation-wide guardrails on top |
 | Audit policy file in the node container | Control-plane **diagnostic settings** (`kube-audit-admin` / `kube-audit`) to Log Analytics, then the same Sentinel / KQL path as the rest of the lab. The audit policy itself is AKS-managed, so the per-resource levels chosen here are not a setting there (verify: category names, resource-specific tables and what each category leaves out) |
 | PSA namespace labels | The same labels |
@@ -429,18 +429,8 @@ a public HTTPS URL. kind's issuer is
 `https://kubernetes.default.svc.cluster.local`, which nothing outside the
 cluster can resolve. The root's variables refuse such an issuer.
 
-### CyberArk mapping
-
-| Here | CyberArk Secrets Manager (Conjur) |
-|---|---|
-| Vault Kubernetes auth role `nightly-report` | A Conjur **host** with `authn-k8s/namespace` + `authn-k8s/service-account` annotations, permitted on the `authn-k8s/<service-id>` authenticator (or `authn-jwt` with the cluster's JWKS, the TokenReview-free model above) |
-| Vault policy `nightly-report-read` | Conjur policy granting `read` + `execute` on one variable |
-| Vault Agent Injector (init + sidecar, file on a shared volume) | **Secrets Provider for Kubernetes** in init-container or sidecar mode with push-to-file. Its "Kubernetes Secrets" mode is the External Secrets trade-off above |
-| `vault.hashicorp.com/*` annotations | `conjur.org/*` annotations on the pod (verify: annotation names for the Secrets Provider version in use) |
-
-The lab's Docker stack already runs **Conjur OSS** for a host-based workload
-(`lab/pam/conjur-demo.sh`). This segment shows the Kubernetes-native half of
-the same pattern.
+ADR 0027 (Microsoft-native PAM) makes the right-hand column the lab's
+target. CyberArk and Conjur are not part of the lab.
 
 ## 5. Run it
 
@@ -537,7 +527,7 @@ new value, no trailing newline) or sections (b) and (c) will fail, correctly.
 
 ## 6. What this does NOT show
 
-- **No AKS, no Entra ID, no CyberArk.** kind, impersonated groups and Vault are
+- **No AKS, no Entra ID.** kind, impersonated groups and Vault are
   labelled stand-ins. No Entra token ever reaches this cluster; group
   membership is asserted by the cluster admin with `--as-group`, which is
   exactly what Entra integration replaces. The Entra federated credential is

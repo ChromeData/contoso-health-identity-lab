@@ -20,8 +20,8 @@
 #       role is NOT on the CI apply identity's delegable list (envs/bootstrap
 #       ABAC condition), so the grant is a human step - the script prints the
 #       exact command.
-#       Production equivalent: CyberArk Vault / PTA syslog -> AMA (CEF) ->
-#       Sentinel.
+#       Production equivalent (ADR 0027): Azure Key Vault diagnostic logs
+#       (AuditEvent) -> Log Analytics -> Sentinel.
 #
 #  B. DC01 Security events -> SecurityEvent (verify: needs Sentinel + the
 #     "Windows Security Events via AMA" connector, per Microsoft Learn; before

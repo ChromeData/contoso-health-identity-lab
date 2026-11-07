@@ -28,7 +28,7 @@ working.
 | `scripts/` | The HR mock, joiner/mover/leaver, post-apply Graph steps, reports, evidence pack |
 | `kql/`, `splunk/`, `monitoring/` | 24 detections in KQL with their SPL twins: five core rules and the ITDR set. The notify playbook (Teams + ServiceNow) and the Teams-approved containment playbook |
 | `iga/` | Birthright rules, SoD rules and the access catalog behind the governance scripts |
-| `pam/` | Vault (CPM stand-in, with discovery, onboarding, reconciliation and an HA/DR rehearsal), Guacamole (PSM and PSMP stand-in), Conjur, midPoint, dynamic database credentials |
+| `pam/` | Vault (rotation harness, with discovery, onboarding, reconciliation and an HA/DR rehearsal), Guacamole (recorded sessions harness), midPoint, dynamic database credentials. PAM target: ADR 0027 (Key Vault, Bastion, LAPS, PIM) |
 | `k8s/` | kind-based workload identity: Vault Kubernetes auth, admission policy, drift test |
 | `evidence/` | `drills/` (the break-glass drill log, an empty template) and hashed local-harness records: `midpoint/` (certification campaigns) and `dynamic-db/` (dynamic database credentials). `out/` is gitignored and holds tenant data |
 

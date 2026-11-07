@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # onboard.sh - step 2: bulk-onboard discovered accounts into Vault through the
-# Vault HTTP API, one Safe (policy) per tier (CyberArk: "Add accounts from
+# Vault HTTP API, one Safe (policy) per tier (the "add accounts from
 # Pending Accounts" + CPM takes over).
 #
 #   * humans  -> their tier's LIBRARY set (exclusive check-out, rotated on

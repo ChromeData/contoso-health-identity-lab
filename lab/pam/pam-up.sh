@@ -15,7 +15,7 @@
 #
 # Usage: ./pam-up.sh              everything above (the full stand-in stack)
 #        ./pam-up.sh --midpoint   only steps 1 + 6 and midPoint with its
-#                                 database (no Vault, Guacamole or Conjur),
+#                                 database (no Vault or Guacamole),
 #                                 then WAIT until midPoint's REST API accepts
 #                                 the administrator - ready for
 #                                 midpoint/run-campaign.sh and
@@ -47,8 +47,6 @@ if [[ ! -f .env ]]; then
   log "Generating .env (random credentials)"
   cat > .env <<ENV
 GUAC_DB_PASSWORD=$(openssl rand -hex 24)
-CONJUR_DB_PASSWORD=$(openssl rand -hex 24)
-CONJUR_DATA_KEY=$(openssl rand -base64 32)
 MIDPOINT_DB_PASSWORD=$(openssl rand -hex 24)
 MIDPOINT_ADMIN_PASSWORD=Mp-$(openssl rand -hex 12)-9a
 DC_FQDN=
@@ -119,7 +117,7 @@ vault_wait
 if [[ "$(vault_cli status -format=json 2>/dev/null | jq -r '.initialized' || true)" != "true" ]]; then
   # ONE key share is a lab shortcut. Production: Shamir 3-of-5 held by
   # different custodians, or auto-unseal via `seal "azurekeyvault"` - the
-  # equivalent of protecting CyberArk's master key.
+  # equivalent of protecting a vault's master key.
   log "Initialising Vault (lab: 1 key share)"
   # Write to a temp file and only keep it if it is valid JSON with a root
   # token - an empty/partial init file would break every later script.
@@ -199,7 +197,6 @@ PAM / IGA stand-ins are up (loopback only):
               lab password in .secrets/operators/NAME-password
   ITSM mock   http://127.0.0.1:8084   ServiceNow Table API v2 stand-in (./itsm-ticket.sh add CHG... --operator NAME --approver A --approver B:
               Tier 0 needs two distinct approvers, neither the requester; Tier 1 one)
-  Conjur      http://127.0.0.1:8083   (./conjur-demo.sh)
   midPoint    http://127.0.0.1:8082/midpoint   administrator / \$MIDPOINT_ADMIN_PASSWORD in .env
               (first start: allow a few minutes before it answers)
 

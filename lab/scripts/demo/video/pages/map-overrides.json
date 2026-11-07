@@ -143,10 +143,6 @@
    "A database login made on request and deleted after one hour.",
    "A key cut for one hour."
   ],
-  "CONJUR": [
-   "Programs fetch only the secret their policy allows, nothing else.",
-   "A vending machine for programs."
-  ],
   "K8S": [
    "A container trades a ten-minute token for one secret. Not covered in the walkthrough.",
    "A ten-minute visitor pass."
@@ -207,7 +203,6 @@
   "GUAC": "Recorded sessions (Guacamole)",
   "HA": "Vault stays up",
   "DYN": "One-hour database logins",
-  "CONJUR": "Secrets for programs",
   "K8S": "Container secrets",
   "PB": "Alert to Teams + ticket",
   "CONTAIN": "Lockout with approval",
@@ -327,13 +322,13 @@
   "VAULT": {
    "kind": "product",
    "standin_for": "",
-   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault, Guacamole and Conjur",
+   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault and Guacamole (superseded by ADR 0027)",
    "where.0.label": "How the vault, sessions and approvals fit together"
   },
   "GUAC": {
    "kind": "product",
    "standin_for": "",
-   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault, Guacamole and Conjur",
+   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault and Guacamole (superseded by ADR 0027)",
    "where.1.label": "The Linux RDP test server (in place of DC01)",
    "where.2.label": "The local PAM stack",
    "proof.0.label": "Recorded RDP session (to a Linux test server)"
@@ -345,12 +340,7 @@
   "DYN": {
    "kind": "product",
    "standin_for": "",
-   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault, Guacamole and Conjur"
-  },
-  "CONJUR": {
-   "kind": "product",
-   "standin_for": "",
-   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault, Guacamole and Conjur"
+   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault and Guacamole (superseded by ADR 0027)"
   },
   "FEED": {
    "kind": "light",

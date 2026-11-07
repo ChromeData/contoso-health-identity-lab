@@ -9,9 +9,9 @@ tokens can get any secret anyway. This linter reads Role / ClusterRole YAML or
 JSON (manifests, or a `kubectl get ... -o json` export) and names those rules
 before anything is applied.
 
-Ported from the author's earlier Conjur-Kubernetes-KubiScan lab (the linter,
-its canary and its fixture only; the Conjur and KubiScan halves were dropped:
-this lab already has a Conjur stand-in in lab/pam and Vault on kind here).
+Ported from the author's earlier Kubernetes-KubiScan lab (the linter, its
+canary and its fixture only; the secrets-manager and KubiScan halves were
+dropped: ADR 0027 makes Azure Key Vault the lab's secrets store).
 
 EXIT CODES (the canary depends on these; a crash must never read as a finding):
   0  read at least one Role/ClusterRole, found nothing risky outside built-ins

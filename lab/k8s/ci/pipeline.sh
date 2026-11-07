@@ -6,8 +6,8 @@
 # this, and so does a human; there is no CI-only logic to drift from.
 #
 # Stand-ins (lab/docs/STAND-INS.md): the kind cluster replaces AKS; Vault's
-# Kubernetes auth + Agent Injector replace CyberArk Conjur authn-k8s / Secrets
-# Provider for Kubernetes (Entra Workload ID + Key Vault CSI on AKS); the
+# Kubernetes auth + Agent Injector stand in for Entra Workload ID + the Key
+# Vault CSI driver on AKS (ADR 0027); the
 # impersonated k8s-clinical-* groups replace Entra groups. None of those
 # products runs here.
 #

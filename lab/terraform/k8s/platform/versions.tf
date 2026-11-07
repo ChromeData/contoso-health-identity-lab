@@ -8,7 +8,7 @@
 # cluster contoso-k8s. See README.md for why there are two stages.
 #
 # STAND-IN: kind stands in for AKS, and in-cluster Vault stands in for
-# CyberArk Secrets Manager (Conjur authn-k8s) - lab/docs/STAND-INS.md.
+# Azure Key Vault via Entra Workload ID (ADR 0027) - lab/docs/STAND-INS.md.
 #
 # PROVIDERS (checked on the GitHub releases pages, 2026-10-19):
 #   hashicorp/helm       ~> 3.3.0  (3.3.0 released 2026-09-02)

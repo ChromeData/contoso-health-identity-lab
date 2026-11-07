@@ -1,6 +1,6 @@
 # ADR 0007: PAM stand-ins (HashiCorp Vault + Guacamole + Conjur OSS) vs. CyberArk
 
-- **Status:** Accepted (lab). It does not select a production PAM vendor. The decision is unchanged; the mapping table, Consequences and Evidence describe what the stand-in does as of 2026-10-20. Everything described as having run ran locally in Docker (the Samba AD harness and the dynamic-database harness), never against DC01 or a tenant.
+- **Status:** **Superseded by [ADR 0027](0027-microsoft-native-pam.md)** (2026-11-06): the lab dropped CyberArk and Conjur and uses Microsoft products for PAM. Kept as the record of the earlier decision; the Conjur code it describes was removed. Was: Accepted (lab). It does not select a production PAM vendor. The decision is unchanged; the mapping table, Consequences and Evidence describe what the stand-in does as of 2026-10-20. Everything described as having run ran locally in Docker (the Samba AD harness and the dynamic-database harness), never against DC01 or a tenant.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 

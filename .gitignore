@@ -4,7 +4,7 @@ lab/evidence/out/
 lab/scripts/powershell/out/
 
 # PAM stand-in stack: generated credentials, Vault unseal key / root token,
-# broker tokens, Conjur API keys, generated Guacamole schema.
+# broker tokens, generated Guacamole schema.
 lab/pam/.env
 lab/pam/.secrets/
 lab/pam/guacamole/initdb.sql

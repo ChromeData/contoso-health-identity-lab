@@ -85,7 +85,7 @@ Each row names a control the lab implements in code, where in the repo it lives,
 
 ---
 
-## 5. Privileged session recording (Guacamole / CyberArk PSM stand-in)
+## 5. Privileged session recording (Guacamole harness; target: Azure Bastion session recording, ADR 0027)
 
 **Lab:** `lab/pam/guacamole/` with session recording to disk, replay via guacenc; `lab/pam/psm-session.sh` (RDP) and `lab/pam/psm-ssh.sh` (SSH), one Guacamole user per operator (`lab/pam/operators.json`), check-out gated on a ServiceNow change (`lab/pam/itsm-ticket.sh`). Ran in the Samba AD harness (`lab/pam/test/e2e.sh`), not yet against DC01.
 
@@ -102,7 +102,7 @@ Each row names a control the lab implements in code, where in the repo it lives,
 
 ## 6. Secrets rotation + checked-out credentials (Vault)
 
-**Lab:** `lab/pam/vault/` — LDAP engine rotates `svc-backup`; library mode for `tier0-admin-01/02`; `lab/pam/discover.sh`, `onboard.sh`, `reconcile.sh`; Conjur OSS for workload secrets (`lab/pam/conjur-demo.sh`). Per-request database credentials are section 16.
+**Lab:** `lab/pam/vault/` — LDAP engine rotates `svc-backup`; library mode for `tier0-admin-01/02`; `lab/pam/discover.sh`, `onboard.sh`, `reconcile.sh`. Per-request database credentials are section 16.
 
 | Framework | Control |
 |---|---|

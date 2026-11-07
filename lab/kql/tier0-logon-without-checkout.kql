@@ -14,7 +14,7 @@
 //   Every Tier-0 logon on a domain controller that PAM does not account for.
 //   Three classes (the Class column):
 //   Vaulted - tier0-admin-01/02 are Domain Admins whose passwords only the
-//     PAM vault knows (lab/pam: Vault LDAP library = the CyberArk stand-in,
+//     PAM vault knows (lab/pam: Vault LDAP library = the local PAM harness,
 //     exclusive check-out, password rotated on check-in). A legitimate logon
 //     ALWAYS sits inside a check-out window. One with no check-out around it
 //     means the credential was used outside PAM: a stolen hash/ticket
@@ -46,7 +46,8 @@
 //     -> Azure Monitor Logs Ingestion API (DCE + DCR, Entra token via az login)
 //     -> custom table VaultCheckout_CL (all three created by
 //        modules/monitoring when enable_itdr_detections = true).
-//   Production equivalent: CyberArk Vault syslog / PTA -> AMA (CEF) -> Sentinel.
+//   Production equivalent (ADR 0027): Windows LAPS password reads in the
+//   Entra audit log -> Sentinel.
 //   DC01 Security events (4624 logon, 4672 special privileges) are collected
 //   by the Azure Monitor Agent + a DCR on vm-dc01, also created by
 //   modules/monitoring (collect_dc_security_events). verify: Microsoft Learn

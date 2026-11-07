@@ -34,9 +34,9 @@
 #   and the secret VALUE is not in this Terraform either: the pipeline seeds
 #   it through the Vault API after this stage, so it never enters state.
 #
-# STAND-IN (lab/docs/STAND-INS.md): CyberArk Secrets Manager / Conjur
-# authn-k8s does the same exchange (a Kubernetes identity in, a scoped
-# secret out). On AKS the Azure-native version is Entra Workload ID: a
+# STAND-IN (lab/docs/STAND-INS.md): the exchange is a Kubernetes identity
+# in, a scoped secret out. On AKS the Azure-native version (the target,
+# ADR 0027) is Entra Workload ID: a
 # federated identity credential trusts the cluster's OIDC issuer, the pod's
 # projected token (audience api://AzureADTokenExchange) is exchanged for an
 # Entra token, and Key Vault RBAC replaces the Vault policy. That FIC is
@@ -359,7 +359,7 @@ resource "vault_policy" "nightly_report_read" {
 }
 
 # -----------------------------------------------------------------------------
-# Vault: Kubernetes auth method (the CyberArk authn-k8s equivalent)
+# Vault: Kubernetes auth method (Entra Workload ID on AKS is the target)
 # -----------------------------------------------------------------------------
 
 resource "vault_auth_backend" "kubernetes" {

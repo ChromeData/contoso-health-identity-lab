@@ -155,7 +155,7 @@ az vm run-command invoke -g $RG -n $VM --command-id RunPowerShellScript --script
 - **The reconcile-account trade-off is explicit.** Vault must rotate Domain
   Admin passwords, and AdminSDHolder overwrites OU delegation on protected
   accounts, so `svc-vault-rotator` is granted on AdminSDHolder. That makes it
-  Tier 0, the same position as a CyberArk CPM reconcile account. Its password
+  Tier 0, the same position as any PAM reconcile account. Its password
   lives only in Key Vault and should be rotated by Vault (`ldap/rotate-root`).
 - **The DC's identity can write only its three build secrets.** An ABAC
   condition on its Key Vault Secrets Officer grant
