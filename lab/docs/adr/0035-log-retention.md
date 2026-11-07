@@ -37,7 +37,12 @@
 | Data | Interactive (analytics) | Long-term (archive or data lake tier) | Immutable export |
 |---|---|---|---|
 | SigninLogs, AuditLogs, AADNonInteractiveUserSignInLogs, SecurityEvent (DCs), AzureActivity | 90 days | 2 years in total | 6 years, to a locked storage account |
-| High-volume, low-value tables (for example non-interactive sign-ins) | 30 days, or a cheaper log plan | 1 year | not needed |
+| High-volume, low-value tables (for example verbose resource diagnostics in `AzureDiagnostics`). Never a sign-in or audit table. | 30 days, or a cheaper log plan | 1 year | not needed |
+
+- Each table is in one tier only. `AADNonInteractiveUserSignInLogs` is in
+  the first tier. It is high-volume, but token replay and break-glass use
+  show up there (`lab/kql/break-glass-signin.kql` reads it), so an
+  investigation needs its full history.
 
 - Microsoft Sentinel includes 90 days of analytics retention at no extra
   retention charge. verify: current Sentinel pricing page.

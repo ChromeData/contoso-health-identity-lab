@@ -9,7 +9,9 @@ link to it, fails. Security rules relax only as far as this page says.
 
 1. Check Service health in the Microsoft 365 admin center and the Azure status page (https://azure.status.microsoft).
 2. Check a sign-in from a second network (a phone hotspot). If it works there, the fault is the hospital network, not Entra. Go to the network runbook.
-3. Open a P1 incident in ServiceNow. Tell the Clinical Operations on-call lead.
+3. Tell the Clinical Operations on-call lead and the identity on-call engineer by phone. Do not wait for a ticket.
+4. Open a P1 incident in ServiceNow if you still have a ServiceNow session. ServiceNow sign-in goes through Entra (SP-initiated SAML, section 3), so a new sign-in can fail.
+5. If you cannot sign in, write the start time (UTC) and what you saw on paper. The identity on-call engineer opens the incident through the ServiceNow side door: the local recovery account `acr.breakglass` at `login.do`, with password and authenticator code ([apps module README, ServiceNow side door](../../terraform/modules/apps/README.md#servicenow-side-door)). L1 does not hold that account. Add your paper notes to the incident when it exists.
 
 ## 2. What still works
 
@@ -42,7 +44,7 @@ link to it, fails. Security rules relax only as far as this page says.
 
 ## 5. After recovery
 
-1. Check that every break-glass sign-in has an incident and a reason.
+1. Check that every break-glass sign-in has an incident and a reason. That includes ServiceNow `acr.breakglass` sign-ins.
 2. Re-check the CA policies against the code (`config-drift.yml`, ADR 0021). Nothing must have changed during the outage.
 3. Have the EHR team reconcile paper downtime records into the EHR.
 4. Write the post-incident report ([post-incident-report-template.md](post-incident-report-template.md)).

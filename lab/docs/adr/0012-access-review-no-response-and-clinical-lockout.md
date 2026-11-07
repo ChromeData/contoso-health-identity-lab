@@ -205,9 +205,10 @@ reviewers behave, so they don't fill this table.
      removed.
   3. T1 (privileged) eligibility is never carried over a move. The PIM
      group owner re-approves it.
-- **Today:** `03-Mover.ps1` removes the old birthright package only, and
-  the mover workflow is opt-in. Until the workflow above is built, a
-  mover's T2 access ends only at its expiry.
+- **Today:** `03-Mover.ps1` leaves birthright removal to the automatic
+  assignment policy and can remove a selected old requestable package.
+  The mover workflow is opt-in. Until the workflow above is built, other
+  T2 assignments remain until expiry unless removed separately.
 
 ## Revisit trigger
 
