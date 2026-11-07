@@ -9,7 +9,8 @@ script "never ran" / "has not run" while lab/evidence/capture-log.csv records
 a run of it.
 
 How: each ADR is split into items (a bullet with its continuation lines, or a
-paragraph). An item is a CLAIM when it contains a "not run" phrase and names a
+paragraph). An item is a CLAIM when it contains a "not run" phrase (including
+the status-line form "Not run: X") and names a
 script (`*.ps1`, `*.sh`, `*.py`, `*.mjs`). A claim FAILS when that script's
 file name appears in the `what` column of any capture-log row.
 
@@ -31,7 +32,11 @@ import sys
 
 NOT_RUN = re.compile(
     r"\b(never run|has never run|never ran|never been run|not yet run|"
-    r"not run yet|has not run|has not been run|not been run)\b",
+    r"not run yet|has not run|has not been run|not been run|"
+    # Bare "Not run: X" is the ADR status-line form (ADR 0003 uses it). The
+    # colon is required: a bare "NOT RUN" is also a result label in tables
+    # (ADR 0026), and that is not a claim about a script.
+    r"not run(?=\s*:))\b",
     re.IGNORECASE,
 )
 SCRIPT = re.compile(r"([A-Za-z0-9_.-]+\.(?:ps1|sh|py|mjs))\b")

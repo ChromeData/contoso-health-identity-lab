@@ -29,6 +29,16 @@ class T(unittest.TestCase):
         self.adr_file("- `Invoke-BreakGlassDrill.ps1` (drill checks, never\n  run)\n")
         self.assertEqual(len(cas.check(self.adr, self.log)), 1)
 
+    def test_bare_not_run_status_form_fails(self):
+        # The status-line wording "Not run: X" must count as a claim too.
+        self.adr_file("- **Status:** Accepted. Not run: `Invoke-BreakGlassDrill.ps1`.\n")
+        self.assertEqual(len(cas.check(self.adr, self.log)), 1)
+
+    def test_not_run_result_label_is_not_a_claim(self):
+        # "NOT RUN" as a table result label (no colon) is not a status claim.
+        self.adr_file("| Check | Result |\n|---|---|\n| `Invoke-BreakGlassDrill.ps1` | a case with no run is NOT RUN, not FAIL |\n")
+        self.assertEqual(cas.check(self.adr, self.log), [])
+
     def test_no_row_for_script_passes(self):
         self.adr_file("- `Convert-BuildAccountToEligible.ps1` (never run)\n")
         self.assertEqual(cas.check(self.adr, self.log), [])
