@@ -97,11 +97,15 @@ cleanup() {
     az group delete -n "$RG" --yes -o none 2>/dev/null || echo "WARNING: group delete failed: delete $RG by hand" >&2
     az keyvault purge -n "$KV" --location "$LOCATION" -o none 2>/dev/null || echo "WARNING: purge failed: purge $KV by hand" >&2
     # Read back: the group is gone and the vault is not in the deleted list.
-    if [[ "$(az group exists -n "$RG" 2>/dev/null)" == "false" ]] \
-       && ! az keyvault show-deleted -n "$KV" -o none 2>/dev/null; then
+    # Only an explicit "not found" counts as purged: any other error from
+    # show-deleted (network, token, throttling) proves nothing, so it fails.
+    local exists deleted_out deleted_rc=0
+    exists="$(az group exists -n "$RG" 2>/dev/null || echo unknown)"
+    deleted_out="$(az keyvault show-deleted -n "$KV" -o none 2>&1)" || deleted_rc=$?
+    if [[ "$exists" == "false" && $deleted_rc -ne 0 ]] && grep -qiE 'No deleted Vault|not ?found|DeletedVaultNotFound' <<<"$deleted_out"; then
       log "Cleanup read back: $RG gone, $KV purged ($(( $(date +%s) - c0 )) s)"
     else
-      echo "WARNING: read back failed: check $RG and the deleted vault $KV by hand" >&2
+      echo "WARNING: read back failed (group exists: $exists; show-deleted rc $deleted_rc: ${deleted_out:0:160}): check $RG and the deleted vault $KV by hand" >&2
       rc=2
     fi
   fi
