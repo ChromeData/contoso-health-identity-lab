@@ -176,9 +176,11 @@ run "drill_incidents_are_labelled" {
     condition = (
       length(azurerm_sentinel_automation_rule.label_drill) == 1 &&
       azurerm_sentinel_automation_rule.label_drill[0].triggers_when == "Created" &&
-      jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)[1].conditionProperties.propertyName == "AccountName" &&
-      jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)[1].conditionProperties.operator == "StartsWith" &&
-      jsonencode(jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)[1].conditionProperties.propertyValues) == jsonencode(["itdr-drill-"]) &&
+      length(jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)) == 1 &&
+      jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)[0].conditionProperties.propertyName == "AccountName" &&
+      jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)[0].conditionProperties.operator == "StartsWith" &&
+      jsonencode(jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)[0].conditionProperties.propertyValues) == jsonencode(["itdr-drill-"]) &&
+      !strcontains(azurerm_sentinel_automation_rule.label_drill[0].condition_json, "IncidentRelatedAnalyticRuleIds") &&
       jsonencode(azurerm_sentinel_automation_rule.label_drill[0].action_incident[0].labels) == jsonencode(["drill"]) &&
       azurerm_sentinel_automation_rule.label_drill[0].action_incident[0].status == null
     )
