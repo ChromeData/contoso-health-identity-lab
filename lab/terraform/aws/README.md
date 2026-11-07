@@ -390,7 +390,11 @@ tofu plan  -var aws_profile=idlab-labadmin -var enable_session_manager=true \
 tofu apply ssm.tfplan   # 19 added (+ the operator guardrails policy updated in place)
 # 3. a session (needs session-manager-plugin)
 aws ssm start-session --profile <LabServerSession profile> --target $(tofu output -raw session_node_instance_id)
-# 4. after the capture: the same targets with -destroy (or the flag false)
+# 4. after the capture: plan with -var enable_session_manager=false and the
+#    SAME targets EXCEPT aws_iam_role_policy.entra_operator_guardrails, and
+#    WITHOUT -destroy. Never -destroy the guardrails policy: that deletes every
+#    operator Deny while its AdministratorAccess attachment stays. Expect
+#    "19 to destroy" and nothing else.
 ```
 
 The CLI profile for the session (`~/.aws/config`): same `sso_session` as
