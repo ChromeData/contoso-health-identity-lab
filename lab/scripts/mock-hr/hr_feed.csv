@@ -59,4 +59,3 @@ employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate
 400101,Ava,Lin,Information Technology,IAM Engineer,400100,active,2021-04-12,
 400102,Raj,Patel,Information Technology,Service Desk Analyst,400100,active,2023-02-06,
 400103,Mei,Tanaka,Information Technology,Access Governance Lead,400100,active,2020-09-14,
-100495,Test,Leaver,Nursing,Registered Nurse,200015,leaver,2026-11-07,2026-11-07
