@@ -430,6 +430,13 @@ Describe 'ITDR detection <_> (KQL + SPL twin)' -ForEach $ItdrRules {
         ([regex]::Matches($splText, '@stanza ')).Count | Should -Be 1
         $splText | Should -Match ([regex]::Escape("lab/kql/$_.kql"))
     }
+
+    It 'SPL twin: the pipeline is real SPL, not commented out (review of #233)' {
+        $lines = $splText -split "`n"
+        @($lines | Where-Object { $_ -match '^\| (where|eval|stats|table|lookup|spath)\b' }).Count | Should -BeGreaterThan 1
+        @($lines | Where-Object { $_ -match '^``` \| ' }).Count | Should -Be 0
+        @($lines | Select-Object -Skip 1 | Where-Object { $_ -and $_ -notmatch '^```' -and $_ -notmatch '^\|' }).Count | Should -Be 0
+    }
 }
 
 Describe 'Splunk app and Terraform module stay in sync' {

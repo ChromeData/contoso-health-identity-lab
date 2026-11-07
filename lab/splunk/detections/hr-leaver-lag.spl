@@ -10,19 +10,9 @@ index=entra sourcetype="azure:loganalytics:aadprovisioninglogs" earliest=-30m la
 ``` the replay (ingest-from-loganalytics.sh) carries this table today, so this ```
 ``` search has no rows to read. It runs and returns nothing until a feed sends ```
 ``` the table with this sourcetype. ```
-``` | spath input=ServicePrincipal path=Name output=SpName ```
-``` | eval Kind=case(SpName=="Contoso HR Inbound Provisioning" AND match(ModifiedProperties, "(?i)\x22accountDisabled\x22[^}]*\x22newValue\x22:\s*\x22True\x22"), "inbound", SpName=="corp.contosohealthlab.com" AND match(ModifiedProperties, "(?i)\x22AccountEnabled\x22[^}]*\x22newValue\x22:\s*\x22False\x22"), "cloud", true(), null()) ```
-``` | where isnotnull(Kind) ```
-``` | spath input=TargetIdentity path=Id output=TgtId ```
-``` | spath input=SourceIdentity path=Id output=SrcId ```
-``` | spath input=ProvisioningStatusInfo path=Status output=InboundStatus ```
-``` | eval AdObjectGuid=if(Kind=="inbound", TgtId, SrcId), EmployeeId=if(Kind=="inbound", SrcId, null()), EntraObjectId=if(Kind=="cloud", TgtId, null()) ```
-``` | stats min(eval(if(Kind=="inbound", _time, null()))) AS LeaverEpoch, min(eval(if(Kind=="cloud", _time, null()))) AS CloudEpoch, values(EmployeeId) AS EmployeeId, values(EntraObjectId) AS EntraObjectId, values(InboundStatus) AS InboundStatus BY AdObjectGuid ```
-``` | where isnotnull(LeaverEpoch) AND LeaverEpoch <= relative_time(now(), "-15m") ```
-``` | eval Reason=case(InboundStatus!="success", "inbound write to AD: ".InboundStatus, isnull(CloudEpoch) OR CloudEpoch < LeaverEpoch, "AD disabled, Entra ID still enabled after 15 minutes", true(), null()) ```
-``` | where isnotnull(Reason) ```
-``` | eval Severity="High", TimeGenerated=strftime(LeaverEpoch, "%Y-%m-%dT%H:%M:%S%z"), LeaverTime=TimeGenerated ```
-``` | table TimeGenerated, Severity, Reason, EmployeeId, AdObjectGuid, EntraObjectId, InboundStatus, LeaverTime ```
+``` Same pairing as the KQL twin: inbound row (ServicePrincipal.Name Contoso HR ```
+``` Inbound Provisioning, accountDisabled True) 15-30 minutes old, joined on the ```
+``` AD objectGUID to the Cloud Sync row (AccountEnabled False). ```
 ``` ========================================================================== ```
 ``` @stanza Contoso ITDR - HR leaver still enabled in Entra ID after 15 minutes ```
 ``` @conf description = HR inbound provisioning disabled the AD account (or failed to) and Cloud Sync has not disabled the Entra user 15 minutes later. KQL twin: lab/kql/hr-leaver-lag.kql ```
@@ -43,6 +33,16 @@ index=entra sourcetype="azure:loganalytics:aadprovisioninglogs" earliest=-30m la
 ``` @conf alert.suppress.period = 1h ```
 ``` @conf request.ui_dispatch_app = search ```
 ``` @conf request.ui_dispatch_view = search ```
-Same pairing as the KQL twin: inbound row (ServicePrincipal.Name Contoso HR
-Inbound Provisioning, accountDisabled True) 15-30 minutes old, joined on the
-AD objectGUID to the Cloud Sync row (AccountEnabled False).
+| spath input=ServicePrincipal path=Name output=SpName
+| eval Kind=case(SpName=="Contoso HR Inbound Provisioning" AND match(ModifiedProperties, "(?i)\x22accountDisabled\x22[^}]*\x22newValue\x22:\s*\x22True\x22"), "inbound", SpName=="corp.contosohealthlab.com" AND match(ModifiedProperties, "(?i)\x22AccountEnabled\x22[^}]*\x22newValue\x22:\s*\x22False\x22"), "cloud", true(), null())
+| where isnotnull(Kind)
+| spath input=TargetIdentity path=Id output=TgtId
+| spath input=SourceIdentity path=Id output=SrcId
+| spath input=ProvisioningStatusInfo path=Status output=InboundStatus
+| eval AdObjectGuid=if(Kind=="inbound", TgtId, SrcId), EmployeeId=if(Kind=="inbound", SrcId, null()), EntraObjectId=if(Kind=="cloud", TgtId, null())
+| stats min(eval(if(Kind=="inbound", _time, null()))) AS LeaverEpoch, min(eval(if(Kind=="cloud", _time, null()))) AS CloudEpoch, values(EmployeeId) AS EmployeeId, values(EntraObjectId) AS EntraObjectId, values(InboundStatus) AS InboundStatus BY AdObjectGuid
+| where isnotnull(LeaverEpoch) AND LeaverEpoch <= relative_time(now(), "-15m")
+| eval Reason=case(InboundStatus!="success", "inbound write to AD: ".InboundStatus, isnull(CloudEpoch) OR CloudEpoch < LeaverEpoch, "AD disabled, Entra ID still enabled after 15 minutes", true(), null())
+| where isnotnull(Reason)
+| eval Severity="High", TimeGenerated=strftime(LeaverEpoch, "%Y-%m-%dT%H:%M:%S%z"), LeaverTime=TimeGenerated
+| table TimeGenerated, Severity, Reason, EmployeeId, AdObjectGuid, EntraObjectId, InboundStatus, LeaverTime

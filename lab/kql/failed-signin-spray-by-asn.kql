@@ -48,21 +48,20 @@ let SignIns = union
     (AADNonInteractiveUserSignInLogs | where TimeGenerated > ago(LookBack)
         | project TimeGenerated, UserPrincipalName, IPAddress, ResultType, Asn = tostring(AutonomousSystemNumber))
 | where isnotempty(Asn) and not(Asn in (TrustedAsns));
-let Failures = SignIns
-| where ResultType in (CredentialFailureCodes)
-| summarize Tries = count(), Ips = make_set(IPAddress, 20) by Asn, UserPrincipalName
-| where Tries <= MaxTriesPerUser
+// Per ASN and user first, so the success check is exact: the lists are
+// capped for display only AFTER each user is judged (review of #233).
+let PerUser = SignIns
+| summarize Tries = countif(ResultType in (CredentialFailureCodes)), Oks = countif(ResultType == "0"),
+            Ips = make_set_if(IPAddress, ResultType in (CredentialFailureCodes), 20)
+    by Asn, UserPrincipalName;
+PerUser
+| where Tries between (1 .. MaxTriesPerUser)
 | summarize DistinctUsers = dcount(UserPrincipalName), Users = make_set(UserPrincipalName, 50),
-            FailedCount = sum(Tries), Ips = make_set(Ips, 50)
+            FailedCount = sum(Tries), CompromisedCount = countif(Oks > 0),
+            Compromised = make_set_if(UserPrincipalName, Oks > 0, 50), Ips = make_set(Ips, 50)
     by Asn
-| where DistinctUsers >= MinDistinctUsers;
-let Successes = SignIns
-| where ResultType == "0"
-| summarize SucceededUsers = make_set(UserPrincipalName, 50) by Asn;
-Failures
-| join kind=leftouter Successes on Asn
-| extend Compromised = set_intersect(Users, coalesce(SucceededUsers, dynamic([])))
-| extend Severity = iff(array_length(Compromised) > 0, "High", "Medium")
+| where DistinctUsers >= MinDistinctUsers
+| extend Severity = iff(CompromisedCount > 0, "High", "Medium")
 | extend TimeGenerated = now()
-| project TimeGenerated, Severity, Asn, DistinctUsers, FailedCount, Users, Compromised, Ips
+| project TimeGenerated, Severity, Asn, DistinctUsers, FailedCount, CompromisedCount, Users, Compromised, Ips
 | sort by DistinctUsers desc

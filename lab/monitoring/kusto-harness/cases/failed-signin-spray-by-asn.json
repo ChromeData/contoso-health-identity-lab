@@ -56,7 +56,8 @@
           "Severity": "High",
           "Compromised": [
             "user1@contosohealthlab.onmicrosoft.com"
-          ]
+          ],
+          "CompromisedCount": 1
         }
       ]
     },
@@ -147,6 +148,47 @@
           }
         ]
       }
+    },
+    {
+      "id": "hit-among-many-successes",
+      "kind": "positive",
+      "label": "12 sprayed users and 60 OTHER users signing in fine from the same ASN; sprayed user5 also succeeds: still High (the hit is judged per user before any list is capped)",
+      "tables": {
+        "SigninLogs": [
+          {
+            "_repeat": 12,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.{i}",
+            "ResultType": "50126",
+            "AutonomousSystemNumber": "64511"
+          },
+          {
+            "_repeat": 60,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "ok{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.100",
+            "ResultType": "0",
+            "AutonomousSystemNumber": "64511"
+          },
+          {
+            "_repeat": 1,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "user5@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.5",
+            "ResultType": "0",
+            "AutonomousSystemNumber": "64511"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "CompromisedCount": 1,
+          "DistinctUsers": 12
+        }
+      ],
+      "expectRows": 1
     }
   ]
 }

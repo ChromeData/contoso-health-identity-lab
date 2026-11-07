@@ -6,19 +6,8 @@ index=entra sourcetype="azure:loganalytics:auditlogs" Category="UserManagement" 
 ``` -------------------------------------------------------------------------- ```
 ``` STAND-IN: Splunk Enterprise 60-day TRIAL. Written 2026-11-07 with the     ```
 ``` fourth ITDR set (review findings B1, B2, C5, D1).                         ```
-``` | where match(ActivityDisplayName, "(?i)security info") ```
-``` | spath path=TargetResources{}.type output=TT ```
-``` | spath path=TargetResources{}.id output=TID ```
-``` | spath path=TargetResources{}.userPrincipalName output=TUPN ```
-``` | eval TargetObjectId=mvindex(TID, 0), TargetUpn=mvindex(TUPN, 0) ```
-``` | lookup contoso_break_glass_users.csv user_id AS TargetObjectId OUTPUT user_id AS BgMatch ```
-``` | where isnotnull(BgMatch) OR match(TargetUpn, "(?i)^bg-admin-[0-9]{2}@") ```
-``` | spath path=InitiatedBy.user.userPrincipalName output=ActorUpn ```
-``` | spath path=InitiatedBy.app.displayName output=ActorApp ```
-``` | eval Actor=coalesce(ActorUpn, ActorApp), ActorKind=case(isnotnull(ActorApp) AND ActorApp!="", "application", lower(ActorUpn)==lower(TargetUpn), "the account itself", true(), "an admin") ```
-``` | eval Severity=if(match(Result, "(?i)^success$") AND NOT match(ActivityDisplayName, "(?i)deleted"), "High", "Medium") ```
-``` | sort 0 - _time ```
-``` | table TimeGenerated, Severity, ActivityDisplayName, ResultReason, Result, TargetUpn, TargetObjectId, Actor, ActorKind, CorrelationId ```
+``` Ids: lookup contoso_break_glass_users.csv (user_id); the bg-admin-NN name is the ```
+``` fallback match, as in the KQL twin. ```
 ``` ========================================================================== ```
 ``` @stanza Contoso ITDR - Authentication method added to a break-glass account ```
 ``` @conf description = Security info registered or changed on a break-glass account, by anyone (the account, an admin or an application). KQL twin: lab/kql/break-glass-auth-method-added.kql ```
@@ -39,5 +28,16 @@ index=entra sourcetype="azure:loganalytics:auditlogs" Category="UserManagement" 
 ``` @conf alert.suppress.period = 1h ```
 ``` @conf request.ui_dispatch_app = search ```
 ``` @conf request.ui_dispatch_view = search ```
-Ids: lookup contoso_break_glass_users (Id); the bg-admin-NN name is the
-fallback match, as in the KQL twin.
+| where match(ActivityDisplayName, "(?i)security info")
+| spath path=TargetResources{}.type output=TT
+| spath path=TargetResources{}.id output=TID
+| spath path=TargetResources{}.userPrincipalName output=TUPN
+| eval TargetObjectId=mvindex(TID, 0), TargetUpn=mvindex(TUPN, 0)
+| lookup contoso_break_glass_users.csv user_id AS TargetObjectId OUTPUT user_id AS BgMatch
+| where isnotnull(BgMatch) OR match(TargetUpn, "(?i)^bg-admin-[0-9]{2}@")
+| spath path=InitiatedBy.user.userPrincipalName output=ActorUpn
+| spath path=InitiatedBy.app.displayName output=ActorApp
+| eval Actor=coalesce(ActorUpn, ActorApp), ActorKind=case(isnotnull(ActorApp) AND ActorApp!="", "application", lower(ActorUpn)==lower(TargetUpn), "the account itself", true(), "an admin")
+| eval Severity=if(match(Result, "(?i)^success$") AND NOT match(ActivityDisplayName, "(?i)deleted"), "High", "Medium")
+| sort 0 - _time
+| table TimeGenerated, Severity, ActivityDisplayName, ResultReason, Result, TargetUpn, TargetObjectId, Actor, ActorKind, CorrelationId

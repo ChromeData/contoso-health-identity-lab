@@ -1,32 +1,32 @@
 {
  "what": "kusto-harness cases run on the Log Analytics query engine (loga-idlab), read-only, rows bound by let",
  "notAScheduledRule": true,
- "started": "2026-11-07T01:45:23Z",
- "finished": "2026-11-07T01:47:41Z",
+ "started": "2026-11-07T01:57:48Z",
+ "finished": "2026-11-07T01:59:50Z",
  "result": "INCOMPLETE",
  "counts": {
-  "PASS": 51,
+  "PASS": 53,
   "FAIL": 0,
   "ERROR": 0,
   "SKIPPED": 1
  },
  "rules": {
-  "pim-activation": "b1dedb1eab53d5d740e478154a47e55547ce5e7fcffad5cea5313bd120be5056",
+  "pim-activation": "4e8229c69b00413bb9a138048829669a5e62219312cf11f74452e985455d94d7",
   "failed-signin-spike": "30f06e763c52d4af9bd2339a80c0ad085321e53205df81dd2443dfd95434d046",
   "operator-signin-outside-allowlist": "b26726a8570f66b91a89d84b481454bc30db0cb8c939fe4dff85a59d5ba8868d",
   "operator-permissions-changed": "23f7632c6cc376116f2a1e24ff08cde0af4759ef66eaa1489a8411df4b3d5559",
   "break-glass-auth-method-added": "bdc61c9a9a81046151827c0e90936446f90ff063a07467a3454b8d6cd4a98141",
   "hr-leaver-lag": "46e556fb631587cc95d8bcc66e736fc94b9e6a5244b1714cf5786c0f6f1ee6d1",
-  "failed-signin-spray-by-asn": "2f07d2d9f5348b4307f389501f4c5f9cefcfdfbdead4c74890245a856a1c3212"
+  "failed-signin-spray-by-asn": "ae64fb2349c8b9f96ba0664f2e69beb7693cd9025d9953dde0d453c439b57c4d"
  },
  "caseFiles": {
-  "pim-activation": "04c347c5965732bc06e5b569ddca7a99fb92dddc5b55323535483f24d2738c3c",
+  "pim-activation": "6ff5227493011d3846250c605eaf86f05e2a42c528158bb96b222a76e176c581",
   "failed-signin-spike": "a129c5bcebc74ce409de3309a368f3d7fe7b602effeabe2d4c6f09fe5b267e45",
   "operator-signin-outside-allowlist": "3d5eea7c2ef9154a081613642f2ffbe1388ff6d8399f9f943a76326715d060ab",
   "operator-permissions-changed": "d8b7365b5af88919ac230bf19cfd57a66cf6ca7a88d811b2a48ed6427c3a8789",
   "break-glass-auth-method-added": "d2461065f84d1b7b3831c1a114e57c6cd730a5a5fa27b9fe682a2e91b0e1975d",
   "hr-leaver-lag": "882b38adbd36797912acd391f3dc1efbf8f464380f67499b26c880038605a25d",
-  "failed-signin-spray-by-asn": "69f81f33a99ea80389a5a52de2340dcb0df8cf58d9eb787ecd364b8cf92fddce"
+  "failed-signin-spray-by-asn": "b275ecb63f7456b29912356a4c47ec404fd24d75538c9d1bc56e380ef84c92c0"
  },
  "cases": [
   {
@@ -37,7 +37,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:23.341563Z",
+     "TimeGenerated": "2026-11-07T01:27:48.289494Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -69,7 +69,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:25.611001Z",
+     "TimeGenerated": "2026-11-07T01:27:50.121838Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -101,7 +101,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:30.578296Z",
+     "TimeGenerated": "2026-11-07T01:27:52.15902Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -160,7 +160,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:40.863399Z",
+     "TimeGenerated": "2026-11-07T01:28:02.859177Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -192,7 +192,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:42.966506Z",
+     "TimeGenerated": "2026-11-07T01:28:04.47857Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -224,7 +224,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:45.281253Z",
+     "TimeGenerated": "2026-11-07T01:28:06.802651Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -256,7 +256,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:47.155312Z",
+     "TimeGenerated": "2026-11-07T01:28:09.960985Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -288,7 +288,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:49.927987Z",
+     "TimeGenerated": "2026-11-07T01:28:11.89045Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -320,7 +320,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:52.886167Z",
+     "TimeGenerated": "2026-11-07T01:28:13.629956Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -352,7 +352,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:55.904861Z",
+     "TimeGenerated": "2026-11-07T01:28:16.551779Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -384,7 +384,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:15:58.783744Z",
+     "TimeGenerated": "2026-11-07T01:28:18.491084Z",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
      "ActorObjectId": "22222222-2222-2222-2222-222222222222",
      "ActorIp": "203.0.113.10",
@@ -409,6 +409,38 @@
    "failures": []
   },
   {
+   "id": "pim-activation/history-anchored-to-the-activation",
+   "kind": "positive",
+   "label": "Activation 50 min ago from 203.0.113.10, which the admin used 24 h 30 min ago (inside THAT activation's 23-hour history) and 198.51.100.50 3 h ago: NewIp no, Medium. A now()-anchored history would drop the older sign-in, read NewIp yes and flip the same activation to High in a later run (review of #233)",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:08:20.696768Z",
+     "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
+     "ActorObjectId": "22222222-2222-2222-2222-222222222222",
+     "ActorIp": "203.0.113.10",
+     "ElevationType": "PIM for Groups",
+     "ElevatedTo": "PIM-Tier0-Security-Admins",
+     "HighValue": true,
+     "Tier0By": "group object id",
+     "OffHours": false,
+     "NewIp": "no",
+     "Severity": "Medium",
+     "Result": "success",
+     "ActivityDisplayName": "Add member to group completed (PIM activation)",
+     "CorrelationId": "11111111-1111-1111-1111-111111111111",
+     "AdditionalDetails": [
+      {
+       "key": "Justification",
+       "value": "CHG0031001 onboarding batch"
+      }
+     ]
+    }
+   ],
+   "failures": []
+  },
+  {
    "id": "failed-signin-spike/password-spray",
    "kind": "positive",
    "label": "12 failures from one IP against 12 users: likely password spray",
@@ -416,7 +448,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:35:00Z",
+     "TimeGenerated": "2026-11-07T01:50:00Z",
      "IPAddress": "198.51.100.66",
      "Country": "NL",
      "FailedCount": 12,
@@ -442,8 +474,8 @@
      "Apps": [
       "Microsoft Office"
      ],
-     "FirstSeen": "2026-11-07T01:39:01.153061Z",
-     "LastSeen": "2026-11-07T01:39:01.153061Z"
+     "FirstSeen": "2026-11-07T01:51:22.585817Z",
+     "LastSeen": "2026-11-07T01:51:22.585817Z"
     }
    ],
    "failures": []
@@ -456,7 +488,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:35:00Z",
+     "TimeGenerated": "2026-11-07T01:50:00Z",
      "IPAddress": "198.51.100.66",
      "Country": "NL",
      "FailedCount": 10,
@@ -471,8 +503,8 @@
      "Apps": [
       "Microsoft Office"
      ],
-     "FirstSeen": "2026-11-07T01:39:02.984574Z",
-     "LastSeen": "2026-11-07T01:39:02.984574Z"
+     "FirstSeen": "2026-11-07T01:51:24.181041Z",
+     "LastSeen": "2026-11-07T01:51:24.181041Z"
     }
    ],
    "failures": []
@@ -485,7 +517,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:35:00Z",
+     "TimeGenerated": "2026-11-07T01:50:00Z",
      "IPAddress": "198.51.100.66",
      "Country": "NL",
      "FailedCount": 10,
@@ -505,8 +537,8 @@
      "Apps": [
       "Microsoft Office"
      ],
-     "FirstSeen": "2026-11-07T01:39:04.696592Z",
-     "LastSeen": "2026-11-07T01:39:04.696592Z"
+     "FirstSeen": "2026-11-07T01:51:26.123041Z",
+     "LastSeen": "2026-11-07T01:51:26.123041Z"
     }
    ],
    "failures": []
@@ -555,7 +587,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:30:00Z",
+     "TimeGenerated": "2026-11-07T01:45:00Z",
      "IPAddress": "198.51.100.66",
      "Country": "NL",
      "FailedCount": 10,
@@ -570,8 +602,8 @@
      "Apps": [
       "Microsoft Office"
      ],
-     "FirstSeen": "2026-11-07T01:34:17.666883Z",
-     "LastSeen": "2026-11-07T01:37:17.666883Z"
+     "FirstSeen": "2026-11-07T01:46:43.94962Z",
+     "LastSeen": "2026-11-07T01:49:43.94962Z"
     }
    ],
    "failures": []
@@ -602,7 +634,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:35:00Z",
+     "TimeGenerated": "2026-11-07T01:50:00Z",
      "IPAddress": "198.51.100.66",
      "Country": "NL",
      "FailedCount": 12,
@@ -628,8 +660,8 @@
      "Apps": [
       "Microsoft Office"
      ],
-     "FirstSeen": "2026-11-07T01:39:26.6618Z",
-     "LastSeen": "2026-11-07T01:39:26.6618Z"
+     "FirstSeen": "2026-11-07T01:51:49.869084Z",
+     "LastSeen": "2026-11-07T01:51:49.869084Z"
     }
    ],
    "failures": []
@@ -642,7 +674,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:36:28.618641Z",
+     "TimeGenerated": "2026-11-07T01:48:51.893329Z",
      "Severity": "High",
      "ServicePrincipalName": "Contoso Lab Operator (local Mac, certificate)",
      "ServicePrincipalId": "88888888-8888-8888-8888-888888888888",
@@ -653,8 +685,8 @@
      "ResultTypes": [
       "0"
      ],
-     "FirstSeen": "2026-11-07T01:36:28.618641Z",
-     "LastSeen": "2026-11-07T01:36:28.618641Z"
+     "FirstSeen": "2026-11-07T01:48:51.893329Z",
+     "LastSeen": "2026-11-07T01:48:51.893329Z"
     }
    ],
    "failures": []
@@ -667,7 +699,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:36:30.426384Z",
+     "TimeGenerated": "2026-11-07T01:48:53.550127Z",
      "Severity": "High",
      "ServicePrincipalName": "Contoso Lab Operator (local Mac, certificate)",
      "ServicePrincipalId": "88888888-8888-8888-8888-888888888888",
@@ -678,8 +710,8 @@
      "ResultTypes": [
       "0"
      ],
-     "FirstSeen": "2026-11-07T01:36:30.426384Z",
-     "LastSeen": "2026-11-07T01:36:30.426384Z"
+     "FirstSeen": "2026-11-07T01:48:53.550127Z",
+     "LastSeen": "2026-11-07T01:48:53.550127Z"
     }
    ],
    "failures": []
@@ -692,7 +724,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:36:32.378886Z",
+     "TimeGenerated": "2026-11-07T01:48:55.376517Z",
      "Severity": "Medium",
      "ServicePrincipalName": "Contoso Lab Operator (local Mac, certificate)",
      "ServicePrincipalId": "88888888-8888-8888-8888-888888888888",
@@ -703,8 +735,8 @@
      "ResultTypes": [
       "7000274"
      ],
-     "FirstSeen": "2026-11-07T01:36:32.378886Z",
-     "LastSeen": "2026-11-07T01:36:32.378886Z"
+     "FirstSeen": "2026-11-07T01:48:55.376517Z",
+     "LastSeen": "2026-11-07T01:48:55.376517Z"
     }
    ],
    "failures": []
@@ -742,7 +774,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:16:40.043966Z",
+     "TimeGenerated": "2026-11-07T01:29:00.370396Z",
      "Severity": "High",
      "OperationName": "Add app role assignment to service principal",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
@@ -769,7 +801,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:16:56.175857Z",
+     "TimeGenerated": "2026-11-07T01:29:01.994046Z",
      "Severity": "High",
      "OperationName": "Add service principal credentials",
      "Actor": "Contoso Lab Operator (local Mac, certificate)",
@@ -796,7 +828,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:16:57.875351Z",
+     "TimeGenerated": "2026-11-07T01:29:04.458884Z",
      "Severity": "Medium",
      "OperationName": "Remove app role assignment from service principal",
      "Actor": "dana.okafor@contosohealthlab.onmicrosoft.com",
@@ -841,7 +873,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:17:05.967302Z",
+     "TimeGenerated": "2026-11-07T01:29:10.470812Z",
      "Severity": "High",
      "ActivityDisplayName": "User registered security info",
      "ResultReason": "User registered Fido2 Authentication Method",
@@ -863,7 +895,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:17:09.046421Z",
+     "TimeGenerated": "2026-11-07T01:29:11.980937Z",
      "Severity": "High",
      "ActivityDisplayName": "Admin registered security info",
      "ResultReason": "Admin registered temporary access pass method for user",
@@ -885,7 +917,7 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:17:12.509381Z",
+     "TimeGenerated": "2026-11-07T01:29:13.992775Z",
      "Severity": "Medium",
      "ActivityDisplayName": "User registered security info",
      "ResultReason": "User failed to register Fido2 Authentication Method",
@@ -925,14 +957,14 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:27:17.877764Z",
+     "TimeGenerated": "2026-11-07T01:39:22.050487Z",
      "Severity": "High",
      "Reason": "AD disabled, Entra ID still enabled after 15 minutes",
      "EmployeeId": "400104",
      "AdObjectGuid": "dddddddd-dddd-dddd-dddd-dddddddddddd",
      "EntraObjectId": "",
      "InboundStatus": "success",
-     "LeaverTime": "2026-11-07T01:27:17.877764Z"
+     "LeaverTime": "2026-11-07T01:39:22.050487Z"
     }
    ],
    "failures": []
@@ -945,14 +977,14 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:27:20.506722Z",
+     "TimeGenerated": "2026-11-07T01:39:23.890747Z",
      "Severity": "High",
      "Reason": "inbound write to AD: failure",
      "EmployeeId": "400104",
      "AdObjectGuid": "dddddddd-dddd-dddd-dddd-dddddddddddd",
      "EntraObjectId": "",
      "InboundStatus": "failure",
-     "LeaverTime": "2026-11-07T01:27:20.506722Z"
+     "LeaverTime": "2026-11-07T01:39:23.890747Z"
     }
    ],
    "failures": []
@@ -992,11 +1024,12 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:47:31.6558767Z",
+     "TimeGenerated": "2026-11-07T01:59:34.0453788Z",
      "Severity": "Medium",
      "Asn": "64511",
      "DistinctUsers": 12,
      "FailedCount": 12,
+     "CompromisedCount": 0,
      "Users": [
       "user0@contosohealthlab.onmicrosoft.com",
       "user1@contosohealthlab.onmicrosoft.com",
@@ -1038,11 +1071,12 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:47:33.9159543Z",
+     "TimeGenerated": "2026-11-07T01:59:37.9407867Z",
      "Severity": "High",
      "Asn": "64511",
      "DistinctUsers": 12,
      "FailedCount": 12,
+     "CompromisedCount": 1,
      "Users": [
       "user0@contosohealthlab.onmicrosoft.com",
       "user1@contosohealthlab.onmicrosoft.com",
@@ -1086,11 +1120,12 @@
    "rowCount": 1,
    "rows": [
     {
-     "TimeGenerated": "2026-11-07T01:47:35.8441146Z",
+     "TimeGenerated": "2026-11-07T01:59:42.2692854Z",
      "Severity": "Medium",
      "Asn": "64511",
      "DistinctUsers": 12,
      "FailedCount": 12,
+     "CompromisedCount": 0,
      "Users": [
       "user0@contosohealthlab.onmicrosoft.com",
       "user1@contosohealthlab.onmicrosoft.com",
@@ -1143,6 +1178,55 @@
    "status": "PASS",
    "rowCount": 0,
    "rows": [],
+   "failures": []
+  },
+  {
+   "id": "failed-signin-spray-by-asn/hit-among-many-successes",
+   "kind": "positive",
+   "label": "12 sprayed users and 60 OTHER users signing in fine from the same ASN; sprayed user5 also succeeds: still High (the hit is judged per user before any list is capped)",
+   "status": "PASS",
+   "rowCount": 1,
+   "rows": [
+    {
+     "TimeGenerated": "2026-11-07T01:59:50.1175509Z",
+     "Severity": "High",
+     "Asn": "64511",
+     "DistinctUsers": 12,
+     "FailedCount": 12,
+     "CompromisedCount": 1,
+     "Users": [
+      "user0@contosohealthlab.onmicrosoft.com",
+      "user1@contosohealthlab.onmicrosoft.com",
+      "user2@contosohealthlab.onmicrosoft.com",
+      "user3@contosohealthlab.onmicrosoft.com",
+      "user4@contosohealthlab.onmicrosoft.com",
+      "user5@contosohealthlab.onmicrosoft.com",
+      "user6@contosohealthlab.onmicrosoft.com",
+      "user7@contosohealthlab.onmicrosoft.com",
+      "user8@contosohealthlab.onmicrosoft.com",
+      "user9@contosohealthlab.onmicrosoft.com",
+      "user10@contosohealthlab.onmicrosoft.com",
+      "user11@contosohealthlab.onmicrosoft.com"
+     ],
+     "Compromised": [
+      "user5@contosohealthlab.onmicrosoft.com"
+     ],
+     "Ips": [
+      "198.51.100.0",
+      "198.51.100.1",
+      "198.51.100.2",
+      "198.51.100.3",
+      "198.51.100.4",
+      "198.51.100.5",
+      "198.51.100.6",
+      "198.51.100.7",
+      "198.51.100.8",
+      "198.51.100.9",
+      "198.51.100.10",
+      "198.51.100.11"
+     ]
+    }
+   ],
    "failures": []
   }
  ]

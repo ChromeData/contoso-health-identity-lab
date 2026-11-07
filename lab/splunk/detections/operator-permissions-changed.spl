@@ -6,25 +6,9 @@ index=entra sourcetype="azure:loganalytics:auditlogs" Category="ApplicationManag
 ``` -------------------------------------------------------------------------- ```
 ``` STAND-IN: Splunk Enterprise 60-day TRIAL. Written 2026-11-07 with the     ```
 ``` fourth ITDR set (review findings B1, B2, C5, D1).                         ```
-``` | where match(Result, "(?i)^success$") ```
-``` | where in(OperationName, "Add app role assignment to service principal", "Remove app role assignment from service principal", "Add delegated permission grant", "Remove delegated permission grant", "Consent to application", "Add service principal credentials", "Remove service principal credentials", "Update application - Certificates and secrets management", "Add owner to service principal", "Add owner to application", "Update application", "Update service principal") ```
-``` | spath path=TargetResources{}.id output=TargetIds ```
-``` | spath path=TargetResources{}.displayName output=TargetNames ```
-``` | spath path=TargetResources{}.modifiedProperties{} output=MP ```
-``` | eval ClientIds=mvmap(MP, if(in(spath(MP, "displayName"), "ServicePrincipal.ObjectID", "ServicePrincipal.AppId"), replace(spath(MP, "newValue"), "\x22", ""), null())) ```
-``` | eval CandidateIds=mvappend(TargetIds, ClientIds) ```
-``` | mvexpand CandidateIds ```
-``` | lookup contoso_operator_principals.csv principal_id AS CandidateIds OUTPUT principal_id AS MatchedId ```
-``` | where isnotnull(MatchedId) ```
-``` | spath path=InitiatedBy.user.userPrincipalName output=ActorUpn ```
-``` | spath path=InitiatedBy.app.displayName output=ActorApp ```
-``` | spath path=InitiatedBy.app.servicePrincipalId output=ActorSpId ```
-``` | lookup contoso_operator_principals.csv principal_id AS ActorSpId OUTPUT principal_id AS ActorOp ```
-``` | eval Actor=coalesce(ActorUpn, ActorApp), ActorIsOperator=if(isnotnull(ActorOp), "true", "false") ```
-``` | eval Severity=if(in(OperationName, "Remove app role assignment from service principal", "Remove delegated permission grant", "Remove service principal credentials"), "Medium", "High") ```
-``` | stats values(MatchedId) AS MatchedIds, first(Severity) AS Severity, first(Actor) AS Actor, first(ActorUpn) AS ActorUpn, first(ActorApp) AS ActorApp, first(ActorSpId) AS ActorSpId, first(ActorIsOperator) AS ActorIsOperator, first(TargetNames) AS TargetNames, first(_time) AS T BY CorrelationId, OperationName ```
-``` | eval TimeGenerated=strftime(T, "%Y-%m-%dT%H:%M:%S%z") ```
-``` | table TimeGenerated, Severity, OperationName, Actor, ActorUpn, ActorApp, ActorSpId, ActorIsOperator, TargetNames, MatchedIds, CorrelationId ```
+``` Ids: lookup contoso_operator_principals.csv (principal_id). Matched on any TargetResources id ```
+``` or a ServicePrincipal.ObjectID / ServicePrincipal.AppId modified-property ```
+``` value, like the KQL twin (quotes stripped). ```
 ``` ========================================================================== ```
 ``` @stanza Contoso ITDR - Lab operator permissions, credentials or owners changed ```
 ``` @conf description = An app role, grant, credential, owner or app setting of the lab operator changed, by anyone including itself. KQL twin: lab/kql/operator-permissions-changed.kql ```
@@ -45,6 +29,22 @@ index=entra sourcetype="azure:loganalytics:auditlogs" Category="ApplicationManag
 ``` @conf alert.suppress.period = 1h ```
 ``` @conf request.ui_dispatch_app = search ```
 ``` @conf request.ui_dispatch_view = search ```
-Ids: lookup contoso_operator_principals (Id). Matched on any TargetResources id
-or a ServicePrincipal.ObjectID / ServicePrincipal.AppId modified-property
-value, like the KQL twin (quotes stripped).
+| where match(Result, "(?i)^success$")
+| where in(OperationName, "Add app role assignment to service principal", "Remove app role assignment from service principal", "Add delegated permission grant", "Remove delegated permission grant", "Consent to application", "Add service principal credentials", "Remove service principal credentials", "Update application - Certificates and secrets management", "Add owner to service principal", "Add owner to application", "Update application", "Update service principal")
+| spath path=TargetResources{}.id output=TargetIds
+| spath path=TargetResources{}.displayName output=TargetNames
+| spath path=TargetResources{}.modifiedProperties{} output=MP
+| eval ClientIds=mvmap(MP, if(in(spath(MP, "displayName"), "ServicePrincipal.ObjectID", "ServicePrincipal.AppId"), replace(spath(MP, "newValue"), "\x22", ""), null()))
+| eval CandidateIds=mvappend(TargetIds, ClientIds)
+| mvexpand CandidateIds
+| lookup contoso_operator_principals.csv principal_id AS CandidateIds OUTPUT principal_id AS MatchedId
+| where isnotnull(MatchedId)
+| spath path=InitiatedBy.user.userPrincipalName output=ActorUpn
+| spath path=InitiatedBy.app.displayName output=ActorApp
+| spath path=InitiatedBy.app.servicePrincipalId output=ActorSpId
+| lookup contoso_operator_principals.csv principal_id AS ActorSpId OUTPUT principal_id AS ActorOp
+| eval Actor=coalesce(ActorUpn, ActorApp), ActorIsOperator=if(isnotnull(ActorOp), "true", "false")
+| eval Severity=if(in(OperationName, "Remove app role assignment from service principal", "Remove delegated permission grant", "Remove service principal credentials"), "Medium", "High")
+| stats values(MatchedId) AS MatchedIds, first(Severity) AS Severity, first(Actor) AS Actor, first(ActorUpn) AS ActorUpn, first(ActorApp) AS ActorApp, first(ActorSpId) AS ActorSpId, first(ActorIsOperator) AS ActorIsOperator, first(TargetNames) AS TargetNames, first(_time) AS T BY CorrelationId, OperationName
+| eval TimeGenerated=strftime(T, "%Y-%m-%dT%H:%M:%S%z")
+| table TimeGenerated, Severity, OperationName, Actor, ActorUpn, ActorApp, ActorSpId, ActorIsOperator, TargetNames, MatchedIds, CorrelationId

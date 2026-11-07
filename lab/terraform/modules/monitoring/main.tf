@@ -82,15 +82,17 @@ locals {
     # Tier 0 is Medium, Tier 0 off-hours or from a new IP is High. One alert
     # per activation, so each carries its own severity; grouped per account
     # AND severity, so a High never hides inside an older Medium incident.
-    # Period P1D: the new-IP check reads the admin's sign-ins of the day
-    # before the alert window; only activations of the last hour alert.
+    # Period P2D: the new-IP check reads, for each activation, the admin's
+    # sign-ins of the 23 h ending an hour before it (up to 25 h back); only
+    # activations of the last hour alert. P2D is also the Log Analytics
+    # alert maximum.
     pim_activation = {
       file         = "pim-activation.kql"
       display_name = "Contoso - PIM activation (just-in-time elevation)"
       description  = "A PIM for Groups / PIM for roles activation completed. Severity from the query: Informational for routine non-Tier-0 work (no ticket), Low when unusual, Medium for Tier 0, High for Tier 0 outside working hours or from a new IP."
       severity     = "Medium"
       frequency    = "PT5M"
-      period       = "P1D"
+      period       = "P2D"
       suppress     = null
       tactics      = ["PrivilegeEscalation"]
       techniques   = ["T1078"]

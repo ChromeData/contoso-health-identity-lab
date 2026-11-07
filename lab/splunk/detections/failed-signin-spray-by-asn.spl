@@ -6,18 +6,7 @@ index=entra (sourcetype="azure:loganalytics:signinlogs" OR sourcetype="azure:log
 ``` -------------------------------------------------------------------------- ```
 ``` STAND-IN: Splunk Enterprise 60-day TRIAL. Written 2026-11-07 with the     ```
 ``` fourth ITDR set (review findings B1, B2, C5, D1).                         ```
-``` | eval Asn=AutonomousSystemNumber ```
-``` | where isnotnull(Asn) AND Asn!="" ```
-``` | lookup contoso_trusted_asns.csv asn AS Asn OUTPUT asn AS TrustedAsn ```
-``` | where isnull(TrustedAsn) ```
-``` | eval Fail=if(in(ResultType, "50126", "50053", "50055", "50056", "50057", "50034"), 1, 0), Ok=if(ResultType=="0", 1, 0) ```
-``` | stats sum(Fail) AS Tries, sum(Ok) AS Oks, values(IPAddress) AS Ips BY Asn, UserPrincipalName ```
-``` | eventstats dc(eval(if(Tries>0 AND Tries<=3, UserPrincipalName, null()))) AS DistinctUsers BY Asn ```
-``` | where DistinctUsers >= 10 ```
-``` | eval SprayUser=if(Tries>0 AND Tries<=3, UserPrincipalName, null()), Hit=if(Tries>0 AND Tries<=3 AND Oks>0, UserPrincipalName, null()) ```
-``` | stats values(SprayUser) AS Users, values(Hit) AS Compromised, sum(eval(if(Tries<=3, Tries, 0))) AS FailedCount, values(Ips) AS Ips, first(DistinctUsers) AS DistinctUsers BY Asn ```
-``` | eval Severity=if(mvcount(Compromised) > 0, "High", "Medium"), TimeGenerated=strftime(now(), "%Y-%m-%dT%H:%M:%S%z") ```
-``` | table TimeGenerated, Severity, Asn, DistinctUsers, FailedCount, Users, Compromised, Ips ```
+``` Trusted ASNs: lookup contoso_trusted_asns.csv (asn), empty in the lab. ```
 ``` ========================================================================== ```
 ``` @stanza Contoso ITDR - Password spray across one network (distinct users per ASN) ```
 ``` @conf description = Credential failures against 10+ distinct users, 3 or fewer tries each, from one ASN in 1 h, in either sign-in table. KQL twin: lab/kql/failed-signin-spray-by-asn.kql ```
@@ -38,4 +27,16 @@ index=entra (sourcetype="azure:loganalytics:signinlogs" OR sourcetype="azure:log
 ``` @conf alert.suppress.period = 1h ```
 ``` @conf request.ui_dispatch_app = search ```
 ``` @conf request.ui_dispatch_view = search ```
-Trusted ASNs: lookup contoso_trusted_asns (Asn), empty in the lab.
+| eval Asn=AutonomousSystemNumber
+| where isnotnull(Asn) AND Asn!=""
+| lookup contoso_trusted_asns.csv asn AS Asn OUTPUT asn AS TrustedAsn
+| where isnull(TrustedAsn)
+| eval Fail=if(in(ResultType, "50126", "50053", "50055", "50056", "50057", "50034"), 1, 0), Ok=if(ResultType=="0", 1, 0)
+| stats sum(Fail) AS Tries, sum(Ok) AS Oks, values(IPAddress) AS Ips BY Asn, UserPrincipalName
+| eventstats dc(eval(if(Tries>0 AND Tries<=3, UserPrincipalName, null()))) AS DistinctUsers BY Asn
+| where DistinctUsers >= 10
+| eval SprayUser=if(Tries>0 AND Tries<=3, UserPrincipalName, null()), Hit=if(Tries>0 AND Tries<=3 AND Oks>0, UserPrincipalName, null())
+| stats values(SprayUser) AS Users, values(Hit) AS Compromised, sum(eval(if(Tries<=3, Tries, 0))) AS FailedCount, values(Ips) AS Ips, first(DistinctUsers) AS DistinctUsers BY Asn
+| eval CompromisedCount=coalesce(mvcount(Compromised), 0)
+| eval Severity=if(CompromisedCount > 0, "High", "Medium"), TimeGenerated=strftime(now(), "%Y-%m-%dT%H:%M:%S%z")
+| table TimeGenerated, Severity, Asn, DistinctUsers, FailedCount, CompromisedCount, Users, Compromised, Ips

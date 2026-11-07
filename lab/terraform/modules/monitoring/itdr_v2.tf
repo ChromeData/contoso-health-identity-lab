@@ -235,7 +235,8 @@ locals {
   # The operator_ips watchlist exists whenever the v2 set is on Sentinel,
   # even while dc_logon_outside_operator_allowlist is still excluded, so the
   # allowlist is in place BEFORE the rule that reads it.
-  operator_ips_watchlist_on = var.enable_sentinel && var.enable_itdr_detections_v2
+  # The v4 operator sign-in rule reads it too (review of #233): on for either.
+  operator_ips_watchlist_on = var.enable_sentinel && (var.enable_itdr_detections_v2 || var.enable_itdr_detections_v4)
 }
 
 # -----------------------------------------------------------------------------

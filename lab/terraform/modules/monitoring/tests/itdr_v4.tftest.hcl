@@ -145,3 +145,20 @@ run "egress_ranges_ipv4_cidr_only" {
   }
   expect_failures = [var.trusted_egress_ranges]
 }
+
+# Review of #233: the operator sign-in rule reads the operator_ips watchlist,
+# so the watchlist must exist with the v4 set even when v2 is off.
+run "v4_alone_creates_the_watchlist" {
+  command = plan
+  variables {
+    enable_itdr_detections_v4 = true
+    operator_principal_ids    = ["88888888-8888-8888-8888-888888888888"]
+    operator_ip_ranges        = ["198.51.100.7/32"]
+    operator_ips_expires_on   = "2099-12-31"
+  }
+
+  assert {
+    condition     = length(azurerm_sentinel_watchlist.operator_ips) == 1 && length(azurerm_sentinel_watchlist_item.operator_ips) == 1
+    error_message = "With v4 on and v2 off, the operator_ips watchlist and its entries must still be created."
+  }
+}
