@@ -43,13 +43,20 @@ Set-StrictMode -Version Latest
 
 function Write-Step([string]$Message) { Write-Output ("[connect-health] {0}" -f $Message) }
 
+# The Connect Health AD FS agent's Windows services. Older agents install
+# AdHealthAdfs* services; the current agent installs ONE service,
+# AzureADConnectHealthAgent (seen on DC01, PR #237 install record). Check
+# both, so neither version reads as "not installed". The same function is in
+# 12-Install-ConnectHealthAgent.ps1 and 19-Remove-Adfs.ps1 (run-on-dc.py
+# sends one file); lab/adfs/tests/ConnectHealth.Tests.ps1 keeps them equal.
+function Get-ConnectHealthAdfsService {
+    @(Get-Service -Name 'AdHealthAdfs*', 'AzureADConnectHealthAgent' -ErrorAction SilentlyContinue)
+}
+
 if (-not (Get-Service adfssrv -ErrorAction SilentlyContinue)) { throw 'AD FS is not installed. Run 10-Install-Adfs.ps1 first.' }
 if ($InstallerUrl -notlike 'https://*') { throw 'InstallerUrl must be https.' }
 
-# Agent 3.x installs AdHealthAdfs* services; 4.x may name them
-# AzureADConnectHealth*. Either one means the agent is installed.
-$svcPattern = @('AdHealthAdfs*', 'AzureADConnectHealth*')
-if (-not (Get-Service $svcPattern -ErrorAction SilentlyContinue)) {
+if ((Get-ConnectHealthAdfsService).Count -eq 0) {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $dir = Join-Path $env:ProgramData 'ContosoAdfs'
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -73,7 +80,7 @@ if (-not (Get-Service $svcPattern -ErrorAction SilentlyContinue)) {
     if ($p.ExitCode -ne 0) { throw "Installer exit code $($p.ExitCode)." }
 } else { Write-Step 'agent already installed' }
 
-$services = Get-Service $svcPattern -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ name = $_.Name; status = $_.Status.ToString() } }
+$services = Get-ConnectHealthAdfsService | ForEach-Object { [pscustomobject]@{ name = $_.Name; status = $_.Status.ToString() } }
 # A registered agent keeps its identity under this key (verify: the value
 # name; the script reports, it does not decide on it).
 $reg = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\ADHealthAgent' -ErrorAction SilentlyContinue

@@ -58,6 +58,16 @@ $doIt = ($Apply -eq 'yes')
 
 function Write-Step([string]$Message) { Write-Output ("[adfs-remove] {0}" -f $Message) }
 
+# The Connect Health AD FS agent's Windows services. Older agents install
+# AdHealthAdfs* services; the current agent installs ONE service,
+# AzureADConnectHealthAgent (seen on DC01, PR #237 install record). Check
+# both, so neither version reads as "not installed". The same function is in
+# 12-Install-ConnectHealthAgent.ps1 and 19-Remove-Adfs.ps1 (run-on-dc.py
+# sends one file); lab/adfs/tests/ConnectHealth.Tests.ps1 keeps them equal.
+function Get-ConnectHealthAdfsService {
+    @(Get-Service -Name 'AdHealthAdfs*', 'AzureADConnectHealthAgent' -ErrorAction SilentlyContinue)
+}
+
 $domainDn = (Get-ADDomain).DistinguishedName
 $dkm = "CN=ADFS,CN=Microsoft,CN=Program Data,$domainDn"
 $adfs = [bool](Get-Service adfssrv -ErrorAction SilentlyContinue)
@@ -89,7 +99,7 @@ $auditsProven = [bool]$anyAudit -and ($oldest -le $since)
 $inventory = [ordered]@{
     adfsService       = $adfs
     relyingParty      = $(if ($adfs) { [bool](Get-AdfsRelyingPartyTrust -Identifier $RpIdentifier) } else { $false })
-    connectHealth     = [bool](Get-Service 'AdHealthAdfs*' -ErrorAction SilentlyContinue)
+    connectHealth     = ((Get-ConnectHealthAdfsService).Count -gt 0)
     dkmContainer      = [bool](Get-ADObject -Filter "DistinguishedName -eq '$dkm'" -ErrorAction SilentlyContinue)
     gmsa              = [bool](Get-ADServiceAccount -Filter "Name -eq '$GmsaName'")
     tokenIssuances    = $recent.Count

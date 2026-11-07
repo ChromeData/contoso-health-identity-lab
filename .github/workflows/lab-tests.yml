@@ -189,7 +189,7 @@ jobs:
         run: |
           Import-Module Pester -RequiredVersion 5.7.1
           $c = New-PesterConfiguration
-          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1')
+          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1', './lab/adfs/tests/ConnectHealth.Tests.ps1')
           $c.Run.Exit = $true
           $c.Output.Verbosity = 'Normal'
           Invoke-Pester -Configuration $c
@@ -202,6 +202,8 @@ jobs:
           bash lab/scripts/demo/tests/close-build-noise.test.sh
           node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs lab/scripts/demo/signin/tests/identity.test.mjs
           node --test lab/terraform/okta/tests/trust-claims.test.mjs
+          # Okta -> Entra migration tools: EL->Entra rule translation, tracker, System Log filter, the app's ID-token check (no network).
+          node --test lab/okta-migration/tests/lib.test.mjs
           bash lab/scripts/demo/tests/containment-drill.test.sh
           # The scanner positive control's own failure modes (stub scanners).
           bash lab/pipelines/scanner-selftest/tests/selftest.test.sh
