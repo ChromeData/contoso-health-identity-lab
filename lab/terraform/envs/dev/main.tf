@@ -325,7 +325,7 @@ module "groups" {
   break_glass_domain = var.onmicrosoft_domain
 
   # Optional groups, each behind the flag of the feature that consumes it.
-  enable_nhi_governance  = var.enable_nhi_governance               # App-Consent-Reviewers
+  enable_nhi_governance  = var.enable_nhi_governance                                                # App-Consent-Reviewers
   enable_workforce_group = var.enable_phishing_resistant_all_users || var.enable_lcw_leaver_trigger # All-Workforce (passkey rollout; scheduled leaver trigger)
 }
 
