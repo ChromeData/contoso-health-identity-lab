@@ -45,3 +45,9 @@ jit_provisioning        = true # [prod] false: pre-linked accounts only
 # passwords at the next sign-in. A check warns on every plan while false.
 routing_rule_active = true
 routing_rule_name   = "Clinic staff to Microsoft Entra ID"
+
+# ---- The clinic's other apps (clinic-apps.tf) ------------------------------------
+# Cut-over switches are NOT here: lab/okta-migration/waves.json (reviewed).
+# Owner's switch: the Okta Admin Console demands a phishing-resistant factor.
+admin_console_phishing_resistant = false
+# okta_admin_console_app_id      = "0oa..."   # Applications > Okta Admin Console (needed with the switch)
