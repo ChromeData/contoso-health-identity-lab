@@ -1,0 +1,110 @@
+[
+ {
+  "time": "2026-11-07T01:13:19Z",
+  "event": "StartSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": null,
+  "target": "i-07a274aa99e3ea550",
+  "document": null,
+  "sessionId": "adm-labops@ContosoHealthLab.onmicrosoft.com-ec5jk38qdfhpyy2hvxxvyxjn54"
+ },
+ {
+  "time": "2026-11-07T01:13:34Z",
+  "event": "StartSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": null,
+  "target": "i-07a274aa99e3ea550",
+  "document": null,
+  "sessionId": "adm-labops@ContosoHealthLab.onmicrosoft.com-ttr5sqzu2sfois2fyvasx6anau"
+ },
+ {
+  "time": "2026-11-07T01:14:51Z",
+  "event": "StartSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": "AccessDenied",
+  "target": null,
+  "document": null,
+  "sessionId": null
+ },
+ {
+  "time": "2026-11-07T01:14:53Z",
+  "event": "SendCommand",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": "AccessDenied",
+  "target": null,
+  "document": null,
+  "sessionId": null
+ },
+ {
+  "time": "2026-11-07T01:15:13Z",
+  "event": "StartSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": "AccessDenied",
+  "target": null,
+  "document": null,
+  "sessionId": null
+ },
+ {
+  "time": "2026-11-07T01:15:31Z",
+  "event": "StartSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": "AccessDenied",
+  "target": null,
+  "document": null,
+  "sessionId": null
+ },
+ {
+  "time": "2026-11-07T01:15:51Z",
+  "event": "StartSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/contoso-lab-operator/lab-operator-20261106T201547",
+  "error": null,
+  "target": "i-07a274aa99e3ea550",
+  "document": null,
+  "sessionId": "lab-operator-20261106T201547-ilbfuisup8dykjcp7y3t5ikesu"
+ },
+ {
+  "time": "2026-11-07T01:15:59Z",
+  "event": "TerminateSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": "AccessDenied",
+  "target": null,
+  "document": null,
+  "sessionId": null
+ },
+ {
+  "time": "2026-11-07T01:16:01Z",
+  "event": "StartSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": null,
+  "target": "i-07a274aa99e3ea550",
+  "document": null,
+  "sessionId": "adm-labops@ContosoHealthLab.onmicrosoft.com-vkvbdohjvdqsbuf64qez3lr8ya"
+ },
+ {
+  "time": "2026-11-07T01:16:12Z",
+  "event": "TerminateSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": null,
+  "target": "adm-labops@ContosoHealthLab.onmicrosoft.com-vkvbdohjvdqsbuf64qez3lr8ya",
+  "document": null,
+  "sessionId": "adm-labops@ContosoHealthLab.onmicrosoft.com-vkvbdohjvdqsbuf64qez3lr8ya"
+ },
+ {
+  "time": "2026-11-07T01:17:02Z",
+  "event": "StartSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": null,
+  "target": "i-07a274aa99e3ea550",
+  "document": null,
+  "sessionId": "adm-labops@ContosoHealthLab.onmicrosoft.com-p8b5i5obdvpcnsj5ablxjpvjl8"
+ },
+ {
+  "time": "2026-11-07T01:26:58Z",
+  "event": "StartSession",
+  "who": "arn:aws:sts::182002546409:assumed-role/AWSReservedSSO_LabServerSession_d3c3cfaca24bd7ad/adm-labops@ContosoHealthLab.onmicrosoft.com",
+  "error": null,
+  "target": "i-07a274aa99e3ea550",
+  "document": null,
+  "sessionId": "adm-labops@ContosoHealthLab.onmicrosoft.com-g3o2oaitx655sqdf4tgy98qlha"
+ }
+]
