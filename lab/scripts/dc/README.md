@@ -18,6 +18,7 @@ extension.
 | `run-on-dc.py` | Runs any of these scripts on DC01 with secret parameters as a managed run command: secrets come from the Keychain or Terraform state inside the helper, are scrubbed from output, never on a command line |
 | `04-Install-CloudSyncAgent.ps1` | Installs and registers the Entra provisioning agent (Cloud Sync) unattended: Microsoft-signature gate, gMSA, domain bind. Replaces the manual RDP step |
 | `Remove-DemoHire.ps1` | Demo retakes only (`lab/scripts/demo/reset-demo-hire.sh`): deletes the one AD account HR provisioning created for an employeeID, never outside `OU=Workforce` / `OU=Disabled`, never a protected (`adminCount=1`) account. Reports only unless `Apply=yes` |
+| `rotate-tier-admin.py` + `Reset-TierAdminPassword.ps1` | New random password for ONE tier admin (`t0-adm-01`, `t1-adm-01`, `t2-adm-01`; `contosoadmin` is refused, the owner decides on it). The password is made on the Mac, written straight into Keychain item `contoso-lab-ad-<account>` over stdin, sent as a protected parameter, never printed. DC01 resets the account, then asks the KDC for a Kerberos ticket with the new password. If DC01 did not change the account, the old Keychain value goes back. `lab/scripts/operator/op python3 -I lab/scripts/dc/rotate-tier-admin.py t0-adm-01` |
 
 ## Run it
 
