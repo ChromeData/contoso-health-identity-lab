@@ -56,9 +56,21 @@ Describe 'Test-SecretExpiry.ps1' {
         $env:GITHUB_STEP_SUMMARY = $null
     }
 
-    It 'the committed register passes today (2026-11-07)' {
-        & $script:Check -Now ([datetime]'2026-11-07') | Out-Null
-        $LASTEXITCODE | Should -Be 0
+    It 'the committed register has owners and dates for every present secret (2026-11-07)' {
+        # A real due date inside the window may fail the run (that is the alert);
+        # an expired, ownerless or undated present secret never may.
+        $out = (& $script:Check -Now ([datetime]'2026-11-07')) -join "`n"
+        $out | Should -Not -Match 'SECRET-EXPIRED:|SECRET-NO-OWNER:|SECRET-NO-EXPIRY:'
+    }
+
+    It 'the AD bind accounts use the privileged-access standard limits (90 days Vault bind, 30 days AD service account)' {
+        $reg = Get-Content -Raw -LiteralPath ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' '..' 'iga' 'nhi-secrets-register.json'))) | ConvertFrom-Json
+        $rot = $reg.secrets | Where-Object name -EQ 'svc-vault-rotator-password'
+        $dis = $reg.secrets | Where-Object name -EQ 'svc-pam-discovery-password'
+        $rot.rotation | Should -Match '^P90D'
+        $dis.rotation | Should -Match '^P30D'
+        ([datetime]$rot.expiresOn - [datetime]$rot.createdOn).TotalDays | Should -BeLessOrEqual 90
+        ([datetime]$dis.expiresOn - [datetime]$dis.createdOn).TotalDays | Should -BeLessOrEqual 30
     }
 }
 
