@@ -9,7 +9,10 @@ no Keychain) and pin what matters:
   * the installation token is scoped to this one repository,
   * gh gets the token only in GH_TOKEN; git only through $BOT_TOKEN,
   * the key, the JWT and the token never appear in any argv or on stdout,
-  * commits are authored by "<slug>[bot]" with its noreply e-mail.
+  * commits are authored by "<slug>[bot]" with its noreply e-mail,
+  * the credential helper answers only https://github.com (never another
+    host), and an SSH remote is refused (it would push with the owner's
+    SSH key). These two run the REAL git with an isolated config.
 
     python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
 """
@@ -17,6 +20,7 @@ no Keychain) and pin what matters:
 import base64
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -26,6 +30,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 BOT_GH = os.path.join(ROOT, "lab", "scripts", "operator", "github-bot", "bot-gh")
 TOKEN = "ghs_STUBTOKEN0123456789"
+REAL_GIT = shutil.which("git")
+STUB_SSH = r"""#!/usr/bin/env bash
+echo "ssh $*" >> "$STUB_DIR/ssh.log"
+exit 1
+"""
 
 STUB_SECURITY = r"""#!/usr/bin/env bash
 echo "security $*" >> "$STUB_DIR/argv.log"
@@ -110,12 +119,27 @@ class BotGhTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_bot(self, *args):
+    def run_bot(self, *args, real_git=False, stdin=None, cwd=None):
         env = dict(os.environ)
         env.update(PATH=self.bin + os.pathsep + env["PATH"], STUB_DIR=self.d,
                    STUB_TOKEN=TOKEN, CONTOSO_OPERATOR_HOME=self.home)
         env.pop("GH_TOKEN", None)
-        return subprocess.run(["bash", BOT_GH, *args], env=env, capture_output=True, text=True)
+        if real_git:
+            # The real git first on PATH (not the recording stub), with no
+            # owner config at all, and an `ssh` stub that records any call.
+            real = os.path.join(self.d, "realbin")
+            os.makedirs(real, exist_ok=True)
+            if not os.path.exists(os.path.join(real, "git")):
+                os.symlink(REAL_GIT, os.path.join(real, "git"))
+                p = os.path.join(real, "ssh")
+                open(p, "w").write(STUB_SSH)
+                os.chmod(p, 0o755)
+            env["PATH"] = real + os.pathsep + env["PATH"]
+            env.update(HOME=self.home, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+            for k in ("GIT_ASKPASS", "SSH_ASKPASS", "GIT_SSH_COMMAND", "GIT_SSH", "GIT_ALLOW_PROTOCOL"):
+                env.pop(k, None)
+        return subprocess.run(["bash", BOT_GH, *args], env=env, capture_output=True, text=True,
+                              input=stdin, cwd=cwd)
 
     def read(self, name):
         p = os.path.join(self.d, name)
@@ -161,6 +185,42 @@ class BotGhTest(unittest.TestCase):
                       self.read("argv.log"))
         self.assert_no_secret_leak(r)
         self.assertNotEqual(self.run_bot("push").returncode, 0)
+
+    @unittest.skipUnless(REAL_GIT, "needs git")
+    def test_credential_helper_answers_github_https_only(self):
+        # Another host (the Greptile finding on PR #241): no password at all.
+        for req in ("protocol=https\nhost=example.invalid\n\n",
+                    "protocol=http\nhost=github.com\n\n",
+                    "protocol=https\nhost=github.com.example.invalid\n\n"):
+            r = self.run_bot("git", "credential", "fill", real_git=True, stdin=req)
+            self.assertNotIn(TOKEN, r.stdout + r.stderr, "token given for: " + req.split()[1])
+            self.assertNotEqual(r.returncode, 0, "git found a credential for " + req.split()[1])
+        # github.com over https: the bot's token (a stub token, test only).
+        r = self.run_bot("git", "credential", "fill", real_git=True,
+                         stdin="protocol=https\nhost=github.com\npath=ChromeData/x.git\n\n")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("username=x-access-token", r.stdout)
+        self.assertIn("password=" + TOKEN, r.stdout)
+        self.assertNotIn(TOKEN, self.read("argv.log"))
+
+    @unittest.skipUnless(REAL_GIT, "needs git")
+    def test_ssh_remote_is_refused_never_owner_key(self):
+        repo = os.path.join(self.d, "repo")
+        subprocess.run([REAL_GIT, "init", "-q", repo], check=True)
+        # A commit, so the push gets as far as connecting to the remote.
+        subprocess.run([REAL_GIT, "-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                        "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+        for url in ("git@github.com:ChromeData/contoso-health-identity-lab.git",
+                    "ssh://git@github.com/ChromeData/contoso-health-identity-lab.git"):
+            r = self.run_bot("git", "push", url, "HEAD:refs/heads/x", real_git=True, cwd=repo)
+            self.assertNotEqual(r.returncode, 0, "an SSH push did not fail")
+            self.assertEqual(self.read("ssh.log"), "", "ssh ran: the push would use the owner's SSH key")
+        # Nor through the owner's own pushInsteadOf rewrite of the HTTPS URL.
+        subprocess.run([REAL_GIT, "-C", repo, "config", "url.git@github.com:.pushInsteadOf",
+                        "https://github.com/"], check=True)
+        r = self.run_bot("push", "feat/x", real_git=True, cwd=repo)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.read("ssh.log"), "", "ssh ran after a pushInsteadOf rewrite")
 
     def test_missing_key_fails_closed(self):
         os.remove(os.path.join(self.d, "key.b64"))

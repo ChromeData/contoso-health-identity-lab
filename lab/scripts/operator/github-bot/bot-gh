@@ -14,6 +14,8 @@
 #   bot-gh gh pr create --base main ...# any gh command, as the bot
 #   bot-gh git commit -m "..."         # commit with the bot as author+committer
 #   bot-gh git push origin-https HEAD  # push over HTTPS with the bot's token
+#                                      # (SSH remotes are refused: they would
+#                                      # push with the owner's SSH key)
 #   bot-gh push <branch>               # shortcut: push HEAD to <branch> as the bot
 #
 # How: the App private key's only lasting copy is the login Keychain item
@@ -22,7 +24,8 @@
 #   2. signs a 9-minute App JWT with openssl (key passed on a pipe),
 #   3. exchanges it for a 1-hour installation token scoped to THIS repo only,
 #   4. passes the token to gh / git in the environment (GH_TOKEN, or a git
-#      credential helper reading $BOT_TOKEN). Never in argv, never printed.
+#      credential helper reading $BOT_TOKEN, answered for https://github.com
+#      only). Never in argv, never printed.
 # curl gets its Authorization header from a config on stdin (-K -), so the
 # JWT and token never show in `ps`.
 #
@@ -108,14 +111,30 @@ case "$cmd" in
     # The helper reads the token from the environment at call time, so the
     # token is not in git's argv or config. The empty helper first clears the
     # owner's own helpers (osxkeychain) for this one command.
+    # It answers only a "get" for protocol=https and host=github.com (git
+    # sends those lines on stdin, then a blank line). Any other host or
+    # protocol gets no answer, so a third-party remote never receives the
+    # token (git then fails or prompts; GIT_TERMINAL_PROMPT=0 stops prompts).
     # shellcheck disable=SC2016  # \$BOT_TOKEN must expand inside git, not here
-    helper='!f() { echo username=x-access-token; echo "password=$BOT_TOKEN"; }; f'
+    helper='!f() { [ "$1" = get ] || return 0; p=; h=; while IFS= read -r l; do [ -n "$l" ] || break; case "$l" in protocol=*) p="${l#protocol=}";; host=*) h="${l#host=}";; esac; done; [ "$p" = https ] && [ "$h" = github.com ] || return 0; echo username=x-access-token; echo "password=$BOT_TOKEN"; }; f'
+    # SSH never: an SSH remote ignores credential.helper and signs in with
+    # the owner's SSH key or agent, so the push would be the owner's, not the
+    # bot's. protocol.ssh.allow=never makes git refuse the ssh transport
+    # (also an https URL that the owner's url.*.pushInsteadOf rewrites to
+    # ssh). GIT_SSH_COMMAND is a second stop if a git build ignores it;
+    # GIT_ALLOW_PROTOCOL would override the -c setting, so it is cleared.
+    # Use an HTTPS remote, or the `push` shortcut.
+    unset GIT_ALLOW_PROTOCOL GIT_SSH
+    export GIT_SSH_COMMAND='sh -c "echo bot-gh: SSH remotes are refused, use https://github.com/... >&2; exit 1"'
+    export GIT_TERMINAL_PROMPT=0
+    gitc=(-c credential.helper= -c "credential.helper=$helper"
+          -c protocol.ssh.allow=never -c protocol.ext.allow=never
+          -c core.sshCommand="$GIT_SSH_COMMAND")
     if [ "$cmd" = push ]; then
       branch="${1:-}"; [ -n "$branch" ] || die "usage: bot-gh push <branch>"
-      exec git -c credential.helper= -c "credential.helper=$helper" \
-        push "https://github.com/$BOT_REPO.git" "HEAD:refs/heads/$branch"
+      exec git "${gitc[@]}" push "https://github.com/$BOT_REPO.git" "HEAD:refs/heads/$branch"
     fi
-    exec git -c credential.helper= -c "credential.helper=$helper" "$@"
+    exec git "${gitc[@]}" "$@"
     ;;
   *) die "unknown command '$cmd' (whoami | gh | git | push)" ;;
 esac
