@@ -213,8 +213,11 @@ Describe '06-NHI-Inventory.ps1 -SecretsRegisterPath (non-Entra long-lived secret
         $out = Test-SecretsRegister -Register $r -Now ([datetime]'2026-11-07')
         foreach ($row in @($out.Rows | Where-Object Status -EQ 'present')) { $row.ExpiresOn | Should -Match '^\d{4}-\d{2}-\d{2}$' -Because "$($row.Name) is present" }
         $stores = (@($out.Rows.Store) -join ' ')
-        # The Key Vault secret list read 2026-11-07 (names only).
-        foreach ($kv in 'aws-scim-token', 'dc01-admin-password', 'dc01-dsrm-password', 'servicenow-integration-password', 'servicenow-provisioning-password', 'svc-pam-discovery', 'svc-vault-rotator') { $stores | Should -Match ([regex]::Escape($kv)) }
+        # The Key Vault secret list read 2026-11-07 (names only). svc-pam-discovery
+        # was retired that day with the Vault stand-in (ADR 0036, PR #253: account
+        # and secret deleted), so it must no longer be listed.
+        foreach ($kv in 'aws-scim-token', 'dc01-admin-password', 'dc01-dsrm-password', 'servicenow-integration-password', 'servicenow-provisioning-password', 'svc-vault-rotator') { $stores | Should -Match ([regex]::Escape($kv)) }
+        @($out.Rows | Where-Object Name -EQ 'svc-pam-discovery-password').Count | Should -Be 0
     }
 
     It 'refuses an invalid register (never "no secrets")' {

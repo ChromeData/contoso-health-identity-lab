@@ -63,14 +63,14 @@ Describe 'Test-SecretExpiry.ps1' {
         $out | Should -Not -Match 'SECRET-EXPIRED:|SECRET-NO-OWNER:|SECRET-NO-EXPIRY:'
     }
 
-    It 'the AD bind accounts use the privileged-access standard limits (90 days Vault bind, 30 days AD service account)' {
+    It 'the AD bind account uses the privileged-access standard limit (90 days Vault bind); the retired discovery bind is gone' {
         $reg = Get-Content -Raw -LiteralPath ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' '..' 'iga' 'nhi-secrets-register.json'))) | ConvertFrom-Json
         $rot = $reg.secrets | Where-Object name -EQ 'svc-vault-rotator-password'
-        $dis = $reg.secrets | Where-Object name -EQ 'svc-pam-discovery-password'
         $rot.rotation | Should -Match '^P90D'
-        $dis.rotation | Should -Match '^P30D'
         ([datetime]$rot.expiresOn - [datetime]$rot.createdOn).TotalDays | Should -BeLessOrEqual 90
-        ([datetime]$dis.expiresOn - [datetime]$dis.createdOn).TotalDays | Should -BeLessOrEqual 30
+        # svc-pam-discovery was retired 2026-11-07 (ADR 0036, PR #253): account and
+        # Key Vault secret deleted, so no register entry remains to expire.
+        @($reg.secrets | Where-Object name -EQ 'svc-pam-discovery-password').Count | Should -Be 0
     }
 }
 
