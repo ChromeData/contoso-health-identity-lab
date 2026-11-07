@@ -200,6 +200,8 @@ jobs:
           bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
           # Pipeline config from Key Vault: fail closed, mask per element (fake az).
           bash .github/scripts/tests/pipeline-config.test.sh
+          # after-signup.sh step B re-run: keeps settings added after setup, refuses a vault rename.
+          python3 -I -m unittest discover -s lab/setup/tests -p 'test_merge_tfvars.py' -v
           bash lab/scripts/demo/tests/reset-demo-hire.test.sh
           bash lab/scripts/demo/tests/close-build-noise.test.sh
           node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs lab/scripts/demo/signin/tests/identity.test.mjs
