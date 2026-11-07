@@ -149,8 +149,9 @@ session was 1.3 MB) and the outbound data after the first 5 GB.
   builds its windows from Vault check-out events (`VaultCheckout_CL`). Key
   Vault and LAPS do not emit those events, so once Vault is retired the
   rule has no source. This PR adds it to `itdr_exclude_rules`, so the next
-  apply **deletes** that one live Sentinel rule (the plan says 1 to
-  destroy). The KQL stays for the local harness. Its Microsoft replacement
+  apply **deletes** that one live Sentinel rule and removes it from
+  the trigger lists of two automation rules (plan: 0 to add, 2 to change,
+  1 to destroy). The KQL stays for the local harness. Its Microsoft replacement
   is DESIGNED, not built: (a) any remote-interactive logon (type 10) on
   DC01 whose source is not `AzureBastionSubnet` (10.42.250.0/26) is an
   alert, because Bastion is the only way in; (b) a Bastion logon by a
