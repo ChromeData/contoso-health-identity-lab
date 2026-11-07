@@ -153,6 +153,13 @@ output "nhi_inventory" {
       credential_expires          = null
       outbound_secret             = "servicenow-provisioning-password (Key Vault; ServiceNow integration user, web-service access only - nhi-secrets-register)"
     } : null
+    clinic_lab_results = var.enable_clinic_results_app ? {
+      service_principal_object_id = azuread_service_principal.clinic_results[0].object_id
+      owners                      = local.app_owners
+      credential_type             = "none (public client: auth code + PKCE, loopback redirect, no secret or certificate)"
+      credential_expires          = null
+      outbound_secret             = "none"
+    } : null
     okta_clinic_idp = var.enable_okta_federation ? {
       service_principal_object_id = azuread_service_principal.okta_idp[0].object_id
       owners                      = local.app_owners
@@ -295,4 +302,17 @@ output "okta_idp_client_secret_command" {
     for app in azuread_application.okta_idp :
     "Add-MgApplicationPassword -ApplicationId ${app.object_id} -PasswordCredential @{ displayName = 'Okta IdP - entered once into lab/terraform/okta'; endDateTime = (Get-Date).ToUniversalTime().AddDays(${var.okta_idp_secret_lifetime_days}) } | Select-Object -ExpandProperty SecretText"
   ])
+}
+
+# ---- Clinic Lab Results (clinic_results.tf) -------------------------------------
+# All null while enable_clinic_results_app is off.
+
+output "clinic_results_client_id" {
+  description = "Client id of Clinic Lab Results (null while off). CA061 targets it; lab/okta-migration/cutover.mjs reads it from Graph by display name."
+  value       = one(azuread_application.clinic_results[*].client_id)
+}
+
+output "clinic_results_users_group_object_id" {
+  description = "Object id of App-ClinicResults-Users, the ONE principal on Clinic Lab Results and CA061's user scope (null while off). Pilot members are added post-apply."
+  value       = one(azuread_group.clinic_results_users[*].object_id)
 }

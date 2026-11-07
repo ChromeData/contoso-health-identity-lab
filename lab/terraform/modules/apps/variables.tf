@@ -732,3 +732,49 @@ variable "servicenow_provisioning_app_display_name" {
     error_message = "servicenow_provisioning_app_display_name must not be empty."
   }
 }
+
+# ---- Clinic Lab Results (clinic_results.tf) -------------------------------------
+
+variable "enable_clinic_results_app" {
+  type        = bool
+  description = <<-EOT
+    Create Clinic Lab Results: the acquired clinic's first app moved from
+    Okta to Entra (okta-migration wave 1). Public-client app registration
+    (auth code + PKCE, loopback redirect, no secret), its enterprise app
+    (assignment required) and the assigned group App-ClinicResults-Users as
+    its ONE assignment. CA061 (modules/conditional-access) targets it. Off
+    by default.
+  EOT
+  default     = false
+}
+
+variable "clinic_results_display_name" {
+  type        = string
+  description = "Display name of the Clinic Lab Results app registration. lab/okta-migration finds the Entra app by this name, so it must match the Okta app's label."
+  default     = "Clinic Lab Results"
+
+  validation {
+    condition     = length(trimspace(var.clinic_results_display_name)) > 0
+    error_message = "clinic_results_display_name must not be empty."
+  }
+}
+
+variable "clinic_results_redirect_uris" {
+  type        = list(string)
+  description = <<-EOT
+    Public-client redirect URIs of Clinic Lab Results. Loopback only
+    (http://localhost:<port>/... or http://127.0.0.1:<port>/...): the app
+    runs on the clinic workstation (lab/okta-migration/clinic-results). Must
+    equal the redirect URI of the Okta app it replaces, so the cut-over
+    changes the IdP and nothing else.
+  EOT
+  default     = ["http://localhost:8471/callback"]
+
+  validation {
+    condition = length(var.clinic_results_redirect_uris) > 0 && alltrue([
+      for u in var.clinic_results_redirect_uris :
+      can(regex("^http://(localhost|127\\.0\\.0\\.1):[0-9]{2,5}/[A-Za-z0-9/_-]*$", u))
+    ])
+    error_message = "clinic_results_redirect_uris must be loopback http URIs with a port and a path (no wildcard, no remote host)."
+  }
+}

@@ -530,3 +530,23 @@ Staged order (tenant time, after `enable_sso_apps`):
 | O3 | operator | Cross-check: `terraform output -raw okta_idp_redirect_uri` here equals `terraform -chdir=../../okta output -raw okta_callback_uri` | The two strings side by side |
 | O4 | operator | Runbook Phase 1 *Validate*: a member of `App-Okta-Federation-Users` with a clinic login signs in to Okta and is sent to Entra; a non-member is refused at Entra | Entra sign-in log row for `okta-clinic-idp` with the CA result; Okta System Log IdP event |
 | O5 | operator | Runbook Phase 1 *Rollback* rehearsal: `routing_rule_active = false` in the Okta root, timed, then back | The timed rollback in the evidence log |
+
+## Clinic Lab Results (Okta -> Entra, wave 1)
+
+`clinic_results.tf`, flag `enable_clinic_results_app` (envs/dev, same name).
+The first app the acquired clinic moves **off Okta** (runbook Phase 2; the
+tracker and the cut-over tools are in [`lab/okta-migration/`](../../../okta-migration/README.md)).
+
+| Object | Value | Why |
+|---|---|---|
+| App registration | `Clinic Lab Results`, single tenant, **public client**, one loopback redirect `http://localhost:8471/callback`, no fallback public-client flows | The app is a workstation viewer: auth code + PKCE, no secret, the same shape it had in Okta (a native app) |
+| Delegated Graph | `openid`, `profile`, `email` | Sign-in only; the app calls no API |
+| Enterprise app | assignment required | No assignment, no token (AADSTS50105) |
+| Group | `App-ClinicResults-Users`, **assigned**, member drift ignored | Not a copy of Okta's `Clinic-Staff`: its rule (login domain) means every hospital user after the acquisition |
+| Assignment | the group, default access role, the only one | One principal per app, as everywhere in this module |
+| Conditional Access | CA061 (modules/conditional-access `clinical.tf`): MFA strength + sign-in every 8 h, the group only, break-glass excluded; **enforced** (lab.tfvars) | The Okta policy it replaces was "two factors, re-authenticate after 8 hours", already enforced |
+
+Post-apply, as the operator (`lab/okta-migration/cutover.mjs prestage` does
+both and reads them back): admin consent on the three delegated scopes
+(`oauth2PermissionGrants`, AllPrincipals), and the pilot user(s) added to
+`App-ClinicResults-Users`.

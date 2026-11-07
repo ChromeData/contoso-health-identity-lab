@@ -1036,3 +1036,19 @@ variable "servicenow_saml_signing_cert_end_date" {
   description = "Expiry of the ServiceNow SAML signing certificate (RFC 3339); null = Entra's 3-year default, which the lab's 180-day credential policy rejects."
   default     = null
 }
+
+# ---- Okta -> Entra app migration, wave 1 (Clinic Lab Results) -----------------
+
+variable "enable_clinic_results_app" {
+  type        = bool
+  description = <<-EOT
+    Okta -> Entra migration wave 1 (lab/okta-migration, runbook Phase 2):
+    the Clinic Lab Results app in Entra (modules/apps clinic_results.tf:
+    public client, PKCE, no secret, assignment required, ONE assignment
+    App-ClinicResults-Users) AND its Conditional Access policy CA061 (MFA,
+    sign-in every 8 h, the app group only), which needs a CA061 entry in
+    ca_policy_states. Needs enable_premium and enable_sso_apps. The Okta app
+    it replaces stays in lab/terraform/okta until the retire step.
+  EOT
+  default     = false
+}
