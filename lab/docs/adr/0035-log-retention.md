@@ -1,4 +1,4 @@
-# ADR 0031: Log retention - 30 days in the lab, years in production
+# ADR 0035: Log retention - 30 days in the lab, years in production
 
 - **Status:** DESIGNED. The lab keeps 30 days (`envs/dev/main.tf`, `retention_in_days = 30`). The production values below are not built.
 - **Date:** 2026-11-07
