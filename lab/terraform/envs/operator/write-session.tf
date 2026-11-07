@@ -67,6 +67,13 @@ locals {
     "Microsoft.OperationalInsights/workspaces/delete",
     "Microsoft.OperationalInsights/workspaces/purge/action",
     "Microsoft.OperationalInsights/workspaces/tables/delete",
+    # WRITE too: a table write can lower that table's retention (for example
+    # VaultCheckout_CL), and a workspace write can lower the workspace
+    # retention every default table follows. Records would then expire early
+    # with no delete or purge, and closing the session does not restore the
+    # old setting. The operator never manages the workspace: APPLY does.
+    "Microsoft.OperationalInsights/workspaces/tables/write",
+    "Microsoft.OperationalInsights/workspaces/write",
     "Microsoft.Insights/diagnosticSettings/delete",
     # WRITE too: a changed diagnostic setting can stop the evidence store's or
     # Key Vault's audit export, and closing the session does not restore it.

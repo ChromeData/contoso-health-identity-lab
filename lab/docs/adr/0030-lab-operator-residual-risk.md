@@ -78,9 +78,11 @@ He closes it with a second apply, with the variable unset.
   Secrets Officer. They are **time-bound active** PIM assignments. Azure ends
   them at `expires_utc` by itself, even if nobody closes the session.
 - **The custom role** is Contributor minus: the storage account, container
-  and immutability-policy deletes and writes, and the Log Analytics workspace
-  delete, purge and table delete. So even in a session, the operator cannot
-  erase the evidence store or the sign-in logs.
+  and immutability-policy deletes and writes; the Log Analytics workspace
+  delete, purge and table delete; the workspace and table writes, which can
+  lower retention; and diagnostic-setting writes and deletes. So even in a
+  session, the operator cannot erase the evidence store or the sign-in logs,
+  or make them expire early.
 
 **Why time-bound active, not eligible.** Microsoft Learn (Azure RBAC,
 "Eligible and time-bound role assignments"): "you can't create eligible role

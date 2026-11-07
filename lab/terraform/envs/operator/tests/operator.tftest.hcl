@@ -194,10 +194,12 @@ run "session_role_cannot_touch_locks_roles_or_evidence" {
       "Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies/delete",
       "Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies/write",
       "Microsoft.OperationalInsights/workspaces/delete",
+      "Microsoft.OperationalInsights/workspaces/tables/write",
+      "Microsoft.OperationalInsights/workspaces/write",
       "Microsoft.Insights/diagnosticSettings/delete",
       "Microsoft.Insights/diagnosticSettings/write",
     ] : contains(one(azurerm_role_definition.operator_session.permissions).not_actions, a)])
-    error_message = "the session role must exclude lock/role-assignment writes and deletes, and the evidence and log deletes"
+    error_message = "the session role must exclude lock/role-assignment writes and deletes, the evidence and log deletes, and log retention writes (tables/write, workspaces/write)"
   }
   assert {
     condition     = azurerm_role_definition.operator_session.assignable_scopes == tolist(["/subscriptions/00000000-0000-0000-0000-000000000001"])
