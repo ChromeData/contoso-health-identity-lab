@@ -233,6 +233,10 @@ jobs:
           # kusto-harness run-on-workspace.py: result decoding and verdict
           # (no workspace; the live runs are operator runs, capture log E114).
           python3 -I -m unittest discover -s lab/monitoring/kusto-harness/tests -p 'test_*.py' -v
+          # ServiceNow use cases (lab/servicenow): package resolution, the
+          # records apply.py writes (no delivery plan, names <= 40), the
+          # provisioning-mapping change, cleanup's guards (stdlib only).
+          python3 -I -m unittest discover -s lab/servicenow/tests -v
 
       # The plain-English plan/apply summaries run with continue-on-error in
       # terraform-plan.yml / terraform-apply.yml (a summary bug must never

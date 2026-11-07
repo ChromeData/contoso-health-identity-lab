@@ -166,6 +166,7 @@ clinical_portal_preauthorize_azure_cli = false
 enable_servicenow_sso                  = true
 enable_servicenow_provisioning         = true
 servicenow_provisioning_job_enabled    = true
+enable_servicenow_fulfilment           = true
 enable_okta_federation                 = true
 enable_clinic_results_app              = true
 
