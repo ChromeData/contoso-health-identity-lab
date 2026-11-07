@@ -5,92 +5,219 @@
 #
 # GitHub's own gate (Environment "required reviewers") is free only on public
 # repositories; on private ones it needs GitHub Enterprise. Until this repo is
-# public, this script is the gate: it opens an issue for the run, waits for an
-# approver to comment "approve" or "deny", then closes the issue. The apply job
-# `needs:` this job, so nothing reaches the APPLY identity without a decision.
+# public, this script is the gate. It runs INSIDE the apply job, AFTER the
+# saved plan (tfplan) exists and BEFORE `terraform apply tfplan`:
+#
+#   plan -> this gate shows that exact plan -> the owner approves it
+#        -> the job re-checks the plan file's sha256 -> apply that file
+#
+# So the approver approves the plan that gets applied, not a run whose plan
+# does not exist yet (karen-review A2; the old order is described in ADR 0005
+# history). The approval names the plan: the approver comments
+# `approve <code>`, where <code> is the first 8 characters of the saved
+# plan's sha256, shown in the issue. A bare `approve`, or a code from another
+# run, is not accepted.
+#
+# Who approves: the owner, by hand, from his own GitHub session (repo Variable
+# APPLY_APPROVERS, default the repo owner). An AI coding assistant never
+# approves. The gate refuses, and cancels the apply on, an approver comment
+# that mentions "Claude" or "delegated" (karen-review A1). That check is
+# cosmetic on its own - the real control is that nobody but the owner types
+# the approval - but it stops the old "reviewed by Claude for ..." pattern.
+#
+# Change-set check (karen-review A2): the PR plan comment (terraform-plan.yml)
+# carries a fingerprint of its change set (`<!-- plan-changeset-sha256: ... -->`,
+# from plan-changeset.sh). When the merged commit's PR has that fingerprint and
+# the saved plan's change set differs, the gate REFUSES: something besides the
+# reviewed PR would be applied (another merge, a portal edit, a repository
+# variable). Recovery: re-run from a fresh PR, or a manual workflow_dispatch
+# run, whose issue then shows the full saved plan for the owner to read (a
+# dispatch has no PR to compare against, and the issue says so).
 #
 # Honest difference from the Environment reviewer: this gate lives in the
 # workflow file, so removing it takes a merged (reviewed) pull request, while
-# an Environment reviewer cannot be removed by code at all. The prod
-# Environment's deployment-branch policy (main only) still applies either way.
-# When the repo goes public, switch back to required reviewers
-# (lab/pipelines/README.md section 5E) and delete this job.
+# an Environment reviewer cannot be removed by code at all.
 #
 # Env: GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_SHA,
-#      GITHUB_SERVER_URL, GITHUB_REPOSITORY_OWNER (all set by Actions)
+#      GITHUB_SERVER_URL, GITHUB_REPOSITORY_OWNER, GITHUB_EVENT_NAME (Actions)
+#      PLAN_SHA256                sha256 of the saved tfplan (required)
+#      PLAN_CHANGESET_FILE        plan-changeset.sh output (required; may be empty = no changes)
+#      PLAN_SUMMARY_FILE          plain-plan.py output (optional; a missing summary is said)
 #      APPLY_APPROVERS            comma-separated logins (default: repo owner)
-#      APPLY_TWO_PERSON           "true" = the person who authored the change
-#                                 may NOT approve it (four-eyes). Default
-#                                 "false" while the lab has one collaborator;
-#                                 the issue then records that the author
-#                                 self-approved. Production: "true".
+#      APPLY_TWO_PERSON           "true" = the change author may NOT approve
 #      APPROVAL_TIMEOUT_MINUTES   default 30
 #      APPROVAL_POLL_SECONDS      default 15
-# Exit: 0 approved | 1 denied or timed out
+# Exit: 0 approved | 1 denied, refused, timed out, or could not check
 # =============================================================================
 set -euo pipefail
 
 : "${GH_TOKEN:?}" "${GITHUB_REPOSITORY:?}" "${GITHUB_RUN_ID:?}" "${GITHUB_SHA:?}"
+: "${PLAN_SHA256:?PLAN_SHA256 is required: the gate shows and binds the saved plan}"
+: "${PLAN_CHANGESET_FILE:?PLAN_CHANGESET_FILE is required}"
+[ -f "$PLAN_CHANGESET_FILE" ] || { echo "Refused: change-set file $PLAN_CHANGESET_FILE is missing"; exit 1; }
+printf '%s' "$PLAN_SHA256" | grep -Eq '^[0-9a-f]{64}$' || { echo "Refused: PLAN_SHA256 is not a sha256"; exit 1; }
+
 SERVER="${GITHUB_SERVER_URL:-https://github.com}"
 APPROVERS="${APPLY_APPROVERS:-${GITHUB_REPOSITORY_OWNER:?}}"
 TWO_PERSON="${APPLY_TWO_PERSON:-false}"
 TIMEOUT_MIN="${APPROVAL_TIMEOUT_MINUTES:-30}"
 POLL="${APPROVAL_POLL_SECONDS:-15}"
 REPO="$GITHUB_REPOSITORY"
+CODE="${PLAN_SHA256:0:8}"
+# shellcheck disable=SC2016  # literal backticks, not a command
+MARKER='## Terraform plan — `lab/terraform/envs/dev`'
+
+sha256_of() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -c1-64; else shasum -a 256 "$1" | cut -c1-64; fi; }
+cap() { head -c "$1" "$2"; [ "$(wc -c < "$2")" -le "$1" ] || printf '\n... [truncated: the full list is in the run log]\n'; }
 
 run_url="$SERVER/$REPO/actions/runs/$GITHUB_RUN_ID"
 short="${GITHUB_SHA:0:7}"
-pr=$(gh api "repos/$REPO/commits/$GITHUB_SHA/pulls" --jq '.[0] | select(.) | "#\(.number) \(.title)"' 2>/dev/null || true)
-# Who made the change: the pull request author, or the commit author on a direct push.
-author=$(gh api "repos/$REPO/commits/$GITHUB_SHA/pulls" --jq '.[0].user.login // empty' 2>/dev/null || true)
-[ -n "$author" ] || author=$(gh api "repos/$REPO/commits/$GITHUB_SHA" --jq '.author.login // empty' 2>/dev/null || true)
+changeset_sha=$(sha256_of "$PLAN_CHANGESET_FILE")
+n_changes=$(grep -c . "$PLAN_CHANGESET_FILE" || true)
+
+# ---- The merged commit's PR (fail closed: "couldn't read" is not "none") ----
+pulls_json=$(gh api "repos/$REPO/commits/$GITHUB_SHA/pulls") || { echo "Refused: could not read the PR for $GITHUB_SHA"; exit 1; }
+pr_number=$(printf '%s' "$pulls_json" | jq -r '.[0].number // empty')
+pr=$(printf '%s' "$pulls_json" | jq -r '.[0] | select(.) | "#\(.number) \(.title)"')
+author=$(printf '%s' "$pulls_json" | jq -r '.[0].user.login // empty')
+if [ -z "$author" ]; then
+  author=$(gh api "repos/$REPO/commits/$GITHUB_SHA" --jq '.author.login // empty') || { echo "Refused: could not read the commit author"; exit 1; }
+fi
 author_lc=$(printf '%s' "$author" | tr '[:upper:]' '[:lower:]')
 who=$(printf '%s' "$APPROVERS" | sed 's/[^,][^,]*/@&/g; s/,/, /g')
+
+# ---- Compare the saved plan's change set with the PR plan comment -----------
+compare_line=""
+mismatch=false
+if [ -n "$pr_number" ]; then
+  comments_json=$(gh api "repos/$REPO/issues/$pr_number/comments" --paginate | jq -s 'add // []') \
+    || { echo "Refused: could not read the comments of PR #$pr_number"; exit 1; }
+  pr_fp=$(printf '%s' "$comments_json" | jq -r --arg m "$MARKER" '
+      [ .[] | select(.user.type == "Bot" and .user.login == "github-actions[bot]")
+            | select(.body | startswith($m)) ] | last | select(.)
+      | .body | capture("<!-- plan-changeset-sha256: (?<h>[0-9a-f]{64}) -->") | .h' 2>/dev/null || true)
+  has_comment=$(printf '%s' "$comments_json" | jq -r --arg m "$MARKER" '
+      any(.[]; .user.type == "Bot" and .user.login == "github-actions[bot]" and (.body | startswith($m)))')
+  if [ -n "$pr_fp" ] && [ "$pr_fp" = "$changeset_sha" ]; then
+    compare_line="**Matches the PR plan.** The saved plan changes the same resources as the plan comment on PR #$pr_number (change-set fingerprint \`${changeset_sha:0:12}\`)."
+  elif [ -n "$pr_fp" ]; then
+    mismatch=true
+    compare_line="**Does NOT match the PR plan.** PR #$pr_number's plan comment has change-set fingerprint \`${pr_fp:0:12}\`; this saved plan has \`${changeset_sha:0:12}\`. Something besides the reviewed PR would be applied (another merge, a portal edit, or a repository variable)."
+  elif [ "$has_comment" = "true" ]; then
+    compare_line="**Not compared:** PR #$pr_number's plan comment has no change-set fingerprint (it was posted before this check existed). Compare the list below with that comment by hand."
+  else
+    compare_line="**Not compared:** PR #$pr_number has no Terraform plan comment. Read the saved plan below; it is what will be applied."
+  fi
+else
+  compare_line="**Not compared:** this run has no pull request (${GITHUB_EVENT_NAME:-direct run}). Read the saved plan below; it is what will be applied."
+fi
+
+summary_file="${PLAN_SUMMARY_FILE:-}"
+if [ -n "$summary_file" ] && [ -s "$summary_file" ]; then
+  summary=$(cap 30000 "$summary_file")
+else
+  summary="_No plain-English summary this time (its step failed). The change set below is complete._"
+fi
+if [ "$n_changes" -eq 0 ]; then
+  changes_block="_No resource changes (the saved plan is \"No changes\")._"
+else
+  # shellcheck disable=SC2016
+  changes_block=$(printf '```text\n%s\n```' "$(cap 20000 "$PLAN_CHANGESET_FILE")")
+fi
+
+if [ "$mismatch" = "true" ]; then
+  decision_text="**The apply is refused** because the saved plan differs from the reviewed PR plan. Nothing was applied."
+else
+  decision_text=$(cat <<EOF
+This is the **exact saved plan** this run will apply. Read it, then comment here:
+
+- \`approve $CODE\` to apply this plan (the code is the first 8 characters of its sha256)
+- \`deny\` to cancel it
+
+Only $who can decide, typed by hand from their own GitHub session. A comment that mentions an AI assistant or a delegation is refused. With no decision in $TIMEOUT_MIN minutes the apply is cancelled.
+$( [ "$TWO_PERSON" = "true" ] && printf 'Two-person rule is ON: the change author (@%s) cannot approve their own change.' "${author:-unknown}" || printf 'Two-person rule is OFF (single-collaborator lab): an approval by the author (@%s) is accepted and recorded as self-approved.' "${author:-unknown}" )
+EOF
+)
+fi
 
 body=$(cat <<EOF
 The **terraform apply** of \`$short\` to **prod** is waiting for a human decision.
 
-- Change: ${pr:-direct push to main}
+- Change: ${pr:-no pull request (${GITHUB_EVENT_NAME:-direct run})}
 - Run: $run_url
+- Saved plan sha256: \`$PLAN_SHA256\`
+- Resources changed: $n_changes
 
-Read the Terraform plan comment on the pull request, then comment here:
+$compare_line
 
-- \`approve\` to apply it
-- \`deny\` to cancel it
+### What this plan does
 
-Only $who can decide. With no decision in $TIMEOUT_MIN minutes the apply is cancelled.
-$( [ "$TWO_PERSON" = "true" ] && printf 'Two-person rule is ON: the change author (@%s) cannot approve their own change.' "${author:-unknown}" || printf 'Two-person rule is OFF (single-collaborator lab): an approval by the author (@%s) is accepted and recorded as self-approved.' "${author:-unknown}" )
+$summary
+
+### Change set (actions and addresses only)
+
+$changes_block
+
+$decision_text
 EOF
 )
 
 issue_url=$(gh issue create -R "$REPO" --title "Approve: apply $short to prod" --body "$body")
 issue="${issue_url##*/}"
 echo "Approval needed: $issue_url"
-echo "::notice title=Approval needed::Comment 'approve' or 'deny' on $issue_url"
 
 close() {   # $1 = completed | not_planned, $2 = closing comment
   gh issue comment "$issue" -R "$REPO" --body "$2" >/dev/null || true
   gh api -X PATCH "repos/$REPO/issues/$issue" -f state=closed -f state_reason="$1" >/dev/null || true
 }
 
-deadline=$(( $(date +%s) + TIMEOUT_MIN * 60 ))
+if [ "$mismatch" = "true" ]; then
+  echo "Refused: the saved plan's change set differs from PR #$pr_number's plan comment"
+  close not_planned "Refused: the saved plan differs from the reviewed PR plan (see above). Nothing was applied. Open a fresh PR, or run the workflow by hand and approve the plan its issue shows."
+  exit 1
+fi
+echo "::notice title=Approval needed::Comment 'approve $CODE' or 'deny' on $issue_url"
+
+hinted=""
+# APPROVAL_TIMEOUT_SECONDS: test hook only (tests/test_apply_gate.py); unset in the workflow.
+deadline=$(( $(date +%s) + ${APPROVAL_TIMEOUT_SECONDS:-$(( TIMEOUT_MIN * 60 ))} ))
 while [ "$(date +%s)" -lt "$deadline" ]; do
   # The latest approve/deny comment by an approver (bots and others ignored).
-  decision=$(gh api "repos/$REPO/issues/$issue/comments" --paginate \
-    | jq -r --arg ok "$APPROVERS" '
+  latest=$(gh api "repos/$REPO/issues/$issue/comments" --paginate | jq -s 'add // []' \
+    | jq -c --arg ok "$APPROVERS" '
         ($ok | split(",") | map(ascii_downcase | gsub("^\\s+|\\s+$"; ""))) as $approvers
         | [ .[]
             | select(.user.type == "User")
             | select((.user.login | ascii_downcase) as $u | $approvers | index($u))
-            | { who: .user.login, word: (.body | ascii_downcase | gsub("^\\s+"; "") | split(" ")[0] | gsub("[^a-z]"; "")) }
+            | (.body | ascii_downcase) as $b
+            | ([$b | splits("\\s+")] | map(select(length > 0))) as $w
+            | { id: .id, who: .user.login,
+                word: (($w[0] // "") | gsub("[^a-z]"; "")),
+                code: (($w[1] // "") | gsub("[^0-9a-f]"; "")),
+                ai: ($b | test("claude|delegat")) }
             | select(.word == "approve" or .word == "approved" or .word == "deny" or .word == "denied" or .word == "reject") ]
-        | last // empty | "\(.who) \(.word)"')
-  if [ -n "$decision" ]; then
-    who_decided="${decision%% *}"; word="${decision##* }"
+        | last // empty') || { echo "Refused: could not read the approval issue's comments"; close not_planned "The gate could not read this issue's comments, so it cannot confirm a decision. The apply is cancelled."; exit 1; }
+  if [ -n "$latest" ]; then
+    who_decided=$(printf '%s' "$latest" | jq -r .who)
+    word=$(printf '%s' "$latest" | jq -r .word)
+    given=$(printf '%s' "$latest" | jq -r .code)
+    cid=$(printf '%s' "$latest" | jq -r .id)
     case "$word" in
       approve|approved)
+        if [ "$(printf '%s' "$latest" | jq -r .ai)" = "true" ]; then
+          echo "Refused: the approval by @$who_decided mentions an AI assistant or a delegation"
+          close not_planned "Refused: this approval mentions an AI assistant or a delegation. Applies are approved by the owner, typed by hand. The apply is cancelled."
+          exit 1
+        fi
+        if [ "$given" != "$CODE" ]; then
+          if [ "$hinted" != "$cid" ]; then
+            gh issue comment "$issue" -R "$REPO" --body "Not accepted: an approval must name this plan, as \`approve $CODE\`. Still waiting." >/dev/null || true
+            hinted="$cid"
+          fi
+          sleep "$POLL"; continue
+        fi
         if [ "$TWO_PERSON" = "true" ] && [ -z "$author_lc" ]; then
-          echo "Refused: the two-person rule is ON but the change author could not be identified, so self-approval cannot be ruled out (APPLY_TWO_PERSON=true)"
+          echo "Refused: the two-person rule is ON but the change author could not be identified (APPLY_TWO_PERSON=true)"
           close not_planned "Refused: the two-person rule is ON but the change author could not be identified, so this approval cannot be accepted (self-approval cannot be ruled out). The apply is cancelled."
           exit 1
         fi
@@ -100,12 +227,12 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
             close not_planned "Refused: @$who_decided authored this change. A different approver must comment approve. The apply is cancelled."
             exit 1
           fi
-          echo "Approved by @$who_decided (SELF-APPROVAL: author and approver are the same person; two-person rule is off)"
-          close completed "Approved by @$who_decided. **Self-approval**: the change author approved their own change (two-person rule off in this single-collaborator lab). Applying: $run_url"
+          echo "Approved by @$who_decided for plan $CODE (SELF-APPROVAL: two-person rule is off)"
+          close completed "Approved by @$who_decided for saved plan \`$CODE\`. **Self-approval**: the change author approved their own change (two-person rule off in this single-collaborator lab). Applying: $run_url"
           exit 0
         fi
-        echo "Approved by @$who_decided (author: @${author:-unknown})"
-        close completed "Approved by @$who_decided (change by @${author:-unknown}). Applying: $run_url"
+        echo "Approved by @$who_decided for plan $CODE (author: @${author:-unknown})"
+        close completed "Approved by @$who_decided for saved plan \`$CODE\` (change by @${author:-unknown}). Applying: $run_url"
         exit 0 ;;
       *)
         echo "Denied by @$who_decided"

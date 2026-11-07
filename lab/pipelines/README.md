@@ -158,13 +158,22 @@ The repo is **public on purpose**, and the pipeline depends on it:
 - **Environments + required reviewers are free on public repos.** On private
   repos, protected Environments (the `prod` reviewer gate) need GitHub
   Team/Enterprise. Public = the reviewer gate costs nothing. **While the repo
-  is private** the gate is the `approval` job in `terraform-apply.yml`
-  (`.github/scripts/apply-approval-gate.sh`): it opens an "Approve: apply
-  <sha> to prod" issue and the apply waits for an approver's `approve` or
-  `deny` comment (repo Variable `APPLY_APPROVERS`, default the owner; 30
-  minutes, then cancel). Difference: removing that job takes a merged PR,
-  while an Environment reviewer cannot be removed by code. Restore required
-  reviewers (5E) and delete the job when the repo goes public.
+  is private** the gate is the "Human gate" step inside the apply job of
+  `terraform-apply.yml` (`.github/scripts/apply-approval-gate.sh`). The job
+  plans first and saves `tfplan`. The gate opens an "Approve: apply <sha> to
+  prod" issue that shows that exact saved plan: the plain-English summary,
+  the change set (actions and addresses) and the file's sha256. It refuses
+  when the change set differs from the PR plan comment's fingerprint. The
+  owner then types `approve <first 8 of the sha256>` (or `deny`) by hand,
+  from his own GitHub session (repo Variable `APPLY_APPROVERS`, default the
+  owner; 30 minutes, then cancel). An AI assistant never approves: the gate
+  refuses an approval that mentions "Claude" or "delegated". The job
+  re-checks the sha256 and applies exactly that file. The plan never leaves
+  the runner (no artifact), because it holds variable values in clear text.
+  Difference from an Environment reviewer: removing the gate takes a merged
+  PR, while an Environment reviewer cannot be removed by code. Restore
+  required reviewers (5E) when the repo goes public, and keep the
+  plan-first order (the reviewer then approves after the plan step).
 - **Branch protection / rulesets** (require PR, require status checks, require
   review) are free on public repos.
 - **Code scanning (SARIF upload)** — the Checkov results under the *Security &

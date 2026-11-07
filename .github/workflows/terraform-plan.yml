@@ -277,6 +277,24 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
         working-directory: ${{ env.TF_WORKING_DIR }}
 
+      # The change set ("<actions> <address>" per changed resource) and its
+      # sha256, for the apply gate: terraform-apply.yml refuses to apply when
+      # the saved plan on main changes a different set of resources than this
+      # PR's plan (karen-review A2). Addresses and actions only, never values.
+      # continue-on-error: without it the comment carries no fingerprint, and
+      # the apply gate then says "not compared" and shows the full saved plan.
+      - name: Change set fingerprint
+        id: changeset
+        if: ${{ !cancelled() && steps.plan.outputs.plan_exit == '0' }}
+        continue-on-error: true
+        run: |
+          plan_json="${RUNNER_TEMP}/plan-cs.json"
+          trap 'rm -f "$plan_json"' EXIT
+          terraform show -json tfplan > "$plan_json"
+          "${GITHUB_WORKSPACE}/.github/scripts/plan-changeset.sh" "$plan_json" > "${RUNNER_TEMP}/changeset.txt"
+          echo "sha256=$(sha256sum "${RUNNER_TEMP}/changeset.txt" | cut -c1-64)" >> "$GITHUB_OUTPUT"
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
       - name: Post plan to PR
         if: ${{ !cancelled() }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -286,6 +304,8 @@ jobs:
           VALIDATE: ${{ steps.validate.outcome }}
           PLAN_EXIT: ${{ steps.plan.outputs.plan_exit || 'not run' }}
           SUMMARY_FILE: ${{ runner.temp }}/plain-summary.md
+          CHANGESET_FILE: ${{ runner.temp }}/changeset.txt
+          CHANGESET_SHA256: ${{ steps.changeset.outputs.sha256 }}
           # In a Dependabot run `secrets` holds Dependabot secrets only. Each
           # EMPTY_* is the string true/false (is it unset?), never a value.
           DEPENDABOT_RUN: ${{ github.actor == 'dependabot[bot]' }}
@@ -343,6 +363,20 @@ jobs:
               core.warning(msg);
               banner.push('> [!WARNING]', `> ${msg}`, '');
             }
+            // Change set + fingerprint for the apply gate (plan-changeset.sh).
+            // Only when the step succeeded, so a stale fingerprint is never kept.
+            let changeset = '';
+            const fp = /^[0-9a-f]{64}$/.test(process.env.CHANGESET_SHA256 || '') ? process.env.CHANGESET_SHA256 : '';
+            if (fp) {
+              try { changeset = fs.readFileSync(process.env.CHANGESET_FILE, 'utf8').trim(); } catch { changeset = ''; }
+              if (changeset.length > 15000) changeset = changeset.slice(0, 15000) + '\n... [truncated]';
+            }
+            const changesetBlock = fp ? [
+              '<details><summary>Change set the apply gate compares (actions and addresses)</summary>',
+              '', '```text', changeset || '(no resource changes)', '```', '',
+              `Fingerprint: \`${fp.slice(0, 12)}\``, '</details>', '',
+              `<!-- plan-changeset-sha256: ${fp} -->`, '',
+            ] : [];
             // The marker heading stays the FIRST line: the upsert below
             // matches on it (startsWith).
             const body = [
@@ -368,6 +402,7 @@ jobs:
               '',
               '</details>',
               '',
+              ...changesetBlock,
               `_Authenticated to Entra via OIDC (PLAN app, read-only). Commit ${context.sha.slice(0,7)}._`,
             ].join('\n');
             // Upsert: find our previous comment and edit it instead of spamming.
