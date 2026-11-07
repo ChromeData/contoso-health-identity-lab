@@ -1,0 +1,23 @@
+@RuleTemplate = "LdapClaims"
+@RuleName = "1 LDAP attributes (issuance)"
+c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname", Issuer == "AD AUTHORITY"]
+ => issue(store = "Active Directory", types = ("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname", "urn:contoso:claims:department", "urn:contoso:claims:employeeid"), query = ";userPrincipalName,mail,givenName,sn,department,employeeID;{0}", param = c.Value);
+
+@RuleTemplate = "MapClaims"
+@RuleName = "2 Name ID from UPN (transform)"
+c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn"]
+ => issue(Type = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", Issuer = c.Issuer, OriginalIssuer = c.OriginalIssuer, Value = c.Value, ValueType = c.ValueType, Properties["http://schemas.xmlsoap.org/ws/2005/05/identity/claimproperties/format"] = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified");
+
+@RuleTemplate = "EmitGroupClaims"
+@RuleName = "3a Group GRP-ClaimsViewer-Clinicians -> role Clinician"
+c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/groupsid", Value == "{{CLINICIANS_SID}}", Issuer == "AD AUTHORITY"]
+ => issue(Type = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role", Value = "ClaimsViewer.Clinician", Issuer = c.Issuer, OriginalIssuer = c.OriginalIssuer, ValueType = c.ValueType);
+
+@RuleTemplate = "EmitGroupClaims"
+@RuleName = "3b Group GRP-ClaimsViewer-Admins -> role Admin"
+c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/groupsid", Value == "{{ADMINS_SID}}", Issuer == "AD AUTHORITY"]
+ => issue(Type = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role", Value = "ClaimsViewer.Admin", Issuer = c.Issuer, OriginalIssuer = c.OriginalIssuer, ValueType = c.ValueType);
+
+@RuleName = "4 Custom: short user name (regex on UPN)"
+c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn"]
+ => issue(Type = "urn:contoso:claims:shortname", Value = RegExReplace(c.Value, "@.*$", ""));
