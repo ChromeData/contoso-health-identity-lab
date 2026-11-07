@@ -203,6 +203,16 @@ loaded only so Pester mocks copy the real cmdlet signatures: a call with a
 wrong parameter name fails a test. `Invoke-BaselineAssessment.Tests.ps1`
 needs CISA's ScubaGear sample (`tests/fixtures/Get-ScubaSample.ps1`,
 SHA-256 pinned); without it those blocks are skipped, not passed.
+`Scale20k.Tests.ps1` is the scale evidence (karen-review I2): a mocked
+20,000-user tenant served in 21 pages of 999, with one page throttled (HTTP
+429, Retry-After). The Graph readers of 06, 08 and 09 must return exactly
+20,000 objects, wait the seconds Graph asks for, and throw rather than return
+a partial list when the throttle outlasts 5 retries. It found one gap: the
+scripts relied only on the Graph SDK's own retry, so a throttle that outlived
+it failed the whole read. `Invoke-GraphGetWithRetry` and
+`Get-GraphThrottleDelay` now add a bounded retry; they are parity-tested
+copies in 06, 08, 09, 10 and the two lab/iga post-apply scripts. It proves
+the paging and retry logic, not Graph's real limits.
 `.github/workflows/lab-tests.yml` runs the same suite on every pull request
 with no credential (configured; not run yet).
 

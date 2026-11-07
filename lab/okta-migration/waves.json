@@ -1,0 +1,31 @@
+{
+  "_comment": "The migration PLAN, per Okta app: who owns it, which wave, and the two switches the Okta root reads (lab/terraform/okta clinic-apps.tf locals). Decisions live here; FACTS (protocol, users, groups, policies, Entra objects, sign-ins, status) are read from the Okta API and Microsoft Graph by inventory.mjs - never typed here. A cut-over is a PR that sets cutover = true; a rollback is the PR (or local apply) that sets it back. Owners are scenario roles, not real people.",
+  "apps": {
+    "Clinic Lab Results": {
+      "owner": "Clinic lab manager (business) / Clinic IT lead (technical)",
+      "wave": 1,
+      "entra_app": "Clinic Lab Results",
+      "pilot": ["test-user-b@contosohealthlab.com"],
+      "cutover": false,
+      "retired": false
+    },
+    "Clinic Billing": {
+      "owner": "Clinic revenue-cycle manager",
+      "wave": 2,
+      "entra_app": "Clinic Billing",
+      "pilot": [],
+      "cutover": false,
+      "retired": false,
+      "blocker": "no billing service provider exists in the lab; its users arrive with an HR department (runbook Phase 3)"
+    },
+    "Clinic Scheduling (legacy)": {
+      "owner": "Clinic operations manager",
+      "wave": 2,
+      "entra_app": "Clinic Scheduling (legacy)",
+      "pilot": [],
+      "cutover": false,
+      "retired": false,
+      "blocker": "bookmark app: the vendor offers no SSO yet - becomes an Entra linked sign-on tile"
+    }
+  }
+}
