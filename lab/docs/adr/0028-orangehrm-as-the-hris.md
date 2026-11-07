@@ -1,6 +1,6 @@
 # ADR 0028: OrangeHRM is the lab's HR system; a scheduled connector feeds Entra API-driven inbound provisioning
 
-- **Status:** RAN · tenant (2026-11-07, capture log E124-E127): a test worker was hired, moved and made a leaver in OrangeHRM's own screens, and the connector carried each change to Entra. Timings are in "Measured in the tenant" below. Option "Workday personal tenant" is DESIGNED only (an owner step).
+- **Status:** RAN · tenant (2026-11-07, capture log E170-E173): a test worker was hired, moved and made a leaver in OrangeHRM's own screens, and the connector carried each change to Entra. Timings are in "Measured in the tenant" below. Option "Workday personal tenant" is DESIGNED only (an owner step).
 - **Date:** 2026-11-07
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** 2027-02-07, or when a Workday personal development tenant is granted to the owner
@@ -158,7 +158,49 @@ All in OrangeHRM, signed in as an HR administrator. Full click list:
 
 ## Measured in the tenant (2026-11-07)
 
-MEASURED_TABLES
+Test worker "Test Hris", Registered Nurse, Nursing, employee number
+100493 (typed by HR). Every HR action was done in OrangeHRM's own screens
+by `hr-clicks.mjs` (a headless browser doing HR's clicks; screenshots kept).
+The connector ran with `--watch 60`. Times are UTC; "+" counts from HR's
+last click (the Save that finishes the task).
+
+**Hire** (capture log E170)
+
+| UTC | + | Step |
+|---|---|---|
+| 17:50:37 | 0:00 | HR saves Report-to (Add Employee 17:50:30, Job 17:50:35 before it) |
+| 17:51:23 | 0:46 | Connector: "SEND hire Test Hris, Registered Nurse (Nursing)"; commit `ba3d029` on `hr-feed` |
+| 17:52:04 | 1:27 | `bulkUpload` answers 202 (run 42398357477, HR-SYNC) |
+| 17:52:08 | 1:31 | Provisioning log: created in on-premises AD |
+| 18:07:13 | 16:36 | Cloud Sync: Entra user created, enabled (its user cycle is 20 minutes; this hire waited most of one) |
+| by 18:08:07 | 17:30 | Dynamic groups: All-Nurses and the nurse auto-assignment group |
+| 18:08:33 | 17:56 | IT runs the joiner Lifecycle Workflow **on demand** (its schedule is every 3 hours). 18:08:43 account enabled; "email the TAP to the manager" **failed** (no manager mail; known lab gap); package requested |
+| 18:10:03 | 19:26 | "Nurse - Clinical Apps" delivered: App-AWS-IdentityCenter-Users, App-ServiceNow-Users |
+| 18:17:23 | 26:46 | ServiceNow: user created (40-minute cycle) |
+| 18:36:28 | 45:51 | AWS IAM Identity Center: user created (SCIM, 40-minute cycle), UserStatus ENABLED |
+
+**Job change** (E171): Sub Unit Nursing to ICU
+
+| UTC | + | Step |
+|---|---|---|
+| 18:20:15 | 0:00 | HR saves the Job tab |
+| 18:20:23 | 0:08 | Connector: "SEND Test Hris moves from Registered Nurse (Nursing) to Registered Nurse (ICU)"; commit `0ff3f36` |
+| 18:20:56 | 0:41 | `bulkUpload` 202 (run 42400791317) |
+| 18:21:00 | 0:45 | AD account updated |
+| 18:22:30 | 2:15 | Cloud Sync: Entra department ICU |
+| by 18:23:37 | 3:22 | Dynamic groups: out of All-Nurses, into All-ICU and the ICU auto-assignment group |
+| 18:55:10 | 34:55 | "ICU - Critical Care Apps" delivered by its auto-assignment policy (see the leaver: by then the account was already off) |
+
+**Leaver** (E172): Terminate Employment, date today, reason Resigned
+
+LEAVER_ROWS
+
+**Read the timings this way.** HR's part, OrangeHRM to Active Directory,
+took 1:31 for the hire, 0:45 for the job change and 0:39 for the leaver.
+The connector added 4 to 46 seconds (its one-minute poll), and the GitHub
+runner about 35 seconds. Everything after AD runs on Microsoft's
+schedules: Cloud Sync (20 minutes), the joiner workflow (3 hours; run on
+demand here), app provisioning (40 minutes).
 
 ## Consequences
 
@@ -191,7 +233,7 @@ MEASURED_TABLES
 
 - `lab/hris/` (OrangeHRM, connector, rehearsal driver) and
   `lab/hris/connector/tests/connector.test.mjs` (CI: `lab-tests.yml`)
-- Capture log E124-E127; screenshots in `~/contoso-demo/captures/hris/2026-11-07/` (outside the repo)
+- Capture log E170-E173; screenshots in `~/contoso-demo/captures/hris/2026-11-07/` (outside the repo)
 - Workday: [developer program](https://blog.workday.com/en-us/workday-open-developer-platform-generally-available.html), [FAQ](https://github.com/Workday/WorkdayDeveloperProgram/blob/main/FAQ.md)
 - OrangeHRM: [release notes (OAuth 2.0 in 5.4)](https://sourceforge.net/projects/orangehrm/files/stable/), [registering an OAuth client](https://api-starter-orangehrm.readme.io/reference/registering-a-client)
 - ServiceNow HRSD on a PDI: [community thread](https://www.servicenow.com/community/hrsd-forum/hr-plugin-activation-on-personal-dev/m-p/1321028)
