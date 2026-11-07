@@ -271,12 +271,59 @@ if ($missingScopes) { Write-Warning "Current Graph context does not list: $($mis
 
 $graph = 'https://graph.microsoft.com/v1.0'
 $em = "$graph/identityGovernance/entitlementManagement"
+function Get-GraphThrottleDelay {
+    # Parity-tested copy (tests/Scale20k.Tests.ps1). Returns the seconds to wait
+    # when a Graph call failed because Graph throttled it (HTTP 429, or 503
+    # Service Unavailable), else $null. Why this exists: Microsoft.Graph's own
+    # retry handler retries a throttled call a few times (verify: Microsoft
+    # Learn "Microsoft Graph throttling guidance" and Set-MgRequestContext
+    # -MaxRetry, default 3). In a 20,000-user tenant a long paged read can
+    # outlive those retries, and then one throttled page used to fail the whole
+    # read (karen-review I2). The wait is the Retry-After header when Graph
+    # sends one, else 10 seconds, kept between 1 and 120 seconds.
+    param($ErrorRecord)
+    $ex = $ErrorRecord.Exception
+    $resp = $null
+    if ($ex -and $ex.PSObject.Properties['Response']) { $resp = $ex.Response }
+    $code = 0
+    if ($resp -and $resp.PSObject.Properties['StatusCode']) { try { $code = [int]$resp.StatusCode } catch { $code = 0 } }
+    if (-not $code -and $ex) {
+        if ($ex.Message -match '\b429\b|TooManyRequests') { $code = 429 }
+        elseif ($ex.Message -match '\b503\b|ServiceUnavailable') { $code = 503 }
+    }
+    if ($code -ne 429 -and $code -ne 503) { return $null }
+    $seconds = 0
+    if ($resp -and $resp.PSObject.Properties['Headers'] -and $resp.Headers) {
+        $ra = $null
+        try { $ra = $resp.Headers.RetryAfter } catch { $ra = $null }
+        if ($ra -and $ra.Delta) { $seconds = [int][math]::Ceiling($ra.Delta.TotalSeconds) }
+        elseif ($ra -and $ra.Date) { $seconds = [int][math]::Ceiling(($ra.Date - [DateTimeOffset]::UtcNow).TotalSeconds) }
+    }
+    if ($seconds -le 0) { $seconds = 10 }
+    return [math]::Min([math]::Max($seconds, 1), 120)
+}
+function Invoke-GraphGetWithRetry {
+    # Parity-tested copy (tests/Scale20k.Tests.ps1). One Graph GET; a throttled
+    # call is retried after the wait Graph asks for, at most -MaxRetry times.
+    # Any other error, or a throttle that outlasts the retries, is thrown:
+    # a caller never gets a partial collection that looks complete.
+    param([Parameter(Mandatory)][string]$Uri, [int]$MaxRetry = 5)
+    for ($attempt = 0; ; $attempt++) {
+        try { return Invoke-MgGraphRequest -Method GET -Uri $Uri -OutputType HashTable -ErrorAction Stop }
+        catch {
+            $wait = Get-GraphThrottleDelay -ErrorRecord $_
+            if ($null -eq $wait -or $attempt -ge $MaxRetry) { throw }
+            Write-Warning "Graph throttled a read (try $($attempt + 1) of $MaxRetry); waiting $wait s as Graph asks."
+            Start-Sleep -Seconds $wait
+        }
+    }
+}
 function Get-GraphCollection {
     # Shared by the lab/iga scripts (parity-tested): every page of a Graph collection.
     param([Parameter(Mandatory)][string]$Uri)
     $items = [System.Collections.Generic.List[object]]::new(); $next = $Uri
     while ($next) {
-        $page = Invoke-MgGraphRequest -Method GET -Uri $next -OutputType HashTable
+        $page = Invoke-GraphGetWithRetry -Uri $next
         foreach ($v in @($page['value'])) { if ($null -ne $v) { $items.Add($v) } }
         $next = if ($page.Contains('@odata.nextLink')) { $page['@odata.nextLink'] } else { $null }
     }
