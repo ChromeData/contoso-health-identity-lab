@@ -122,6 +122,10 @@ run "plan_lab_tfvars" {
     error_message = "Day 1 + apps: CA001-CA010 and CA020 exist (enable_premium + the CA flags); enable_sso_apps plans the AWS IAM Identity Center and Clinical Portal apps; the PAM app (enable_pam_oidc_app) is still off"
   }
   assert {
+    condition     = nonsensitive(output.apps_nhi_inventory).clinic_lab_results != null && output.ca_policy_display_names["CA061"] == "CA061 - Require MFA and sign-in every 8h for Clinic Lab Results"
+    error_message = "lab.tfvars: enable_clinic_results_app reaches BOTH modules - modules/apps plans Clinic Lab Results (its NHI row is set) and modules/conditional-access plans CA061 for it (Okta -> Entra wave 1)"
+  }
+  assert {
     condition     = nonsensitive(output.apps_nhi_inventory).servicenow_provisioning != null && output.servicenow_provisioning_job_enabled == true
     error_message = "lab.tfvars: enable_servicenow_provisioning plans the ServiceNow provisioning app and servicenow_provisioning_job_enabled starts its cycle (started after Test Connection + on-demand + sign-in, capture-log E82/E83)"
   }
@@ -326,6 +330,10 @@ run "plan_legacy_flags_on_new_flags_off" {
     }
   }
 
+  assert {
+    condition     = nonsensitive(output.apps_nhi_inventory).clinic_lab_results == null && output.ca_policy_display_names["CA061"] == null
+    error_message = "enable_clinic_results_app = false: neither Clinic Lab Results nor CA061 may be planned"
+  }
   assert {
     condition     = alltrue([for k in ["CA009", "CA010", "CA020", "CA021", "CA060"] : output.ca_policy_display_names[k] == null])
     error_message = "CA009, CA010, CA020, CA021 and CA060 must not be planned while their flags are off"
