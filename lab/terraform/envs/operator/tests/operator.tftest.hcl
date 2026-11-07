@@ -19,6 +19,7 @@ mock_provider "azuread" {
         "Synchronization.ReadWrite.All"                        = "9b50c33d-700f-43b1-b2eb-87e89b703581"
         "AuditLog.Read.All"                                    = "b0afded3-3588-46d8-8b3d-9842eff778da"
         "EntitlementManagement.ReadWrite.All"                  = "9acd699f-1e81-4958-b001-93b1d2506e19"
+        "EntitlementManagement.Read.All"                       = "c74fd47d-ed3c-45c3-9a9e-b8676de685d2"
         "Policy.Read.All"                                      = "246dd0d5-5bd0-4def-940b-0421030a5b68"
         "AccessReview.Read.All"                                = "d07a8cc0-3d51-4b77-b3b0-32704d1f69fa"
         "LifecycleWorkflows.Read.All"                          = "7c67316a-232a-4b84-be22-cea2c0906404"
@@ -41,6 +42,7 @@ mock_provider "azuread" {
         "DelegatedPermissionGrant.ReadWrite.All"               = "8e8e4742-1d95-4f68-9d56-6ee75648c72a"
         "SecurityEvents.Read.All"                              = "bf394140-e372-4bf9-a898-299cfc7564e5"
         "AccessReview.ReadWrite.All"                           = "ef5f7d5c-338f-44b0-86c3-351f46c8bb5f"
+        "Reports.Read.All"                                     = "230c1aed-a721-4c5d-9cb4-a90514e508ef"
       }
     }
   }
@@ -127,6 +129,19 @@ run "grants_are_exactly_the_reviewed_lists" {
     error_message = "Secure Score: SecurityEvents.Read.All only (no SecurityEvents.ReadWrite.All)"
   }
   assert {
+    # The AD FS migration report (lab/adfs) is a READ: Reports.Read.All is the
+    # only (least privileged) application permission Learn lists for
+    # getRelyingPartyDetailedSummary. Nothing broader for reports is granted.
+    condition     = contains(var.operator_graph_roles, "Reports.Read.All") && length([for r in var.operator_graph_roles : r if startswith(r, "Reports.") && r != "Reports.Read.All"]) == 0
+    error_message = "AD FS migration report: Reports.Read.All only (no other Reports.* role)"
+  }
+  assert {
+    # 09-SoD-Report.ps1 runs app-only as the operator between sessions and
+    # reads access packages and their assignments.
+    condition     = contains(var.operator_graph_roles, "EntitlementManagement.Read.All") && contains(var.operator_session_graph_roles, "EntitlementManagement.ReadWrite.All")
+    error_message = "entitlement management: Read standing (SoD report), ReadWrite in a session"
+  }
+  assert {
     condition     = contains(var.operator_session_graph_roles, "AccessReview.ReadWrite.All") && contains(var.operator_graph_roles, "AccessReview.Read.All")
     error_message = "access reviews: Read standing (the report scripts' scope check), ReadWrite in a session"
   }
@@ -168,6 +183,8 @@ run "session_role_cannot_touch_locks_roles_or_evidence" {
       "Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies/delete",
       "Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies/write",
       "Microsoft.OperationalInsights/workspaces/delete",
+      "Microsoft.Insights/diagnosticSettings/delete",
+      "Microsoft.Insights/diagnosticSettings/write",
     ] : contains(one(azurerm_role_definition.operator_session.permissions).not_actions, a)])
     error_message = "the session role must exclude lock/role-assignment writes and deletes, and the evidence and log deletes"
   }
@@ -182,8 +199,9 @@ run "session_open_adds_writes_time_bound" {
 
   variables {
     operator_write_session = {
-      opened_utc  = "2099-01-01T09:00:00Z"
-      expires_utc = "2099-01-01T13:00:00Z"
+      # A window open NOW: a future start is refused (see below).
+      opened_utc  = timeadd(timestamp(), "-1h")
+      expires_utc = timeadd(timestamp(), "3h")
       reason      = "test: recording day resets"
     }
   }
@@ -197,7 +215,7 @@ run "session_open_adds_writes_time_bound" {
     error_message = "an open session adds the custom session role and Key Vault Secrets Officer"
   }
   assert {
-    condition     = alltrue([for a in azurerm_pim_active_role_assignment.operator_session : one(one(a.schedule).expiration).end_date_time == "2099-01-01T13:00:00Z"])
+    condition     = alltrue([for a in azurerm_pim_active_role_assignment.operator_session : one(one(a.schedule).expiration).end_date_time == var.operator_write_session.expires_utc])
     error_message = "every Azure session assignment ends at expires_utc (time-bound active)"
   }
   assert {
@@ -228,6 +246,22 @@ run "expired_session_fails_the_plan" {
       opened_utc  = "2000-01-01T09:00:00Z"
       expires_utc = "2000-01-01T10:00:00Z"
       reason      = "test: a stale session"
+    }
+  }
+
+  expect_failures = [terraform_data.operator_write_session_window]
+}
+
+run "future_session_fails_the_plan" {
+  command = plan
+
+  variables {
+    # Graph grants have no start time: applying this now would grant the
+    # Graph writes now, not in 2099.
+    operator_write_session = {
+      opened_utc  = "2099-01-01T09:00:00Z"
+      expires_utc = "2099-01-01T13:00:00Z"
+      reason      = "test: a session that has not started"
     }
   }
 

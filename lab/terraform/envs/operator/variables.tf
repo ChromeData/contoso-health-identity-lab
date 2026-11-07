@@ -48,6 +48,12 @@ variable "operator_graph_roles" {
       DeviceManagementManagedDevices.Read.All  the Intune pilot device
       DeviceManagementConfiguration.Read.All   its compliance policy
       SecurityEvents.Read.All             Secure Score history (read only)
+      Reports.Read.All                    the AD FS application migration
+                                          report (lab/adfs, ADR 0009): least
+                                          privileged per Learn
+                                          (reportroot-getrelyingpartydetailedsummary)
+      EntitlementManagement.Read.All      access packages and assignments for
+                                          09-SoD-Report.ps1 between sessions
 
     History: until 2026-11-06 this list also held 16 write permissions,
     including AppRoleAssignment.ReadWrite.All and
@@ -70,6 +76,8 @@ variable "operator_graph_roles" {
     "DeviceManagementManagedDevices.Read.All",
     "DeviceManagementConfiguration.Read.All",
     "SecurityEvents.Read.All",
+    "Reports.Read.All",
+    "EntitlementManagement.Read.All",
   ]
 
   validation {
