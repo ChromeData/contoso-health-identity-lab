@@ -142,3 +142,22 @@ Postings say CyberArk. The lab does the same jobs with HashiCorp Vault and Apach
 | Dual control | A second person approves a check-out | Approved change ticket required before check-out (`FEED` detection matches check-outs to logons) |
 | Discovery | Finds privileged accounts nobody knew about | `Find-ShadowAdmins.ps1`, `06-NHI-Inventory.ps1` |
 | Conjur | Secrets for programs, not people | Conjur OSS, in the lab under the same name |
+
+## Lab-only facts to say once on camera
+
+- **One person plays every role.** The cockpit holds the test admins' and the
+  break-glass accounts' passkeys in the operator Mac's Keychain, so it can sign
+  in as each persona (E11c, E11d, E103, E104). In production each admin holds
+  their own hardware key, and no one person holds them all. Say: "In the lab one
+  person plays every role, so the cockpit holds the test accounts' passkeys. In
+  production each admin holds their own hardware key."
+- **Git is the transport here, not the authority.** The HR feed reaches Entra
+  through a commit on the `hr-feed` branch, sent by `hr-feed.yml`. So write access
+  to that branch can hire or fire. In production HR never touches git: Workday's
+  outbound integration calls the same inbound provisioning API. Say: "The CSV and
+  the git push stand in for Workday's outbound integration. In production HR never
+  touches git." The branch ruleset that limits pushes is a setup step; it has no
+  evidence row yet.
+- **An AI coding assistant built this lab with the owner.** It writes the code and
+  opens the pull requests with the owner's GitHub login. Only the owner approves an
+  apply (README, "How this lab was built").

@@ -81,7 +81,7 @@ by URL and check date in a **Sources** section.
    onward the words are fixed, and they are the same words the rest of the
    repository uses:
    - **RAN · tenant:** exercised against a real Microsoft tenant, with
-     evidence. Nothing yet.
+     evidence: an E-row in `lab/evidence/capture-log.csv`
    - **RAN · harness:** exercised end to end in a local harness (the PAM
      stack against Samba AD, the midPoint campaign, dynamic database
      credentials, the Kubernetes segment)
@@ -89,9 +89,12 @@ by URL and check date in a **Sources** section.
      mocked tests), never applied
    - **DESIGNED:** documented only
 
-   Today, nothing has been applied to a tenant. A decision records a
-   measured result only after a real run; until then the result is a
-   placeholder (`<measured: …>` or "fill after running").
+   The lab has run in a real tenant since 2026-10-27 (E01 onwards). Each
+   status line names the E-rows behind it. A decision records a measured
+   result only after a real run; until then the result is a placeholder
+   (`<measured: …>` or "fill after running"). `.github/scripts/check-adr-status.py`
+   fails CI when an ADR says a script "never ran" but the capture log has a
+   row for it.
 4. **Decisions are superseded, not edited.** A changed decision gets a new
    ADR, and the old one's status becomes "Superseded by 00NN", or "Partly
    superseded by 00NN" when only part of it changed.

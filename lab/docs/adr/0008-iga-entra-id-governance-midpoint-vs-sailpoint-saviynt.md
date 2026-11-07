@@ -1,6 +1,6 @@
 # ADR 0008: IGA with Entra ID Governance (+ midPoint stand-in) vs. SailPoint / Saviynt
 
-- **Status:** Accepted (lab and scenario recommendation). The Entra ID Governance side is code, validated offline, never applied. The midPoint certification campaign ran locally on 2026-10-20, on mock-HR persona users, not Entra data. `test/e2e-midpoint.sh` passed 91/91 in every `lab/pam/test/run-all.sh` run that day; the latest count is in the newest `lab/evidence/offline-tests/` record (counts and the runner's console output), and the latest campaign record is hashed in `lab/evidence/midpoint/20261020T162116Z/`.
+- **Status:** Accepted (lab and scenario recommendation). The Entra ID Governance side is RAN · tenant: the catalog, 4 access packages and the SoD links (E19), privileged reviews (E53), a refused request (E39c) and the SoD report (E71). The midPoint certification campaign ran locally on 2026-10-20, on mock-HR persona users, not Entra data. `test/e2e-midpoint.sh` passed 91/91 in every `lab/pam/test/run-all.sh` run that day; the latest count is in the newest `lab/evidence/offline-tests/` record (counts and the runner's console output), and the latest campaign record is hashed in `lab/evidence/midpoint/20261020T162116Z/`.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 

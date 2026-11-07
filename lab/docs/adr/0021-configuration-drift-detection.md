@@ -1,6 +1,6 @@
 # ADR 0021: Configuration drift detection (nightly reconcile of tenant state against the code)
 
-- **Status:** Accepted (lab). BUILT: `Export-IdentityConfig.ps1`, `Compare-IdentityConfig.ps1`, their Pester suites and `.github/workflows/config-drift.yml`, all tested offline against mocked Graph. Not run: no export has been taken from a tenant and the committed baseline is a placeholder (`lab/config-baseline/`). **RAN · tenant:** nothing.
+- **Status:** Accepted (lab). BUILT: `Export-IdentityConfig.ps1`, `Compare-IdentityConfig.ps1`, their Pester suites and `.github/workflows/config-drift.yml`, all tested offline against mocked Graph. **RAN · tenant:** nightly since 2026-10-29 against a reviewed baseline (#98); it caught a real Microsoft schema change (#112), and the baseline was refreshed by PR (#113).
 - **Date:** 2026-10-26
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 

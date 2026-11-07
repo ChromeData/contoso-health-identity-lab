@@ -107,6 +107,19 @@ with an end date; exemptions are group-based, never per-user).
   ticket.
 - Review it with [ca-change-review-checklist.md](ca-change-review-checklist.md).
 
+### First graduation only: security defaults and CA001 in one window
+
+Security defaults and Conditional Access cannot both be on. Turn security
+defaults off **in the same change window as CA001 (MFA for all users), seconds
+before it is enforced**. On 2026-10-28 the lab turned security defaults off at
+22:12Z and enforced CA001 at about 23:2xZ (E30a). For about 70 minutes no MFA
+policy was enforced. That was a sequencing mistake. The order is:
+
+1. Have the CA001 PR merged and its apply waiting at the gate.
+2. Turn security defaults off.
+3. Approve the CA001 apply at once. Confirm CA001 shows `enabled`.
+4. Only then graduate the other policies.
+
 ## 5. Merge and apply
 
 `terraform-apply.yml` pauses at the `prod` environment reviewer gate. The

@@ -19,7 +19,10 @@ Every layer sits behind a staging flag that is `false` in `lab.tfvars`
 CI identities live in a separate, human-applied `envs/bootstrap` root, and the
 AWS IAM Identity Center permission set in an equally separate, human-applied
 `aws/` root, and the Okta side of the acquired clinic's coexistence (ADR 0022) in
-a third human-applied root, `okta/`. Workforce users (Dana Okafor and colleagues) are **not**
+a third human-applied root, `okta/`. ("Human-applied" means applied
+outside CI, from the operator workstation. The owner starts or approves
+each such apply. Before 2026-11-07 AI helpers running as the lab operator
+also ran some of them, for example the `okta/` apply in PR #222.) Workforce users (Dana Okafor and colleagues) are **not**
 Terraform's: HR provisioning owns them.
 
 > **Status: BUILT.** Every directory validates and every mocked test passes

@@ -22,9 +22,43 @@ rules list read on 2026-11-06 showed 16 of the first 22 as enabled
 scheduled rules (plus Microsoft's Fusion rule); the five in
 `itdr_exclude_rules`, the break-glass rule (being moved to a near-real-time
 rule, `main.tf`) and the two third-set rules were not in it. (This paragraph
-said until 2026-11-06 that no workspace existed; that was out of date.) What
-has run offline (on
-2026-10-20, unless marked otherwise):
+said until 2026-11-06 that no workspace existed; that was out of date.) The live state is in the table below.
+
+### Running in Sentinel, and what has fired (live read, 2026-11-06)
+
+Read as the lab operator: the workspace's analytics rules list, and
+`SecurityAlert` counted by rule name over 30 days. "Fired" means alerts on
+real tenant events. Most of them came from the lab's own build and admin work
+(true events, benign cause); no rule's alerts have been triaged one by one,
+so the false-positive column records only what is known.
+
+| Rule (display name) | Running | Alerts, 30 days | Known false positives / notes |
+|---|---|---|---|
+| Permission granted to an application | Y | 718 | Lab setup grants; noisy during builds |
+| Failed sign-in spike from one IP | Y | 149 | Counts interrupts as failures (karen D1; PR #233). E113 was a staged trigger |
+| Directory role assigned outside PIM | Y | 144 | Pipeline and operator role work |
+| PIM activation | Y | 138 | Every activation is Medium and opens a ticket (karen B5; PR #233). Real activation: E40b |
+| Credential added to an app or service principal | Y | 110 | Lab app and operator certificate work |
+| CA policy, named location or auth strength changed outside IaC | Y | 108 | All on 2026-10-28/29, the graduation night (E30) |
+| Break-glass account sign-in (NRT) | Y | 48 | 2 sign-ins in the 2026-11-05 drill (E49); late rows added alerts (dedup: PR #230) |
+| Authentication method changed by an admin | Y | 42 | Lab passkey and TAP setup (E11c, E11d, E100) |
+| Member added to a privileged AD group | Y | 12 | 2026-11-07, AD work on DC01 |
+| Tier-0 logon on DC01 without a Vault check-out | Y | 9 | 2026-11-07, AD work on DC01 |
+| Security info registered from a risky or unfamiliar context | Y | 7 | Break-glass passkey registration (E41a) |
+| Legacy authentication attempts | Y | 0 | |
+| Sign-in from a blocked / watched country | Y | 0 | |
+| DCSync (replication by a non-DC account) | Y | 0 | |
+| Device-code flow sign-in | Y | 0 | |
+| Kerberoasting (RC4 service tickets) | Y | 0 | |
+| Member added to a privileged group outside PIM | Y | 0 | |
+| identity-risk, pim-activation-without-auth-context, sod-violation-granted, vault-privileged-access-anomaly, dc-logon-outside-operator-allowlist | N | - | In `itdr_exclude_rules` or waiting for a dependency |
+| dormant-privileged-account-reactivation, keyvault-bulk-secret-read | N | - | Third set, flag off (E114) |
+
+So: 24 written, 17 running (16 scheduled, 1 NRT) plus Fusion, 11 seen firing
+on real tenant events. Drill and test rules (`Contoso DRILL`, `Contoso TEST`)
+are temporary and not counted.
+
+What has run offline (on 2026-10-20, unless marked otherwise):
 
 - `modules/monitoring`'s mocked `terraform test` (32 runs) checks that every
   rule the module deploys exists here, that entity mappings and custom
