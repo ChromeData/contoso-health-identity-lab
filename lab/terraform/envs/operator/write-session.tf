@@ -68,6 +68,9 @@ locals {
     "Microsoft.OperationalInsights/workspaces/purge/action",
     "Microsoft.OperationalInsights/workspaces/tables/delete",
     "Microsoft.Insights/diagnosticSettings/delete",
+    # WRITE too: a changed diagnostic setting can stop the evidence store's or
+    # Key Vault's audit export, and closing the session does not restore it.
+    "Microsoft.Insights/diagnosticSettings/write",
   ]
 }
 
@@ -103,7 +106,10 @@ locals {
 
 # Fail the PLAN when the window has already ended: a stale session must not
 # be re-applied by mistake. Close it by applying with operator_write_session
-# unset. (variables.tf validates the window itself: at most 8 hours.)
+# unset. Fail it too when the window has not started yet (more than 15
+# minutes ahead): Graph grants have no start time, so a future window would
+# grant the Graph writes at apply time, long before Azure's PIM start.
+# (variables.tf validates the window itself: at most 8 hours.)
 resource "terraform_data" "operator_write_session_window" {
   count = local.write_session_open ? 1 : 0
 
@@ -117,6 +123,10 @@ resource "terraform_data" "operator_write_session_window" {
     precondition {
       condition     = timecmp(plantimestamp(), var.operator_write_session.expires_utc) < 0
       error_message = "The operator write session ended at ${var.operator_write_session.expires_utc}. Close it: apply with operator_write_session unset (ADR 0030)."
+    }
+    precondition {
+      condition     = timecmp(var.operator_write_session.opened_utc, timeadd(plantimestamp(), "15m")) <= 0
+      error_message = "The operator write session opens at ${var.operator_write_session.opened_utc}, in the future. Graph writes would start at apply time, not then. Apply when the window opens (ADR 0030)."
     }
   }
 }
