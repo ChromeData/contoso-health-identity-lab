@@ -1,0 +1,16 @@
+# Contoso Claims Viewer (lab/adfs/README.md). Which identity provider the app
+# trusts is ONE setting, CV_IDP_FILE in .env, written by cutover.sh:
+#   adfs.xml  -> the app signs users in through AD FS   (before / roll-back)
+#   entra.xml -> the app signs users in through Entra   (after the cutover)
+services:
+  claims-viewer:
+    build: .
+    image: contoso-claims-viewer:2.4.10
+    container_name: contoso-claims-viewer
+    ports:
+      - "127.0.0.1:8443:8443"   # loopback only: nothing on the LAN can reach it
+    environment:
+      CV_IDP_FILE: ${CV_IDP_FILE:-adfs.xml}
+    volumes:
+      - ./idp-metadata:/var/simplesamlphp/idp-metadata:ro
+    restart: "no"

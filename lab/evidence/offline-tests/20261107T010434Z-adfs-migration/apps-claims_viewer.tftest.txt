@@ -1,0 +1,9 @@
+tests/claims_viewer.tftest.hcl... in progress
+  run "claims_viewer_absent_by_default"... pass
+  run "claims_viewer_on_plans_the_converted_app"... pass
+  run "claims_viewer_without_groups_fails"... pass
+  run "claims_viewer_group_name_instead_of_id_is_refused"... pass
+tests/claims_viewer.tftest.hcl... tearing down
+tests/claims_viewer.tftest.hcl... pass
+
+Success! 4 passed, 0 failed.
