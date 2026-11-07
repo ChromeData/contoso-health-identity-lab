@@ -214,7 +214,20 @@ class GateTest(unittest.TestCase):
         self.issue_comments([user("owner1", f"approve {CODE}")])
         r = self.run_gate(GITHUB_EVENT_NAME="workflow_dispatch")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("this run has no pull request", self.read("issue_body.md"))
+        self.assertIn("manual workflow_dispatch run. Read", self.read("issue_body.md"))
+
+    def test_dispatch_with_pr_skips_comparison(self):
+        # Manual recovery: the merged commit still has its PR, whose plan
+        # comment differs from the saved plan. A dispatch must not refuse.
+        self.pr_comments([self.pr_plan_comment("0" * 64)])
+        self.issue_comments([user("owner1", f"approve {CODE}")])
+        r = self.run_gate(GITHUB_EVENT_NAME="workflow_dispatch")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        body = self.read("issue_body.md")
+        self.assertIn("manual workflow_dispatch run", body)
+        self.assertIn("PR #7", body)
+        self.assertNotIn("Does NOT match", body)
+        self.assertNotIn("issues/7/comments", self.read("calls.log"))
 
     # ---- fail closed ---------------------------------------------------------
     def test_missing_plan_sha_fails(self):

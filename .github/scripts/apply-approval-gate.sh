@@ -32,7 +32,8 @@
 # reviewed PR would be applied (another merge, a portal edit, a repository
 # variable). Recovery: re-run from a fresh PR, or a manual workflow_dispatch
 # run, whose issue then shows the full saved plan for the owner to read (a
-# dispatch has no PR to compare against, and the issue says so).
+# dispatch skips the PR comparison, even when the commit has a PR, and the
+# issue says so).
 #
 # Honest difference from the Environment reviewer: this gate lives in the
 # workflow file, so removing it takes a merged (reviewed) pull request, while
@@ -133,7 +134,15 @@ fi
 # ---- Compare the saved plan's change set with the PR plan comment -----------
 compare_line=""
 mismatch=false
-if [ -n "$pr_number" ]; then
+if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ]; then
+  # The manual recovery path. A dispatch on a merged main commit still finds
+  # that commit's PR, but the owner ran it by hand to apply what is there now,
+  # so the PR comparison is skipped (it would refuse again). The issue says so
+  # and shows the full saved plan, which is what the code approves.
+  from_pr=""
+  [ -z "$pr_number" ] || from_pr=" (the commit came from PR #$pr_number; its plan comment is not compared)"
+  compare_line="**Not compared:** this is a manual workflow_dispatch run$from_pr. Read the saved plan below; it is what will be applied."
+elif [ -n "$pr_number" ]; then
   comments_json=$(gh api "repos/$REPO/issues/$pr_number/comments" --paginate | jq -s 'add // []') \
     || { echo "Refused: could not read the comments of PR #$pr_number"; exit 1; }
   pr_fp=$(printf '%s' "$comments_json" | jq -r --arg m "$MARKER" '

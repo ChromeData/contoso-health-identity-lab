@@ -331,6 +331,7 @@ jobs:
                 ? '_No plain-English summary this time (its step failed). The full plan is under Technical details below._'
                 : '**What this change does:** not known yet. The plan did not finish; Technical details below show which step failed.';
             }
+            if (summary.length > 30000) summary = summary.slice(0, 30000) + '\n... [truncated]';
             const checks = [
               ['formatting', process.env.FMT === 'success'],
               ['setup', process.env.INIT === 'success'],
@@ -343,12 +344,6 @@ jobs:
             const checksLine = failed.length === 0
               ? 'Terraform checks: formatting, setup, validation and plan all passed.'
               : `Terraform checks: **${listed} did not pass** (see Technical details below).`;
-            // GitHub comment hard limit is 65536 chars; truncate the plan,
-            // leaving room for the summary (plain-plan.py caps its bullets).
-            const MAX = Math.max(20000, 60000 - summary.length);
-            if (plan.length > MAX) {
-              plan = plan.slice(0, MAX) + '\n\n... [truncated — see the full plan in the Actions log] ...';
-            }
             // verify: Dependabot runs honour id-token: write + vars; if not,
             // azure/login fails and this comment shows every step skipped.
             const banner = [];
@@ -379,7 +374,7 @@ jobs:
             ] : [];
             // The marker heading stays the FIRST line: the upsert below
             // matches on it (startsWith).
-            const body = [
+            const render = (planText) => [
               '## Terraform plan — `lab/terraform/envs/dev`',
               '',
               summary,
@@ -397,7 +392,7 @@ jobs:
               `| plan exit code | \`${process.env.PLAN_EXIT}\` |`,
               '',
               '```terraform',
-              plan,
+              planText,
               '```',
               '',
               '</details>',
@@ -405,6 +400,18 @@ jobs:
               ...changesetBlock,
               `_Authenticated to Entra via OIDC (PLAN app, read-only). Commit ${context.sha.slice(0,7)}._`,
             ].join('\n');
+            // GitHub's comment limit is 65536 characters. Everything except
+            // the plan (summary, banner, change set, fingerprint) is sized
+            // first; the plan gets only the space that is left, so a long
+            // change set can never push the comment over the limit.
+            const LIMIT = 65000;
+            const NOTE = '\n\n... [truncated — see the full plan in the Actions log] ...';
+            const room = LIMIT - render('').length;
+            if (plan.length > room) {
+              plan = plan.slice(0, Math.max(0, room - NOTE.length)) + NOTE;
+            }
+            const body = render(plan);
+            if (body.length > 65536) core.warning(`Plan comment is ${body.length} characters; GitHub may refuse it.`);
             // Upsert: find our previous comment and edit it instead of spamming.
             // Bot-authored only (a user comment copying the heading is never
             // edited) and paginated (found even on PRs with >30 comments).
