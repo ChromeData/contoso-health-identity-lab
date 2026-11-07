@@ -11,6 +11,8 @@
 #   * help-desk AU scoping, the Global Administrator rule bodies and the
 #     PIM-eligible review bodies (rendered JSON, decoded and checked);
 #   * Azure-resource PIM: a GROUP eligible (never active), Tier-0 approvers;
+#   * Key Vault Secrets Officer (keyvault.tf): a role-assignable GROUP eligible
+#     at vault scope, 2-hour MFA + justification + Tier-0 approval activation;
 #   * AWS admin (aws.tf): a role-assignable PIM group, eligible-only, 2-hour
 #     MFA + justification activation, every activation mailed, reviewed
 #     quarterly but outside the CA002 / CA020 scope;
@@ -76,6 +78,10 @@ run "defaults_only_the_original_binding" {
   assert {
     condition     = length(azurerm_pim_eligible_role_assignment.azure_pim) == 0 && length(azurerm_role_management_policy.azure_pim) == 0
     error_message = "No Azure PIM resource may be planned while enable_pim_azure_resources = false."
+  }
+  assert {
+    condition     = length(azuread_group.keyvault_pim) == 0 && length(azurerm_pim_eligible_role_assignment.keyvault_pim) == 0 && length(azurerm_role_management_policy.keyvault_pim) == 0
+    error_message = "No Key Vault PIM resource may be planned while enable_pim_keyvault_officers = false."
   }
   assert {
     condition     = length(azuread_group.aws_admin) == 0 && length(azuread_group_role_management_policy.aws_admin_member) == 0 && output.aws_admin_group_object_id == null
@@ -905,6 +911,86 @@ run "azure_pim_rejects_owner" {
   }
 
   expect_failures = [var.azure_pim_role_definition_guid]
+}
+
+# =============================================================================
+# Just-in-time Key Vault Secrets Officer (keyvault.tf)
+# =============================================================================
+
+run "keyvault_officers_pim" {
+  command = apply
+
+  variables {
+    enable_pim_keyvault_officers = true
+    keyvault_pim_scope_id        = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.KeyVault/vaults/kv-idlab-20f1"
+  }
+
+  assert {
+    condition     = azurerm_pim_eligible_role_assignment.keyvault_pim[0].role_definition_id == "/subscriptions/22222222-2222-2222-2222-222222222222/providers/Microsoft.Authorization/roleDefinitions/b86a8fe4-44ce-4948-aee5-eccb2c155cd7"
+    error_message = "The eligible role must be Key Vault Secrets Officer (b86a8fe4-...), as a subscription-scoped role definition id."
+  }
+  assert {
+    condition     = azurerm_pim_eligible_role_assignment.keyvault_pim[0].scope == "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.KeyVault/vaults/kv-idlab-20f1"
+    error_message = "Eligibility must be scoped to the lab vault only, not its resource group."
+  }
+  assert {
+    condition     = azurerm_pim_eligible_role_assignment.keyvault_pim[0].principal_id == azuread_group.keyvault_pim[0].object_id && azuread_group.keyvault_pim[0].assignable_to_role
+    error_message = "The eligible principal must be the role-assignable PIM group, not a person."
+  }
+  assert {
+    condition = (
+      azurerm_role_management_policy.keyvault_pim[0].activation_rules[0].require_approval &&
+      azurerm_role_management_policy.keyvault_pim[0].activation_rules[0].require_multifactor_authentication &&
+      azurerm_role_management_policy.keyvault_pim[0].activation_rules[0].require_justification &&
+      azurerm_role_management_policy.keyvault_pim[0].activation_rules[0].maximum_duration == "PT2H"
+    )
+    error_message = "Key Vault Secrets Officer activation must need approval, MFA and a reason, for at most 2 hours by default."
+  }
+  assert {
+    condition     = one(azurerm_role_management_policy.keyvault_pim[0].activation_rules[0].approval_stage[0].primary_approver).object_id == azuread_group.pim_approvers["tier0"].object_id
+    error_message = "Key Vault approvals route to PIM-Approvers-Tier0 (the vault holds Tier-0 secrets)."
+  }
+  assert {
+    condition     = azurerm_role_management_policy.keyvault_pim[0].active_assignment_rules[0].expiration_required
+    error_message = "A direct active Key Vault Secrets Officer assignment through PIM must expire."
+  }
+  assert {
+    condition     = contains(keys(output.privileged_review_targets), "PIM-KeyVault-Secrets-Officers")
+    error_message = "The Key Vault PIM group must feed the privileged access review."
+  }
+}
+
+run "keyvault_pim_needs_scope" {
+  command = plan
+
+  variables {
+    enable_pim_keyvault_officers = true
+  }
+
+  expect_failures = [azurerm_role_management_policy.keyvault_pim]
+}
+
+run "keyvault_pim_scope_must_be_a_vault" {
+  command = plan
+
+  variables {
+    enable_pim_keyvault_officers = true
+    keyvault_pim_scope_id        = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab"
+  }
+
+  expect_failures = [var.keyvault_pim_scope_id]
+}
+
+run "keyvault_pim_capped_at_tier0" {
+  command = plan
+
+  variables {
+    enable_pim_keyvault_officers         = true
+    keyvault_pim_scope_id                = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.KeyVault/vaults/kv-idlab-20f1"
+    keyvault_pim_activation_max_duration = "PT8H"
+  }
+
+  expect_failures = [var.keyvault_pim_activation_max_duration]
 }
 
 # =============================================================================

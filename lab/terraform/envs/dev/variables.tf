@@ -640,6 +640,12 @@ variable "enable_pim_azure_resources" {
   default     = false
 }
 
+variable "enable_pim_keyvault_officers" {
+  type        = bool
+  description = "Make PIM-KeyVault-Secrets-Officers ELIGIBLE for Key Vault Secrets Officer on the lab vault (Azure PIM, MFA + justification + Tier-0 approval, 2h; ADR 0027). Needs enable_premium and a HUMAN applier with Owner / User Access Administrator on the vault - the CI APPLY identity cannot write PIM role-management policies (modules/pim/README.md)."
+  default     = false
+}
+
 variable "enable_pim_aws_admin" {
   type        = bool
   description = "AWS admin without root (ADR 0025): create PIM-AWS-Lab-Admins (modules/pim aws.tf; eligible-only, 2-hour MFA + justification activation, every activation mailed) and assign it to the AWS IAM Identity Center app as its second principal (modules/apps), so SCIM copies only ACTIVE members to AWS. lab/terraform/aws grants the SCIM copy the LabAdministrator permission set. Needs enable_premium and enable_sso_apps; eligibility is a post-apply step."
