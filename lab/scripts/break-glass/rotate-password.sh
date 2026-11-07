@@ -29,13 +29,20 @@
 #     the reset, so a failed reset never leaves the account with a password
 #     nobody stored. Only after Graph accepts it is it promoted to the real
 #     name.
+#   * The script NEVER deletes a "-pending" item it cannot prove unused. If
+#     the reset outcome is unknown (for example the connection dropped after
+#     Entra changed the password), the item stays. A new --apply refuses to
+#     overwrite it. --resume sends that same pending value again and then
+#     promotes it, so the account and the Keychain agree.
 #   * Nothing here ever prints it. Never use `security -g`.
 #
 # USAGE
 #   rotate-password.sh bg-admin-01            # dry run: checks only, changes nothing
 #   rotate-password.sh bg-admin-01 --apply    # rotate
+#   rotate-password.sh bg-admin-01 --resume   # finish an unfinished rotation
 # Then commit the record it writes under lab/evidence/break-glass/ and add the
-# capture-log row it prints.
+# capture-log row it prints. Neither names the person who ran it: the repo is
+# public, and captures that name people stay private (evidence README).
 # =============================================================================
 set -euo pipefail
 umask 077
@@ -43,9 +50,9 @@ umask 077
 acct="${1:-}"
 mode="${2:---dry-run}"
 if [[ ! "$acct" =~ ^bg-admin-[0-9]{2}$ ]]; then
-  echo "usage: $0 bg-admin-NN [--apply]" >&2; exit 2
+  echo "usage: $0 bg-admin-NN [--apply|--resume]" >&2; exit 2
 fi
-case "$mode" in --apply|--dry-run) ;; *) echo "unknown option: $mode" >&2; exit 2;; esac
+case "$mode" in --apply|--resume|--dry-run) ;; *) echo "unknown option: $mode" >&2; exit 2;; esac
 
 command -v security >/dev/null || { echo "macOS 'security' not found: this must run on the owner's Mac." >&2; exit 1; }
 command -v az >/dev/null || { echo "az CLI not found." >&2; exit 1; }
@@ -82,9 +89,24 @@ echo "Password set:   ${before}$( [[ "$before" == "$created" ]] && echo '  <- ne
 echo "Signed in as:   ${who}"
 echo "Keychain item:  ${svc}"
 
+has_pending=no
+if security find-generic-password -s "$pending" -a "$upn" >/dev/null 2>&1; then
+  has_pending=yes
+  echo "Pending item:   ${pending} EXISTS (an earlier rotation did not finish; see the runbook)"
+fi
+
 if [[ "$mode" == "--dry-run" ]]; then
   echo "Dry run: nothing changed. Re-run with --apply to rotate."
   exit 0
+fi
+
+if [[ "$mode" == "--apply" && "$has_pending" == "yes" ]]; then
+  echo "Refusing: ${pending} exists. It may hold the password Entra now uses." >&2
+  echo "Do not delete it. Run: $0 ${acct} --resume" >&2
+  exit 1
+fi
+if [[ "$mode" == "--resume" && "$has_pending" != "yes" ]]; then
+  echo "Nothing to resume: ${pending} does not exist." >&2; exit 1
 fi
 
 # --- 3. New password, into Keychain (pending) and read back ----------------
@@ -92,19 +114,29 @@ fi
 # or backslashes, so neither `security -i` parsing nor JSON can mangle it.
 # Entra needs 3 of 4 character classes: loop until upper, lower and digit
 # are all present.
-pw=""
-until [[ "$pw" =~ [A-Z] && "$pw" =~ [a-z] && "$pw" =~ [0-9] ]]; do
-  pw="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40)"
-done
+# The bytes come from a FINITE read (head -c on the file). A pipe from an
+# endless `tr </dev/urandom` into `head` kills tr with SIGPIPE, and with
+# pipefail plus set -e that stopped --apply before any reset.
+if [[ "$mode" == "--apply" ]]; then
+  pw=""
+  until [[ ${#pw} -eq 40 && "$pw" =~ [A-Z] && "$pw" =~ [a-z] && "$pw" =~ [0-9] ]]; do
+    raw="$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9')"
+    pw="${raw:0:40}"
+  done
+  unset raw
 
-printf 'add-generic-password -U -s %s -a %s -l "Break-glass %s password (rotation pending)" -w %s\n' \
-  "$pending" "$upn" "$acct" "$pw" | security -i >/dev/null
-readback="$(security find-generic-password -s "$pending" -a "$upn" -w)"
-if [[ "$readback" != "$pw" ]]; then
-  unset pw readback
-  echo "Keychain read-back did not match. Nothing sent to Entra." >&2; exit 1
+  printf 'add-generic-password -s %s -a %s -l "Break-glass %s password (rotation pending)" -w %s\n' \
+    "$pending" "$upn" "$acct" "$pw" | security -i >/dev/null
+  readback="$(security find-generic-password -s "$pending" -a "$upn" -w)"
+  if [[ "$readback" != "$pw" ]]; then
+    unset pw readback
+    echo "Keychain read-back did not match. Nothing sent to Entra." >&2; exit 1
+  fi
+  unset readback
+else
+  # --resume: send the value already saved under -pending, unchanged.
+  pw="$(security find-generic-password -s "$pending" -a "$upn" -w)"
 fi
-unset readback
 
 # --- 4. Reset in Entra through a private body file -------------------------
 tmp="$(mktemp -d)"
@@ -113,7 +145,10 @@ printf '{"passwordProfile":{"forceChangePasswordNextSignIn":false,"password":"%s
 if ! az rest --method patch --url "https://graph.microsoft.com/v1.0/users/${uid}" \
       --headers 'Content-Type=application/json' --body "@$tmp/body.json" >/dev/null; then
   rm -f "$tmp/body.json"; unset pw
-  echo "Entra refused the reset. The old password still works; the -pending Keychain item holds an UNUSED value (delete it)." >&2
+  # A failed call does not prove the reset did not happen. Keep the item.
+  echo "The reset call failed. The outcome is UNKNOWN: Entra may already use the new password." >&2
+  echo "The -pending Keychain item (${pending}) is KEPT. Do not delete it." >&2
+  echo "Run: $0 ${acct} --resume" >&2
   exit 1
 fi
 rm -f "$tmp/body.json"
@@ -134,13 +169,15 @@ now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 stamp="$(date -u +%Y%m%dT%H%MZ)"
 mkdir -p "$repo/lab/evidence/break-glass"
 rec="lab/evidence/break-glass/${stamp}-${acct}-password-rotation.json"
-python3 - "$repo/$rec" "$upn" "$uid" "$before" "$after" "$who" "$svc" "$now" <<'PY'
+python3 - "$repo/$rec" "$upn" "$uid" "$before" "$after" "$svc" "$now" <<'PY'
 import json, sys
-path, upn, uid, before, after, who, svc, now = sys.argv[1:]
+path, upn, uid, before, after, svc, now = sys.argv[1:]
 json.dump({
   "account": upn, "objectId": uid,
   "lastPasswordChangeBefore": before, "lastPasswordChangeAfter": after,
-  "rotatedBy": who, "rotatedAtUtc": now,
+  # No login here: the repo is public. The owner's az sign-in shows who.
+  "rotatedBy": "the lab owner (a human admin sign-in, not the operator)",
+  "rotatedAtUtc": now,
   "storedIn": "macOS login Keychain, service " + svc + " (value never printed or logged)",
   "terraformState": "random_password.break_glass still holds the SEEDED value; it no longer works (ignore_changes = [password])",
 }, open(path, "w"), indent=2)
@@ -151,4 +188,4 @@ echo
 echo "Rotated. Read back: lastPasswordChangeDateTime ${after}."
 echo "Record: ${rec}"
 echo "Capture-log row to append (lab/evidence/capture-log.csv), set the id:"
-echo "E__,${now},\"Break-glass password rotated (RAN · tenant): ${acct}, by ${who} (human, not the operator), new value in the owner's Keychain only (${svc}), never printed. lastPasswordChangeDateTime ${before} -> ${after}. The seeded value in Terraform state no longer works (runbook break-glass-password-rotation.md)\",${sha},${rec},yes,owner"
+echo "E__,${now},\"Break-glass password rotated (RAN · tenant): ${acct}, by the lab owner (human, not the operator), new value in the owner's Keychain only (${svc}), never printed. lastPasswordChangeDateTime ${before} -> ${after}. The seeded value in Terraform state no longer works (runbook break-glass-password-rotation.md)\",${sha},${rec},yes,owner"

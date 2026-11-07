@@ -41,6 +41,8 @@ cannot do this. The script refuses a service-principal sign-in.
 4. Do steps 2 and 3 again for `bg-admin-02`.
 5. Commit the two records the script wrote in `lab/evidence/break-glass/`.
    Append the two capture-log rows it printed (give each a new id).
+   The record and the row say "the lab owner". They do not name your login,
+   because this repo is public. Do not add your login to them.
 6. Check the passkey still signs in (the next drill, `break-glass-drill.md`).
    The password is the backup. The passkey is the sign-in.
 7. Check Sentinel for an incident on the reset. If one opened, close it
@@ -57,7 +59,23 @@ cannot do this. The script refuses a service-principal sign-in.
 
 ## If it fails
 
-- **Entra refused the reset:** the old password still works. The
-  `-pending` Keychain item holds an unused value. Delete it:
-  `security delete-generic-password -s contoso-breakglass-bg-admin-01-password-pending`.
-- **Keychain read-back did not match:** nothing was sent to Entra. Run again.
+The script keeps a new password under a `-pending` Keychain name until
+Entra accepts it. It never deletes that item when it cannot prove the item is
+unused.
+
+- **The reset call failed (outcome unknown):** a failed call does not prove
+  that the reset did not happen. The connection can drop after Entra changed
+  the password. So the `-pending` item can hold the only copy of the working
+  password. Do not delete it. Run:
+  `lab/scripts/break-glass/rotate-password.sh bg-admin-01 --resume`.
+  Resume sends the same pending value again. When Entra accepts it, the
+  script promotes the item to the real name. Now the account and the
+  Keychain hold the same value.
+- **`--apply` refuses because a `-pending` item exists:** an earlier run did
+  not finish. Do not delete the item. Run `--resume`, as above.
+- **`--resume` fails too:** keep the item. Check the error (for example: no
+  role, or Entra is down). Fix the cause, then run `--resume` again. The
+  passkey still signs in while you do this.
+- **Keychain read-back did not match:** nothing was sent to Entra. The
+  script stops before the reset. Run `--resume` (it sends the saved
+  value), or ask a second admin to check the item first.
