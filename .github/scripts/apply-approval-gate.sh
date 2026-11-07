@@ -45,6 +45,14 @@
 #      PLAN_SUMMARY_FILE          plain-plan.py output (optional; a missing summary is said)
 #      APPLY_APPROVERS            comma-separated logins (default: repo owner)
 #      APPLY_TWO_PERSON           "true" = the change author may NOT approve
+#      APPLY_BOT_LOGIN            the GitHub App / bot login AI agents push and
+#                                 merge as (unset today). Set = real
+#                                 two-identity separation: the gate refuses
+#                                 unless the PR author AND merger are that bot
+#                                 and the approver is in APPLY_APPROVERS and is
+#                                 neither of them. Unset = the gate still works
+#                                 and says, in the issue and the run summary,
+#                                 that separation is by procedure only.
 #      APPROVAL_TIMEOUT_MINUTES   default 30
 #      APPROVAL_POLL_SECONDS      default 15
 # Exit: 0 approved | 1 denied, refused, timed out, or could not check
@@ -85,6 +93,33 @@ if [ -z "$author" ]; then
 fi
 author_lc=$(printf '%s' "$author" | tr '[:upper:]' '[:lower:]')
 who=$(printf '%s' "$APPROVERS" | sed 's/[^,][^,]*/@&/g; s/,/, /g')
+
+# ---- Who merged it, and the bot / owner separation (APPLY_BOT_LOGIN) --------
+# The list endpoint above has no merged_by; the single-PR read does.
+merger=""
+if [ -n "$pr_number" ]; then
+  merger=$(gh api "repos/$REPO/pulls/$pr_number" --jq '.merged_by.login // empty') \
+    || { echo "Refused: could not read who merged PR #$pr_number"; exit 1; }
+fi
+merger_lc=$(printf '%s' "$merger" | tr '[:upper:]' '[:lower:]')
+BOT="${APPLY_BOT_LOGIN:-}"
+bot_lc=$(printf '%s' "$BOT" | tr '[:upper:]' '[:lower:]')
+if [ -n "$BOT" ]; then
+  if [ -z "$pr_number" ]; then
+    echo "Refused: APPLY_BOT_LOGIN is set, and this run has no pull request whose author and merger can be checked"
+    exit 1
+  fi
+  if [ "$author_lc" != "$bot_lc" ] || [ "$merger_lc" != "$bot_lc" ]; then
+    echo "Refused: APPLY_BOT_LOGIN=$BOT, but PR #$pr_number was authored by @${author:-unknown} and merged by @${merger:-unknown}"
+    exit 1
+  fi
+  separation_line="Separation: the change was authored and merged by the bot @$BOT; the approver must be a different account in APPLY_APPROVERS."
+else
+  separation_line="**Author and approver are the same GitHub account (${GITHUB_REPOSITORY_OWNER:-the owner}); separation is by procedure only.** APPLY_BOT_LOGIN is not set, so AI agents push and open PRs with the owner's login, and only the owner types the approval."
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    printf '%s\n\n' "$separation_line" >> "$GITHUB_STEP_SUMMARY"
+  fi
+fi
 
 # ---- Compare the saved plan's change set with the PR plan comment -----------
 compare_line=""
@@ -144,6 +179,9 @@ body=$(cat <<EOF
 The **terraform apply** of \`$short\` to **prod** is waiting for a human decision.
 
 - Change: ${pr:-no pull request (${GITHUB_EVENT_NAME:-direct run})}
+- Change author: ${author:-unknown}$( [ -n "$pr_number" ] && printf ' (merged by %s)' "${merger:-unknown}" )
+- Approver must be: $who
+- $separation_line
 - Run: $run_url
 - Saved plan sha256: \`$PLAN_SHA256\`
 - Resources changed: $n_changes
@@ -215,6 +253,12 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
             hinted="$cid"
           fi
           sleep "$POLL"; continue
+        fi
+        decider_lc=$(printf '%s' "$who_decided" | tr '[:upper:]' '[:lower:]')
+        if [ -n "$BOT" ] && { [ "$decider_lc" = "$author_lc" ] || [ "$decider_lc" = "$merger_lc" ] || [ "$decider_lc" = "$bot_lc" ]; }; then
+          echo "Refused: @$who_decided is the change author or merger (APPLY_BOT_LOGIN=$BOT)"
+          close not_planned "Refused: @$who_decided authored or merged this change. With APPLY_BOT_LOGIN set, the approver must be a different account. The apply is cancelled."
+          exit 1
         fi
         if [ "$TWO_PERSON" = "true" ] && [ -z "$author_lc" ]; then
           echo "Refused: the two-person rule is ON but the change author could not be identified (APPLY_TWO_PERSON=true)"

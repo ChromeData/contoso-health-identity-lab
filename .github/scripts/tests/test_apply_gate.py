@@ -32,6 +32,9 @@ STUB_GH = textwrap.dedent(r"""
       "api repos/o/r/commits/abc1234567/pulls")
         [ -f "$STUB_DIR/pulls.fail" ] && exit 1
         cat "$STUB_DIR/pulls.json"; exit 0 ;;
+      "api repos/o/r/pulls/7")
+        [ -f "$STUB_DIR/pr.fail" ] && exit 1
+        cat "$STUB_DIR/merged_by.txt"; exit 0 ;;
       "api repos/o/r/commits/abc1234567")
         echo "author1"; exit 0 ;;
       "api repos/o/r/issues/7/comments")
@@ -73,6 +76,7 @@ class GateTest(unittest.TestCase):
         self.pulls([{"number": 7, "title": "Add one thing", "user": {"login": "author1"}}])
         self.pr_comments([])
         self.issue_comments([])
+        self.write("merged_by.txt", "author1\n")
 
     def tearDown(self):
         shutil.rmtree(self.dir)
@@ -115,6 +119,7 @@ class GateTest(unittest.TestCase):
             "PLAN_SUMMARY_FILE": os.path.join(self.dir, "summary.md"),
             "APPROVAL_POLL_SECONDS": "0",
             "APPROVAL_TIMEOUT_SECONDS": "2",
+            "GITHUB_STEP_SUMMARY": os.path.join(self.dir, "summary_out.md"),
         }
         env.update(extra)
         env = {k: v for k, v in env.items() if v is not None}
@@ -225,6 +230,60 @@ class GateTest(unittest.TestCase):
 
     def test_unreadable_pr_lookup_fails(self):
         self.write("pulls.fail", "")
+        r = self.run_gate()
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(self.read("issue_body.md"), "")
+
+
+class SeparationTest(GateTest):
+    """APPLY_BOT_LOGIN: real two-identity separation when set, said plainly when not."""
+
+    def bot_pr(self, author="agent-bot[bot]", merger="agent-bot[bot]"):
+        self.pulls([{"number": 7, "title": "x", "user": {"login": author}}])
+        self.write("merged_by.txt", merger + "\n")
+
+    def test_unset_says_procedure_only_in_issue_and_summary(self):
+        self.issue_comments([user("owner1", f"approve {CODE}")])
+        r = self.run_gate()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        body = self.read("issue_body.md")
+        self.assertIn("Change author: author1 (merged by author1)", body)
+        self.assertIn("Approver must be: @owner1", body)
+        self.assertIn("separation is by procedure only", body)
+        self.assertIn("separation is by procedure only", self.read("summary_out.md"))
+
+    def test_set_bot_authored_and_merged_owner_approves(self):
+        self.bot_pr()
+        self.issue_comments([user("owner1", f"approve {CODE}")])
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        body = self.read("issue_body.md")
+        self.assertIn("authored and merged by the bot", body)
+        self.assertNotIn("procedure only", body)
+
+    def test_set_refuses_human_author(self):
+        self.bot_pr(author="owner1")
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]")
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(self.read("issue_body.md"), "")
+
+    def test_set_refuses_human_merger(self):
+        self.bot_pr(merger="owner1")
+        self.assertEqual(self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]").returncode, 1)
+
+    def test_set_refuses_approver_who_is_merger(self):
+        self.bot_pr()
+        self.issue_comments([user("agent-bot[bot]", f"approve {CODE}")])
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", APPLY_APPROVERS="owner1,agent-bot[bot]")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("authored or merged", self.read("issue_replies.md"))
+
+    def test_set_refuses_run_without_pr(self):
+        self.pulls([])
+        self.assertEqual(self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]").returncode, 1)
+
+    def test_unreadable_merger_fails_closed(self):
+        self.write("pr.fail", "")
         r = self.run_gate()
         self.assertEqual(r.returncode, 1)
         self.assertEqual(self.read("issue_body.md"), "")

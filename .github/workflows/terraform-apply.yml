@@ -277,6 +277,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           APPLY_APPROVERS: ${{ vars.APPLY_APPROVERS }}
           APPLY_TWO_PERSON: ${{ vars.APPLY_TWO_PERSON || 'false' }}
+          # Unset today: agents use the owner's login, and the gate says so.
+          APPLY_BOT_LOGIN: ${{ vars.APPLY_BOT_LOGIN }}
           PLAN_SHA256: ${{ steps.fingerprint.outputs.sha256 }}
           PLAN_CHANGESET_FILE: ${{ runner.temp }}/changeset.txt
           PLAN_SUMMARY_FILE: ${{ runner.temp }}/plain-plan.md

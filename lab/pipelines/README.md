@@ -174,6 +174,24 @@ The repo is **public on purpose**, and the pipeline depends on it:
   PR, while an Environment reviewer cannot be removed by code. Restore
   required reviewers (5E) when the repo goes public, and keep the
   plan-first order (the reviewer then approves after the plan step).
+
+  **Who is who.** GitHub's Environment required reviewers and "Prevent
+  self-review" are not available here: the repo is a private, user-owned
+  repo, and on Free, Pro and Team plans required reviewers work only on
+  public repos. The repo stays private, so the issue gate stays.
+
+  | Role | GitHub login today | Target |
+  |---|---|---|
+  | Owner: reads the saved plan and types `approve <code>` | `ChromeData` | Unchanged |
+  | AI coding agents: push branches, open PRs, merge | `ChromeData` (the same `gh` login) | A GitHub App / bot login, so author and merger differ from the approver (owner task: create the App) |
+  | Apply identity | APPLY app over OIDC (`environment:prod`) | Unchanged |
+
+  Repo Variable `APPLY_BOT_LOGIN` (unset today) switches on real
+  two-identity separation: the gate then refuses unless the PR author and
+  merger are that bot and the approver is in `APPLY_APPROVERS` and is
+  neither of them. While it is unset, every approval issue and run summary
+  says: "Author and approver are the same GitHub account (ChromeData);
+  separation is by procedure only."
 - **Branch protection / rulesets** (require PR, require status checks, require
   review) are free on public repos.
 - **Code scanning (SARIF upload)** — the Checkov results under the *Security &
