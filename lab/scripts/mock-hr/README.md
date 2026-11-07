@@ -150,6 +150,16 @@ Connect-MgGraph -Scopes 'SynchronizationData-User.Upload'   # signed-in user mus
 
 Then continue the lifecycle with `../powershell/02-Joiner.ps1` (day-1 access).
 
+## How HR makes a change: the Contoso HR form
+
+HR does not edit `hr_feed.csv`. HR uses the **Contoso HR** form in
+[`lab/hr-app/`](../../hr-app/README.md) (ADR 0027): hire, change job or
+department, or make a worker a leaver. The form issues the employee number
+and writes the roster on the `hr-feed` branch as one commit per save. The
+workflow below then sends that change. The CSV stays the HR app's data store
+and the format the sender reads; editing it by hand still works for tests
+and retakes, but it is not the HR path any more.
+
 ## HR changes through GitHub Actions
 
 [`.github/workflows/hr-feed.yml`](../../../.github/workflows/hr-feed.yml) is
@@ -158,7 +168,7 @@ system. Edit `hr_feed.csv` on that branch, commit, push, and GitHub Actions
 sends **only the rows that commit changed** to the provisioning job, signed in
 as **HR-SYNC** over GitHub OIDC (no password or secret anywhere).
 
-**Hire someone:** on `hr-feed`, add a row and push:
+**Hire someone** (by hand, for tests; HR uses the form): on `hr-feed`, add a row and push. The form issues the next number in the range itself:
 
 ```
 400104,Sam,Rivera,Information Technology,Cloud Engineer,400100,joiner,2026-11-09,
