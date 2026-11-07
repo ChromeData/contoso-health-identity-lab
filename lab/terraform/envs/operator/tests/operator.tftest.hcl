@@ -39,6 +39,7 @@ mock_provider "azuread" {
         "DelegatedPermissionGrant.ReadWrite.All"               = "8e8e4742-1d95-4f68-9d56-6ee75648c72a"
         "SecurityEvents.Read.All"                              = "bf394140-e372-4bf9-a898-299cfc7564e5"
         "AccessReview.ReadWrite.All"                           = "ef5f7d5c-338f-44b0-86c3-351f46c8bb5f"
+        "Reports.Read.All"                                     = "230c1aed-a721-4c5d-9cb4-a90514e508ef"
       }
     }
   }
@@ -112,6 +113,13 @@ run "grants_are_exactly_the_reviewed_lists" {
     # change alerts and incidents the SOC works from.
     condition     = contains(var.operator_graph_roles, "SecurityEvents.Read.All") && !contains(var.operator_graph_roles, "SecurityEvents.ReadWrite.All")
     error_message = "Secure Score: SecurityEvents.Read.All only (no SecurityEvents.ReadWrite.All)"
+  }
+  assert {
+    # The AD FS migration report (lab/adfs) is a READ: Reports.Read.All is the
+    # only (least privileged) application permission Learn lists for
+    # getRelyingPartyDetailedSummary. Nothing broader for reports is granted.
+    condition     = contains(var.operator_graph_roles, "Reports.Read.All") && length([for r in var.operator_graph_roles : r if startswith(r, "Reports.") && r != "Reports.Read.All"]) == 0
+    error_message = "AD FS migration report: Reports.Read.All only (no other Reports.* role)"
   }
   assert {
     # Creating the Terraform-rendered review series (New-AccessReviewDefinitions.ps1)

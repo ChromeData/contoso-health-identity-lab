@@ -52,6 +52,7 @@ lab/terraform/
 │   ├── versions.tf / providers.tf / variables.tf / main.tf / outputs.tf
 │   ├── github-oidc.tf                ← optional (enable_github_oidc) read-only GitHub OIDC role for plan runs
 │   ├── audit-trail.tf                ← optional (enable_audit_baseline) CloudTrail trail + bucket + IAM Access Analyzer
+│   ├── session-manager.tf            ← optional (enable_session_manager) no-inbound-port server, Session Manager shell only, LabServerSession for the PIM group
 │   ├── tests/                        ← mocked terraform test (github_oidc.tftest.hcl)
 │   ├── terraform.tfvars.example      ← copy → terraform.tfvars (gitignored): profile, region, account guard
 │   └── README.md                     ← why separate, order of operations, verify list, CI-OIDC production option
@@ -267,6 +268,7 @@ environment, not committed.
 |---|---|---|
 | `enable_github_oidc` | `false` | GitHub Actions OIDC provider + a read-only role for plan runs |
 | `enable_audit_baseline` | `false` | CloudTrail trail `contoso-lab-audit-trail` (all regions, log file validation) + its locked-down S3 bucket + the free external-access IAM Access Analyzer (`audit-trail.tf`); apply with a LabAdministrator session |
+| `enable_session_manager` | `false` | One t4g.micro with no inbound port, SSH key or public IP, reachable only by a Session Manager shell through four VPC endpoints (~$1/day while on); transcripts to CloudWatch Logs; the `LabServerSession` permission set for the SCIM copy of `PIM-AWS-Lab-Admins` (`session-manager.tf`); apply with a LabAdministrator session, turn off after a capture |
 
 **`okta/` (human-applied)**
 

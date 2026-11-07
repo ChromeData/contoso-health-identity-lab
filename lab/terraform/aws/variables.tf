@@ -383,3 +383,101 @@ variable "audit_log_retention_days" {
     error_message = "audit_log_retention_days must be a whole number of days from 90 (Event history already keeps 90) to 3650."
   }
 }
+
+# ---- Session Manager (session-manager.tf, ADR 0025) ----------------------------------------------
+
+variable "enable_session_manager" {
+  type        = bool
+  description = <<-EOT
+    Create the Session Manager server path (session-manager.tf): a private
+    VPC with no internet route, four interface endpoints (~$1/day), one
+    t4g.micro with no inbound port, the session log group and preferences
+    document, and the LabServerSession permission set for the SCIM copy of
+    the Entra PIM group. Apply with a LabAdministrator session. Turn it off
+    again after capture: that destroys the server and the endpoints.
+  EOT
+  default     = false
+}
+
+variable "session_node_running" {
+  type        = bool
+  description = "Whether the Session Manager server runs (true) or is stopped (false, the endpoints still cost money: turn enable_session_manager off to remove them)."
+  default     = true
+}
+
+variable "session_node_instance_type" {
+  type        = string
+  description = "Instance type of the Session Manager server. Default t4g.micro: the smallest free-tier-eligible type in us-east-1 (describe-instance-types free-tier-eligible, read 2026-11-06). Must be arm64 (the AMI is AL2023 arm64)."
+  default     = "t4g.micro"
+
+  validation {
+    condition     = can(regex("^t4g\\.(nano|micro|small)$", var.session_node_instance_type))
+    error_message = "session_node_instance_type must be a small arm64 t4g type (the AMI is AL2023 arm64)."
+  }
+}
+
+variable "session_vpc_cidr" {
+  type        = string
+  description = "CIDR of the Session Manager VPC and its one private subnet."
+  default     = "10.42.0.0/24"
+
+  validation {
+    condition     = can(cidrnetmask(var.session_vpc_cidr))
+    error_message = "session_vpc_cidr must be a CIDR block."
+  }
+}
+
+variable "session_group_display_name" {
+  type        = string
+  description = "DisplayName of the PIM group, as SCIM created it in the Identity Store, that gets LabServerSession. Default PIM-AWS-Lab-Admins (the only PIM group SCIM carries today; a dedicated server-operator group is a later step)."
+  default     = "PIM-AWS-Lab-Admins"
+
+  validation {
+    condition     = length(trimspace(var.session_group_display_name)) > 0
+    error_message = "session_group_display_name must not be empty."
+  }
+}
+
+variable "session_group_entra_object_id" {
+  type        = string
+  description = "OPTIONAL lineage pin: the Entra object id of the PIM group. When set, plan fails unless the Identity Store group carries it as an external id. Empty = no pin."
+  default     = ""
+
+  validation {
+    condition     = var.session_group_entra_object_id == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.session_group_entra_object_id))
+    error_message = "session_group_entra_object_id must be empty or an Entra object id (GUID)."
+  }
+}
+
+variable "session_target_tag_key" {
+  type        = string
+  description = "Tag key a server must carry for LabServerSession to open a shell on it."
+  default     = "session-access"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.:/=+@-]{1,128}$", var.session_target_tag_key)) && !startswith(lower(var.session_target_tag_key), "aws:")
+    error_message = "session_target_tag_key must be a valid tag key that does not start with aws:."
+  }
+}
+
+variable "session_target_tag_value" {
+  type        = string
+  description = "Tag value a server must carry for LabServerSession to open a shell on it."
+  default     = "lab-server-session"
+
+  validation {
+    condition     = length(var.session_target_tag_value) > 0
+    error_message = "session_target_tag_value must not be empty (an empty value would match any server with the key)."
+  }
+}
+
+variable "session_log_retention_days" {
+  type        = number
+  description = "Days CloudWatch Logs keeps session transcripts. Must be a CloudWatch-allowed value."
+  default     = 30
+
+  validation {
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365], var.session_log_retention_days)
+    error_message = "session_log_retention_days must be one of 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365."
+  }
+}
