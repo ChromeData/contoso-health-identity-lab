@@ -82,17 +82,18 @@ locals {
     # Tier 0 is Medium, Tier 0 off-hours or from a new IP is High. One alert
     # per activation, so each carries its own severity; grouped per account
     # AND severity, so a High never hides inside an older Medium incident.
-    # Period P2D: the new-IP check reads, for each activation, the admin's
-    # sign-ins of the 23 h ending an hour before it (up to 25 h back); only
-    # activations of the last hour alert. P2D is also the Log Analytics
-    # alert maximum.
+    # Period P1D: the new-IP check reads, for each activation, the admin's
+    # sign-ins of the 22 h ending an hour before it (up to 24 h back); only
+    # activations of the last hour alert. Not P2D: Sentinel refuses a period
+    # of 2 days or more with a frequency under 1 hour (BadRequest, proven
+    # 2026-10-27, see itdr.tf), and this rule must run every 5 minutes.
     pim_activation = {
       file         = "pim-activation.kql"
       display_name = "Contoso - PIM activation (just-in-time elevation)"
       description  = "A PIM for Groups / PIM for roles activation completed. Severity from the query: Informational for routine non-Tier-0 work (no ticket), Low when unusual, Medium for Tier 0, High for Tier 0 outside working hours or from a new IP."
       severity     = "Medium"
       frequency    = "PT5M"
-      period       = "P2D"
+      period       = "P1D"
       suppress     = null
       tactics      = ["PrivilegeEscalation"]
       techniques   = ["T1078"]

@@ -685,3 +685,28 @@ Describe 'Splunk break-glass search: one result per throttle key (PR #230 review
         $bgSpl | Should -Match 'IPAddress=coalesce\(IPAddress, ""\)'
     }
 }
+
+Describe 'HR leaver lag: only a SUCCESSFUL cloud write counts as a disable (PR #233 review)' {
+    BeforeAll {
+        $llKql = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'kql' 'hr-leaver-lag.kql')
+        $llSpl = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'splunk' 'detections' 'hr-leaver-lag.spl')
+        $llCases = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'monitoring' 'kusto-harness' 'cases' 'hr-leaver-lag.json') | ConvertFrom-Json
+    }
+
+    It 'KQL CloudDisabled requires ProvisioningStatusInfo.Status == success' {
+        $block = ([regex]::Match($llKql, '(?s)let CloudDisabled = .*?;')).Value
+        $block | Should -Match ([regex]::Escape('where tostring(parse_json(ProvisioningStatusInfo).Status) =~ "success"'))
+    }
+
+    It 'SPL drops a cloud row whose status is not success (null-safe) and keeps InboundStatus from inbound rows only' {
+        $llSpl | Should -Match ([regex]::Escape('eval Kind=if(Kind=="cloud" AND coalesce(lower(RowStatus), "")!="success", null(), Kind)'))
+        $llSpl | Should -Match ([regex]::Escape('eval InboundStatus=if(Kind=="inbound", RowStatus, null())'))
+    }
+
+    It 'the engine cases include a failed cloud export that still alerts' {
+        $c = @($llCases.cases | Where-Object id -EQ 'cloud-export-failed')
+        $c.Count | Should -Be 1
+        $c[0].kind | Should -Be 'positive'
+        ($c[0].tables.AADProvisioningLogs | Where-Object { $_.ServicePrincipal -match 'corp\.contosohealthlab\.com' }).ProvisioningStatusInfo | Should -Match 'failure'
+    }
+}

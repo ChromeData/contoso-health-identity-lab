@@ -84,6 +84,43 @@
       }
     },
     {
+      "id": "cloud-export-failed",
+      "kind": "positive",
+      "label": "Cloud Sync logged the AccountEnabled = False change but the export FAILED: the Entra account is still enabled, High (review of #233)",
+      "tables": {
+        "AADProvisioningLogs": [
+          {
+            "TimeGenerated": "ago:20m",
+            "ServicePrincipal": "{\"Id\": \"x\", \"Name\": \"Contoso HR Inbound Provisioning\"}",
+            "Action": "Update",
+            "SourceIdentity": "{\"Id\": \"400104\", \"Name\": \"\"}",
+            "TargetIdentity": "{\"Id\": \"dddddddd-dddd-dddd-dddd-dddddddddddd\", \"Name\": \"\"}",
+            "ProvisioningStatusInfo": "{\"Status\": \"success\"}",
+            "CycleId": "c1",
+            "ModifiedProperties": "[{\"displayName\": \"accountDisabled\", \"oldValue\": null, \"newValue\": \"True\"}, {\"displayName\": \"parentDistinguishedName\", \"oldValue\": null, \"newValue\": \"OU=Disabled,DC=corp,DC=contosohealthlab,DC=com\"}]"
+          },
+          {
+            "TimeGenerated": "ago:17m",
+            "ServicePrincipal": "{\"Id\": \"y\", \"Name\": \"corp.contosohealthlab.com\"}",
+            "Action": "Update",
+            "SourceIdentity": "{\"Id\": \"dddddddd-dddd-dddd-dddd-dddddddddddd\", \"Name\": \"\"}",
+            "TargetIdentity": "{\"Id\": \"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee\", \"Name\": \"\"}",
+            "ProvisioningStatusInfo": "{\"Status\": \"failure\"}",
+            "ModifiedProperties": "[{\"displayName\": \"AccountEnabled\", \"oldValue\": null, \"newValue\": \"False\"}]"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "EmployeeId": "400104",
+          "AdObjectGuid": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+          "Reason": "AD disabled, Entra ID still enabled after 15 minutes"
+        }
+      ],
+      "expectRows": 1
+    },
+    {
       "id": "still-inside-15-minutes",
       "kind": "negative",
       "label": "AD disabled 5 minutes ago: not judged yet",

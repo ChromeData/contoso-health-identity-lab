@@ -34,7 +34,7 @@
 //   paste of this file (empty id list) and for direct role activations.
 //   Working hours: 07:00-18:59 Monday-Friday in the hospital's time zone
 //   (America/New_York), set in Terraform. New IP: the activating admin had successful sign-ins
-//   in the 23 hours ending one hour before that activation, and none came from this IP.
+//   in the 22 hours ending one hour before that activation, and none came from this IP.
 //   An admin with no sign-in history in that window is "unknown", not new,
 //   so a rarely used account does not page on every activation.
 //
@@ -105,7 +105,7 @@ let WorkDaysLocal = dynamic([]); // @@PIM_WORK_DAYS@@
 let WorkHours = iff(array_length(WorkHoursLocal) == 0, dynamic([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]), WorkHoursLocal);
 let WorkDays = iff(array_length(WorkDaysLocal) == 0, dynamic([1, 2, 3, 4, 5]), WorkDaysLocal);
 let AlertWindow = 1h;    // only activations this recent alert
-let History = 23h;       // sign-in history before each activation's own hour
+let History = 22h;       // sign-in history before each activation's own hour (22 h: keeps the rule's period at P1D)
 let Activations = AuditLogs
 | where TimeGenerated > ago(AlertWindow)
 | where LoggedByService == "PIM"
@@ -150,7 +150,9 @@ let Activations = AuditLogs
 // one activation never opens two incidents (review of #233).
 let SignInHistory = SigninLogs
 // The oldest activation in the alert window needs history back to
-// History + 2 x AlertWindow (25 h): within the rule's 2-day period.
+// History + 2 x AlertWindow (24 h) = the rule's P1D period. Not 2 days:
+// Sentinel refuses a period of 2 days or more with a 5-minute frequency
+// (BadRequest, proven 2026-10-27; itdr.tf). Review of #233.
 | where TimeGenerated > ago(History + 2 * AlertWindow)
 | where ResultType == "0"
 | project SignInTime = TimeGenerated, ActorObjectId = UserId, SignInIp = IPAddress;

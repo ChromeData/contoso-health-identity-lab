@@ -35,10 +35,12 @@ index=entra sourcetype="azure:loganalytics:aadprovisioninglogs" earliest=-30m la
 ``` @conf request.ui_dispatch_view = search ```
 | spath input=ServicePrincipal path=Name output=SpName
 | eval Kind=case(SpName=="Contoso HR Inbound Provisioning" AND match(ModifiedProperties, "(?i)\x22accountDisabled\x22[^}]*\x22newValue\x22:\s*\x22True\x22"), "inbound", SpName=="corp.contosohealthlab.com" AND match(ModifiedProperties, "(?i)\x22AccountEnabled\x22[^}]*\x22newValue\x22:\s*\x22False\x22"), "cloud", true(), null())
+| spath input=ProvisioningStatusInfo path=Status output=RowStatus
+| eval Kind=if(Kind=="cloud" AND coalesce(lower(RowStatus), "")!="success", null(), Kind)
 | where isnotnull(Kind)
 | spath input=TargetIdentity path=Id output=TgtId
 | spath input=SourceIdentity path=Id output=SrcId
-| spath input=ProvisioningStatusInfo path=Status output=InboundStatus
+| eval InboundStatus=if(Kind=="inbound", RowStatus, null())
 | eval AdObjectGuid=if(Kind=="inbound", TgtId, SrcId), EmployeeId=if(Kind=="inbound", SrcId, null()), EntraObjectId=if(Kind=="cloud", TgtId, null())
 | stats min(eval(if(Kind=="inbound", _time, null()))) AS LeaverEpoch, min(eval(if(Kind=="cloud", _time, null()))) AS CloudEpoch, values(EmployeeId) AS EmployeeId, values(EntraObjectId) AS EntraObjectId, values(InboundStatus) AS InboundStatus BY AdObjectGuid
 | where isnotnull(LeaverEpoch) AND LeaverEpoch <= relative_time(now(), "-15m")

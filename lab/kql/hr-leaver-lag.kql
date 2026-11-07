@@ -22,7 +22,9 @@
 //       employee number.
 //     cloud disable  = ServicePrincipal.Name = the AD domain (Cloud Sync,
 //       corp.contosohealthlab.com), SourceIdentity.Id = the same AD
-//       objectGUID, ModifiedProperties AccountEnabled -> False.
+//       objectGUID, ModifiedProperties AccountEnabled -> False, and
+//       ProvisioningStatusInfo.Status = success (a failed export does not
+//       count as a disable).
 //   Lag = an inbound leaver row 15-30 minutes old with no cloud-disable row
 //   for that objectGUID at or after it. Each leaver is judged in exactly one
 //   15-minute run (the rule runs every 15 minutes), so it alerts once.
@@ -67,6 +69,10 @@ let Inbound = AADProvisioningLogs
 let CloudDisabled = AADProvisioningLogs
 | where TimeGenerated > ago(Lag + JudgeWindow)
 | where tostring(parse_json(ServicePrincipal).Name) == CloudSyncApp
+// Only a SUCCESSFUL cloud write counts: a failed export can log the attempted
+// AccountEnabled = False change while the Entra account stays enabled
+// (review of #233).
+| where tostring(parse_json(ProvisioningStatusInfo).Status) =~ "success"
 | mv-apply mp = todynamic(ModifiedProperties) on (
     where tostring(mp.displayName) =~ "AccountEnabled" and tostring(mp.newValue) =~ "False"
     | take 1
