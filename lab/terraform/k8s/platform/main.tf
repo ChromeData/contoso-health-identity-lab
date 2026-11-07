@@ -161,7 +161,10 @@ locals {
       # secretObjects either; the e2e test checks the namespace holds none.
       syncSecret = { enabled = false }
 
-      tokenRequests = [{ audience = local.token_exchange_audience }]
+      # 600 s is the API minimum; set explicitly so the driver never asks
+      # for a longer-lived token than the e2e test checks (k8s-e2e.sh and
+      # pipeline.sh read this back from the live CSIDriver).
+      tokenRequests = [{ audience = local.token_exchange_audience, expirationSeconds = 600 }]
     }
   }
 }

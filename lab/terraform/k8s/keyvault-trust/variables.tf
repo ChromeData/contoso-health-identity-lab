@@ -18,17 +18,19 @@ variable "run_id" {
 variable "issuer_url" {
   type        = string
   description = <<-EOT
-    The kind cluster's PUBLIC service-account issuer: the static website of
-    this run's storage account, with no trailing slash (for example
-    https://stk8skv1234abcd.z20.web.core.windows.net). Entra compares it to
-    the token's `iss` claim as an exact string and fetches the signing keys
-    from <issuer>/.well-known/openid-configuration -> jwks_uri, so it must
-    be public HTTPS. On AKS it would be the cluster's oidcIssuerProfile URL.
+    The cluster's PUBLIC service-account issuer, VERBATIM. kind: the static
+    website of this run's storage account, with no trailing slash (for
+    example https://stk8skv1234abcd.z20.web.core.windows.net). AKS: the
+    cluster's oidcIssuerProfile.issuerUrl exactly as returned, which ENDS IN
+    A SLASH. Entra compares it to the token's `iss` claim as an exact string,
+    so it is never rewritten either way. Entra fetches the signing keys from
+    the issuer's /.well-known/openid-configuration -> jwks_uri, so it must be
+    public HTTPS.
   EOT
 
   validation {
-    condition     = can(regex("^https://[^/\\s]+(/[^\\s]*)?[^/]$", var.issuer_url))
-    error_message = "issuer_url must be an https:// URL without a trailing slash (it must equal the API server's --service-account-issuer)."
+    condition     = can(regex("^https://[^/\\s]+(/[^\\s]*)?$", var.issuer_url))
+    error_message = "issuer_url must be an https:// URL, passed verbatim (with AKS's trailing slash, or kind's none): it must equal the token's iss."
   }
   validation {
     # kind's default issuer, loopback, private IPv4 literals and private

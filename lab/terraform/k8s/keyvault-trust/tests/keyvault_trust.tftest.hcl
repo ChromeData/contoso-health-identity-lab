@@ -101,14 +101,17 @@ run "kind_default_issuer_is_rejected" {
   expect_failures = [var.issuer_url]
 }
 
-run "trailing_slash_issuer_is_rejected" {
+run "aks_trailing_slash_issuer_is_kept_verbatim" {
+  # AKS returns oidcIssuerProfile.issuerUrl with a trailing slash, and the
+  # token's iss carries it too: the credential must hold it unchanged.
   command = plan
-
   variables {
-    issuer_url = "https://stk8skv0a1b2c3d.z20.web.core.windows.net/"
+    issuer_url = "https://eastus2.oic.prod-aks.azure.com/86a2e327-4951-4348-a3c4-6f4b79ffd8f2/0a1b2c3d-0000-4000-8000-000000000000/"
   }
-
-  expect_failures = [var.issuer_url]
+  assert {
+    condition     = azuread_application_federated_identity_credential.nightly_report.issuer == "https://eastus2.oic.prod-aks.azure.com/86a2e327-4951-4348-a3c4-6f4b79ffd8f2/0a1b2c3d-0000-4000-8000-000000000000/"
+    error_message = "an AKS issuer with its trailing slash must reach the federated credential verbatim"
+  }
 }
 
 run "http_issuer_is_rejected" {

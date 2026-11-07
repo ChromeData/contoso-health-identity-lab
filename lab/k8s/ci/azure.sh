@@ -195,6 +195,15 @@ kv_secret_value() { # kv_secret_value SECRET_ID -> the value on stdout (CAPTURE 
 }
 
 # --- teardown -------------------------------------------------------------------------
+# kv_deleted_state: "present" (soft-deleted, purgeable), "gone" (Azure said
+# so: "No deleted Vault or HSM was found"), or "unknown" (the lookup itself
+# failed: outage, token, throttling). Only "gone" counts as absent.
+kv_deleted_state() {
+  local out
+  if out=$(az_q keyvault show-deleted -n "$KV_NAME" -o none 2>&1); then echo present; return; fi
+  if grep -qiE 'No deleted Vault|DeletedVaultNotFound|was not found' <<<"$out"; then echo gone; else echo unknown; fi
+}
+
 azure_down() { # -> 0 when everything this run created is gone (read back)
   load_run_env || { log "no $RUN_ENV: no Azure objects to delete"; return 0; }
   local ok=0 n
@@ -214,17 +223,20 @@ azure_down() { # -> 0 when everything this run created is gone (read back)
     log "az group delete $AZ_RG (storage account + Key Vault)"
     az_q group delete -n "$AZ_RG" --yes || ok=1
   fi
-  if az_q keyvault show-deleted -n "$KV_NAME" -o none 2>/dev/null; then
-    log "az keyvault purge $KV_NAME (soft-deleted vault, no purge protection)"
-    az_q keyvault purge -n "$KV_NAME" -l "$AZ_LOCATION" || ok=1
-  fi
+  case "$(kv_deleted_state)" in
+    present)
+      log "az keyvault purge $KV_NAME (soft-deleted vault, no purge protection)"
+      az_q keyvault purge -n "$KV_NAME" -l "$AZ_LOCATION" || ok=1 ;;
+    gone) ;;
+    *) log "could not tell whether $KV_NAME is soft-deleted (lookup failed): keeping the run record"; ok=1 ;;
+  esac
   # Read back: nothing of this run is left.
   local rg app kv
   rg=$(az_q group exists -n "$AZ_RG" 2>/dev/null || echo unknown)
   app=$(az_q ad app list --display-name "k8s-nightly-report-$RUN_ID" --query 'length(@)' -o tsv 2>/dev/null || echo unknown)
-  if az_q keyvault show-deleted -n "$KV_NAME" -o none 2>/dev/null; then kv=soft-deleted; else kv=gone; fi
+  kv=$(kv_deleted_state)   # present | gone | unknown; only "gone" passes
   log "read back: resource group exists=$rg; app registrations=$app; vault $KV_NAME: $kv"
-  [[ "$rg" == false && "$app" == 0 && "$kv" == gone ]] || ok=1
+  [[ "$rg" == false && "$app" == 0 && "$kv" == gone ]] || ok=1   # unknown keeps RUN_ENV for a retry
   if [[ $ok -eq 0 ]]; then
     rm -f "$TF_KEYVAULT_TRUST/terraform.tfstate" "$TF_KEYVAULT_TRUST/terraform.tfstate.backup"
     rm -f "$RUN_ENV"

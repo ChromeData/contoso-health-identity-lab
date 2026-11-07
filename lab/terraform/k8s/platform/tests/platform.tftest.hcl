@@ -64,7 +64,7 @@ run "csi_release_is_pinned_and_wired_for_the_lab" {
     error_message = "driver, registrar and liveness-probe images must carry a sha256 digest"
   }
   assert {
-    condition     = yamldecode(helm_release.csi_secrets_store_provider_azure.values[0])["secrets-store-csi-driver"].tokenRequests == [{ audience = "api://AzureADTokenExchange" }]
+    condition     = yamldecode(helm_release.csi_secrets_store_provider_azure.values[0])["secrets-store-csi-driver"].tokenRequests == [{ audience = "api://AzureADTokenExchange", expirationSeconds = 600 }]
     error_message = "the driver must request tokens for exactly one audience: api://AzureADTokenExchange"
   }
   assert {

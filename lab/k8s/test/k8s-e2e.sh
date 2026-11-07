@@ -444,6 +444,15 @@ csidriver_one_audience() {
   [[ "$aud" == "[\"$EXCHANGE_AUDIENCE\"]" ]]
 }
 
+csidriver_token_lifetime() {
+  # The lifetime the CSI driver itself requests for the pod's token: the live
+  # CSIDriver object, not a token this test mints with --duration.
+  local exp
+  exp=$(k get csidriver secrets-store.csi.k8s.io -o json | jq -c '[.spec.tokenRequests[]?.expirationSeconds]') || return 1
+  info "CSIDriver secrets-store.csi.k8s.io tokenRequests expirationSeconds=$exp"
+  [[ "$exp" == "[600]" ]]
+}
+
 issuer_published() {
   # What Entra fetches, fetched the same way (anonymous HTTPS), must be the
   # API server's own documents byte for byte.
@@ -961,7 +970,8 @@ check "SecretProviderClass: Workload ID (this app's client id), no secretObjects
 # =============================================================================
 step "(c) Entra Workload ID + Key Vault RBAC: who gets a token, and what it is worth"
 JWT_EX=$(mint_token nightly-report "$EXCHANGE_AUDIENCE" 2>/dev/null) || JWT_EX=""
-check "TokenRequest for clinical-apps/nightly-report: iss=public issuer, aud=[$EXCHANGE_AUDIENCE], <= 600s" claims_ok
+check "the CSI driver itself requests 600 s tokens (live CSIDriver spec.tokenRequests)" csidriver_token_lifetime
+check "a test TokenRequest for clinical-apps/nightly-report: iss=public issuer, aud=[$EXCHANGE_AUDIENCE], <= 600s" claims_ok
 check "Entra exchanges it for an access token (federated credential, no client secret)" exchange_ok
 JWT_EX=""
 check "the access token is for Key Vault, issued to this app, in this tenant" access_token_scoped

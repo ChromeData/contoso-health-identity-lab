@@ -129,6 +129,30 @@ CLUSTER_TOUCHED=0
 AZURE_TOUCHED=0
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/k8s-pipeline.XXXXXX")"
 SEED_SHA_FILE="$STATE_DIR/seed.sha256"
+# One run at a time may own the shared state (run.env, the seed hash, the
+# kept cluster). The lock is taken BEFORE that state is checked, and held
+# until the EXIT trap has finished teardown, so two runs cannot both pass the
+# "no kept run" check and then overwrite or delete each other's records.
+# mkdir is atomic; a lock whose owner process is gone is taken over.
+LOCK_DIR="$STATE_DIR/run.lock"
+LOCK_HELD=0
+acquire_lock() {
+  mkdir -p "$STATE_DIR"
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    local owner; owner="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+    if [[ -n "$owner" ]] && kill -0 "$owner" 2>/dev/null; then
+      die "another pipeline run (pid $owner) holds ${LOCK_DIR#"$REPO_ROOT"/}: wait for it to finish"
+    fi
+    log "taking over a stale lock (pid ${owner:-unknown} is gone)"
+    rm -rf "$LOCK_DIR"
+    mkdir "$LOCK_DIR" 2>/dev/null || die "could not take ${LOCK_DIR#"$REPO_ROOT"/} (another run started at the same time?)"
+  fi
+  echo "$$" > "$LOCK_DIR/pid"
+  LOCK_HELD=1
+}
+release_lock() {
+  if [[ "$LOCK_HELD" == 1 ]]; then rm -rf "$LOCK_DIR"; LOCK_HELD=0; fi
+}
 
 export TF_IN_AUTOMATION=1             # no "run terraform apply next" hints
 export TF_INPUT=0
@@ -274,6 +298,7 @@ preflight() {
   # Azure is needed from stage 4 on. A static-only run (STOP_AFTER<=3) needs
   # no operator and no cloud.
   if [[ $STOP_AFTER -ge 4 ]]; then
+    acquire_lock
     az_preflight
     if [[ -s "$RUN_ENV" ]]; then
       die "a kept run's Azure objects are still recorded in ${RUN_ENV#"$REPO_ROOT"/}: delete them first (lab/scripts/operator/op $0 --teardown)"
@@ -401,6 +426,11 @@ platform_apply() {
   aud=$(k get csidriver secrets-store.csi.k8s.io -o json | jq -c '[.spec.tokenRequests[]?.audience]')
   printf '      live: CSIDriver secrets-store.csi.k8s.io tokenRequests audiences=%s\n' "$aud"
   [[ "$aud" == "[\"$EXCHANGE_AUDIENCE\"]" ]] || stage_fail "CSIDriver tokenRequests $aud, exactly [\"$EXCHANGE_AUDIENCE\"] expected"
+  # The lifetime the DRIVER asks for (not a token this script mints).
+  local exp
+  exp=$(k get csidriver secrets-store.csi.k8s.io -o json | jq -c '[.spec.tokenRequests[]?.expirationSeconds]')
+  printf '      live: CSIDriver tokenRequests expirationSeconds=%s\n' "$exp"
+  [[ "$exp" == "[600]" ]] || stage_fail "CSIDriver tokenRequests expirationSeconds $exp, exactly [600] expected"
   k -n "$CSI_NS" get daemonsets -o wide | indent
   STAGE_NOTE[6]="CSI driver + Azure provider Ready; 1 token audience"
 }
@@ -783,8 +813,13 @@ KEPT
     azure_down || ok=1
   fi
   if [[ $ok -eq 0 ]]; then
-    rm -f "$SEED_SHA_FILE"
-    rmdir "$STATE_DIR" 2>/dev/null || true
+    # The seed hash belongs to the cluster run that wrote it. A static-only
+    # run, or a run refused because a kept run exists, never touched that
+    # cluster, so it must not delete the kept run's hash.
+    if [[ "$CLUSTER_TOUCHED" == 1 ]]; then
+      rm -f "$SEED_SHA_FILE"
+      rmdir "$STATE_DIR" 2>/dev/null || true
+    fi
     TEARDOWN_RESULT=PASS
   else
     TEARDOWN_RESULT=FAIL
@@ -831,6 +866,7 @@ on_exit() {
     if [[ $n -le $STOP_AFTER && $rc -eq 0 && "${STAGE_RESULT[n]}" != PASS ]]; then rc=1; fi
   done
   summary "$rc"
+  release_lock   # only after teardown: the lock covers it
   if [[ -d "$WORK" && "$WORK" == */k8s-pipeline.* ]]; then rm -rf "$WORK"; fi
   exit "$rc"
 }
@@ -844,6 +880,7 @@ if [[ "$TEARDOWN_ONLY" == 1 ]]; then
   STOP_AFTER=0
   if [[ -d "$HOME/.local/bin" && ":$PATH:" != *":$HOME/.local/bin:"* ]]; then PATH="$PATH:$HOME/.local/bin"; fi
   need kind; need terraform; need jq
+  acquire_lock
   az_preflight
   CLUSTER_TOUCHED=1
   if load_run_env; then
