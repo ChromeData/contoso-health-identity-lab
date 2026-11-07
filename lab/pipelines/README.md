@@ -119,7 +119,7 @@ These **federated credentials** are created by Terraform in
 | App | Credential subject (`sub`) | Why |
 |---|---|---|
 | PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:pull_request` | same-repo PRs can plan (read-only); fork PRs get no OIDC token |
-| PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | the nightly `config-drift.yml` runs on main (schedule); still read-only. Missing = AADSTS700213 on every scheduled run |
+| PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | the nightly `config-drift.yml` and the review `plan` job of `terraform-apply.yml` (no environment) run on main; still read-only. Missing = AADSTS700213 |
 | APPLY app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:environment:prod` | only the `prod` deploy can apply |
 | HR-SYNC app (opt-in) | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/hr-feed` | `hr-feed.yml` uploads changed HR rows (SCIM bulkUpload) and reads the provisioning log; nothing else. Protect the branch with a ruleset |
 | EVIDENCE app (opt-in) | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | `evidence-pack.yml` (manual, main only) reads the evidence pack (six read-only Graph roles) and adds it to the WORM evidence container (create-only ABAC grant); nothing else |
@@ -145,9 +145,13 @@ Audience: api://AzureADTokenExchange
 
 The `environment:prod` subject is the keystone: GitHub only puts
 `environment:prod` in the token's `sub` when a job declares
-`environment: prod`, and that job is the one gated by a required reviewer. So
+`environment: prod`, and every such job waits for the required reviewer. So
 the write identity is unreachable without passing the human gate, and `prod`
-accepts deployments from `main` only (§5E).
+accepts deployments from `main` only (§5E). That is why the review plan job
+declares NO environment and signs in as the read-only PLAN app: if it ran in
+`prod`, either it would pause before any plan exists (karen A2) or `prod`
+would need its reviewer removed, and then any workflow on `main` could sign
+in as APPLY without an approval.
 
 ---
 
@@ -157,13 +161,13 @@ The repo is **public on purpose**, and the pipeline depends on it:
 
 - **Environments + required reviewers are free on public repos.** On private
   repos they need GitHub Enterprise. The apply gate is the Environment
-  `production` reviewer (below). The old private-repo gate, an "Approve:
+  `prod` reviewer (below). The old private-repo gate, an "Approve:
   apply" issue (`.github/scripts/apply-approval-gate.sh`), remains in that
   script as a fallback; the workflow runs it only in `GATE_MODE=check`.
 
   | Role | GitHub login | Notes |
   |---|---|---|
-  | Owner: reads the plan, clicks Review deployments -> Approve and deploy | `ChromeData` | Required reviewer of `production` |
+  | Owner: reads the plan, clicks Review deployments -> Approve and deploy | `ChromeData` | Required reviewer of `prod` |
   | AI coding agents: push branches, open PRs, merge | `<slug>[bot]` via `bot-gh` once the owner creates the App; `ChromeData` until then | "Prevent self-review" stops the merger approving its own run |
   | Apply identity | APPLY app over OIDC (`environment:prod`) | Runs only after the approval |
 
@@ -171,21 +175,22 @@ The repo is **public on purpose**, and the pipeline depends on it:
   the reviewer rule (HTTP 422, billing plan) and rulesets (HTTP 403, account
   on GitHub Free). The owner made the repo public again at 02:31Z. Since then:
 
-  - **The gate is GitHub's own.** Environment `production`: required
-    reviewer ChromeData, "Prevent self-review" on, "Allow administrators to
-    bypass" off, deployment branches `main` only. `terraform-apply.yml` runs
-    three jobs: `plan` (plan for review + checks, summary in the job), then
-    `approve` (environment `production`: the run pauses on **Review
-    deployments**), then `terraform-apply` (plans again and refuses unless
+  - **The gate is GitHub's own.** Environment `prod`: required reviewer
+    ChromeData, "Prevent self-review" on, "Allow administrators to bypass"
+    off, deployment branches `main` only. `terraform-apply.yml` runs two
+    jobs: `plan` (no environment, read-only PLAN app: plan for review +
+    checks, summary in the job), then `terraform-apply` (environment `prod`:
+    the run pauses on **Review deployments** before the job starts; after the
+    approval it signs in as APPLY, plans again and refuses unless
     `plan-fingerprint.py` gives the same fingerprint as the reviewed plan:
     resources, actions and values; and the review plan is under 60 minutes
     old). The issue gate is kept only as `GATE_MODE=check` for its checks.
-  - **`prod` stays** (the APPLY OIDC subject is `environment:prod`; renaming
-    it would break the federated credential). At the merge of this change,
-    remove its required reviewer, so the only approval is `production`
-    (otherwise the plan job pauses before any plan exists, the karen A2 gap):
-    `gh api -X PUT repos/ChromeData/contoso-health-identity-lab/environments/prod -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'`
-    (a PUT without `reviewers` should clear them; check with `gh api ./environments/prod --jq .protection_rules` that only `branch_policy` is left).
+  - **Only `prod` holds the write identity.** The APPLY OIDC subject is
+    `environment:prod`, so the APPLY app is reachable only after the `prod`
+    reviewer approves. Keep the reviewer on `prod`. An earlier draft of this
+    change moved it to a second Environment `production` and planned in
+    `prod` as APPLY before the approval; that left Contributor reachable
+    without an approval (Greptile, PR #241), so the draft was dropped.
   - **Ruleset `main-protection`** (active again): PR required (0 approvals:
     the owner's approval is the deployment, not the PR), the five checks in
     5F required, no force-push, no deletion, no bypass.
@@ -194,9 +199,18 @@ The repo is **public on purpose**, and the pipeline depends on it:
     the lab's GitHub App bot (`lab/scripts/operator/github-bot/`): the owner
     runs `new-bot-app.sh` once, agents use `bot-gh`, and the owner sets
     `APPLY_BOT_LOGIN` to `<slug>[bot]` at a PR merge (the plan job then
-    refuses a change the bot did not author and merge). Until the bot exists,
-    a run that ChromeData merged cannot be approved by ChromeData: re-run it
-    as the bot (`bot-gh gh workflow run terraform-apply.yml --ref main`).
+    refuses a change the bot did not author and merge). A run that ChromeData
+    started (for example a merge before `APPLY_BOT_LOGIN` is set) cannot be
+    approved by ChromeData. Once the bot exists, start a new run as the bot
+    with a repository dispatch,
+    `bot-gh gh api repos/ChromeData/contoso-health-identity-lab/dispatches -f event_type=apply-main`.
+    Why not `gh workflow run`: that needs the App permission Actions: write,
+    and the bot has Actions: read. A repository dispatch needs only Contents:
+    write, which the bot already has (GitHub docs, "Permissions required for
+    GitHub Apps"). Actions: write would also let the bot delete workflow run
+    logs (the apply audit trail) and disable workflows, so it stays read.
+    The dispatched run uses `main`'s copy of the workflow on `main`'s last
+    commit, and waits for the same `prod` approval.
   - **What stays procedure.** GitHub tells accounts apart, not people. While
     the owner's own `gh` login is on the machine the agents use, an agent
     could approve with it. The owner's fix: once `bot-gh` works, sign the
@@ -468,12 +482,13 @@ with no PR and no review, lock the WORM store irreversibly.
 > None of it is a credential, but keep that in mind before adding variables.
 
 ### E. GitHub — the `prod` Environment with a required reviewer
-> **Since 2026-11-07:** the reviewer lives on a second Environment, **`production`** (required reviewer ChromeData, "Prevent self-review" on, admins cannot bypass, branch `main` only), used by the `approve` job. `prod` keeps only its `main` branch policy and the APPLY OIDC subject; it has NO reviewer after this change merges (section 3).
+> **Keep the reviewer on `prod`.** `prod` is the only Environment that gets the APPLY identity, so it is the gate: required reviewer ChromeData, "Prevent self-review" on, "Allow administrators to bypass" off, branch `main` only. The review plan job has no environment (read-only PLAN app). Do not remove the `prod` reviewer and do not move it to another Environment (section 3).
 
 - [ ] Settings → **Environments** → **New environment** → name it **`prod`**
       (the name MUST match `environment: prod` in `terraform-apply.yml`).
 - [ ] Add **Required reviewers** (yourself / a second admin). This is the human
-      gate; the apply run pauses until approved.
+      gate; the apply run pauses until approved. Tick **Prevent self-review**
+      and clear **Allow administrators to bypass configured protection rules**.
 - [ ] **Deployment branches and tags → Selected branches and tags → add
       `main`.** Required. The APPLY subject `environment:prod` carries no
       branch ref, so this setting is the only thing that ties the write

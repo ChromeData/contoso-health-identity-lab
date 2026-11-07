@@ -42,8 +42,9 @@
 # every check above (author / merger / bot separation, PR change-set compare)
 # and write the plan the owner must read to the job summary, then exit
 # 0 (checks passed) or 1 (refused). No issue is opened and nothing waits: the
-# approval itself is GitHub's Environment "production" (required reviewer
-# ChromeData, "Prevent self-review" on), the "Review deployments" button.
+# approval itself is GitHub's Environment "prod" on the apply job (required
+# reviewer ChromeData, "Prevent self-review" on), the "Review deployments"
+# button.
 # GATE_MODE unset = the issue gate below (the private-repo fallback).
 #
 # Env: GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_SHA,
@@ -172,7 +173,7 @@ if [ "${GATE_MODE:-}" = "check" ] && [ "$mismatch" != "true" ]; then
   decision_text=$(cat <<EOF
 This is the plan the owner approves. After approval the apply job plans again, and applies only if the full fingerprint of that plan (resources, actions and values) equals this one.
 
-To approve: open the run page, click **Review deployments**, read this summary, tick **production**, click **Approve and deploy**. Only the required reviewer can approve. "Prevent self-review" is on, so the account that started this run cannot approve it.
+To approve: open the run page, click **Review deployments**, read this summary, tick **prod**, click **Approve and deploy**. Only the required reviewer can approve. "Prevent self-review" is on, so the account that started this run cannot approve it.
 EOF
 )
 elif [ "$mismatch" = "true" ]; then
@@ -225,7 +226,7 @@ if [ "${GATE_MODE:-}" = "check" ]; then
     echo "Refused: the saved plan's change set differs from PR #$pr_number's plan comment"
     exit 1
   fi
-  echo "::notice title=Review deployments::Read the summary of job 'plan for review', then Review deployments, tick production, Approve and deploy"
+  echo "::notice title=Review deployments::Read the summary of job 'plan for review', then Review deployments, tick prod, Approve and deploy"
   exit 0
 fi
 

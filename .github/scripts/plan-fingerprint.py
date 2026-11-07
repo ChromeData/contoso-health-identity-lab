@@ -5,9 +5,9 @@
     python3 -I .github/scripts/plan-fingerprint.py "$RUNNER_TEMP/plan.json"
 
 Why: since the repo is public, the human gate is GitHub's Environment
-"production" (required reviewer, "Prevent self-review"). GitHub asks for that
-approval before a job starts, so the approval sits in its own job, between a
-"plan for review" job and the apply job. The saved plan file cannot travel
+"prod" (required reviewer, "Prevent self-review") on the apply job. GitHub
+asks for that approval before a job starts, so the plan to review comes from
+an earlier "plan for review" job (read-only PLAN app). The saved plan file cannot travel
 between jobs: it holds every variable value in clear text, and an artifact on
 a public repo is downloadable by any signed-in GitHub user. So the apply job
 plans again and applies only when its plan has the SAME fingerprint as the

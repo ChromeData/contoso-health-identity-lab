@@ -292,7 +292,7 @@ class SeparationTest(GateTest):
 class CheckModeTest(GateTest):
     """GATE_MODE=check (public repo): the checks and the plan for the reviewer,
     written to the job summary. No issue, no waiting: the approval is the
-    Environment "production" (Review deployments)."""
+    Environment "prod" on the apply job (Review deployments)."""
 
     def test_check_mode_opens_no_issue_and_writes_summary(self):
         self.pr_comments([self.pr_plan_comment(self.changeset_sha())])

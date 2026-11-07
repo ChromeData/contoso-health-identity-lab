@@ -31,6 +31,11 @@
 #   contents write, pull_requests write, workflows write (agents edit
 #   .github/workflows), actions read, checks read, issues READ (the bot cannot
 #   comment on an "Approve: apply" issue), metadata read. No webhook.
+#   actions stays READ on purpose: write would also let the bot delete
+#   workflow runs and their logs (the apply audit trail) and disable
+#   workflows. The bot's recovery run of terraform-apply.yml is a repository
+#   dispatch (event_type apply-main), which needs only contents write
+#   (GitHub docs, "Permissions required for GitHub Apps").
 # =============================================================================
 set -euo pipefail
 
