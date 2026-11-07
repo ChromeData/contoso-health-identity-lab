@@ -79,4 +79,10 @@ Describe 'New-LifecycleWorkflows.ps1 -OfflinePreview' {
         & $script:Lcw -OfflinePreview | Out-Null
         ($global:LcwOut -join "`n") | Should -Not -Match 'workflowScheduleIntervalInHours'
     }
+
+    It 'the joiner never admits a disabled user (it re-enabled a same-day HR leaver on 2026-11-07)' {
+        & $script:Lcw -OfflinePreview | Out-Null
+        $j = Get-PreviewBody -Lines $global:LcwOut -Category 'joiner'
+        $j['executionConditions']['scope']['rule'] | Should -Be "(department eq 'Nursing') and (accountEnabled eq true)"
+    }
 }

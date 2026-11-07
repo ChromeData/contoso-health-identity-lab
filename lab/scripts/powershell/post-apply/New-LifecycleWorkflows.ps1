@@ -663,6 +663,19 @@ foreach ($nick in $groupIds.Keys) {
                 -Description "Birthright cloud group $nick (not package-delivered)." -Arguments $gArgs))
 }
 
+# Joiner scope. HR creates synced accounts ENABLED (HR job accountDisabled
+# <- active; proven 2026-11-07: AD accountDisabled False at create, Entra
+# AccountEnabled true), so the joiner never needs to enable a disabled user.
+# It must not: on 2026-11-07 the scheduled joiner ran "Enable user account"
+# on a worker HR had terminated the same day (hire date still inside the
+# joiner's trigger window and its 3-day catch-up) and switched the leaver
+# back on 84 s after Cloud Sync disabled it. So the scope admits enabled
+# users only. With -ManageOnPremisesAccounts the workflow owns enablement
+# (pre-hires created disabled), so that guard cannot apply: do not combine
+# it with a same-week HR leaver.
+$joinerRule = "(department eq '$(ConvertTo-ODataLiteral $JoinerDepartment)')"
+if (-not $ManageOnPremisesAccounts) { $joinerRule += ' and (accountEnabled eq true)' }
+
 $joinerBody = [ordered]@{
     category            = 'joiner'
     displayName         = $JoinerWorkflowName
@@ -673,7 +686,7 @@ $joinerBody = [ordered]@{
         '@odata.type' = '#microsoft.graph.identityGovernance.triggerAndScopeBasedConditions'
         scope         = [ordered]@{
             '@odata.type' = '#microsoft.graph.identityGovernance.ruleBasedSubjectSet'
-            rule          = "(department eq '$(ConvertTo-ODataLiteral $JoinerDepartment)')"
+            rule          = $joinerRule
         }
         trigger       = [ordered]@{
             '@odata.type'      = '#microsoft.graph.identityGovernance.timeBasedAttributeTrigger'
