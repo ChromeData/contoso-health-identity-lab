@@ -384,6 +384,10 @@ run "pipeline_config_vault_opt_in" {
     error_message = "only PLAN and APPLY may read the vault, with Key Vault Secrets User"
   }
   assert {
+    condition     = length(azurerm_role_assignment.pipeline_config_writer) == 0
+    error_message = "no writer grant unless one is named"
+  }
+  assert {
     condition     = length(azurerm_monitor_diagnostic_setting.pipeline_config) == 1
     error_message = "every read is logged to loga-idlab when the workspace is known"
   }
@@ -398,4 +402,19 @@ run "pipeline_config_vault_needs_a_valid_name" {
   }
 
   expect_failures = [azurerm_key_vault.pipeline_config]
+}
+
+run "pipeline_config_writer_is_a_named_human" {
+  command = plan
+
+  variables {
+    enable_pipeline_config_vault      = true
+    pipeline_config_vault_name        = "kv-idlab-cicd-test"
+    pipeline_config_writer_object_ids = ["a0a0a0a0-0000-4000-8000-0000000000ab"]
+  }
+
+  assert {
+    condition     = length(azurerm_role_assignment.pipeline_config_writer) == 1 && endswith(azurerm_role_assignment.pipeline_config_writer["a0a0a0a0-0000-4000-8000-0000000000ab"].role_definition_id, "/b86a8fe4-44ce-4948-aee5-eccb2c155cd7")
+    error_message = "the named writer gets Key Vault Secrets Officer on the vault"
+  }
 }

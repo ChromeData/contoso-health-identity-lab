@@ -122,6 +122,26 @@ resource "azurerm_role_assignment" "pipeline_config_reader" {
   description        = "${upper(each.key)} pipeline identity: read the pipeline's privacy values at run time (GitHub OIDC). No write."
 }
 
+# Writers: the humans who seed the values (after-signup.sh puts the setup
+# admin here). Key Vault Secrets Officer at vault scope, pinned by id
+# (b86a8fe4-44ce-4948-aee5-eccb2c155cd7, Learn built-in roles). Subscription
+# Owner alone cannot write secrets in an RBAC vault. CI is never a writer.
+resource "azurerm_role_assignment" "pipeline_config_writer" {
+  for_each = local.pipeline_config_enabled ? toset(var.pipeline_config_writer_object_ids) : toset([])
+
+  scope              = azurerm_key_vault.pipeline_config[0].id
+  role_definition_id = "/subscriptions/${data.azurerm_subscription.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/b86a8fe4-44ce-4948-aee5-eccb2c155cd7"
+  principal_id       = each.value
+  description        = "Pipeline config writer (a human): seeds and rotates the five privacy values. Not CI."
+
+  lifecycle {
+    precondition {
+      condition     = !contains([local.plan_sp, local.apply_sp], each.value)
+      error_message = "pipeline_config_writer_object_ids must not name the PLAN or APPLY identity: CI never writes its own config."
+    }
+  }
+}
+
 # Every read lands in loga-idlab (who read which value, when).
 resource "azurerm_monitor_diagnostic_setting" "pipeline_config" {
   count = local.pipeline_config_enabled && var.log_analytics_workspace_id != "" ? 1 : 0

@@ -167,6 +167,7 @@ enable_app_management_roles     = $APP_ROLES
 enable_identity_protection_logs = $IDP_LOGS
 enable_pipeline_config_vault    = true
 pipeline_config_vault_name      = "${PIPELINE_CONFIG_VAULT:-kv-idlab-cicd-${STATE_SA: -4}}"
+pipeline_config_writer_object_ids = ["$ADMIN_OBJECT_ID"]
 EOF
 fi
 # The lock blocks the role assignments bootstrap creates: lift it around the apply.
@@ -198,8 +199,16 @@ setvar() { run gh variable set "$1" --repo "$R" --body "$2"; }
 CFG_VAULT="$("$TF" -chdir="$ROOT/lab/terraform/envs/bootstrap" output -raw pipeline_config_vault_name 2>/dev/null || echo "<pipeline_config_vault_name>")"
 setcfg() {
   if [ "$YES" = 1 ]; then
-    printf '%s' "$2" | az keyvault secret set --vault-name "$CFG_VAULT" --name "$1" --file /dev/stdin -o none
-    printf '   $ (Key Vault %s) %s = <value>\n' "$CFG_VAULT" "$1"
+    # The Secrets Officer grant bootstrap made for you can take a few
+    # minutes to reach Key Vault: retry (up to ~5 min), then stop.
+    local i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      if printf '%s' "$2" | az keyvault secret set --vault-name "$CFG_VAULT" --name "$1" --file /dev/stdin -o none 2>/dev/null; then
+        printf '   $ (Key Vault %s) %s = <value>\n' "$CFG_VAULT" "$1"; return 0
+      fi
+      sleep 30
+    done
+    echo "could not write $1 to $CFG_VAULT (role not effective yet, or no Secrets Officer grant): re-run step C" >&2; return 1
   else printf '   (dry) Key Vault %s: %s = <value>\n' "$CFG_VAULT" "$1"; fi
 }
 setvar TF_PIPELINE_CONFIG_VAULT "$CFG_VAULT"

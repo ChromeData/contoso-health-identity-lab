@@ -271,6 +271,17 @@ variable "pipeline_config_vault_name" {
   default     = ""
 }
 
+variable "pipeline_config_writer_object_ids" {
+  type        = list(string)
+  description = "Object ids (humans) given Key Vault Secrets Officer on the pipeline config vault to seed the five values; after-signup.sh puts the setup admin here. Empty = writers come from a wider grant (the lab operator holds Secrets Officer at subscription scope)."
+  default     = []
+
+  validation {
+    condition     = alltrue([for id in var.pipeline_config_writer_object_ids : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))])
+    error_message = "pipeline_config_writer_object_ids must be object id GUIDs."
+  }
+}
+
 variable "pipeline_config_resource_group_name" {
   type        = string
   description = "Resource group for the pipeline config vault. Its own RG: the tfstate RG is ReadOnly-locked and rg-identity-lab belongs to envs/dev's APPLY identity."
