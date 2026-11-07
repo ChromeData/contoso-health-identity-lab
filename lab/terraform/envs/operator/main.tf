@@ -54,11 +54,13 @@ locals {
   # removed by the next apply, and 06-NHI-Inventory.ps1 flags it until then.
   operator_owners = []
 
-  # Graph grants that exist right now: the standing read set, plus the write
-  # set while a session is open. Keyed by permission name, so closing a
-  # session destroys exactly the write grants and nothing else.
-  write_session_open    = var.operator_write_session != null
-  operator_graph_grants = toset(concat(var.operator_graph_roles, local.write_session_open ? var.operator_session_graph_roles : []))
+  # Graph grants: the standing read set always; the write set only while a
+  # session is open, in a SEPARATE resource (below) so closing a session
+  # destroys exactly the write grants, and opening one grants them only after
+  # Azure accepted the time-bound PIM assignments (fail closed).
+  write_session_open            = var.operator_write_session != null
+  operator_graph_grants         = toset(var.operator_graph_roles)
+  operator_session_graph_grants = toset(local.write_session_open ? var.operator_session_graph_roles : [])
 
   # The app registration REQUESTS every permission it may ever hold, so a
   # session does not change the app object; requesting is not granting.
@@ -129,6 +131,18 @@ resource "azuread_app_role_assignment" "operator" {
   app_role_id         = data.azuread_service_principal.msgraph.app_role_ids[each.value]
   principal_object_id = azuread_service_principal.operator.object_id
   resource_object_id  = data.azuread_service_principal.msgraph.object_id
+}
+
+# Session Graph writes. depends_on: if Azure refuses a PIM assignment, the
+# apply stops before any Graph write is granted.
+resource "azuread_app_role_assignment" "operator_session" {
+  for_each = local.operator_session_graph_grants
+
+  app_role_id         = data.azuread_service_principal.msgraph.app_role_ids[each.value]
+  principal_object_id = azuread_service_principal.operator.object_id
+  resource_object_id  = data.azuread_service_principal.msgraph.object_id
+
+  depends_on = [azurerm_pim_active_role_assignment.operator_session]
 }
 
 resource "azurerm_role_assignment" "operator" {

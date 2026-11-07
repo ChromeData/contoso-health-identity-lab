@@ -111,7 +111,7 @@ run "grants_are_exactly_the_reviewed_lists" {
 
   assert {
     # No session open (the default): only the standing, read-only set.
-    condition     = toset(keys(azuread_app_role_assignment.operator)) == toset(var.operator_graph_roles)
+    condition     = toset(keys(azuread_app_role_assignment.operator)) == toset(var.operator_graph_roles) && length(azuread_app_role_assignment.operator_session) == 0
     error_message = "without a write session, exactly the standing Graph roles are granted"
   }
   assert {
@@ -207,7 +207,7 @@ run "session_open_adds_writes_time_bound" {
   }
 
   assert {
-    condition     = toset(keys(azuread_app_role_assignment.operator)) == toset(concat(var.operator_graph_roles, var.operator_session_graph_roles))
+    condition     = toset(keys(azuread_app_role_assignment.operator)) == toset(var.operator_graph_roles) && toset(keys(azuread_app_role_assignment.operator_session)) == toset(var.operator_session_graph_roles)
     error_message = "an open session grants the standing set plus the session writes"
   }
   assert {
