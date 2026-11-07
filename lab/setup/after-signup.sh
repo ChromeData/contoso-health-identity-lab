@@ -149,8 +149,16 @@ fi
 APP_ROLES="${ENABLE_APP_MANAGEMENT_ROLES:-$(prev_knob enable_app_management_roles)}"; APP_ROLES="${APP_ROLES:-false}"
 IDP_LOGS="${ENABLE_IDENTITY_PROTECTION_LOGS:-$(prev_knob enable_identity_protection_logs)}"; IDP_LOGS="${IDP_LOGS:-false}"
 note "workspace for the Entra log export: ${LAW_ID:-<none yet: first run, envs/dev not applied>}; app-management roles: $APP_ROLES; Identity Protection logs: $IDP_LOGS"
-note "writing $BOOT/terraform.tfvars (gitignored)"
-if [ "$YES" = 1 ]; then cat > "$BOOT/terraform.tfvars" <<EOF
+# The pipeline config vault's name: env var, then the existing file, then the
+# default. A different name than the live one would make the next apply
+# REPLACE the vault (purge protection keeps the old name taken), so the merge
+# below refuses a change (--refuse-change) instead of writing it.
+PREV_VAULT="$(prev_knob pipeline_config_vault_name)"
+CFG_VAULT_NAME="${PIPELINE_CONFIG_VAULT:-${PREV_VAULT:-kv-idlab-cicd-${STATE_SA: -4}}}"
+note "writing $BOOT/terraform.tfvars (gitignored); settings added after setup are kept (lab/setup/merge_tfvars.py)"
+if [ "$YES" = 1 ]; then
+GEN="$(mktemp)"; trap 'rm -f "$GEN"' EXIT
+cat > "$GEN" <<EOF
 subscription_id              = "$AZURE_SUBSCRIPTION_ID"
 tenant_id                    = "$TENANT_ID"
 github_owner                 = "$GITHUB_OWNER"
@@ -166,9 +174,17 @@ log_analytics_workspace_id   = "$LAW_ID"
 enable_app_management_roles     = $APP_ROLES
 enable_identity_protection_logs = $IDP_LOGS
 enable_pipeline_config_vault    = true
-pipeline_config_vault_name      = "${PIPELINE_CONFIG_VAULT:-kv-idlab-cicd-${STATE_SA: -4}}"
+pipeline_config_vault_name      = "$CFG_VAULT_NAME"
 pipeline_config_writer_object_ids = ["$ADMIN_OBJECT_ID"]
 EOF
+# Every key the old file has and this script does not write is copied over
+# (apply_azure_scope, enable_lab_vm_operator, cannot_delete_lock_resource_ids,
+# EVIDENCE / HR-SYNC / PIM-Demo-Readers switches...). The writer list keeps
+# its old value: a re-run by another admin must not swap the writer.
+python3 -I "$ROOT/lab/setup/merge_tfvars.py" "$BOOT/terraform.tfvars" "$GEN" \
+  --keep-old pipeline_config_writer_object_ids \
+  --refuse-change pipeline_config_vault_name > "$GEN.merged" || { rm -f "$GEN.merged"; exit 1; }
+mv "$GEN.merged" "$BOOT/terraform.tfvars"; chmod 600 "$BOOT/terraform.tfvars"
 fi
 # The lock blocks the role assignments bootstrap creates: lift it around the apply.
 run az lock delete -n lock-tfstate-readonly -g "$STATE_RG" --resource "$STATE_SA" --resource-type Microsoft.Storage/storageAccounts -o none || true
@@ -201,8 +217,7 @@ setcfg() {
   if [ "$YES" = 1 ]; then
     # The Secrets Officer grant bootstrap made for you can take a few
     # minutes to reach Key Vault: retry (up to ~5 min), then stop.
-    local i
-    for i in 1 2 3 4 5 6 7 8 9 10; do
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
       if printf '%s' "$2" | az keyvault secret set --vault-name "$CFG_VAULT" --name "$1" --file /dev/stdin -o none 2>/dev/null; then
         printf '   $ (Key Vault %s) %s = <value>\n' "$CFG_VAULT" "$1"; return 0
       fi
