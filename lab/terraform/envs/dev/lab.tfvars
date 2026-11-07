@@ -294,3 +294,19 @@ ca008_scope                       = "all_users"
 ca008_allow_all_users_enforcement = false
 
 blocked_countries = ["KP", "IR", "SY", "CU"]
+
+# AD FS -> Entra migration exercise (lab/adfs/README.md, ADR 0009). Both OFF
+# in this PR, so its plan is "No changes". The run order turns them on one at
+# a time, each through its own reviewed PR:
+#   enable_adfs_https = true   after the owner OKs AD FS on DC01 (README step 1)
+#   enable_claims_viewer_app   after 11-Add-ClaimsViewerRp.ps1 and one Cloud
+#                              Sync cycle, with the two group ids set below
+# After 19-Remove-Adfs.ps1 only enable_adfs_https goes back to false: the
+# Entra app is then the app's ONLY identity provider, so it stays on.
+enable_adfs_https        = false
+enable_claims_viewer_app = false
+# Same 180-day key-credential limit as the AWS / ServiceNow certificates
+# above: Entra's 3-year default would be refused at the first enabled apply.
+claims_viewer_saml_signing_cert_end_date = "2027-04-20T00:00:00Z"
+# claims_viewer_clinicians_group_object_id = "<GRP-ClaimsViewer-Clinicians object id>"
+# claims_viewer_admins_group_object_id     = "<GRP-ClaimsViewer-Admins object id>"

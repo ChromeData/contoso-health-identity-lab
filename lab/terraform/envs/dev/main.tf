@@ -192,6 +192,20 @@ check "pam_oidc_app_requires_sso_apps" {
   }
 }
 
+check "claims_viewer_requires_sso_apps" {
+  assert {
+    condition     = !var.enable_claims_viewer_app || (var.enable_premium && var.enable_sso_apps)
+    error_message = "enable_claims_viewer_app = true has no effect unless enable_premium and enable_sso_apps are both true (the Claims Viewer app lives in modules/apps)."
+  }
+}
+
+check "adfs_https_requires_dc" {
+  assert {
+    condition     = !var.enable_adfs_https || var.enable_dc
+    error_message = "enable_adfs_https = true has no effect unless enable_dc is true (the 443 rule is on DC01's NSG)."
+  }
+}
+
 check "servicenow_sso_requires_sso_apps" {
   assert {
     condition     = !var.enable_servicenow_sso || (var.enable_premium && var.enable_sso_apps)
@@ -535,7 +549,9 @@ module "dc_vm" {
   key_vault_id        = module.keyvault.key_vault_id
   allowed_ip_ranges   = var.operator_ip_ranges
   vm_size             = var.dc_vm_size
-  tags                = var.tags
+  # 443 to DC01 only for the temporary AD FS exercise (lab/adfs).
+  adfs_https_enabled = var.enable_adfs_https
+  tags               = var.tags
 }
 
 # -----------------------------------------------------------------------------
@@ -740,6 +756,14 @@ module "apps" {
   # Okta (lab/okta-migration wave 1). Its group lives in this module, like
   # PAM-Operators; CA061 above targets it.
   enable_clinic_results_app = var.enable_clinic_results_app
+
+  # Contoso Claims Viewer (default false): the app migrated off AD FS
+  # (lab/adfs, ADR 0009 phase 3). Its two groups come from AD through Cloud
+  # Sync, so their ids are inputs, not module.groups outputs.
+  enable_claims_viewer_app                 = var.enable_claims_viewer_app
+  claims_viewer_clinicians_group_object_id = var.claims_viewer_clinicians_group_object_id
+  claims_viewer_admins_group_object_id     = var.claims_viewer_admins_group_object_id
+  claims_viewer_saml_signing_cert_end_date = var.claims_viewer_saml_signing_cert_end_date
 }
 
 # -----------------------------------------------------------------------------

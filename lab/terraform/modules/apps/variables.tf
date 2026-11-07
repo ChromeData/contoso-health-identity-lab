@@ -778,3 +778,49 @@ variable "clinic_results_redirect_uris" {
     error_message = "clinic_results_redirect_uris must be loopback http URIs with a port and a path (no wildcard, no remote host)."
   }
 }
+
+# ---- Contoso Claims Viewer (claims_viewer.tf) ---------------------------------
+
+variable "enable_claims_viewer_app" {
+  type        = bool
+  description = <<-EOT
+    Create the Contoso Claims Viewer SAML app: the app migrated off AD FS
+    (lab/adfs, ADR 0009 phase 3), with the AD FS claim rules converted into a
+    claims-mapping policy and two app roles. Needs the two group object ids
+    below. envs/dev flag: enable_claims_viewer_app. Off by default.
+  EOT
+  default     = false
+}
+
+variable "claims_viewer_clinicians_group_object_id" {
+  type        = string
+  description = "Entra object id of GRP-ClaimsViewer-Clinicians (an AD group synced by Cloud Sync; lab/adfs/scripts/11-Add-ClaimsViewerRp.ps1 creates it). Gets app role ClaimsViewer.Clinician."
+  default     = ""
+
+  validation {
+    condition     = var.claims_viewer_clinicians_group_object_id == "" || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.claims_viewer_clinicians_group_object_id))
+    error_message = "claims_viewer_clinicians_group_object_id must be an object id (GUID), not a name."
+  }
+}
+
+variable "claims_viewer_admins_group_object_id" {
+  type        = string
+  description = "Entra object id of GRP-ClaimsViewer-Admins (synced from AD). Gets app role ClaimsViewer.Admin."
+  default     = ""
+
+  validation {
+    condition     = var.claims_viewer_admins_group_object_id == "" || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.claims_viewer_admins_group_object_id))
+    error_message = "claims_viewer_admins_group_object_id must be an object id (GUID), not a name."
+  }
+}
+
+variable "claims_viewer_saml_signing_cert_end_date" {
+  type        = string
+  description = "Expiry of the Claims Viewer SAML signing certificate (RFC 3339). null = Entra's default (3 years). Changing it replaces the certificate: re-run lab/adfs/claims-viewer/fetch-metadata.sh entra."
+  default     = null
+
+  validation {
+    condition     = var.claims_viewer_saml_signing_cert_end_date == null || can(formatdate("YYYY-MM-DD", var.claims_viewer_saml_signing_cert_end_date))
+    error_message = "claims_viewer_saml_signing_cert_end_date must be RFC 3339, e.g. 2027-11-07T00:00:00Z."
+  }
+}
