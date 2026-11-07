@@ -6,6 +6,9 @@ Proves the cutover kept the app's claims: BEFORE is what AD FS issued
 AD FS), AFTER is what Entra issued (the Claims Viewer after cutover.sh entra).
 
 Passes (exit 0) only when, for the same user:
+  * BEFORE came from AD FS and AFTER from Entra ("source" adfs / entra, and
+    the issuer agrees: Entra issuers are https://sts.windows.net/<tenant>/).
+    Two captures from the same IdP prove nothing about a move,
   * both responses had a valid signature,
   * the Name ID value matches and AFTER uses the contract's Name ID format,
   * every contract claim type is present in BOTH with the same set of values.
@@ -42,6 +45,15 @@ def norm(values, mode):
 
 def compare(before, after, contract):
     rows, problems = [], []
+    # A move is AD FS -> Entra. Two captures taken before cutover.sh entra
+    # (or two after it) would otherwise compare equal and "pass".
+    for side, doc, want in (("before", before, "adfs"), ("after", after, "entra")):
+        src = doc.get("source")
+        entra_issuer = str(doc.get("issuer") or "").startswith("https://sts.windows.net/")
+        if src != want:
+            problems.append(f"{side}: source is {src!r}, expected {want!r}")
+        elif entra_issuer != (want == "entra"):
+            problems.append(f"{side}: issuer {doc.get('issuer')!r} does not match source {want!r}")
     for side, doc in (("before", before), ("after", after)):
         if doc.get("signatureValid") is not True:
             problems.append(f"{side}: signature not valid")
