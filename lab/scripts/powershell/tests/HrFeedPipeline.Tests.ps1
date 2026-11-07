@@ -288,6 +288,20 @@ Describe 'Write-HrFeedSummary.ps1: the plain-English story' {
         (Get-Content -LiteralPath $script:Md -Raw) | Should -Match '## HR change not sent: GitHub could not sign in to Microsoft'
     }
 
+    It 'rows held back while the rest were sent: the summary says how many, the real limit used, and the ticket path (review C2)' {
+        $f = Join-Path $TestDrive 'held.json'
+        [ordered]@{ schema = 'hr-feed-send/1'; outcome = 'dry-run'; refusal = @{ kind = 'mass-disable'; count = 25; threshold = 20 }; jobId = $script:Job; servicePrincipalId = $script:Sp
+            selected = @(@{ employeeId = '400104'; status = 'joiner' }); sentAtUtc = $null
+            batches = @([ordered]@{ index = 1; records = 1; employeeIds = @('400104'); httpStatus = 0; accepted = $false })
+            quarantined = @(1..25 | ForEach-Object { @{ employeeId = "6000$_"; status = 'leaver'; kind = 'mass-disable' } }) } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $f
+        & $script:Summary -ChangesPath (New-ChangesFile @($script:Sam)) -ResultPath $f -SummaryPath $script:Md -WaitSeconds 0
+        $md = Get-Content -LiteralPath $script:Md -Raw
+        $md | Should -Match 'Held back by the safety check: 25 row'
+        $md | Should -Match 'limit for this push is 20'
+        $md | Should -Match 'BulkChangeTicket'
+        Remove-Item -LiteralPath $script:Md
+    }
+
     It 'a change step that stopped (no changes file) says nothing was sent and points at its log' {
         & $script:Summary -ChangesPath (Join-Path $TestDrive 'missing-changes.json') -SummaryPath $script:Md -WaitSeconds 0
         $md = Get-Content -LiteralPath $script:Md -Raw

@@ -30,9 +30,9 @@ Describe 'Invoke-InboundProvisioning.ps1 mass-change guard' {
         Mock Connect-MgGraph { throw 'tests must never connect' }
     }
 
-    It 'refuses a feed that would disable more accounts than -MaxChanges, before sending anything' {
+    It 'holds back (quarantines) the leavers of a feed that would disable more than the threshold, and says so' {
         $f = New-Feed -Leavers 12
-        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*Mass-change guard*12 account*'
+        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -QuarantinePath (Join-Path $TestDrive 'q12.json') -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*Mass-change guard*12 account*'
         Should -Invoke Invoke-MgGraphRequest -Times 0
     }
 
@@ -64,9 +64,9 @@ Describe 'Invoke-InboundProvisioning.ps1 department / job title mass-change guar
         }
     }
 
-    It 'refuses a feed that moves 20 nurses to Billing (birthright access would follow), before sending anything' {
+    It 'holds back a feed that moves 20 nurses to Billing (birthright access would follow), and says so' {
         $f = New-WardFeed -Moved 20
-        { & $script:Inbound -CsvPath $f -StatePath $script:State -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*Mass-change guard*department or job title for 20 worker(s)*'
+        { & $script:Inbound -CsvPath $f -StatePath $script:State -QuarantinePath (Join-Path $TestDrive 'q20.json') -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*Mass-change guard*department or job title for 20 worker(s)*'
         Should -Invoke Invoke-MgGraphRequest -Times 0
     }
 
@@ -164,14 +164,26 @@ Describe 'Invoke-InboundProvisioning.ps1 pipeline path (hr-feed.yml): named rows
         $text | Should -Not -Match 'userName|sam\.rivera|hireDate|2026-11-09|"400104"'
     }
 
-    It 'a guard refusal is recorded for the summary (outcome refused, kind, count)' {
+    It 'a guard hold-back is recorded for the summary (kind, count, threshold, the held ids; the joiner still goes)' {
+        # Was: the whole run refused. Now (review C2) the 11 leavers are
+        # quarantined and the one joiner is still sent (here: dry run).
         $f = New-Feed -Leavers 11
-        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -ResultPath $script:Result -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*Mass-change guard*'
+        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -ResultPath $script:Result -QuarantinePath (Join-Path $TestDrive 'q-pipe.json') -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*Mass-change guard*'
         $r = Get-Content -LiteralPath $script:Result -Raw | ConvertFrom-Json
-        $r.outcome | Should -Be 'refused'
+        $r.outcome | Should -Be 'dry-run'
         $r.refusal.kind | Should -Be 'mass-disable'
         $r.refusal.count | Should -Be 11
         $r.refusal.threshold | Should -Be 10
+        @($r.quarantined).Count | Should -Be 11
+        @($r.batches[0].employeeIds) | Should -Be @('900001')
+    }
+
+    It 'a run where every row is held back is recorded as refused (nothing to send)' {
+        $lines = @('employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate')
+        for ($i = 0; $i -lt 11; $i++) { $lines += "9300$('{0:d2}' -f $i),Leaver,Only$i,Nursing,Registered Nurse,200015,leaver,2020-01-01,2026-10-20" }
+        $f = Join-Path $TestDrive 'only-leavers.csv'; Set-Content -LiteralPath $f -Value $lines
+        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -ResultPath $script:Result -QuarantinePath (Join-Path $TestDrive 'q-only.json') -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*Nothing was sent*Mass-change guard*'
+        (Get-Content -LiteralPath $script:Result -Raw | ConvertFrom-Json).outcome | Should -Be 'refused'
     }
 
     It 'an invalid row is recorded as invalid with its kind (bad start date)' {
@@ -247,3 +259,186 @@ Describe 'Invoke-InboundProvisioning.ps1 -UseAzureCliToken (app-only, GitHub OID
 }
 
 AfterAll { Remove-Variable -Name InboundOut, HrFakeToken -Scope Global -ErrorAction SilentlyContinue }
+
+Describe 'Invoke-InboundProvisioning.ps1 mass-change guard at hospital scale (review C2)' {
+    BeforeAll {
+        function New-ScaleFeed {
+            # $Staff active rows plus $Leavers leaver rows.
+            param([int]$Staff, [int]$Leavers, [string]$Name = 'scale')
+            $lines = [System.Collections.Generic.List[string]]::new()
+            $lines.Add('employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate')
+            for ($i = 0; $i -lt $Staff; $i++) { $lines.Add("5$('{0:d5}' -f $i),Staff,Person$i,Nursing,Registered Nurse,200015,active,2020-01-01,") }
+            for ($i = 0; $i -lt $Leavers; $i++) { $lines.Add("6$('{0:d5}' -f $i),Gone,Person$i,Nursing,Registered Nurse,200015,leaver,2020-01-01,2026-11-01") }
+            $f = Join-Path $TestDrive "$Name.csv"; Set-Content -LiteralPath $f -Value $lines; return $f
+        }
+    }
+    BeforeEach {
+        Mock Write-Host {}
+        Mock Invoke-MgGraphRequest { throw 'tests must never call Graph' }
+        Mock Connect-MgGraph { throw 'tests must never connect' }
+        $script:Q = Join-Path $TestDrive ("q-" + [guid]::NewGuid().ToString('N') + '.json')
+        $script:Approved = Join-Path $TestDrive 'approved.json'
+    }
+
+    It 'a normal Monday at 2,000 staff (15 leavers) passes: 1 percent of the population is 20, over the floor of 10' {
+        $f = New-ScaleFeed -Staff 2000 -Leavers 15 -Name 'monday'
+        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -QuarantinePath $script:Q -HidePayload -WhatIf -WarningAction SilentlyContinue } | Should -Not -Throw
+        Test-Path -LiteralPath $script:Q | Should -BeFalse
+    }
+
+    It 'the same 15 leavers in a 100-person feed are held back, and the quarantine file names ids only' {
+        $f = New-ScaleFeed -Staff 100 -Leavers 15 -Name 'small'
+        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -QuarantinePath $script:Q -HidePayload -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*DISABLE 15 account*threshold 10*'
+        $q = Get-Content -LiteralPath $script:Q -Raw
+        @(($q | ConvertFrom-Json).rows).Count | Should -Be 15
+        $q | Should -Not -Match 'Gone|Person'
+    }
+
+    It 'mean + 3 sigma of the last 30 days raises the threshold for a hospital whose normal day is about 30' {
+        $h = Join-Path $TestDrive 'history.json'
+        $today = [datetime]::UtcNow.Date
+        $rows = for ($d = 1; $d -le 10; $d++) { [ordered]@{ date = $today.AddDays(-$d).ToString('yyyy-MM-dd'); disabling = (28 + ($d % 5)); accessChanges = 2 } }
+        (ConvertTo-Json -InputObject @($rows)) | Set-Content -LiteralPath $h
+        $f = New-ScaleFeed -Staff 100 -Leavers 33 -Name 'sigma'
+        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -ChangeHistoryPath $h -QuarantinePath $script:Q -HidePayload -WhatIf -WarningAction SilentlyContinue } | Should -Not -Throw
+        # 80 is far outside that history: held back.
+        $f2 = New-ScaleFeed -Staff 100 -Leavers 80 -Name 'sigma2'
+        { & $script:Inbound -CsvPath $f2 -StatePath (Get-StatePath) -ChangeHistoryPath $h -QuarantinePath $script:Q -HidePayload -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*threeSigma*'
+    }
+
+    It 'history older than 30 days, or fewer than 7 days, does not count' {
+        $h = Join-Path $TestDrive 'old-history.json'
+        $rows = for ($d = 40; $d -le 50; $d++) { [ordered]@{ date = [datetime]::UtcNow.Date.AddDays(-$d).ToString('yyyy-MM-dd'); disabling = 30; accessChanges = 0 } }
+        (ConvertTo-Json -InputObject @($rows)) | Set-Content -LiteralPath $h
+        $f = New-ScaleFeed -Staff 100 -Leavers 33 -Name 'oldh'
+        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -ChangeHistoryPath $h -QuarantinePath $script:Q -HidePayload -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*Mass-change guard*'
+    }
+
+    It 'a reviewed, unexpired bulk change ticket lets the event through; expired, too small or unlisted holds it back' {
+        $f = New-ScaleFeed -Staff 100 -Leavers 40 -Name 'reorg'
+        $exp = [datetime]::UtcNow.Date.AddDays(7).ToString('yyyy-MM-dd')
+        @{ schema = 'approved-bulk-changes/1'; changes = @(
+                @{ ticket = 'CHG0040021'; kind = 'disable'; maxCount = 50; expires = $exp; reason = 'test site closing' },
+                @{ ticket = 'CHG0040022'; kind = 'disable'; maxCount = 50; expires = '2020-01-01'; reason = 'expired' },
+                @{ ticket = 'CHG0040023'; kind = 'disable'; maxCount = 5; expires = $exp; reason = 'too small' },
+                @{ ticket = 'CHG0040024'; kind = 'access-change'; maxCount = 50; expires = $exp; reason = 'wrong kind' }) } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $script:Approved
+        $common = @{ CsvPath = $f; QuarantinePath = $script:Q; ApprovedBulkChangesPath = $script:Approved; HidePayload = $true; WhatIf = $true; WarningAction = 'SilentlyContinue' }
+        { & $script:Inbound @common -StatePath (Get-StatePath) -BulkChangeTicket CHG0040021 } | Should -Not -Throw
+        { & $script:Inbound @common -StatePath (Get-StatePath) -BulkChangeTicket CHG0040022 } | Should -Throw '*expired*'
+        { & $script:Inbound @common -StatePath (Get-StatePath) -BulkChangeTicket CHG0040023 } | Should -Throw '*allows 5*'
+        { & $script:Inbound @common -StatePath (Get-StatePath) -BulkChangeTicket CHG0040024 } | Should -Throw '*not in the reviewed list*'
+        { & $script:Inbound @common -StatePath (Get-StatePath) -BulkChangeTicket CHG0049999 } | Should -Throw '*not in the reviewed list*'
+    }
+
+    It 'the shipped allow-list is empty: no ticket passes until a reviewed PR adds one' {
+        $shipped = Join-Path (Split-Path -Parent $script:Inbound) 'approved-bulk-changes.json'
+        @((Get-Content -LiteralPath $shipped -Raw | ConvertFrom-Json).changes).Count | Should -Be 0
+    }
+}
+
+Describe 'Invoke-InboundProvisioning.ps1 UPNs: issued once, ASCII, collision-safe (review C3)' {
+    BeforeEach {
+        $global:InboundOut = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $global:InboundOut.Add([string]$Object) }
+        Mock Invoke-MgGraphRequest { throw 'tests must never call Graph' }
+        Mock Connect-MgGraph { throw 'tests must never connect' }
+        function Get-UserNames([string[]]$Lines, [string[]]$Only = @()) {
+            $global:InboundOut.Clear()
+            $f = Join-Path $TestDrive ("upn-" + [guid]::NewGuid().ToString('N') + '.csv')
+            Set-Content -LiteralPath $f -Value $Lines -Encoding utf8NoBOM
+            $p = @{ CsvPath = $f; StatePath = (Get-StatePath); UpnDomain = 'contosohealthlab.com'; WhatIf = $true; WarningAction = 'SilentlyContinue' }
+            if ($Only) { $p.EmployeeId = $Only }
+            & $script:Inbound @p
+            $raw = @($global:InboundOut | Where-Object { $_ -match '^\s*\{' }) -join "`n"
+            $m = [ordered]@{}
+            foreach ($op in @(($raw | ConvertFrom-Json -AsHashtable)['Operations'])) { $m[$op['bulkId']] = $op['data']['userName'] }
+            return $m
+        }
+        $script:H = 'employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate'
+    }
+
+    It 'the second John Smith gets a suffix digit; the lower employee id keeps the plain name, whatever the row order' {
+        $u = Get-UserNames @($script:H, '100500,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,', '100400,John,Smith,Nursing,Registered Nurse,200015,joiner,2026-11-09,')
+        $u['100400'] | Should -Be 'john.smith@contosohealthlab.com'
+        $u['100500'] | Should -Be 'john.smith2@contosohealthlab.com'
+    }
+
+    It 'a collision with a worker who is NOT in this run (pipeline -EmployeeId) is still seen' {
+        $u = Get-UserNames @($script:H, '100400,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,', '100500,John,Smith,Nursing,Registered Nurse,200015,joiner,2026-11-09,') -Only '100500'
+        $u.Keys | Should -Be @('100500')
+        $u['100500'] | Should -Be 'john.smith2@contosohealthlab.com'
+    }
+
+    It "O'Brien, Jose with an accent and a double-barrelled name give plain ASCII" {
+        $jose = 'Jos' + [char]0x00E9
+        $u = Get-UserNames @($script:H, "100401,Siobhan,O'Brien,Nursing,Registered Nurse,200015,active,2020-01-01,", "100402,$jose,Mu$([char]0x00F1)oz,Nursing,Registered Nurse,200015,active,2020-01-01,", '100403,Mary Ann,Lloyd-Jones,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        $u['100401'] | Should -Be 'siobhan.obrien@contosohealthlab.com'
+        $u['100402'] | Should -Be 'jose.munoz@contosohealthlab.com'
+        $u['100403'] | Should -Be 'maryann.lloyd-jones@contosohealthlab.com'
+    }
+
+    It 'a name with no usable ASCII is refused, not sent as an odd UPN' {
+        { Get-UserNames @($script:H, "100404,$([char]0x674E),$([char]0x660E),Nursing,Registered Nurse,200015,active,2020-01-01,") } | Should -Throw '*no usable ASCII*'
+    }
+
+    It 'a nurse who marries keeps her UPN when the feed carries the HR-issued upn column (never re-derived)' {
+        $h = $script:H + ',upn'
+        $u = Get-UserNames @($h, '100405,Dana,Okafor-Reid,Nursing,Registered Nurse,200015,active,2020-01-01,,dana.okafor@contosohealthlab.com')
+        $u['100405'] | Should -Be 'dana.okafor@contosohealthlab.com'
+    }
+
+    It 'a upn column value that is invalid, or used twice, stops the run' {
+        $h = $script:H + ',upn'
+        { Get-UserNames @($h, "100406,A,B,Nursing,Registered Nurse,200015,active,2020-01-01,,o'brien@x.com") } | Should -Throw '*invalid upn*'
+        { Get-UserNames @($h, '100406,A,B,Nursing,Registered Nurse,200015,active,2020-01-01,,a.b@x.com', '100407,C,D,Nursing,Registered Nurse,200015,active,2020-01-01,,a.b@x.com') } | Should -Throw '*same upn*'
+    }
+
+    It 'a derived UPN never takes a value another row already holds in the upn column' {
+        $h = $script:H + ',upn'
+        $u = Get-UserNames @($h, '100408,Jo,Lee,Nursing,Registered Nurse,200015,active,2020-01-01,,jo.lee@contosohealthlab.com', '100300,Jo,Lee,Nursing,Registered Nurse,200015,joiner,2026-11-09,,')
+        $u['100408'] | Should -Be 'jo.lee@contosohealthlab.com'
+        $u['100300'] | Should -Be 'jo.lee2@contosohealthlab.com'
+    }
+
+    It 'the SCIM anchor is the employee id (externalId), so the engine matches on it and never on the name' {
+        $f = Join-Path $TestDrive 'anchor.csv'
+        Set-Content -LiteralPath $f -Value @($script:H, '100409,Ana,Silva,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        $global:InboundOut.Clear()
+        & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -WhatIf -WarningAction SilentlyContinue
+        $op = @((((@($global:InboundOut | Where-Object { $_ -match '^\s*\{' }) -join "`n") | ConvertFrom-Json -AsHashtable)['Operations']))[0]
+        $op['data']['externalId'] | Should -Be '100409'
+    }
+}
+
+Describe 'Rehire after a leave (review C7): the payload switches the account on in the NEW job' {
+    BeforeEach {
+        $global:InboundOut = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $global:InboundOut.Add([string]$Object) }
+        Mock Invoke-MgGraphRequest { throw 'tests must never call Graph' }
+        Mock Connect-MgGraph { throw 'tests must never connect' }
+    }
+
+    It 'a rehired worker (leaver -> active, different department) is sent active=true with the new department and title, same anchor and UPN' {
+        $f = Join-Path $TestDrive 'rehire.csv'
+        Set-Content -LiteralPath $f -Value @('employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate,upn',
+            '100210,Rae,Lin,Pharmacy,Pharmacist,200015,active,2026-11-09,,rae.lin@contosohealthlab.com')
+        # Baseline: she left as an ICU nurse 18 months ago.
+        $state = Get-StatePath
+        (@{ '100210' = @{ dept = 'ICU'; jobTitle = 'Registered Nurse' } } | ConvertTo-Json) | Set-Content -LiteralPath $state
+        & $script:Inbound -CsvPath $f -StatePath $state -WhatIf -WarningAction SilentlyContinue
+        $op = @((((@($global:InboundOut | Where-Object { $_ -match '^\s*\{' }) -join "`n") | ConvertFrom-Json -AsHashtable)['Operations']))[0]
+        $op['data']['active'] | Should -BeTrue
+        $op['data']['externalId'] | Should -Be '100210'
+        $op['data']['userName'] | Should -Be 'rae.lin@contosohealthlab.com'
+        $op['data']['urn:ietf:params:scim:schemas:extension:enterprise:2.0:User']['department'] | Should -Be 'Pharmacy'
+        $op['data']['title'] | Should -Be 'Pharmacist'
+        # The new start date is the hire date the birthright rules read.
+        ([datetime]$op['data']['urn:ietf:params:scim:schemas:extension:contoso:1.0:User']['hireDate']).ToUniversalTime().ToString('yyyy-MM-dd') | Should -Be '2026-11-09'
+    }
+
+    It 'the OU expression the DC prints moves an active account OUT of OU=Disabled (active False -> Disabled, else the department OU), applied Always' {
+        $dc = Get-Content -LiteralPath ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' 'dc' '02-Configure-Domain.ps1'))) -Raw
+        $dc | Should -Match 'IIF\(\[active\]=`"False`", `"\$disabledOu`", Switch\(\[urn:ietf:params:scim:schemas:extension:enterprise:2\.0:User:department\]'
+        $dc | Should -Match 'apply Always'
+    }
+}
