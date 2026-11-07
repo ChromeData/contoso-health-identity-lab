@@ -9,7 +9,7 @@
 #
 # STAND-IN: the lab's vault is HashiCorp Vault in Docker on the operator's
 # laptop (lab/pam), so there is no VM for the Azure Monitor Agent to sit on.
-# Production equivalent (ADR 0027): Azure Key Vault diagnostic logs
+# Production equivalent (ADR 0036): Azure Key Vault diagnostic logs
 # (AuditEvent) -> Log Analytics -> Sentinel, or for a self-run Vault its
 # socket/syslog audit device -> AMA on the vault host. Same evidence, delivered by an agent instead of a
 # script.

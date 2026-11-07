@@ -524,7 +524,7 @@ record_override() { # record_override SAM ACTION JUSTIFICATION OPERATOR UNRESOLV
 # change) and carries enough APPROVALS:
 #
 # Dual control (access approval with a minimum number of approvers; in the
-# Microsoft design, ADR 0027, a PIM activation approval). The approvals are ServiceNow's own
+# Microsoft design, ADR 0036, a PIM activation approval). The approvals are ServiceNow's own
 # records, table sysapproval_approver (one row per approver per change). One
 # counts only if it is
 #   * in state "approved" (requested / rejected / cancelled ones do not),

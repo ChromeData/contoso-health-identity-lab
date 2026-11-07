@@ -85,7 +85,7 @@ Each row names a control the lab implements in code, where in the repo it lives,
 
 ---
 
-## 5. Privileged session recording (Guacamole harness; target: Azure Bastion session recording, ADR 0027)
+## 5. Privileged session recording (Guacamole harness; target: Azure Bastion session recording, ADR 0036)
 
 **Lab:** `lab/pam/guacamole/` with session recording to disk, replay via guacenc; `lab/pam/psm-session.sh` (RDP) and `lab/pam/psm-ssh.sh` (SSH), one Guacamole user per operator (`lab/pam/operators.json`), check-out gated on a ServiceNow change (`lab/pam/itsm-ticket.sh`). Ran in the Samba AD harness (`lab/pam/test/e2e.sh`), not yet against DC01.
 

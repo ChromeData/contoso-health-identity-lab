@@ -11,7 +11,7 @@ before anything is applied.
 
 Ported from the author's earlier Kubernetes-KubiScan lab (the linter, its
 canary and its fixture only; the secrets-manager and KubiScan halves were
-dropped: ADR 0027 makes Azure Key Vault the lab's secrets store).
+dropped: ADR 0036 makes Azure Key Vault the lab's secrets store).
 
 EXIT CODES (the canary depends on these; a crash must never read as a finding):
   0  read at least one Role/ClusterRole, found nothing risky outside built-ins

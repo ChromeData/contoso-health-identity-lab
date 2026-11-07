@@ -24,7 +24,7 @@ can read exactly one secret path. Around that one exchange:
 | What runs here | Stands in for |
 |---|---|
 | **kind** cluster `contoso-k8s` (one node, Kubernetes 1.36) | **AKS** |
-| HashiCorp **Vault** Kubernetes auth + **Vault Agent Injector** | **Microsoft Entra Workload ID** + **Azure Key Vault** through the **Key Vault CSI driver** on AKS (the target, ADR 0027) |
+| HashiCorp **Vault** Kubernetes auth + **Vault Agent Injector** | **Microsoft Entra Workload ID** + **Azure Key Vault** through the **Key Vault CSI driver** on AKS (the target, ADR 0036) |
 | Kubernetes groups via `kubectl --as-group` (impersonation) | **Entra ID groups** through AKS's Entra integration |
 
 Nothing in this folder talks to Azure or Entra. It runs for $0 on a
@@ -429,7 +429,7 @@ a public HTTPS URL. kind's issuer is
 `https://kubernetes.default.svc.cluster.local`, which nothing outside the
 cluster can resolve. The root's variables refuse such an issuer.
 
-ADR 0027 (Microsoft-native PAM) makes the right-hand column the lab's
+ADR 0036 (Microsoft-native PAM) makes the right-hand column the lab's
 target. CyberArk and Conjur are not part of the lab.
 
 ## 5. Run it

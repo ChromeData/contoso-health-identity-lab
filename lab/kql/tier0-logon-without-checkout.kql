@@ -46,7 +46,7 @@
 //     -> Azure Monitor Logs Ingestion API (DCE + DCR, Entra token via az login)
 //     -> custom table VaultCheckout_CL (all three created by
 //        modules/monitoring when enable_itdr_detections = true).
-//   Production equivalent (ADR 0027): Windows LAPS password reads in the
+//   Production equivalent (ADR 0036): Windows LAPS password reads in the
 //   Entra audit log -> Sentinel.
 //   DC01 Security events (4624 logon, 4672 special privileges) are collected
 //   by the Azure Monitor Agent + a DCR on vm-dc01, also created by

@@ -2,7 +2,7 @@
 
 **Stand-ins:** kind stands in for AKS. In-cluster Vault (dev mode) stands in
 for the Azure-native target on AKS: Entra Workload ID + the Key Vault CSI
-driver (ADR 0027). See
+driver (ADR 0036). See
 [`lab/docs/STAND-INS.md`](../../../docs/STAND-INS.md).
 
 Stage 2 is [`../identity`](../identity/README.md). Why there are two stages:

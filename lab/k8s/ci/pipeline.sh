@@ -7,7 +7,7 @@
 #
 # Stand-ins (lab/docs/STAND-INS.md): the kind cluster replaces AKS; Vault's
 # Kubernetes auth + Agent Injector stand in for Entra Workload ID + the Key
-# Vault CSI driver on AKS (ADR 0027); the
+# Vault CSI driver on AKS (ADR 0036); the
 # impersonated k8s-clinical-* groups replace Entra groups. None of those
 # products runs here.
 #

@@ -4,9 +4,9 @@
 # Every stand-in, what it replaces, and the on-camera line: lab/docs/STAND-INS.md
 #
 #   vault        HashiCorp Vault Community  (LDAP secrets engine rotates real AD
-#                accounts on DC01). ADR 0027 replaces it: Azure Key Vault for
+#                accounts on DC01). ADR 0036 replaces it: Azure Key Vault for
 #                secrets, Windows LAPS for rotation.
-#   guacd/guac   Apache Guacamole (recorded sessions). ADR 0027 replaces it:
+#   guacd/guac   Apache Guacamole (recorded sessions). ADR 0036 replaces it:
 #                Azure Bastion session recording (Premium SKU).
 #   midpoint     Evolveum midPoint          -> SailPoint / Saviynt (IGA)
 #   itsm-mock    ServiceNow Table API mock  -> ServiceNow change tickets (PDI at

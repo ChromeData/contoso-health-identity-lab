@@ -16,7 +16,7 @@
 #
 # STAND-IN: Vault (Kubernetes auth + Agent Injector) stands in for the
 # Azure-native target on AKS: Entra Workload ID + the Key Vault CSI driver
-# (ADR 0027, lab/docs/STAND-INS.md). kind stands in for AKS.
+# (ADR 0036, lab/docs/STAND-INS.md). kind stands in for AKS.
 #
 # DEV MODE IS A LAB SHORTCUT, AND IT IS ONLY ACCEPTABLE BECAUSE THE CLUSTER IS
 # EPHEMERAL: in-memory storage, auto-unsealed, plain HTTP, and a root token.

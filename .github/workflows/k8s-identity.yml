@@ -23,7 +23,7 @@
 #
 # Stand-ins (lab/docs/STAND-INS.md): kind replaces AKS; Vault's Kubernetes auth
 # method + Agent Injector stand in for Microsoft Entra Workload ID + the
-# Azure Key Vault CSI driver on AKS (the target, ADR 0027); the human groups
+# Azure Key Vault CSI driver on AKS (the target, ADR 0036); the human groups
 # are impersonated, where AKS would use Entra group object IDs.
 #
 # NO CLOUD CREDENTIALS: no id-token: write, no secrets, no repo variables. The

@@ -7,7 +7,7 @@ or runs out. Revoking it also ends the person's open sessions.
 
 | Here | Stands in for |
 |---|---|
-| Vault Community 2.1.1, **database secrets engine** (`database/`) | Zero-standing-privilege database access / dynamic secrets. The Microsoft way (ADR 0027) removes the database password: Microsoft Entra authentication to Azure Database for PostgreSQL, with a managed identity for apps and a PIM-eligible group for people |
+| Vault Community 2.1.1, **database secrets engine** (`database/`) | Zero-standing-privilege database access / dynamic secrets. The Microsoft way (ADR 0036) removes the database password: Microsoft Entra authentication to Azure Database for PostgreSQL, with a managed identity for apps and a PIM-eligible group for people |
 | PostgreSQL 16.15 `clinical-db`, synthetic data only | The clinical database (an EHR reporting replica, for example) |
 | `clinical-app` (psql on the same internal network) | The analyst workstation or reporting app that logs in |
 | A Vault token minted by the script | Signing in to Vault with OIDC (Microsoft Entra ID), with an Entra group mapped to the policy (tenant time, below) |

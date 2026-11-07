@@ -51,7 +51,7 @@
 #      (test/guac_recording.py: plays back) and is the same file the web
 #      app's History serves to its player; check-in rotates the password and
 #      the KDC refuses the old one
-#   h. (removed: the Conjur check; ADR 0027 dropped Conjur)
+#   h. (removed: the Conjur check; ADR 0036 dropped Conjur)
 #   i. midPoint REST login (and a wrong password is refused) + connector
 #      inventory (is MS Graph bundled?)
 #   j. ./discover.sh: every planted finding classified (nested membership,

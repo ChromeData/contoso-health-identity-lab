@@ -322,13 +322,13 @@
   "VAULT": {
    "kind": "product",
    "standin_for": "",
-   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault and Guacamole (superseded by ADR 0027)",
+   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault and Guacamole (superseded by ADR 0036)",
    "where.0.label": "How the vault, sessions and approvals fit together"
   },
   "GUAC": {
    "kind": "product",
    "standin_for": "",
-   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault and Guacamole (superseded by ADR 0027)",
+   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault and Guacamole (superseded by ADR 0036)",
    "where.1.label": "The Linux RDP test server (in place of DC01)",
    "where.2.label": "The local PAM stack",
    "proof.0.label": "Recorded RDP session (to a Linux test server)"
@@ -340,7 +340,7 @@
   "DYN": {
    "kind": "product",
    "standin_for": "",
-   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault and Guacamole (superseded by ADR 0027)"
+   "adrs.0.label": "ADR 0007: choosing HashiCorp Vault and Guacamole (superseded by ADR 0036)"
   },
   "FEED": {
    "kind": "light",

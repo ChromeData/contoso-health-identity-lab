@@ -36,7 +36,7 @@
 #
 # STAND-IN (lab/docs/STAND-INS.md): the exchange is a Kubernetes identity
 # in, a scoped secret out. On AKS the Azure-native version (the target,
-# ADR 0027) is Entra Workload ID: a
+# ADR 0036) is Entra Workload ID: a
 # federated identity credential trusts the cluster's OIDC issuer, the pod's
 # projected token (audience api://AzureADTokenExchange) is exchanged for an
 # Entra token, and Key Vault RBAC replaces the Vault policy. That FIC is

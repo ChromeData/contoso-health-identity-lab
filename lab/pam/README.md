@@ -1,6 +1,6 @@
 # PAM / IGA stand-ins — local Docker stack
 
-> **Superseded for PAM by [ADR 0027](../docs/adr/0027-microsoft-native-pam.md)
+> **Superseded for PAM by [ADR 0036](../docs/adr/0036-microsoft-native-pam.md)
 > (2026-11-06).** The lab's privileged-access path is now Microsoft-native:
 > Azure Key Vault for secrets, Azure Bastion session recording (Premium SKU)
 > for recorded admin sessions, Windows LAPS for password rotation, Intune
@@ -18,12 +18,12 @@ AD domain controller in Azure; today it runs against a Samba AD DC harness
 
 | Container | Real product | Stands in for | What the demo proves |
 |---|---|---|---|
-| `vault` | HashiCorp Vault Community 2.1 | **Azure Key Vault** (secrets) + **Windows LAPS** (rotation), ADR 0027 | AD account discovery → bulk onboarding → dependency-gated rotation → reconciliation; exclusive check-out, rotate-on-check-in, audit log |
-| `guacd` + `guacamole` | Apache Guacamole 1.6 | **Azure Bastion session recording** (Premium SKU), ADR 0027 | Brokered SSH to a Linux host and brokered RDP to a Linux xrdp stand-in (both RAN · harness), RDP to DC01 itself (BUILT, needs DC01); each session belongs to one named operator who never sees the credential, recorded, and the recording checked for playback |
+| `vault` | HashiCorp Vault Community 2.1 | **Azure Key Vault** (secrets) + **Windows LAPS** (rotation), ADR 0036 | AD account discovery → bulk onboarding → dependency-gated rotation → reconciliation; exclusive check-out, rotate-on-check-in, audit log |
+| `guacd` + `guacamole` | Apache Guacamole 1.6 | **Azure Bastion session recording** (Premium SKU), ADR 0036 | Brokered SSH to a Linux host and brokered RDP to a Linux xrdp stand-in (both RAN · harness), RDP to DC01 itself (BUILT, needs DC01); each session belongs to one named operator who never sees the credential, recorded, and the recording checked for playback |
 | `itsm-mock` | ServiceNow Table API v2 mock (`tools/mock_servicenow.py`), incl. the `sysapproval_approver` table | **ServiceNow** change tickets + approvals (a ServiceNow PDI at tenant time) | Check-out only with an approved, current change assigned to the person asking, under **dual control** for Tier 0: two distinct approvers, neither of them the requester (Tier 1: one) |
 | `ssh-target` (profile `ssh`) | OpenSSH on Debian, trusting only Vault's SSH CA | A Tier-1 **Linux server** behind PSMP | Ephemeral 10-minute certificates; the target's own log names the operator |
 | `rdp-target` (profile `rdp`, harness only) | xrdp 0.10 + xorgxrdp on Debian, AD logon by Kerberos (`rdp-target/`) | **A Linux STAND-IN for an RDP session to DC01**. It is not Windows: Samba AD has no RDP, so this gives the brokered RDP path something real to connect to | A Tier-0 AD account checked out of Vault logs on over RDP through Guacamole with the injected password; the session is recorded and the recording plays back; after check-in the password no longer works ([RDP without DC01](#rdp-recording-without-dc01-linux-xrdp-stand-in)) |
-| `vault-1/2/3` + `vault-unsealer` (`docker-compose.ha.yml`) | Vault integrated storage (Raft) + transit auto-unseal | Vault's own HA and DR (Azure Key Vault is a managed service with built-in replication, so ADR 0027 retires this) | Leader failover, a timed snapshot-restore DR drill (RTO/RPO), a rolling upgrade |
+| `vault-1/2/3` + `vault-unsealer` (`docker-compose.ha.yml`) | Vault integrated storage (Raft) + transit auto-unseal | Vault's own HA and DR (Azure Key Vault is a managed service with built-in replication, so ADR 0036 retires this) | Leader failover, a timed snapshot-restore DR drill (RTO/RPO), a rolling upgrade |
 | `midpoint` | Evolveum midPoint 4.10 | **SailPoint / Saviynt** | A risk-tiered certification campaign run headless over REST, with detective SoD and automated remediation ([`midpoint/README.md`](midpoint/README.md)); Entra users aggregated through the Graph connector at tenant time |
 | `contoso-dyndb` project (`docker-compose.dynamic-db.yml`): its own Vault + PostgreSQL `clinical-db` | Vault database secrets engine | zero-standing-privilege database access / dynamic secrets (Microsoft's way: Entra authentication to the database, no password) | A new Postgres login per request, 1-hour lease, dropped (and its sessions ended) on revoke; nobody holds a standing password ([`dynamic-db/README.md`](dynamic-db/README.md)) |
 | `samba-dc` (harness only, `test/docker-compose.samba.yml`) | Samba 4.22 AD DC on Debian | **DC01**, the lab's Windows Server domain controller in Azure | The real scripts run against a real AD (LDAPS, `pwdLastSet`, nested groups, SPNs) without a tenant |
@@ -46,7 +46,7 @@ AD domain controller in Azure; today it runs against a Samba AD DC harness
 > run is the hashed record `20261020T193913Z` (79/79, GAP 0).
 >
 > These counts are from 2026-10-20. The PAM flow's 284 included one Conjur
-> check (allowed and denied workload). ADR 0027 removed Conjur and that check,
+> check (allowed and denied workload). ADR 0036 removed Conjur and that check,
 > so the next run has one check fewer.
 >
 > Where each number is held: the `--publish` run `20261020T220031Z` wrote the
@@ -200,10 +200,10 @@ vault-ha.sh / dr-drill.sh:   3-node Raft, failover, timed snapshot-restore drill
 ### Vocabulary map
 
 The general PAM name of each piece, and the Microsoft product that does the
-job in the lab's target design (ADR 0027). Delinea Secret Server names are in
+job in the lab's target design (ADR 0036). Delinea Secret Server names are in
 brackets where they differ.
 
-| PAM term (Microsoft product in ADR 0027) | Here | Notes |
+| PAM term (Microsoft product in ADR 0036) | Here | Notes |
 |---|---|---|
 | Password vault, HA and DR (Azure Key Vault) | Vault Community; 3-node Raft cluster in `docker-compose.ha.yml` | Raft replicates every write; DR = snapshots, drilled by `dr-drill.sh` |
 | Master Policy | `pam-policy.json` top level: `stale_days`, `exclusions`, `require_ticket` per tier | Exclusions are documented exceptions, each with a reason |
@@ -403,7 +403,7 @@ raises a change with its approvals in the mock; `./itsm-ticket.sh approve
 CHG####### --by NAME [--state rejected]` acts as one approver afterwards.
 Lab personas: ops-dana is an approver only (she never checks anything out, so
 she never gets a Guacamole user). Not built: an approval *workflow*
-(request, notify, approve in the PAM product; PIM does this in ADR 0027); here the approvals are made in the ITSM
+(request, notify, approve in the PAM product; PIM does this in ADR 0036); here the approvals are made in the ITSM
 and the broker only enforces them.
 
 **Pinned to Table API v2**: v2 answers a query with no match with 200 and an

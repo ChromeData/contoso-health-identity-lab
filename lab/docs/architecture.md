@@ -123,7 +123,7 @@ each Conditional Access graduation.
    for Tier 0, neither the requester) into a per-person, recorded
    Guacamole session, with 10-minute SSH certificates for Linux
    ([ADR 0007](adr/0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md),
-   superseded by [ADR 0027](adr/0027-microsoft-native-pam.md): the target is
+   superseded by [ADR 0036](adr/0036-microsoft-native-pam.md): the target is
    Azure Key Vault, Azure Bastion session recording, Windows LAPS and PIM).
    HA and DR are rehearsed on a separate three-node Vault cluster with a
    timed DR drill on test data; the vault that holds the AD credentials is

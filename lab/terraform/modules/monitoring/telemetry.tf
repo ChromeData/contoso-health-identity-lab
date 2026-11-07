@@ -20,7 +20,7 @@
 #       role is NOT on the CI apply identity's delegable list (envs/bootstrap
 #       ABAC condition), so the grant is a human step - the script prints the
 #       exact command.
-#       Production equivalent (ADR 0027): Azure Key Vault diagnostic logs
+#       Production equivalent (ADR 0036): Azure Key Vault diagnostic logs
 #       (AuditEvent) -> Log Analytics -> Sentinel.
 #
 #  B. DC01 Security events -> SecurityEvent (verify: needs Sentinel + the

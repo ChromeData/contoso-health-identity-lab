@@ -109,6 +109,26 @@ if [[ ! -s guacamole/initdb.sql ]]; then
 fi
 
 # 3. up -------------------------------------------------------------------------
+# Conjur was removed from docker-compose.yml (ADR 0036). `docker compose up`
+# does not stop containers of services that are no longer in the file, so a
+# stack started before that change would keep Conjur running. Remove exactly
+# those containers by their compose labels. NOT `--remove-orphans`: that
+# would also remove containers from the overlay files (ha, oidc, dynamic-db)
+# when this base file runs alone. The conjur-db volume is left in place
+# (data is never deleted silently); the command to drop it is printed.
+project="$(docker compose config --format json 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("name",""))' 2>/dev/null || true)"
+project="${project:-contoso-pam}"
+for svc in conjur conjur-cli conjur-db; do
+  ids="$(docker ps -aq --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=$svc")"
+  if [[ -n "$ids" ]]; then
+    log "Retiring the old $svc container (Conjur left the lab, ADR 0036)"
+    # shellcheck disable=SC2086  # one id per word, on purpose
+    docker rm -f $ids >/dev/null
+  fi
+done
+if docker volume inspect "${project}_conjur-db" >/dev/null 2>&1; then
+  log "Kept volume ${project}_conjur-db (old Conjur data). Remove it with: docker volume rm ${project}_conjur-db"
+fi
 log "Starting containers"
 docker compose up -d
 

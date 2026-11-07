@@ -1,15 +1,15 @@
 # Vendor evaluation: PAM and IGA for Contoso Health
 
-- **Status:** PAM part **superseded by [ADR 0027](adr/0027-microsoft-native-pam.md)** (2026-11-06): the owner decided against a PAM vendor, so the lab uses Microsoft products (Azure Key Vault, Azure Bastion session recording, Windows LAPS, Intune Endpoint Privilege Management, PIM). CyberArk is not part of the lab. The PAM vendor scoring below stays as the desk-review record of the market comparison that was rejected. The IGA part is still Proposed. This is a desk review. No vendor POC has been run, and no quotes have been received.
+- **Status:** PAM part **superseded by [ADR 0036](adr/0036-microsoft-native-pam.md)** (2026-11-06): the owner decided against a PAM vendor, so the lab uses Microsoft products (Azure Key Vault, Azure Bastion session recording, Windows LAPS, Intune Endpoint Privilege Management, PIM). CyberArk is not part of the lab. The PAM vendor scoring below stays as the desk-review record of the market comparison that was rejected. The IGA part is still Proposed. This is a desk review. No vendor POC has been run, and no quotes have been received.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario, a fictional 5,000-user hospital. It is not a real employer and not a real procurement.
-- **Related:** [ADR 0027](adr/0027-microsoft-native-pam.md) (Microsoft-native PAM, supersedes ADR 0007), [ADR 0007](adr/0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md) (PAM stand-ins), [ADR 0008](adr/0008-iga-entra-id-governance-midpoint-vs-sailpoint-saviynt.md) (IGA), [`STAND-INS.md`](STAND-INS.md), [`risk-register.md`](risk-register.md), [`roadmap.md`](roadmap.md)
+- **Related:** [ADR 0036](adr/0036-microsoft-native-pam.md) (Microsoft-native PAM, supersedes ADR 0007), [ADR 0007](adr/0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md) (PAM stand-ins), [ADR 0008](adr/0008-iga-entra-id-governance-midpoint-vs-sailpoint-saviynt.md) (IGA), [`STAND-INS.md`](STAND-INS.md), [`risk-register.md`](risk-register.md), [`roadmap.md`](roadmap.md)
 
 ## 1. Decision
 
 | Area | Decision | Confidence |
 |---|---|---|
-| **PAM** | **Use Microsoft-native PAM (ADR 0027). Don't buy a PAM vendor.** Key Vault holds secrets, Azure Bastion records admin sessions, Windows LAPS rotates local admin passwords, Intune EPM gives one approved app admin rights, and PIM keeps every role just-in-time. The earlier desk-review recommendation (a CyberArk / BeyondTrust / Delinea POC, §4 to §7) was rejected on 2026-11-06. | High on direction (owner decision). The licence fit is checked: EPM is in the lab's Microsoft 365 E5 SKU (`Intune-EPM` service plan). |
+| **PAM** | **Use Microsoft-native PAM (ADR 0036). Don't buy a PAM vendor.** Key Vault holds secrets, Azure Bastion records admin sessions, Windows LAPS rotates local admin passwords, Intune EPM gives one approved app admin rights, and PIM keeps every role just-in-time. The earlier desk-review recommendation (a CyberArk / BeyondTrust / Delinea POC, §4 to §7) was rejected on 2026-11-06. | High on direction (owner decision). The licence fit is checked: EPM is in the lab's Microsoft 365 E5 SKU (`Intune-EPM` service plan). |
 | **IGA** | **Extend Entra ID Governance now. Don't buy SailPoint or Saviynt yet** (this confirms ADR 0008). Buy one when a trigger in §6 fires. | High for phase 1. SailPoint leads on capability, but only by 3 points, and the lead comes from clinical-app connectivity, which phase 1 doesn't need (§5). |
 | **Microsoft licensing** | Keep the Entra ID P1/P2 that comes with M365 E5. Add the Entra ID Governance step-up for every member user in scope. Buy Workload ID Premium only for service principals named by the NHI inventory. Don't buy Entra Suite unless Private Access or Internet Access comes into scope. | High on structure. The step-up price needs verifying (§8). |
 
@@ -71,7 +71,7 @@ Notes on the scores that differ:
 - **Delinea, row 6 = 4.** It completed the StrongDM acquisition on 2026-03-05, which adds just-in-time runtime authorization for humans and NHIs (Delinea release).
   - verify: whether Delinea has an Entra gallery app or documented SAML/SCIM.
   - verify: Delinea's SaaS vs on-prem (Secret Server) packaging.
-- **Lab stand-ins.** They scored high on secrets on 2026-10-20 because a Conjur allow/deny demo, the Vault Kubernetes auth and the per-request database logins all ran (`lab/k8s/`, `lab/pam/dynamic-db/`; ADR 0027 later removed the Conjur demo). Re-scored on 2026-10-20 after the harness grew (41 → 54): rows 1, 2 and 4 rise by one because discovery to reconciliation, per-person ticket-gated sessions with SSH, and HA with a timed DR drill now run in the harness; row 3 rises by one because Entra sign-in to the broker is built, though never run. They still score low everywhere a production estate is judged: one small domain, no vendor access without a VPN, and Contoso carrying the HA, patching and 24×7 support itself (ADR 0007). The decision in §1 doesn't change.
+- **Lab stand-ins.** They scored high on secrets on 2026-10-20 because a Conjur allow/deny demo, the Vault Kubernetes auth and the per-request database logins all ran (`lab/k8s/`, `lab/pam/dynamic-db/`; ADR 0036 later removed the Conjur demo). Re-scored on 2026-10-20 after the harness grew (41 → 54): rows 1, 2 and 4 rise by one because discovery to reconciliation, per-person ticket-gated sessions with SSH, and HA with a timed DR drill now run in the harness; row 3 rises by one because Entra sign-in to the broker is built, though never run. They still score low everywhere a production estate is judged: one small domain, no vendor access without a VPN, and Contoso carrying the HA, patching and 24×7 support itself (ADR 0007). The decision in §1 doesn't change.
 
 **Sensitivity**
 
@@ -195,7 +195,7 @@ These are US list prices from Microsoft's Entra pricing page, read on 2026-10-20
 
 | Risk | Compensating control |
 |---|---|
-| **CyberArk ownership change.** Palo Alto Networks owns it and is moving it to the Idira brand. Pricing, bundling or roadmap may shift. | Get a multi-year price hold in the contract. Keep the challenger's POC results current, and keep the PAM vocabulary map (`lab/pam/README.md`) so the move stays vendor-portable. Moot for the lab since ADR 0027 (no PAM vendor). |
+| **CyberArk ownership change.** Palo Alto Networks owns it and is moving it to the Idira brand. Pricing, bundling or roadmap may shift. | Get a multi-year price hold in the contract. Keep the challenger's POC results current, and keep the PAM vocabulary map (`lab/pam/README.md`) so the move stays vendor-portable. Moot for the lab since ADR 0036 (no PAM vendor). |
 | **PAM SaaS stores ePHI-adjacent recordings.** | A signed BAA is an exit criterion (test 10). Set a recording retention period (owner: Compliance). HIPAA's six-year rule (§164.316(b)(2)) covers required documentation, not logs as such (verify: Contoso's records policy). |
 | **Entra can't govern EHR entitlements** (§5, row 2). | Owner attestations plus custom-data reviews, tracked as trigger 1. Model toxic combinations as separate access packages (ADR 0008). |
 | **Governance licence cost scales with every in-scope member.** | Budget for all 5,000. Check the Frontline Worker SKU for clinical staff (verify:). |

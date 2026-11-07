@@ -3,7 +3,7 @@
 **Stand-ins, said up front:** the cluster is **kind** (Kubernetes in Docker),
 standing in for **AKS**. Vault's Kubernetes auth method and Agent Injector
 stand in for **Entra Workload ID + the Key Vault CSI driver** on AKS (the
-target, ADR 0027). The human groups are **impersonated** Kubernetes groups standing in for
+target, ADR 0036). The human groups are **impersonated** Kubernetes groups standing in for
 Entra groups. Nothing in Azure runs here. See
 [`lab/docs/STAND-INS.md`](../../docs/STAND-INS.md).
 

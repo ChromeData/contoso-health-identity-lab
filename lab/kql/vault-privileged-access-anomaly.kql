@@ -8,7 +8,7 @@
 // WHAT IT CATCHES
 //   tier0-logon-without-checkout.kql watches the DC side (a Tier-0 logon with
 //   no check-out). This rule watches the VAULT side - the local HashiCorp
-//   Vault harness (lab/pam; ADR 0027 replaces it with Azure Key Vault and
+//   Vault harness (lab/pam; ADR 0036 replaces it with Azure Key Vault and
 //   Windows LAPS) - for the misuse a PAM team watches for. One rule, one
 //   Signal column, one row per event or burst. PamTerm names the event in
 //   general PAM words:

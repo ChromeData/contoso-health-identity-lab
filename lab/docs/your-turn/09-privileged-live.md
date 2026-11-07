@@ -84,7 +84,7 @@ Guacamole through Entra only once `enable_pim_oidc_app` is on (it needs
 - Two break-glass accounts, two keys each, every key tested, and the alarm
   fires every time. The script does the checking; the sign-ins stay human.
 - On the AD side, a local HashiCorp Vault and Guacamole harness shows the
-  ideas. The lab's target is Microsoft-native (ADR 0027): Azure Key Vault,
+  ideas. The lab's target is Microsoft-native (ADR 0036): Azure Key Vault,
   Azure Bastion session recording and Windows LAPS. Check-out needs an approved change and, for Tier 0, two
   approvers, neither of them the person asking. The session is recorded, and
   the password is rotated at check-in.

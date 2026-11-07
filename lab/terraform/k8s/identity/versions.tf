@@ -15,7 +15,7 @@
 # Terraform state.
 #
 # STAND-IN: Vault Kubernetes auth stands in for Entra Workload ID + Azure
-# Key Vault on AKS (ADR 0027); the impersonated groups stand in
+# Key Vault on AKS (ADR 0036); the impersonated groups stand in
 # for Entra groups surfaced through AKS Entra integration.
 # lab/docs/STAND-INS.md has the on-camera lines.
 #

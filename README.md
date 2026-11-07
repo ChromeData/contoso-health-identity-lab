@@ -165,15 +165,15 @@ ServiceNow product, on free or trial licensing (the Okta coexistence,
 Integrator Free org, E58). SailPoint, Saviynt and Workday are licensed to organisations and the
 author holds no licence, so a named stand-in does the same job and is said to
 be one. For privileged access the lab's target is Microsoft-native
-([ADR 0027](lab/docs/adr/0027-microsoft-native-pam.md)): Azure Key Vault, Azure
+([ADR 0036](lab/docs/adr/0036-microsoft-native-pam.md)): Azure Key Vault, Azure
 Bastion session recording, Windows LAPS, Intune Endpoint Privilege Management
 and PIM. CyberArk and Conjur are not part of the lab. The local Vault and
 Guacamole harness below is the earlier build of the same ideas:
 
 | Stand-in here | Replaces |
 |---|---|
-| HashiCorp Vault (LDAP secrets engine, exclusive library check-out) | Azure Key Vault (secrets) and Windows LAPS (rotation), ADR 0027 |
-| Apache Guacamole (recorded RDP / SSH, injected credentials) + Vault SSH CA | Azure Bastion session recording (Premium SKU), ADR 0027 |
+| HashiCorp Vault (LDAP secrets engine, exclusive library check-out) | Azure Key Vault (secrets) and Windows LAPS (rotation), ADR 0036 |
+| Apache Guacamole (recorded RDP / SSH, injected credentials) + Vault SSH CA | Azure Bastion session recording (Premium SKU), ADR 0036 |
 | Vault database secrets engine | Microsoft Entra authentication to the database (no password) |
 | Vault Raft cluster with a transit auto-unseal | Not needed with Azure Key Vault, a managed service with built-in replication |
 | Samba AD domain controller (harness only) | DC01, the lab's Windows Server domain controller in Azure |
@@ -281,5 +281,5 @@ Written down on purpose. A reviewer will find these in ten minutes; better they 
 | **Two sign-in policies are report-only** (CA002 phishing-resistant admins, CA021 step-up for Tier-0 activation). | No passkeys are registered yet; enforcing them first would lock every admin out. | Register two hardware keys per admin, run the passwordless rollout (`07-Passwordless-Rollout.ps1`), then graduate both through their own reviewed change. |
 | **The build account still holds a standing Global Administrator role.** | It created the tenant and the pipeline identities; removing it is the last step, not the first. | Make it eligible in PIM like every other admin, keep the two break-glass accounts as the only standing exceptions, and watch all three with the existing detection rules. |
 | **Splunk has run only on synthetic events.** The first 22 SPL twins fire on the replayed detection test cases (E59 to E61); the 2 added on 2026-11-06 have not been replayed. The Log Analytics replay still needs a live admin session. | The tenant-backed replay rides `az login`, which the lab's own 4-hour admin re-auth rule keeps killing. | Run `ingest-from-loganalytics.sh` once with a live admin session and record the tenant-backed row. |
-| **Several products are stand-ins** (HR system, SailPoint, Workday; PAM moved to Microsoft products in ADR 0027). | No free trials exist; each stand-in is named with what it replaces (`lab/docs/STAND-INS.md`). | Swap each stand-in for the real product behind the same interface; the code paths and runbooks do not change. |
+| **Several products are stand-ins** (HR system, SailPoint, Workday; PAM moved to Microsoft products in ADR 0036). | No free trials exist; each stand-in is named with what it replaces (`lab/docs/STAND-INS.md`). | Swap each stand-in for the real product behind the same interface; the code paths and runbooks do not change. |
 | **Eight robot accounts have no accountable owner** (E70). | The inventory (`06-NHI-Inventory.ps1`) found them; assigning owners needs the business to name people. | Owners assigned in the access-package model, enforced by the nightly drift check. |
