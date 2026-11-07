@@ -1,0 +1,295 @@
+{
+  "generatedAt": "2026-11-07T01:07:13Z",
+  "org": "integrator-8288815.okta.com",
+  "apps": [
+    {
+      "okta": {
+        "id": "0oa196auv2sxeVRfe698",
+        "label": "Clinic Scheduling (legacy)",
+        "signOnMode": "BOOKMARK",
+        "protocol": "Bookmark",
+        "status": "ACTIVE",
+        "hidden": false,
+        "groups": [
+          "Clinic-Staff"
+        ],
+        "userCount": 1,
+        "users": [
+          "test-user-b@contosohealthlab.com"
+        ],
+        "policy": "Any two factors",
+        "policyRules": [
+          {
+            "name": "Catch-all Rule",
+            "priority": 99,
+            "status": "ACTIVE",
+            "access": "ALLOW",
+            "factorMode": "2FA",
+            "reauthenticateIn": "PT12H",
+            "constraints": [
+              {
+                "possession": {
+                  "required": true,
+                  "deviceBound": "REQUIRED",
+                  "phishingResistant": "REQUIRED",
+                  "userPresence": "REQUIRED"
+                }
+              }
+            ],
+            "groups": []
+          }
+        ],
+        "samlAttributes": [],
+        "groupRules": [
+          {
+            "name": "Clinic staff by login domain",
+            "status": "ACTIVE",
+            "okta": "String.substringAfter(user.login, \"@\") == \"contosohealthlab.com\"",
+            "entra": "(user.userPrincipalName -endsWith \"@contosohealthlab.com\")",
+            "why_not": null,
+            "into": [
+              "Clinic-Staff"
+            ]
+          }
+        ],
+        "sso7d": 0,
+        "entraPattern": "Linked-sign-on enterprise app (My Apps tile) until the app gets real SSO"
+      },
+      "entra": null,
+      "appTrusts": "okta"
+    },
+    {
+      "okta": {
+        "id": "0oa19mjdqjb0WxeAZ698",
+        "label": "Clinic Billing",
+        "signOnMode": "SAML_2_0",
+        "protocol": "SAML 2.0",
+        "status": "ACTIVE",
+        "hidden": true,
+        "groups": [
+          "Clinic-Billing"
+        ],
+        "userCount": 0,
+        "users": [],
+        "policy": "Clinic clinical apps",
+        "policyRules": [
+          {
+            "name": "Clinic staff: two factors, re-auth every 8h",
+            "priority": 1,
+            "status": "ACTIVE",
+            "access": "ALLOW",
+            "factorMode": "2FA",
+            "reauthenticateIn": "PT8H",
+            "constraints": [],
+            "groups": [
+              "Clinic-Billing",
+              "Clinic-Staff"
+            ]
+          },
+          {
+            "name": "Catch-all Rule",
+            "priority": 99,
+            "status": "ACTIVE",
+            "access": "DENY",
+            "factorMode": "2FA",
+            "reauthenticateIn": "PT12H",
+            "constraints": [
+              {
+                "possession": {
+                  "required": true,
+                  "deviceBound": "REQUIRED",
+                  "phishingResistant": "REQUIRED",
+                  "userPresence": "REQUIRED"
+                }
+              }
+            ],
+            "groups": []
+          }
+        ],
+        "samlAttributes": [
+          "department = user.department"
+        ],
+        "groupRules": [
+          {
+            "name": "Clinic billing by department",
+            "status": "ACTIVE",
+            "okta": "user.department == \"Clinic Billing\"",
+            "entra": "(user.department -eq \"Clinic Billing\")",
+            "why_not": null,
+            "into": [
+              "Clinic-Billing"
+            ]
+          }
+        ],
+        "sso7d": 0,
+        "entraPattern": "Non-gallery SAML enterprise app (same entity id + ACS) + claims mapping"
+      },
+      "entra": null,
+      "appTrusts": "okta"
+    },
+    {
+      "okta": {
+        "id": "0oa19mje0oyLEHh1U698",
+        "label": "Clinic Lab Results",
+        "signOnMode": "OPENID_CONNECT",
+        "protocol": "OIDC",
+        "status": "ACTIVE",
+        "hidden": false,
+        "groups": [
+          "Clinic-Staff"
+        ],
+        "userCount": 1,
+        "users": [
+          "test-user-b@contosohealthlab.com"
+        ],
+        "policy": "Clinic clinical apps",
+        "policyRules": [
+          {
+            "name": "Clinic staff: two factors, re-auth every 8h",
+            "priority": 1,
+            "status": "ACTIVE",
+            "access": "ALLOW",
+            "factorMode": "2FA",
+            "reauthenticateIn": "PT8H",
+            "constraints": [],
+            "groups": [
+              "Clinic-Billing",
+              "Clinic-Staff"
+            ]
+          },
+          {
+            "name": "Catch-all Rule",
+            "priority": 99,
+            "status": "ACTIVE",
+            "access": "DENY",
+            "factorMode": "2FA",
+            "reauthenticateIn": "PT12H",
+            "constraints": [
+              {
+                "possession": {
+                  "required": true,
+                  "deviceBound": "REQUIRED",
+                  "phishingResistant": "REQUIRED",
+                  "userPresence": "REQUIRED"
+                }
+              }
+            ],
+            "groups": []
+          }
+        ],
+        "samlAttributes": [],
+        "groupRules": [
+          {
+            "name": "Clinic staff by login domain",
+            "status": "ACTIVE",
+            "okta": "String.substringAfter(user.login, \"@\") == \"contosohealthlab.com\"",
+            "entra": "(user.userPrincipalName -endsWith \"@contosohealthlab.com\")",
+            "why_not": null,
+            "into": [
+              "Clinic-Staff"
+            ]
+          }
+        ],
+        "sso7d": 1,
+        "entraPattern": "App registration (same client type and redirect URIs) + enterprise app"
+      },
+      "entra": null,
+      "appTrusts": "okta"
+    }
+  ],
+  "admins": [
+    {
+      "login": "okta@ContosoHealthLab.onmicrosoft.com",
+      "roles": [
+        "SUPER_ADMIN"
+      ],
+      "factors": [
+        "signed_nonce",
+        "token:software:totp"
+      ],
+      "phishing_resistant": true
+    }
+  ],
+  "accessPolicyRules": [
+    {
+      "policy": "Any two factors",
+      "rule": "Catch-all Rule",
+      "priority": 99,
+      "demands_phishing_resistant": true,
+      "factorMode": "2FA",
+      "access": "ALLOW"
+    },
+    {
+      "policy": "Okta Admin Console",
+      "rule": "Admin App Policy",
+      "priority": 0,
+      "demands_phishing_resistant": false,
+      "factorMode": "2FA",
+      "access": "ALLOW"
+    },
+    {
+      "policy": "Okta Admin Console",
+      "rule": "Catch-all Rule",
+      "priority": 99,
+      "demands_phishing_resistant": false,
+      "factorMode": "2FA",
+      "access": "ALLOW"
+    },
+    {
+      "policy": "Okta Dashboard",
+      "rule": "Catch-all Rule",
+      "priority": 99,
+      "demands_phishing_resistant": false,
+      "factorMode": "2FA",
+      "access": "ALLOW"
+    },
+    {
+      "policy": "Okta Browser Plugin",
+      "rule": "Catch-all Rule",
+      "priority": 99,
+      "demands_phishing_resistant": false,
+      "factorMode": "2FA",
+      "access": "ALLOW"
+    },
+    {
+      "policy": "Okta Account Management Policy",
+      "rule": "Password Expiry Rule",
+      "priority": 0,
+      "demands_phishing_resistant": false,
+      "factorMode": "1FA",
+      "access": "ALLOW"
+    },
+    {
+      "policy": "Okta Account Management Policy",
+      "rule": "Catch-all Rule",
+      "priority": 99,
+      "demands_phishing_resistant": false,
+      "factorMode": "2FA_If_Possible",
+      "access": "ALLOW"
+    },
+    {
+      "policy": "Okta OIN Submission Tester",
+      "rule": "Catch-all Rule",
+      "priority": 99,
+      "demands_phishing_resistant": false,
+      "factorMode": "1FA",
+      "access": "ALLOW"
+    },
+    {
+      "policy": "Clinic clinical apps",
+      "rule": "Clinic staff: two factors, re-auth every 8h",
+      "priority": 1,
+      "demands_phishing_resistant": false,
+      "factorMode": "2FA",
+      "access": "ALLOW"
+    },
+    {
+      "policy": "Clinic clinical apps",
+      "rule": "Catch-all Rule",
+      "priority": 99,
+      "demands_phishing_resistant": false,
+      "factorMode": "2FA",
+      "access": "DENY"
+    }
+  ]
+}

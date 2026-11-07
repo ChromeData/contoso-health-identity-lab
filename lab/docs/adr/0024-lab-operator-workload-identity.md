@@ -161,6 +161,12 @@ Two Graph application roles close the last two stated gaps in the demo:
   the Terraform body and refuses one that keeps access on silence without a
   reviewer and a fallback reviewer. `AccessReview.Read.All` stays too: the
   read-only report scripts check their Graph context for that exact name.
+- `Reports.Read.All` (added 2026-11-07): read the AD FS application migration
+  report (`GET /beta/reports/getRelyingPartyDetailedSummary`) as code, for
+  `lab/adfs`. It is the only application permission Microsoft Learn lists for
+  that call. It reads usage and sign-in summaries; nothing under `/reports`
+  writes. `tests/operator.tftest.hcl` pins that no other `Reports.*` role is
+  granted.
 
 No new reach: the operator was already Tier 0 (Consequences above), so it
 could have granted itself either role. Like every change here, both arrive
