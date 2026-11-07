@@ -59,7 +59,9 @@ try {
     page = await ctx.newPage();
     await page.goto(APP, { waitUntil: 'domcontentloaded' });
     await page.fill('#userNameInput', upn);
-    await page.fill('#passwordInput', passwordFor(upn));
+    const pw = passwordFor(upn);   // { service, value } or null (lib.mjs)
+    if (!pw) throw new Error(`no Keychain password for ${upn} (contoso-lab-pw-<local part>, account = UPN)`);
+    await page.fill('#passwordInput', pw.value);
     await Promise.all([page.waitForURL((u) => onApp({ url: () => u.toString() }), { timeout: 60000 }), page.click('#submitButton')]);
   } else if (idpUrl.includes('login.microsoftonline.com')) {
     const r = await signIn(upn, APP, { browser, headless: !headed, fresh: true, until: async (p) => onApp(p) });

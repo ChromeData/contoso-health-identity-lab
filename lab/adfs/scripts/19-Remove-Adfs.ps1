@@ -10,7 +10,9 @@
     sign-ins for the app for an agreed period". The script counts AD FS
     token-issuance audits (Security log, event 1200, source "AD FS Auditing")
     that name the relying party in the last -QuietHours hours. If there are
-    any, it stops, unless -Force yes. Before you decommission, the cutover is
+    any, it stops, unless -Force yes. It also stops when it cannot prove the
+    quiet period: no AD FS audit has ever been written (auditing is broken),
+    or the Security log does not reach back -QuietHours. Before you decommission, the cutover is
     done and nothing still uses AD FS.
 
     What -Apply yes removes, in this order:
@@ -67,6 +69,20 @@ try {
     if ($_.FullyQualifiedErrorId -notmatch 'NoMatchingEventsFound') { throw }
 }
 
+# An empty result is proof only if auditing WORKS and the log REACHES BACK far
+# enough. Otherwise "no events" may just mean "nothing was written" (the
+# gMSA lacks SeAuditPrivilege, 10-Install-Adfs.ps1 step 8) or "the log
+# rolled over". So: at least one AD FS token-issuance audit must exist at
+# all, and the oldest Security event must be older than the quiet window.
+$anyAudit = $null
+try {
+    $anyAudit = Get-WinEvent -FilterHashtable @{ LogName = 'Security'; ProviderName = 'AD FS Auditing'; Id = 1200 } -MaxEvents 1 -ErrorAction Stop
+} catch [System.Exception] {
+    if ($_.FullyQualifiedErrorId -notmatch 'NoMatchingEventsFound') { throw }
+}
+$oldest = (Get-WinEvent -LogName Security -Oldest -MaxEvents 1).TimeCreated
+$auditsProven = [bool]$anyAudit -and ($oldest -le $since)
+
 $inventory = [ordered]@{
     adfsService       = $adfs
     relyingParty      = $(if ($adfs) { [bool](Get-AdfsRelyingPartyTrust -Identifier $RpIdentifier) } else { $false })
@@ -74,11 +90,16 @@ $inventory = [ordered]@{
     dkmContainer      = [bool](Get-ADObject -Filter "DistinguishedName -eq '$dkm'" -ErrorAction SilentlyContinue)
     gmsa              = [bool](Get-ADServiceAccount -Filter "Name -eq '$GmsaName'")
     tokenIssuances    = $recent.Count
+    auditsWork        = [bool]$anyAudit
+    securityLogFrom   = $oldest.ToUniversalTime().ToString('o')
     quietWindowHours  = $QuietHours
 }
 Write-Step ("inventory: " + ($inventory | ConvertTo-Json -Compress))
 
 if (-not $doIt) { Write-Step 'report only (pass -Apply yes to decommission)'; return }
+if (-not $auditsProven -and $Force -ne 'yes') {
+    throw "Cannot prove the quiet period: AD FS audits found = $([bool]$anyAudit), Security log starts $oldest (window starts $since). Fix auditing (README step 3b) or wait, then re-run (or -Force yes)."
+}
 if ($recent.Count -gt 0 -and $Force -ne 'yes') {
     throw "AD FS issued $($recent.Count) token(s) for $RpIdentifier in the last $QuietHours h. The app still uses AD FS: finish the cutover first (or -Force yes)."
 }

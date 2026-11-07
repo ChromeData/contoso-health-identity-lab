@@ -107,12 +107,12 @@ The E5 trial ends about 2026-11-26. Steps 2 to 6 feed the readiness report, so d
    `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/11-Add-ClaimsViewerRp.ps1 --param DomainName=corp.contosohealthlab.com --param UpnSuffix=contosohealthlab.com --param "RulesText=$(cat lab/adfs/claims-viewer.rules.txt)" --secret PilotPassword=keychain:contoso-lab-pw-adfs-pilot`
 5. Install the Connect Health agent: `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/12-Install-ConnectHealthAgent.ps1`. Then decision 2: the person registers it.
 6. Make sign-in traffic and the "before" claims:
-   `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/13-Get-AdfsClaims.ps1 --param FederationServiceName=sts.corp.contosohealthlab.com --param UserName=adfs-pilot@contosohealthlab.com --param Count=5 --secret UserPassword=keychain:contoso-lab-pw-adfs-pilot > before-adfs.json`
+   `lab/scripts/dc/run-on-dc.py lab/adfs/scripts/13-Get-AdfsClaims.ps1 --param FederationServiceName=sts.corp.contosohealthlab.com --param UserName=adfs-pilot@contosohealthlab.com --param Count=5 --secret UserPassword=keychain:contoso-lab-pw-adfs-pilot | sed -n '/^{/,/^}/p' > before-adfs.json` (run-on-dc.py prints a start and an end line around the script's JSON; `sed` keeps the JSON only). Check it: `python3 -m json.tool before-adfs.json`.
    Open Entra > Enterprise apps > Usage & insights > **AD FS application migration**. Record the status and the claim-rule findings. Microsoft notes that changes can take up to 24 hours to show.
 7. PR: `enable_adfs_https = true`. After its apply: `claims-viewer/fetch-metadata.sh pin` (ADFS_IP = DC01's public IP), then `fetch-metadata.sh adfs`, `cutover.sh adfs`, and `node lab/adfs/compare/capture.mjs adfs-pilot@contosohealthlab.com before.json` (browser, through the app).
 8. PR: `enable_claims_viewer_app = true` with the two group object ids. After its apply: run the output `claims_viewer_saml_signing_cert_activation_command`, then `enroll.mjs adfs-pilot@contosohealthlab.com` (authenticator for Entra MFA).
 9. **Cutover and proof:** `fetch-metadata.sh entra` (TENANT_ID, CLIENT_ID), `cutover.sh entra`, `capture.mjs … after.json`, `python3 lab/adfs/compare/compare_claims.py before.json after.json`. It must print `"same": true`. **Roll-back** at any point: `cutover.sh adfs` (the AD FS relying party is still there).
-10. **Decommission** after the quiet period: `19-Remove-Adfs.ps1 -DomainName … -QuietHours 24` (report), then `-Apply yes`. Undo step 3b. PR: `enable_adfs_https = false`. The Entra app stays: it is now the app's only IdP.
+10. **Decommission** after the quiet period: `19-Remove-Adfs.ps1 -DomainName … -QuietHours 24` (report), then `-Apply yes`. Undo step 3b. PR: `enable_adfs_https = false` only. `enable_claims_viewer_app` stays true: the Entra app is now the app's only IdP.
 
 ## Safety notes
 
