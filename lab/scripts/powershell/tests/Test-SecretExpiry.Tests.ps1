@@ -61,3 +61,27 @@ Describe 'Test-SecretExpiry.ps1' {
         $LASTEXITCODE | Should -Be 0
     }
 }
+
+Describe 'rotate-aws-scim-token.md step 3 (the token never shows or goes into argv)' {
+    BeforeAll {
+        $script:Runbook = Get-Content -Raw -LiteralPath ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' '..' 'docs' 'runbooks' 'rotate-aws-scim-token.md')))
+        $script:SetLines = @($script:Runbook -split "`n" | Where-Object { $_ -match '^\s*(printf .*\| *)?az keyvault secret set ' })
+    }
+
+    It 'reads the token with a hidden prompt' {
+        $script:Runbook | Should -Match "read -rs 'tok\?"
+    }
+
+    It 'every secret-set command reads stdin and prints nothing' {
+        $script:SetLines.Count | Should -BeGreaterThan 0
+        foreach ($l in $script:SetLines) {
+            $l | Should -Match '--file /dev/stdin'
+            $l | Should -Match '--output none'
+            $l | Should -Not -Match '--value'
+        }
+    }
+
+    It 'clears the shell variable after the write' {
+        $script:Runbook | Should -Match '(?m)^\s*unset tok\s*$'
+    }
+}

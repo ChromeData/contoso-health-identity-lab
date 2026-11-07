@@ -36,11 +36,22 @@
    working until step 7. Copy the token straight into the next step. Never
    paste it into a terminal command line, a chat or a file.
 3. **Store it in Key Vault** as a new version of `aws-scim-token`, with an
-   expiry one year out, so Key Vault also knows the date:
-   `az keyvault secret set --vault-name kv-idlab-20f1 --name aws-scim-token --file /dev/stdin --expires <YYYY-MM-DDT00:00:00Z>`,
-   then paste the token and press Ctrl-D. `--file /dev/stdin` keeps the value
-   out of argv and shell history. Use a Secrets Officer session, not the
-   operator.
+   expiry one year out, so Key Vault also knows the date. Use a Secrets
+   Officer session, not the operator. Run these three commands in zsh:
+
+   ```zsh
+   read -rs 'tok?SCIM token (hidden): '; echo
+   printf '%s' "$tok" | az keyvault secret set --vault-name kv-idlab-20f1 --name aws-scim-token --file /dev/stdin --expires <YYYY-MM-DDT00:00:00Z> --output none
+   unset tok
+   ```
+
+   - `read -rs` turns off terminal echo, so the token is not shown on the
+     screen, in scrollback or in a session recording.
+   - `printf '%s'` is a shell builtin. It sends the exact value, with no
+     added newline, to stdin. The value never goes into argv or shell history.
+   - `--output none` stops the CLI from printing the saved secret. Without it,
+     `az keyvault secret set` prints the secret's `value`.
+   - `unset tok` removes the value from the shell.
 4. **Write it to Entra** with the seeding apply that modules/apps documents
    (`lab/terraform/modules/apps/README.md`, "SCIM credential", step 6):
    export `TF_VAR_aws_scim_credentials` from Key Vault for this run only, then
