@@ -1,0 +1,15 @@
+{
+  "result": "PASS",
+  "idp": "okta",
+  "staging": false,
+  "app": "Clinic Lab Results",
+  "user": "test-user-b@contosohealthlab.com",
+  "issuer": "https://integrator-8288815.okta.com",
+  "amr": [
+    "mfa",
+    "pwd"
+  ],
+  "at": "2026-11-07T01:16:10Z",
+  "seconds": 19,
+  "banner": "Signed in as test-user-b@contosohealthlab.com through Okta"
+}

@@ -99,6 +99,13 @@ enterprise app. The flow is the same.
 
 ## Phase 2 — Move applications one at a time
 
+**Status:** the clinic's three apps, their authentication policy and group
+rules are **RAN · tenant** in the Okta org (E115). Wave 1 (*Clinic Lab
+Results*, OIDC) is pre-staged in Entra as code (PR #219: app, group, CA061)
+and its cut-over is scripted with a timed rollback:
+[`lab/okta-migration/`](../okta-migration/README.md). The tracker there is
+generated from the Okta API and Graph.
+
 Per app (repeat for each wave):
 
 | Step | Action | Rollback |

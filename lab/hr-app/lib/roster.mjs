@@ -107,6 +107,20 @@ function checkManager(workers, manager, self) {
   if (!m) throw new HrError('The manager is not on the roster.');
   if (m.status === 'leaver') throw new HrError('The manager has left the organisation.');
   if (manager === self) throw new HrError('A worker cannot be their own manager.');
+  // No reporting loops: walk up from the proposed manager. If the chain
+  // reaches this worker (Marcus managing his own manager Grace), refuse.
+  if (!self) return;
+  const byId = new Map(workers.map((w) => [w.employeeId, w]));
+  const seen = new Set();
+  for (let cur = byId.get(manager); cur && cur.manager && !seen.has(cur.employeeId); cur = byId.get(cur.manager)) {
+    seen.add(cur.employeeId);
+    if (cur.manager === self) throw new HrError(`${m.givenName} ${m.surname} reports to this worker (directly or further down), so cannot be their manager.`);
+  }
+}
+
+// The local part of the userName the sender builds (given.surname, lowercased).
+export function accountName(givenName, surname) {
+  return `${givenName}.${surname}`.toLowerCase();
 }
 
 // HIRE. HR gives name, job, department, manager, start date. The HR app
@@ -125,6 +139,18 @@ export function hire(roster, input, catalogue) {
   checkManager(roster.workers, manager, null);
   const dupe = roster.workers.find((w) => w.status !== 'leaver' && w.givenName.toLowerCase() === givenName.toLowerCase() && w.surname.toLowerCase() === surname.toLowerCase());
   if (dupe) throw new HrError(`${givenName} ${surname} already works here. Change their record instead.`, 409);
+  // The directory account name. Invoke-InboundProvisioning.ps1 builds the
+  // userName as given.surname, lowercased: no employee number in it. So two
+  // different splits ("Alex.J Kim" / "Alex J.Kim") or a leaver whose disabled
+  // account still sits in AD would give two workers ONE account name, and the
+  // second hire could never get its own account. Check every worker on the
+  // roster, leavers included; refuse a space (an invalid UPN).
+  const account = accountName(givenName, surname);
+  if (/\s/.test(account)) throw new HrError('Names with a space cannot make a directory account name. Use a hyphen (for example Mary-Ann).');
+  const clash = roster.workers.find((w) => accountName(w.givenName, w.surname) === account);
+  if (clash) {
+    throw new HrError(`The account name ${account} already belongs to ${clash.givenName} ${clash.surname} (${clash.status === 'leaver' ? 'a leaver whose account still exists' : 'a current worker'}). Ask IT for a different account name before hiring.`, 409);
+  }
   const employeeId = nextEmployeeId(roster.workers, dept, jobTitle);
   const worker = { employeeId, givenName, surname, dept, jobTitle, manager, status: 'joiner', startDate, endDate: '' };
   return { roster: { ...roster, workers: [...roster.workers, worker] }, worker, kind: 'hired' };
@@ -132,7 +158,7 @@ export function hire(roster, input, catalogue) {
 
 // CHANGE. New job / department / manager (a mover), or status -> leaver with
 // an end date, or a leaver back to active (a rehire on the same number).
-export function change(roster, employeeId, input, catalogue) {
+export function change(roster, employeeId, input, catalogue, today = new Date().toLocaleDateString('en-CA')) {
   const idx = roster.workers.findIndex((w) => w.employeeId === employeeId);
   if (idx < 0) throw new HrError('No worker with that employee number.', 404);
   const before = roster.workers[idx];
@@ -155,6 +181,12 @@ export function change(roster, employeeId, input, catalogue) {
   if (status === 'leaver') {
     after.endDate = clean(input.endDate) || before.endDate;
     checkDate(after.endDate, 'Last working day');
+    // Leaver means "switch the account off now": the sender sends active:false
+    // at once and does not read endDate. A future last day would cut a worker
+    // off while still working, so it is refused until that day.
+    if (before.status !== 'leaver' && after.endDate > today) {
+      throw new HrError(`Leaver switches the account off now. Record ${before.givenName} ${before.surname} as a leaver on their last working day (${after.endDate}), not before.`);
+    }
     if (after.endDate < after.startDate) throw new HrError('The last working day is before the start date.');
     const reports = roster.workers.filter((w) => w.manager === employeeId && w.status !== 'leaver');
     if (reports.length && before.status !== 'leaver') {

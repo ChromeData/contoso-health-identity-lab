@@ -73,7 +73,12 @@ export class GitHubStore {
     const r = JSON.parse(out).workflow_runs?.[0];
     if (!r) return { state: 'queued' };
     if (r.status !== 'completed') return { state: 'sending', run: r.html_url };
-    return { state: r.conclusion === 'success' ? 'delivered' : 'failed', run: r.html_url, finishedAt: r.updated_at };
+    // A green run means Microsoft accepted the change (202) and logged no
+    // failure while the run waited. It does NOT mean Microsoft confirmed it:
+    // Write-HrFeedSummary.ps1 stays green when the provisioning log is not
+    // readable or has no entry yet. So the state is 'accepted', never
+    // 'delivered'; the confirmation is IT's to read in the provisioning log.
+    return { state: r.conclusion === 'success' ? 'accepted' : 'failed', run: r.html_url, finishedAt: r.updated_at };
   }
 }
 

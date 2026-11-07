@@ -33,7 +33,10 @@ SuccessFactors. HR can do three things:
 
 - **Hire:** first name, last name, department, job, manager, start date.
 - **Change:** a new department, job or manager (a mover).
-- **Leave:** set the status to Leaver and give the last working day.
+- **Leave:** set the status to Leaver and give the last working day. The
+  day must be today or earlier, because the sender switches the account
+  off at once and does not read the date. Scheduling a future leaver is
+  not built here.
 
 The department and job come from a list: the jobs IT has access rules for
 (`lab/iga/birthright-rules.json`) plus the jobs already on the roster. A real
@@ -47,6 +50,14 @@ in the worker's range. The roster already uses these ranges: 100xxx staff,
 400103 (Mei Tanaka), so the next IT hire gets **400104**. This answers the
 owner's question about where 400104 came from. Before this change, a person
 typed it in the README's example row. Now the HR system issues it.
+
+**The account name must be free.** The sender builds the directory account
+name from the name alone (`first.last`, lowercased), not from the number.
+So the form refuses a hire whose account name is already taken by anyone on
+the roster. That includes a leaver, whose disabled AD account still exists,
+and a different split of the same letters ("Alex.J Kim" and "Alex J.Kim").
+It also refuses a space in a name (an invalid account name): HR uses a
+hyphen. In production, IT would issue a unique account name instead.
 
 A real HRIS never reuses a number. In the lab a number can come back only
 when the retake reset (`reset-demo-hire.sh`) deletes a demo row on purpose.
@@ -95,8 +106,12 @@ would also let IT create and disable workers with no HR record. That is the
 segregation-of-duties gap a hospital auditor looks for.
 
 **What HR sees.** HR never sees GitHub or the file. HR sees "Saved", then
-"Sending to IT systems", then "Delivered to IT systems at 7:50:43 PM" (from
-the `hr-feed` push run's result). If Microsoft logs a failure, the run turns red,
+"Sending to IT systems", then "Accepted by IT systems at 7:50:43 PM" (from
+the `hr-feed` push run's result). "Accepted" is deliberate: a green run
+means Microsoft answered 202 and logged no failure while the run waited
+(up to its wait limit). It is not Microsoft's confirmation; the
+provisioning log is, and IT reads it. The measured run below still showed
+the earlier word, "Delivered". If Microsoft logs a failure, the run turns red,
 and the form says "Not delivered. IT has the details and will contact HR."
 
 **The roster file is the HR app's database table.** The file stays
@@ -122,7 +137,7 @@ employee number 100493. Times are UTC. "+" counts from HR's click.
 | 00:45:40 | 0:44 | Provisioning log: created in on-premises AD |
 | 00:48:15 | 3:19 | Cloud Sync: Entra user created, enabled |
 | 00:49:32 | 4:36 | Dynamic groups: All-Nurses and the nurse auto-assignment group |
-| 00:50:43 | 5:47 | The form shows "Delivered" (the run waits for the provisioning log, which appeared about 4 minutes after the event) |
+| 00:50:43 | 5:47 | The form shows "Delivered", now worded "Accepted" (the run waits for the provisioning log, which appeared about 4 minutes after the event) |
 | 01:10:33 | 25:37 | The joiner Lifecycle Workflow runs: account enabled, a Temporary Access Pass added, package requested (01:11:01). Its "email the TAP to the manager" task **failed**: the manager has no mail attribute (a lab gap, not caused by this change) |
 | 01:15:07 | 30:11 | "Nurse - Clinical Apps" delivered: App-AWS-IdentityCenter-Users and App-ServiceNow-Users |
 | 01:15:20 | 30:24 | AWS IAM Identity Center: user created (SCIM) |
@@ -145,7 +160,7 @@ the HR send.
 | 01:33:14 | 7:10 | AD account disabled |
 | 01:34:00 | 7:56 | Cloud Sync: Entra "Account enabled: No" |
 | 01:34:26 | 8:22 | Removed from All-Nurses and the auto-assignment group |
-| 01:39:03 | 12:59 | The form's status for this save reads "delivered" |
+| 01:39:03 | 12:59 | The form's status for this save reads "delivered" (now "accepted") |
 | 01:37:10 | 11:06 | ServiceNow: user disabled |
 | 01:55:21 | 29:17 | AWS: user disabled (SCIM) |
 

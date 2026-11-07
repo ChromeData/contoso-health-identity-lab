@@ -118,7 +118,7 @@ export function makeApp({ store, rules, today = () => new Date().toLocaleDateStr
         }
         const w = url.pathname.match(/^\/api\/workers\/(\d{6})$/);
         if (w) {
-          const r = await save((roster, cat) => change(roster, w[1], input, cat));
+          const r = await save((roster, cat) => change(roster, w[1], input, cat, today()));
           return send(res, 200, { worker: publicWorker(r.worker), kind: r.kind, commit: r.commit, savedAt: r.savedAt });
         }
       }
