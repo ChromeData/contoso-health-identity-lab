@@ -1,10 +1,10 @@
 # Okta -> Entra app migration tracker
 
-Generated 2026-11-07T01:16:38Z by `node lab/okta-migration/inventory.mjs` from the Okta API and Microsoft Graph. Do not edit by hand: re-run the script.
+Generated 2026-11-07T02:40:28Z by `node lab/okta-migration/inventory.mjs` from the Okta API and Microsoft Graph. Do not edit by hand: re-run the script.
 
 | app | owner | protocol | users | wave | status | test_result |
 |---|---|---|---|---|---|---|
-| Clinic Lab Results | Clinic lab manager (business) / Clinic IT lead (technical) | OIDC | 1 | 1 | inventoried | PASS okta 2026-11-07T01:16:10Z |
+| Clinic Lab Results | Clinic lab manager (business) / Clinic IT lead (technical) | OIDC | 1 | 1 | inventoried | PASS okta 2026-11-07T02:40:03Z |
 | Clinic Billing | Clinic revenue-cycle manager | SAML 2.0 | 0 | 2 | inventoried | not tested |
 | Clinic Scheduling (legacy) | Clinic operations manager | Bookmark | 1 | 2 | inventoried | not tested |
 
@@ -12,7 +12,7 @@ Generated 2026-11-07T01:16:38Z by `node lab/okta-migration/inventory.mjs` from t
 
 ### Clinic Lab Results
 
-- Okta: app `0oa19mje0oyLEHh1U698`, groups Clinic-Staff, authentication policy *Clinic clinical apps*, SSO events in the last 7 days: 1
+- Okta: app `0oa19mje0oyLEHh1U698`, groups Clinic-Staff, authentication policy *Clinic clinical apps*, SSO events in the last 7 days: 2
 - Entra: not built yet
 - Next: pre-stage the Entra app (PR), owner sign-off
 

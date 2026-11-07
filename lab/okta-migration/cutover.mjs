@@ -40,7 +40,7 @@ import { execFileSync } from 'node:child_process';
 import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
-import { HERE, REPO, OKTA_ROOT, okta, nowIso, graphAll } from './lib.mjs';
+import { HERE, REPO, OKTA_ROOT, okta, nowIso, graphAll, checkSwitchTarget } from './lib.mjs';
 import { CONF, CONF_DIR, readConf, serve } from './clinic-results/app.mjs';
 import { graph } from '../scripts/demo/signin/lib.mjs';
 
@@ -148,6 +148,7 @@ async function prestage() {
   const p = plan();
   const e = entraApp(p.entra_app);
   const prev = fs.existsSync(CONF) ? JSON.parse(fs.readFileSync(CONF, 'utf8')) : null;
+  checkSwitchTarget(appLabel, prev);
   const blocks = idpBlocks({ org: o.org, oktaClientId: a.credentials.oauthClient.client_id, entra: e && e.sp ? e : null });
   const conf = { app: appLabel, active: prev?.active || 'okta', ...blocks, history: prev?.history || [] };
   if (conf.active === 'entra' && !conf.entra) throw new Error('config says entra is active but the Entra app is gone: run rollback');
@@ -162,6 +163,7 @@ async function prestage() {
 async function test({ idp, as }) {
   if (!(await portFree())) throw new Error('port 8471 is in use (app.mjs running?): stop it first');
   const conf = readConf();
+  checkSwitchTarget(appLabel, conf);
   const want = idp || conf.active;
   if (!conf[want]) throw new Error(`no ${want} block in the config: run prestage`);
   const upn = as || plan().pilot[0];
@@ -183,7 +185,7 @@ async function test({ idp, as }) {
     const s = await signIn(upn, 'http://localhost:8471/login', {
       headless: true, fresh: true,
       until: async (pg) => /^http:\/\/localhost:8471\/$/.test(pg.url()) && /Signed in as/.test(await pg.content()),
-      landing: { url: /^http:\/\/localhost:8471\//, text: /Signed in as/, denied: /Sign-in refused by the IdP|HTTP 4\d\d|not the trusted|does not verify|unknown state/ },
+      landing: { url: /^http:\/\/localhost:8471\//, text: /Signed in as/, denied: /Sign-in refused|HTTP 4\d\d|not the trusted|does not verify|unknown state/ },
     });
     const text = await s.page.innerText('body').catch(() => '');
     await s.close();
@@ -225,6 +227,7 @@ async function switchTo(target) {
   const emergency = target === 'okta' && args.includes('--emergency');
   if (p.cutover !== wantCutover && !emergency) throw new Error(`waves.json says cutover = ${p.cutover} for "${appLabel}": set it to ${wantCutover} first (the reviewed change), then run ${cmd} again${target === 'okta' ? ' - or, in an incident, rollback --emergency' : ''}`);
   const conf = readConf();
+  checkSwitchTarget(appLabel, conf);
   if (!conf.entra) throw new Error('no Entra block in the config: run prestage after the Entra PR is applied');
   if (!(await portFree())) throw new Error('port 8471 is in use (app.mjs running?): stop it first - nothing was changed');
   if (conf.active === target) log(`the app already trusts ${target}`);

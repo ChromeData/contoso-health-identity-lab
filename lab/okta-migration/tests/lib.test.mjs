@@ -5,9 +5,9 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import {
   oktaElToEntra, protocolOf, isClinicApp, statusOf, buildRow, toCsv, toMarkdown, toHtml,
-  systemLogFilter, entraSigninKql, okta, graphAll,
+  systemLogFilter, entraSigninKql, okta, graphAll, checkSwitchTarget, latestTest,
 } from '../lib.mjs';
-import { verifyIdToken, authorizeUrl, pkcePair, signinRecord, page } from '../clinic-results/app.mjs';
+import { verifyIdToken, authorizeUrl, pkcePair, signinRecord, page, checkCallback } from '../clinic-results/app.mjs';
 
 test('the clinic login-domain rule translates to an endsWith on the UPN', () => {
   assert.deepEqual(oktaElToEntra('String.substringAfter(user.login, "@") == "contosohealthlab.com"'), { rule: '(user.userPrincipalName -endsWith "@contosohealthlab.com")' });
@@ -143,4 +143,35 @@ test('Graph lists follow every nextLink page, and refuse an endless one', () => 
   const pages = { a: { value: [1, 2], '@odata.nextLink': 'b' }, b: { value: [3], '@odata.nextLink': 'c' }, c: { value: [] } };
   assert.deepEqual(graphAll((m, u) => pages[u], 'a'), [1, 2, 3]);
   assert.throws(() => graphAll(() => ({ value: [1], '@odata.nextLink': 'x' }), 'x', 3), /more than 3 pages/);
+});
+
+test('a cut-over or rollback touches only the app it has tooling for, with its own config', () => {
+  assert.doesNotThrow(() => checkSwitchTarget('Clinic Lab Results', { app: 'Clinic Lab Results' }));
+  assert.doesNotThrow(() => checkSwitchTarget('Clinic Lab Results', null));
+  // Greptile #222: rollback --app "Clinic Billing" must not switch Lab Results.
+  assert.throws(() => checkSwitchTarget('Clinic Billing', { app: 'Clinic Lab Results' }), /no cut-over tooling.*nothing was changed/);
+  assert.throws(() => checkSwitchTarget('Clinic Lab Results', { app: 'Clinic Billing' }), /config is for "Clinic Billing".*nothing was changed/);
+});
+
+test('the tracker shows the latest test, so a failed pilot is never hidden', () => {
+  const rs = [
+    { app: 'A', result: 'PASS', idp: 'okta', staging: false, at: '2026-11-07T00:59:08Z' },
+    { app: 'A', result: 'FAIL', idp: 'entra', staging: true, at: '2026-11-07T02:00:00Z' },
+    { app: 'B', result: 'PASS', idp: 'okta', staging: false, at: '2026-11-07T03:00:00Z' },
+  ];
+  const t = latestTest(rs, 'A');
+  assert.equal(t.result, 'FAIL');
+  const row = buildRow({ app: { id: '0oaAAAAAAAAAAAAAAAAA', label: 'A', signOnMode: 'OPENID_CONNECT' }, plan: {}, okta: { status: 'ACTIVE', userCount: 1, groups: [], policy: '' }, entra: null, appTrusts: 'okta', test: t });
+  assert.equal(row.test_result, 'FAIL entra (staging) 2026-11-07T02:00:00Z');
+  assert.equal(latestTest(rs, 'C'), null);
+});
+
+test('a callback is accepted only from the browser that started the login, for the IdP trusted now', () => {
+  const p = { verifier: 'v', nonce: 'n', idp: 'entra', t: Date.now(), browser: 'cookie-abc' };
+  assert.deepEqual(checkCallback(p, 'cookie-abc', 'entra'), { ok: true });
+  assert.match(checkCallback(p, 'cookie-xyz', 'entra').why, /another browser/);
+  assert.match(checkCallback(p, undefined, 'entra').why, /another browser/);
+  assert.equal(checkCallback(p, 'cookie-abc', 'okta').code, 409);
+  assert.match(checkCallback(undefined, 'cookie-abc', 'entra').why, /unknown or used state/);
+  assert.match(checkCallback({ ...p, t: Date.now() - 11 * 60 * 1000 }, 'cookie-abc', 'entra').why, /10 minutes/);
 });

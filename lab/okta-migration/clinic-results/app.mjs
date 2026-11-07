@@ -93,6 +93,18 @@ export function signinRecord(idpName, claims, at = new Date()) {
   };
 }
 
+// Is this callback the end of a login THIS browser started, with the IdP the
+// app trusts now? The login cookie (cr_login, HttpOnly, set by /login) must
+// match the one stored with the state: a callback URL carried to another
+// browser is refused before the code is exchanged. Pure: unit-tested.
+export function checkCallback(pendingEntry, loginCookie, active) {
+  if (!pendingEntry) return { ok: false, code: 400, why: 'unknown or used state' };
+  if (!loginCookie || !pendingEntry.browser || !crypto.timingSafeEqual(Buffer.from(String(loginCookie).padEnd(64).slice(0, 64)), Buffer.from(String(pendingEntry.browser).padEnd(64).slice(0, 64)))) return { ok: false, code: 400, why: 'this sign-in was started in another browser' };
+  if (pendingEntry.idp !== active) return { ok: false, code: 409, why: `the app now trusts ${active}; this sign-in was started with ${pendingEntry.idp}` };
+  if (Date.now() - pendingEntry.t > 10 * 60 * 1000) return { ok: false, code: 400, why: 'sign-in took longer than 10 minutes' };
+  return { ok: true };
+}
+
 export function readConf(file = CONF) {
   if (!fs.existsSync(file)) throw new Error(`no IdP config at ${file}: run node lab/okta-migration/cutover.mjs prestage`);
   const c = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -143,17 +155,17 @@ export function serve({ port = PORT, conf = CONF } = {}) {
       if (url.pathname === '/login') {
         const { verifier, challenge } = pkcePair();
         const state = b64u(crypto.randomBytes(16)); const nonce = b64u(crypto.randomBytes(16));
-        pending.set(state, { verifier, nonce, idp: c.active, t: Date.now() });
-        return send(302, '', { location: authorizeUrl(c[c.active], { state, nonce, challenge, redirect: `http://localhost:${port}/callback` }) });
+        const browser = b64u(crypto.randomBytes(24));
+        pending.set(state, { verifier, nonce, idp: c.active, t: Date.now(), browser });
+        return send(302, '', { location: authorizeUrl(c[c.active], { state, nonce, challenge, redirect: `http://localhost:${port}/callback` }), 'set-cookie': `cr_login=${browser}; HttpOnly; SameSite=Lax; Path=/callback; Max-Age=600` });
       }
       if (url.pathname === '/callback') {
         if (url.searchParams.get('error')) return send(400, `<p>Sign-in refused by the IdP: ${esc(url.searchParams.get('error'))}: ${esc(url.searchParams.get('error_description') || '')}</p>`);
         const p = pending.get(url.searchParams.get('state'));
-        if (!p) return send(400, 'unknown state');
-        pending.delete(url.searchParams.get('state'));
-        // A sign-in started before a cut-over (or rollback) must not finish
-        // against the IdP the app no longer trusts: start again.
-        if (p.idp !== c.active) return send(409, `<p>The app now trusts ${esc(c.active)}; this sign-in was started with ${esc(p.idp)}. <a href="/login">Sign in again</a>.</p>`);
+        const loginCookie = (req.headers.cookie || '').match(/(?:^|;\s*)cr_login=([A-Za-z0-9_-]+)/)?.[1];
+        const chk = checkCallback(p, loginCookie, c.active);
+        if (p) pending.delete(url.searchParams.get('state'));
+        if (!chk.ok) return send(chk.code, `<p>Sign-in refused: ${esc(chk.why)}. <a href="/login">Sign in again</a>.</p>`);
         const idp = c[p.idp];
         const tok = await getJson(idp.token_endpoint, {
           method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },

@@ -33,7 +33,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   HERE, okta, isClinicApp, protocolOf, entraTargetFor, oktaElToEntra, buildRow,
-  toCsv, toMarkdown, toHtml, systemLogFilter, nowIso, graphAll,
+  toCsv, toMarkdown, toHtml, systemLogFilter, nowIso, graphAll, latestTest,
 } from './lib.mjs';
 import { CONF } from './clinic-results/app.mjs';
 import { graph } from '../scripts/demo/signin/lib.mjs';
@@ -150,7 +150,7 @@ for (const item of inv) {
   item.entra = entra;
   const appTrusts = conf && conf.app === label ? conf.active : 'okta';
   item.appTrusts = appTrusts;
-  const test = results.filter((r) => r.app === label && !r.staging).pop() || results.filter((r) => r.app === label).pop() || null;
+  const test = latestTest(results, label);
   rows.push(buildRow({ app: item._app, plan, okta: item.okta, entra, appTrusts, test, oktaSso7d: item.okta.sso7d, entraSignins7d: entra ? entra.signins7d : null }));
   delete item._app;
 }

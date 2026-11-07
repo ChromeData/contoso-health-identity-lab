@@ -217,7 +217,7 @@ export function buildRow({ app, plan = {}, okta, entra, appTrusts, test, oktaSso
     users: okta ? okta.userCount : 0,
     wave: plan.wave ?? '',
     status,
-    test_result: test ? `${test.result} ${test.idp} ${test.at}` : (status === 'inventoried' ? 'not tested' : 'not tested yet'),
+    test_result: test ? `${test.result} ${test.idp}${test.staging ? ' (staging)' : ''} ${test.at}` : (status === 'inventoried' ? 'not tested' : 'not tested yet'),
     okta_app_id: app.id,
     okta_groups: okta ? okta.groups.join('; ') : '',
     okta_policy: okta ? okta.policy : '',
@@ -297,6 +297,22 @@ ${body}
 ${extraHtml}
 </body></html>
 `;
+}
+
+// ---- Which app a cut-over may touch ---------------------------------------------
+// cutover.mjs applies ONE Okta resource (okta_app_oauth.clinic_results) and
+// edits ONE app config. Any other --app, or a config written for another
+// app, is refused before anything changes.
+export const SWITCHABLE_APPS = ['Clinic Lab Results'];
+export function checkSwitchTarget(appLabel, conf) {
+  if (!SWITCHABLE_APPS.includes(appLabel)) throw new Error(`"${appLabel}" has no cut-over tooling yet (only ${SWITCHABLE_APPS.join(', ')}): nothing was changed`);
+  if (conf && conf.app !== appLabel) throw new Error(`the app config is for "${conf.app}", not "${appLabel}": nothing was changed`);
+}
+
+// The test result a tracker row shows: the LATEST one for the app, staging
+// or not, so a failed pilot is never hidden behind an older production PASS.
+export function latestTest(results, app) {
+  return results.filter((r) => r.app === app).sort((a, b) => String(a.at).localeCompare(String(b.at))).pop() || null;
 }
 
 // ---- System Log ---------------------------------------------------------------
