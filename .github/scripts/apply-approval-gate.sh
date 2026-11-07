@@ -38,6 +38,14 @@
 # workflow file, so removing it takes a merged (reviewed) pull request, while
 # an Environment reviewer cannot be removed by code at all.
 #
+# GATE_MODE=check (used by terraform-apply.yml since the repo is public): do
+# every check above (author / merger / bot separation, PR change-set compare)
+# and write the plan the owner must read to the job summary, then exit
+# 0 (checks passed) or 1 (refused). No issue is opened and nothing waits: the
+# approval itself is GitHub's Environment "production" (required reviewer
+# ChromeData, "Prevent self-review" on), the "Review deployments" button.
+# GATE_MODE unset = the issue gate below (the private-repo fallback).
+#
 # Env: GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_SHA,
 #      GITHUB_SERVER_URL, GITHUB_REPOSITORY_OWNER, GITHUB_EVENT_NAME (Actions)
 #      PLAN_SHA256                sha256 of the saved tfplan (required)
@@ -160,7 +168,14 @@ else
   changes_block=$(printf '```text\n%s\n```' "$(cap 20000 "$PLAN_CHANGESET_FILE")")
 fi
 
-if [ "$mismatch" = "true" ]; then
+if [ "${GATE_MODE:-}" = "check" ] && [ "$mismatch" != "true" ]; then
+  decision_text=$(cat <<EOF
+This is the plan the owner approves. After approval the apply job plans again, and applies only if the full fingerprint of that plan (resources, actions and values) equals this one.
+
+To approve: open the run page, click **Review deployments**, read this summary, tick **production**, click **Approve and deploy**. Only the required reviewer can approve. "Prevent self-review" is on, so the account that started this run cannot approve it.
+EOF
+)
+elif [ "$mismatch" = "true" ]; then
   decision_text="**The apply is refused** because the saved plan differs from the reviewed PR plan. Nothing was applied."
 else
   decision_text=$(cat <<EOF
@@ -183,7 +198,7 @@ The **terraform apply** of \`$short\` to **prod** is waiting for a human decisio
 - Approver must be: $who
 - $separation_line
 - Run: $run_url
-- Saved plan sha256: \`$PLAN_SHA256\`
+- ${PLAN_LABEL:-Saved plan sha256}: \`$PLAN_SHA256\`
 - Resources changed: $n_changes
 
 $compare_line
@@ -199,6 +214,20 @@ $changes_block
 $decision_text
 EOF
 )
+
+if [ "${GATE_MODE:-}" = "check" ]; then
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    printf '## Plan for owner review\n\n%s\n' "$body" >> "$GITHUB_STEP_SUMMARY"
+  else
+    printf '%s\n' "$body"
+  fi
+  if [ "$mismatch" = "true" ]; then
+    echo "Refused: the saved plan's change set differs from PR #$pr_number's plan comment"
+    exit 1
+  fi
+  echo "::notice title=Review deployments::Read the summary of job 'plan for review', then Review deployments, tick production, Approve and deploy"
+  exit 0
+fi
 
 issue_url=$(gh issue create -R "$REPO" --title "Approve: apply $short to prod" --body "$body")
 issue="${issue_url##*/}"

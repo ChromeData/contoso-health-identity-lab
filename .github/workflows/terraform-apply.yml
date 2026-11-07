@@ -4,17 +4,18 @@
 # Runs on push to main (i.e. after a PR is reviewed + merged), or on a manual
 # dispatch of main only. Applies the Terraform using the WRITE-capable APPLY
 # app registration over GitHub OIDC — again, NO stored credential. The job targets
-# the protected `prod` GitHub Environment. The human gate between "merged to
-# main" and "changed the live tenant" sits INSIDE the job, between the plan and
-# the apply (karen-review A2):
-#   1. terraform plan -out=tfplan (the saved plan; it stays on this runner)
-#   2. its sha256, change set and plain-English summary are computed
-#   3. the gate posts exactly that plan in an "Approve: apply" issue, compares
-#      its change set with the PR plan comment (refuses on a mismatch), and
-#      waits for the owner to type `approve <first 8 of the sha256>` by hand
-#   4. the job re-checks the tfplan sha256 and applies exactly that file
-# So the owner approves the plan that is applied, not a plan that does not
-# exist yet. An AI assistant never approves (the gate refuses such comments).
+# the `prod` GitHub Environment. The human gate between "merged to main" and
+# "changed the live tenant" is GitHub's Environment "production" (required
+# reviewer ChromeData, "Prevent self-review" on), on its own job (karen A1, A2):
+#   1. job plan: terraform plan of main, plain-English summary, change set and
+#      a fingerprint of every change (plan-fingerprint.py); checks (PR author,
+#      merger, bot separation, change set vs the PR plan comment)
+#   2. job approve: the run pauses; the owner clicks Review deployments, reads
+#      job 1's summary, ticks production, clicks Approve and deploy
+#   3. job terraform-apply: plans again and applies only a plan with the SAME
+#      fingerprint as the one reviewed (and reviewed under 60 minutes ago)
+# An AI assistant never approves. "Prevent self-review" stops the account that
+# started the run from approving it; the agents merge as the bot.
 #
 # Two-identity design (defence in depth):
 #   - PLAN app  -> read-only Graph/Azure, used on pull_request (plan only)
@@ -59,7 +60,7 @@ on:
       - "lab/iga/access-catalog.json"
       - "lab/scripts/powershell/post-apply/Set-AutoAssignmentPolicies.ps1"
       - ".github/workflows/terraform-apply.yml"
-  workflow_dispatch: {}        # manual, reviewer-gated re-apply of main only
+  workflow_dispatch: {}        # manual re-apply of main only; same production approval
 
 permissions:
   contents: read
@@ -149,37 +150,46 @@ env:
   TF_VAR_require_scim_credentials: "true"
 
 jobs:
-  # One job on purpose: plan, human gate, apply. The saved plan (tfplan) holds
-  # every variable value in clear text, so it never leaves this runner: no
-  # artifact upload, nothing for a second job to download. Splitting the gate
-  # into its own job would need that artifact (readable by anyone with repo
-  # read access for its retention period) or would let the apply re-plan,
-  # which is the gap karen-review A2 found.
-  # The gate while the repo is PRIVATE is the step "Human gate" below
-  # (.github/scripts/apply-approval-gate.sh): GitHub's Environment required
-  # reviewers need a public repo (or Enterprise). Approvers: repo Variable
-  # APPLY_APPROVERS (comma-separated logins), default the repo owner.
-  terraform-apply:
-    name: terraform apply (prod, owner-approved saved plan)
+  # Three jobs, in this order (the repo is public, so GitHub's own gate works):
+  #   1. plan          - plan main as APPLY, show the plan, run the checks
+  #   2. approve       - Environment "production": required reviewer ChromeData,
+  #                      "Prevent self-review" on, admins cannot bypass. The run
+  #                      pauses here with a "Review deployments" button.
+  #   3. terraform-apply - plan again, refuse unless the plan's fingerprint
+  #                      equals the reviewed one, then apply that new plan file.
+  # Why the apply plans again: GitHub asks for the approval BEFORE a job
+  # starts, so the approval must be its own job after the plan job (else the
+  # owner approves a plan that does not exist yet, karen-review A2). The saved
+  # plan holds every variable value in clear text, and an artifact on a public
+  # repo is downloadable by any signed-in GitHub user, so tfplan never leaves
+  # its runner. plan-fingerprint.py hashes resources, actions AND values, so
+  # anything that differs from the reviewed plan stops the apply.
+  # Who is who: "Prevent self-review" stops the account that started the run
+  # (the merger) from approving it. AI agents push and merge as the lab's
+  # GitHub App bot (lab/scripts/operator/github-bot/bot-gh), the owner
+  # approves. If the owner's own login merges, the owner cannot approve that
+  # run: re-run it from the bot (`bot-gh gh workflow run terraform-apply.yml`).
+  plan:
+    name: plan for review (prod plan, nothing applied)
     runs-on: ubuntu-latest
-    # Plan + up to 30 minutes waiting for the owner + apply + access rules.
-    timeout-minutes: 90
-    # Defence in depth only: a dispatched run executes the chosen branch's own
-    # copy of this file, so a branch can delete this line. The real control is
-    # the prod environment's deployment-branch policy (main only, see
-    # lab/pipelines/README.md §5E), because the APPLY subject
+    timeout-minutes: 30
+    # Defence in depth only: the real control is the deployment-branch policy
+    # (main only) on both environments, because the APPLY subject
     # `environment:prod` carries no branch ref.
     if: github.ref == 'refs/heads/main'
-    # The human gate is the `approval` job above while the repo is private.
-    # Once public, configure required reviewers on this Environment instead
-    # (repo Settings -> Environments -> prod); the run then pauses here.
+    # `prod` has no reviewer: it exists for the APPLY OIDC subject
+    # (environment:prod) and its main-only branch policy. Planning needs the
+    # APPLY identity's read of the live tenant; plan writes nothing but the
+    # state lock.
     environment:
       name: prod
     permissions:
       id-token: write          # OIDC token for Entra federation (APPLY app)
       contents: read
-      issues: write            # the "Approve: apply" issue (human gate step)
-      pull-requests: read      # find the merged PR and its plan comment
+      pull-requests: read      # find the merged PR, its merger and plan comment
+    outputs:
+      fingerprint: ${{ steps.fingerprint.outputs.fingerprint }}
+      planned_at: ${{ steps.fingerprint.outputs.planned_at }}
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -198,8 +208,111 @@ jobs:
           terraform_wrapper: false
 
       - name: terraform init
-        # Backend values are repo Variables (the state account name is
-        # globally unique per deployment). Auth is OIDC via ARM_USE_OIDC.
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ vars.TFSTATE_RG }}" \
+            -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}"
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      - name: terraform plan (the plan the owner reviews)
+        # -lock=false: this plan is for reading only; the apply job takes the
+        # lock for its own plan + apply. Same B2B rule as terraform-plan.yml.
+        env:
+          B2B_CONNECTED_ORGANIZATION: ${{ vars.TF_B2B_CONNECTED_ORGANIZATION }}
+        run: |
+          if [ -n "${B2B_CONNECTED_ORGANIZATION}" ]; then
+            export TF_VAR_b2b_connected_organization="${B2B_CONNECTED_ORGANIZATION}"
+          fi
+          terraform plan -input=false -no-color -lock=false -var-file=lab.tfvars -out=tfplan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # Plain English, change set and fingerprint. The JSON plan (every
+      # variable value in clear text) stays in RUNNER_TEMP, is never printed,
+      # and is deleted on exit. NOT continue-on-error for the fingerprint:
+      # without it the apply job cannot prove it applies the reviewed plan.
+      - name: Plan summary, change set and fingerprint
+        id: fingerprint
+        run: |
+          plan_json="${RUNNER_TEMP}/plan.json"
+          trap 'rm -f "$plan_json"' EXIT
+          terraform show -json tfplan > "$plan_json"
+          python3 "${GITHUB_WORKSPACE}/.github/scripts/plain-plan.py" "$plan_json" > "${RUNNER_TEMP}/plain-plan.md" \
+            || echo "(plain-English summary failed; the change set below is complete)" > "${RUNNER_TEMP}/plain-plan.md"
+          "${GITHUB_WORKSPACE}/.github/scripts/plan-changeset.sh" "$plan_json" > "${RUNNER_TEMP}/changeset.txt"
+          fp=$(python3 -I "${GITHUB_WORKSPACE}/.github/scripts/plan-fingerprint.py" "$plan_json")
+          printf '%s' "$fp" | grep -Eq '^[0-9a-f]{64}$' || { echo "::error::no plan fingerprint"; exit 1; }
+          echo "fingerprint=$fp" >> "$GITHUB_OUTPUT"
+          echo "planned_at=$(date +%s)" >> "$GITHUB_OUTPUT"
+          echo "Plan fingerprint: $fp"
+          cat "${RUNNER_TEMP}/changeset.txt"
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # The checks of apply-approval-gate.sh in GATE_MODE=check: PR author and
+      # merger, bot separation (APPLY_BOT_LOGIN), change set vs the PR plan
+      # comment (refuses on a mismatch). It writes the plan to this job's
+      # summary for the reviewer. It opens no issue and waits for nothing.
+      - name: Checks and the plan for the reviewer
+        env:
+          GATE_MODE: check
+          PLAN_LABEL: Plan fingerprint (resources, actions and values)
+          GH_TOKEN: ${{ github.token }}
+          APPLY_APPROVERS: ${{ vars.APPLY_APPROVERS }}
+          APPLY_BOT_LOGIN: ${{ vars.APPLY_BOT_LOGIN }}
+          PLAN_SHA256: ${{ steps.fingerprint.outputs.fingerprint }}
+          PLAN_CHANGESET_FILE: ${{ runner.temp }}/changeset.txt
+          PLAN_SUMMARY_FILE: ${{ runner.temp }}/plain-plan.md
+        run: .github/scripts/apply-approval-gate.sh
+
+  # The human gate. The job has no steps that touch anything and no
+  # permissions: its only purpose is the Environment's protection rules.
+  # Environment "production" (set in repo Settings -> Environments, not in
+  # code, so no pull request can remove it): required reviewer ChromeData,
+  # "Prevent self-review" on, "Allow administrators to bypass" off,
+  # deployment branches: main only.
+  approve:
+    name: owner approval (production)
+    needs: plan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: production
+    permissions: {}
+    steps:
+      - name: Approved by the production reviewer
+        env:
+          FINGERPRINT: ${{ needs.plan.outputs.fingerprint }}
+        run: echo "Approved for plan fingerprint ${FINGERPRINT:0:12}. The apply job applies only a plan with this fingerprint."
+
+  terraform-apply:
+    name: terraform apply (prod, the approved plan only)
+    needs: [plan, approve]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: prod
+    permissions:
+      id-token: write          # OIDC token for Entra federation (APPLY app)
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Azure login (OIDC, APPLY app)
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.16.5"  # same CLI that generated the committed .terraform.lock.hcl files
+          terraform_wrapper: false
+
+      - name: terraform init
         run: |
           terraform init -input=false \
             -backend-config="resource_group_name=${{ vars.TFSTATE_RG }}" \
@@ -207,15 +320,6 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
 
       - name: terraform plan (fresh, saved to file)
-        # Plan on the merged main and save it. The human gate below shows THIS
-        # plan to the owner, and the apply step applies exactly this file (no
-        # second refresh). Anything that changed since the PR (a hand-edited CA
-        # policy is reverted, another merge, a repository variable) is in this
-        # plan, and the gate refuses when its change set differs from the PR's.
-        # b2b_connected_organization is an OBJECT, and Terraform rejects an
-        # empty TF_VAR_ value for one, so it is exported only when the
-        # Variable is set (one JSON object; same rule as terraform-plan.yml).
-        # The saved plan carries it into the apply step below.
         env:
           B2B_CONNECTED_ORGANIZATION: ${{ vars.TF_B2B_CONNECTED_ORGANIZATION }}
         run: |
@@ -225,12 +329,7 @@ jobs:
           terraform plan -input=false -no-color -lock-timeout=120s -var-file=lab.tfvars -out=tfplan
         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      # What the saved plan above is about to change, in plain English, printed
-      # here BEFORE the apply runs (and kept for the Apply summary below, in
-      # both tenses). Reads the same tfplan file the apply uses; `terraform
-      # show` does not refresh or touch the tenant. Same safety rules as
-      # terraform-plan.yml: the JSON plan (every variable value in clear text)
-      # stays in RUNNER_TEMP, is never printed, and is deleted on exit.
+      # Same plain-English summary, kept for the Apply summary below.
       # continue-on-error: a summary bug never blocks or fails the apply.
       - name: What this apply will change (plain English)
         id: summary
@@ -247,72 +346,31 @@ jobs:
           cat "${RUNNER_TEMP}/plain-plan.md"
         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      # The saved plan's fingerprint (sha256 of the tfplan file) and change set
-      # ("<actions> <address>" per changed resource, plan-changeset.sh). NOT
-      # continue-on-error: without them the gate cannot show the owner what
-      # will be applied, so the run stops (fail closed). Addresses and actions
-      # only; the JSON plan stays in RUNNER_TEMP and is deleted on exit.
-      - name: Saved plan fingerprint and change set
-        id: fingerprint
+      # The approved plan only: this plan's fingerprint must equal the one
+      # the owner reviewed in job 1, and the review must be recent (60
+      # minutes from plan to apply). Anything else (another merge, a portal
+      # edit, a changed Variable, a different value) stops here, nothing
+      # applied. Recovery: re-run the workflow and review the new plan.
+      - name: Refuse unless this is the approved plan
+        env:
+          APPROVED_FINGERPRINT: ${{ needs.plan.outputs.fingerprint }}
+          PLANNED_AT: ${{ needs.plan.outputs.planned_at }}
         run: |
-          plan_json="${RUNNER_TEMP}/plan-cs.json"
+          plan_json="${RUNNER_TEMP}/plan-fp.json"
           trap 'rm -f "$plan_json"' EXIT
           terraform show -json tfplan > "$plan_json"
-          "${GITHUB_WORKSPACE}/.github/scripts/plan-changeset.sh" "$plan_json" > "${RUNNER_TEMP}/changeset.txt"
-          sha=$(sha256sum tfplan | cut -c1-64)
-          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
-          echo "planned_at=$(date +%s)" >> "$GITHUB_OUTPUT"
-          echo "Saved plan sha256: $sha"
-          echo "Change set ($(grep -c . "${RUNNER_TEMP}/changeset.txt" || true) resources):"
-          cat "${RUNNER_TEMP}/changeset.txt"
-        working-directory: ${{ env.TF_WORKING_DIR }}
-
-      # The human gate. Opens "Approve: apply <sha> to prod" with the exact
-      # saved plan (summary, change set, sha256), compares it with the PR plan
-      # comment, and waits up to 30 minutes for the owner's hand-typed
-      # `approve <code>` or `deny`. Exit 1 = denied, refused or timed out: the
-      # job stops and nothing is applied.
-      - name: Human gate (the owner approves this saved plan)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          APPLY_APPROVERS: ${{ vars.APPLY_APPROVERS }}
-          APPLY_TWO_PERSON: ${{ vars.APPLY_TWO_PERSON || 'false' }}
-          # Unset today: agents use the owner's login, and the gate says so.
-          APPLY_BOT_LOGIN: ${{ vars.APPLY_BOT_LOGIN }}
-          PLAN_SHA256: ${{ steps.fingerprint.outputs.sha256 }}
-          PLAN_CHANGESET_FILE: ${{ runner.temp }}/changeset.txt
-          PLAN_SUMMARY_FILE: ${{ runner.temp }}/plain-plan.md
-        run: .github/scripts/apply-approval-gate.sh
-
-      # Apply only the file that was approved: same sha256, and not older than
-      # the gate's window plus a margin (40 minutes). Terraform itself also
-      # refuses a saved plan whose state changed since it was made ("Saved
-      # plan is stale"), which covers another apply landing in between.
-      - name: Re-check the approved plan file
-        env:
-          APPROVED_SHA256: ${{ steps.fingerprint.outputs.sha256 }}
-          PLANNED_AT: ${{ steps.fingerprint.outputs.planned_at }}
-        run: |
-          now_sha=$(sha256sum tfplan | cut -c1-64)
-          if [ -z "${APPROVED_SHA256}" ] || [ "$now_sha" != "${APPROVED_SHA256}" ]; then
-            echo "::error::Refused: tfplan changed after approval (approved ${APPROVED_SHA256:-none}, now $now_sha). Nothing applied."
+          now_fp=$(python3 -I "${GITHUB_WORKSPACE}/.github/scripts/plan-fingerprint.py" "$plan_json")
+          if [ -z "${APPROVED_FINGERPRINT}" ] || [ "$now_fp" != "${APPROVED_FINGERPRINT}" ]; then
+            echo "::error::Refused: this plan (${now_fp:0:12}) is not the approved plan (${APPROVED_FINGERPRINT:0:12}). Nothing applied. Re-run and review the new plan."
             exit 1
           fi
           age=$(( $(date +%s) - PLANNED_AT ))
-          if [ "$age" -gt 2400 ]; then
-            echo "::error::Refused: the approved plan is ${age}s old (limit 2400s). Re-run to plan and approve again."
+          if [ "$age" -gt 3600 ]; then
+            echo "::error::Refused: the reviewed plan is ${age}s old (limit 3600s). Nothing applied. Re-run and review again."
             exit 1
           fi
-          echo "tfplan sha256 matches the approved plan (${now_sha:0:8}); age ${age}s"
+          echo "Plan fingerprint matches the approved plan (${now_fp:0:12}); ${age}s since review plan"
         working-directory: ${{ env.TF_WORKING_DIR }}
-
-      # A fresh sign-in after the wait: GitHub's OIDC token is short-lived.
-      - name: Azure login again after the gate (APPLY app, fresh OIDC token)
-        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
-        with:
-          client-id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: terraform apply
         id: apply
@@ -383,7 +441,7 @@ jobs:
             '- Automatic access rules: not used here (access packages are switched off in lab.tfvars).' | Set-Content -LiteralPath $plain -Encoding utf8NoBOM
             exit 0
           }
-          # -Confirm:$false: the human gate was the step before the apply; the script's
+          # -Confirm:$false: the human gate was the approve job before this one; the script's
           # own refusals still apply. Package names and rule text only in the
           # log; the Graph token is masked and never printed. The pinned
           # module first (a different one on the runner image would load instead).

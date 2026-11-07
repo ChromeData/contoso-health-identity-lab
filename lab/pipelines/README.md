@@ -156,66 +156,51 @@ accepts deployments from `main` only (§5E).
 The repo is **public on purpose**, and the pipeline depends on it:
 
 - **Environments + required reviewers are free on public repos.** On private
-  repos, protected Environments (the `prod` reviewer gate) need GitHub
-  Team/Enterprise. Public = the reviewer gate costs nothing. **While the repo
-  is private** the gate is the "Human gate" step inside the apply job of
-  `terraform-apply.yml` (`.github/scripts/apply-approval-gate.sh`). The job
-  plans first and saves `tfplan`. The gate opens an "Approve: apply <sha> to
-  prod" issue that shows that exact saved plan: the plain-English summary,
-  the change set (actions and addresses) and the file's sha256. It refuses
-  when the change set differs from the PR plan comment's fingerprint. The
-  owner then types `approve <first 8 of the sha256>` (or `deny`) by hand,
-  from his own GitHub session (repo Variable `APPLY_APPROVERS`, default the
-  owner; 30 minutes, then cancel). An AI assistant never approves: the gate
-  refuses an approval that mentions "Claude" or "delegated". The job
-  re-checks the sha256 and applies exactly that file. The plan never leaves
-  the runner (no artifact), because it holds variable values in clear text.
-  Difference from an Environment reviewer: removing the gate takes a merged
-  PR, while an Environment reviewer cannot be removed by code. Restore
-  required reviewers (5E) when the repo goes public, and keep the
-  plan-first order (the reviewer then approves after the plan step).
+  repos they need GitHub Enterprise. The apply gate is the Environment
+  `production` reviewer (below). The old private-repo gate, an "Approve:
+  apply" issue (`.github/scripts/apply-approval-gate.sh`), remains in that
+  script as a fallback; the workflow runs it only in `GATE_MODE=check`.
 
-  **Who is who.** GitHub's Environment required reviewers and "Prevent
-  self-review" are not available here: the repo is a private, user-owned
-  repo, and on Free, Pro and Team plans required reviewers work only on
-  public repos. The repo stays private, so the issue gate stays.
-
-  | Role | GitHub login today | Target |
+  | Role | GitHub login | Notes |
   |---|---|---|
-  | Owner: reads the saved plan and types `approve <code>` | `ChromeData` | Unchanged |
-  | AI coding agents: push branches, open PRs, merge | `ChromeData` (the same `gh` login) | A GitHub App / bot login, so author and merger differ from the approver (owner task: create the App) |
-  | Apply identity | APPLY app over OIDC (`environment:prod`) | Unchanged |
+  | Owner: reads the plan, clicks Review deployments -> Approve and deploy | `ChromeData` | Required reviewer of `production` |
+  | AI coding agents: push branches, open PRs, merge | `<slug>[bot]` via `bot-gh` once the owner creates the App; `ChromeData` until then | "Prevent self-review" stops the merger approving its own run |
+  | Apply identity | APPLY app over OIDC (`environment:prod`) | Runs only after the approval |
 
-  Repo Variable `APPLY_BOT_LOGIN` (unset today) switches on real
-  two-identity separation: the gate then refuses unless the PR author and
-  merger are that bot and the approver is in `APPLY_APPROVERS` and is
-  neither of them. While it is unset, every approval issue and run summary
-  says: "Author and approver are the same GitHub account (ChromeData);
-  separation is by procedure only."
+  **History, 2026-11-07 (UTC).** While the repo was private, GitHub refused
+  the reviewer rule (HTTP 422, billing plan) and rulesets (HTTP 403, account
+  on GitHub Free). The owner made the repo public again at 02:31Z. Since then:
 
-  **Checked on 2026-11-07 (UTC) with the gh API, as ChromeData:**
-  - `PUT repos/.../environments/production` with required reviewer
-    ChromeData and `prevent_self_review: true` was refused: HTTP 422
-    "Please ensure the billing plan supports the required reviewers
-    protection rule." (The empty environment it left was deleted.)
-  - `GET repos/.../branches/main/protection` and `GET repos/.../rulesets`
-    were refused: HTTP 403 "Upgrade to GitHub Pro or make this repository
-    public to enable this feature." So the account is on GitHub Free, and on
-    this private repo `main` has no enforced branch protection or ruleset
-    today (5F describes the public-repo setup). A CODEOWNERS file plus a
-    required owner review is therefore not available either.
-  - Closest true alternative, free: the issue gate above, plus a separate
-    bot identity for the agents. `lab/scripts/operator/github-bot/` holds it:
-    the owner runs `new-bot-app.sh` once (a GitHub App: free, no seat),
-    agents then push, open PRs and merge with `bot-gh`, and the owner sets
-    `APPLY_BOT_LOGIN` to `<slug>[bot]` at a PR merge. From then on the gate
-    refuses a change the bot did not author and merge, and refuses an
-    approval by the bot, the author or the merger. The App has issues READ
-    only, so it cannot comment on an approval issue at all.
-  - What stays procedure, not platform: ChromeData is the repo admin and can
-    change the workflow or the Variable through a merged PR. An Environment
-    reviewer (GitHub Enterprise, or a public repo) is the only rule code
-    cannot remove.
+  - **The gate is GitHub's own.** Environment `production`: required
+    reviewer ChromeData, "Prevent self-review" on, "Allow administrators to
+    bypass" off, deployment branches `main` only. `terraform-apply.yml` runs
+    three jobs: `plan` (plan for review + checks, summary in the job), then
+    `approve` (environment `production`: the run pauses on **Review
+    deployments**), then `terraform-apply` (plans again and refuses unless
+    `plan-fingerprint.py` gives the same fingerprint as the reviewed plan:
+    resources, actions and values; and the review plan is under 60 minutes
+    old). The issue gate is kept only as `GATE_MODE=check` for its checks.
+  - **`prod` stays** (the APPLY OIDC subject is `environment:prod`; renaming
+    it would break the federated credential). At the merge of this change,
+    remove its required reviewer, so the only approval is `production`
+    (otherwise the plan job pauses before any plan exists, the karen A2 gap):
+    `gh api -X PUT repos/ChromeData/contoso-health-identity-lab/environments/prod -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'`
+    (a PUT without `reviewers` should clear them; check with `gh api ./environments/prod --jq .protection_rules` that only `branch_policy` is left).
+  - **Ruleset `main-protection`** (active again): PR required (0 approvals:
+    the owner's approval is the deployment, not the PR), the five checks in
+    5F required, no force-push, no deletion, no bypass.
+  - **Who is who.** "Prevent self-review" blocks the account that started the
+    run, which for a push is the merger. AI agents push, open PRs and merge as
+    the lab's GitHub App bot (`lab/scripts/operator/github-bot/`): the owner
+    runs `new-bot-app.sh` once, agents use `bot-gh`, and the owner sets
+    `APPLY_BOT_LOGIN` to `<slug>[bot]` at a PR merge (the plan job then
+    refuses a change the bot did not author and merge). Until the bot exists,
+    a run that ChromeData merged cannot be approved by ChromeData: re-run it
+    as the bot (`bot-gh gh workflow run terraform-apply.yml --ref main`).
+  - **What stays procedure.** GitHub tells accounts apart, not people. While
+    the owner's own `gh` login is on the machine the agents use, an agent
+    could approve with it. The owner's fix: once `bot-gh` works, sign the
+    agents' machine out of his `gh` login and approve only in his browser.
 - **Branch protection / rulesets** (require PR, require status checks, require
   review) are free on public repos.
 - **Code scanning (SARIF upload)** — the Checkov results under the *Security &
@@ -483,6 +468,8 @@ with no PR and no review, lock the WORM store irreversibly.
 > None of it is a credential, but keep that in mind before adding variables.
 
 ### E. GitHub — the `prod` Environment with a required reviewer
+> **Since 2026-11-07:** the reviewer lives on a second Environment, **`production`** (required reviewer ChromeData, "Prevent self-review" on, admins cannot bypass, branch `main` only), used by the `approve` job. `prod` keeps only its `main` branch policy and the APPLY OIDC subject; it has NO reviewer after this change merges (section 3).
+
 - [ ] Settings → **Environments** → **New environment** → name it **`prod`**
       (the name MUST match `environment: prod` in `terraform-apply.yml`).
 - [ ] Add **Required reviewers** (yourself / a second admin). This is the human
