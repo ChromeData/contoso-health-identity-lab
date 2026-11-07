@@ -202,3 +202,17 @@ run "empty_tag_value_refused" {
 
   expect_failures = [var.session_target_tag_value]
 }
+
+run "server_role_lands_in_the_server_account" {
+  command = apply
+
+  variables {
+    enable_session_manager = true
+    target_account_id      = "210987654321"
+  }
+
+  assert {
+    condition     = aws_ssoadmin_account_assignment.server_session[0].target_id == "123456789012"
+    error_message = "LabServerSession is assigned in the account that holds the server, not in var.target_account_id"
+  }
+}

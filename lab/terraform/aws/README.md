@@ -346,6 +346,20 @@ activation, no AWS group membership, no LabServerSession, no shell.
   their 1-hour expiry, and a shell that is already open stays open (seen
   live, below). The preferences document caps every shell at 60 minutes. An
   admin can cut an open shell at once with `aws ssm terminate-session`.
+- **The operator bypassed PIM in the live run.** The lab operator role
+  (`contoso-lab-operator`, standing AdministratorAccess minus IAM writes)
+  opened a shell on the server at 01:15:51Z with no activation (CloudTrail,
+  E126). The fix is in code, **BUILT, not applied**: guardrails v4 in
+  `entra-operator.tf` (`NoServerShell`: StartSession, ResumeSession,
+  SendCommand, EC2 Instance Connect, Fleet Manager GUI; `NoSessionLogTampering`:
+  the preferences document and the session log group). Apply it with the
+  next activation (`-target=aws_iam_role_policy.entra_operator_guardrails`
+  in step 2 below). That one policy also carries guardrails v3
+  (`NoAuditTampering`, from audit-trail.tf), which is not live yet either
+  (read 2026-11-07: live Sids are v2 only). Until then, "only through PIM"
+  is true for people, not for the operator. The operator also keeps EC2
+  admin over the server itself (stop it, change it), which these Denies do
+  not remove.
 - `cloudWatchEncryptionEnabled` is false: true would refuse every session
   unless the log group had a customer KMS key ($1/month). CloudWatch Logs
   still encrypts the data at rest with its own keys. The log group keeps 30
@@ -371,8 +385,9 @@ tofu plan  -var aws_profile=idlab-labadmin -var enable_session_manager=true \
   -target=aws_instance.ssm_node -target=aws_ec2_instance_state.ssm_node \
   -target=aws_ssoadmin_permission_set.server_session \
   -target=aws_ssoadmin_permission_set_inline_policy.server_session \
-  -target=aws_ssoadmin_account_assignment.server_session -out ssm.tfplan
-tofu apply ssm.tfplan                                   # expect 19 added
+  -target=aws_ssoadmin_account_assignment.server_session \
+  -target=aws_iam_role_policy.entra_operator_guardrails -out ssm.tfplan   # + guardrails v3/v4 for the operator
+tofu apply ssm.tfplan   # 19 added (+ the operator guardrails policy updated in place)
 # 3. a session (needs session-manager-plugin)
 aws ssm start-session --profile <LabServerSession profile> --target $(tofu output -raw session_node_instance_id)
 # 4. after the capture: the same targets with -destroy (or the flag false)

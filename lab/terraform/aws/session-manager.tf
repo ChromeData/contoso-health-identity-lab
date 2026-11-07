@@ -4,10 +4,13 @@
 # WHAT: the server half of "AWS admin is just-in-time through Entra"
 # (ADR 0025, its Session Manager section). One small Linux server that has NO
 # inbound port, NO SSH key and NO public IP. The only way in is an AWS
-# Systems Manager Session Manager shell, and the only people who can open
+# Systems Manager Session Manager shell, and the only PEOPLE who can open
 # one are members of the Entra PIM-for-Groups group PIM-AWS-Lab-Admins,
 # while their activation lasts, through the least-privileged permission set
-# LabServerSession.
+# LabServerSession. The lab operator (standing AdministratorAccess) is kept
+# out by guardrails v4 in entra-operator.tf (NoServerShell) - live only once
+# that policy is applied; in the 2026-11-07 run it was not, and the operator
+# could open a shell.
 #
 #   adm-labops --(PIM for Groups: activate, MFA + reason)--> member of
 #   PIM-AWS-Lab-Admins --SCIM--> Identity Store group of the same name
@@ -461,8 +464,10 @@ resource "aws_ssoadmin_account_assignment" "server_session" {
   permission_set_arn = aws_ssoadmin_permission_set.server_session[0].arn
   principal_id       = data.aws_identitystore_group.server_session[0].group_id
   principal_type     = "GROUP"
-  target_id          = local.target_account_id
-  target_type        = "AWS_ACCOUNT"
+  # The server's account (the applying profile's), NOT local.target_account_id:
+  # with a member-account target the role would land where the server isn't.
+  target_id   = local.ssm_account
+  target_type = "AWS_ACCOUNT"
   # Policy first, then the assignment provisions the role with it.
   depends_on = [aws_ssoadmin_permission_set_inline_policy.server_session]
 }

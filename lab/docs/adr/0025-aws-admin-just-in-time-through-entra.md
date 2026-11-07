@@ -192,6 +192,10 @@ use Azure Bastion.
   at once. Not built: an automatic "end open sessions when the activation
   ends" action.
 - `ssm-user` can `sudo` on Amazon Linux. Every command is still logged.
+- The lab operator opened a shell with no activation in the live run
+  (standing AdministratorAccess). Guardrails v4 (`NoServerShell`,
+  `NoSessionLogTampering` in `entra-operator.tf`) close that in code; they
+  are BUILT, not applied, and go live with the next LabAdministrator apply.
 - Sources (checked 2026-11-06): AWS Systems Manager User Guide, "Additional
   sample IAM policies for Session Manager" (ssm:resourceTag, own sessions
   via aws:ssmmessages:session-id), "Session document schema", "Logging

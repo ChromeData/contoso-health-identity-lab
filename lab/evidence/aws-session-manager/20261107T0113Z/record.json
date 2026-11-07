@@ -109,6 +109,7 @@
   ]
  ],
  "not_proven_or_limits": [
+  "the lab operator role (standing AdministratorAccess, live guardrails v2) opened a shell on the server at 01:15:51Z with no PIM activation (CloudTrail StartSession, contoso-lab-operator); guardrails v4 NoServerShell is built in code, not applied",
   "LabServerSession shares PIM-AWS-Lab-Admins with LabAdministrator: no split by person yet",
   "ssmmessages:OpenDataChannel is scoped to session/${aws:userid}-* as in AWS samples; the session ids start with the role session name, and sessions opened anyway, so this statement was not seen to restrict anything",
   "the 60-minute maxSessionDuration and 20-minute idle timeout were configured but not observed (a printing loop is not idle input)",
