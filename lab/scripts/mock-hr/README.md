@@ -58,8 +58,10 @@ once the account exists: Lifecycle Workflows, access packages, CA and PIM.
   (`-MaxChanges`, default 10), a share of the population
   (`-MaxChangePercent`, default 1 percent of the joiner and active rows in
   the whole file: 200 people at 20,000), and, when a history file is kept
-  (`-ChangeHistoryPath`, at least 7 days in the last 30), the mean plus 3
-  standard deviations of earlier runs. WHY: a fixed 10 trips on every normal
+  (`-ChangeHistoryPath`, at least 7 distinct earlier dates in the last 30),
+  the mean plus 3 standard deviations of the daily totals. The file keeps
+  one entry per date: several sends on one day add to that day, so they
+  never count as more days. WHY: a fixed 10 trips on every normal
   Monday at 20,000 staff (about 15 leavers a day), and people then learn to
   override it (hostile review, finding C2).
   - **Over the threshold, the rows of that kind are held back, not the whole
@@ -82,7 +84,13 @@ once the account exists: Lifecycle Workflows, access packages, CA and PIM.
   dropped, `O'Brien` becomes `obrien`, a space is removed), and a suffix digit
   for a collision (`john.smith2`). The worker with the lower employee id keeps
   the plain name, so the same file always gives the same answer, and a
-  collision with a worker who is not in this push is still seen. A name that
+  collision with a worker who is not in this push is still seen. Every UPN
+  sent is recorded in the `-StatePath` file (employee id -> UPN) after a
+  send with no failed batch. A recorded UPN stays with its worker and stays
+  reserved, also after a name change or after the worker leaves the file, so
+  `john.smith2` is never handed to someone else. On the GitHub runner that
+  file is rebuilt from the previous commit of `hr_feed.csv`, so there the
+  lasting record is the `upn` column only. A name that
   leaves no usable ASCII is refused. Two settings in the provisioning app
   keep a name change from renaming anyone (tenant-time steps, verify on the
   app): the matching attribute is `externalId` (the employee id), and the

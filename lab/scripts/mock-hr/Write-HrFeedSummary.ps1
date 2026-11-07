@@ -220,6 +220,7 @@ function Get-OutcomeText {
     # unreadable / undelivered).
     param([Parameter(Mandatory)][string]$Kind, [Parameter(Mandatory)][string]$Mode, [hashtable]$Outcome = @{ state = 'pending' })
     if ($Kind -eq 'removed') { return 'nothing sent: deleting a row does not switch an account off (mark the person as a leaver instead)' }
+    if ($Outcome.state -eq 'held') { return 'held back by the safety check: NOT sent (see above)' }
     if ($Outcome.state -eq 'undelivered') { return 'not delivered: Microsoft refused this batch' }
     if ($Mode -eq 'dry-run') {
         switch ($Kind) {
@@ -416,6 +417,10 @@ else {
 
 # Rows the mass-change guard held back while the rest went (review C2).
 $held = @(if ($result -and $result['quarantined']) { $result['quarantined'] })
+# Those workers were never sent: mark them so their line does not read
+# "sent; Microsoft has not logged it yet" in a run whose other batches went.
+foreach ($q in $held) { $qid = [string](Get-Field $q 'employeeId'); if ($qid) { $personOutcome[$qid] = @{ state = 'held'; action = ''; errorCode = '' } } }
+$heldIds = @($held | ForEach-Object { [string](Get-Field $_ 'employeeId') })
 if ($held.Count -and $outcome -ne 'refused') {
     $md.Add('')
     $md.Add("**Held back by the safety check: $($held.Count) row(s).** $((Get-RefusalText $result['refusal'] $MaxChanges))")
@@ -445,8 +450,8 @@ if ($jobId -and $mode -eq 'sent') {
 }
 
 # Technical details, folded.
-$leaversSent = @($sendable | Where-Object { $_['status'] -eq 'leaver' }).Count
-$moversSent = @($sendable | Where-Object { $_['kind'] -eq 'moved' }).Count
+$leaversSent = @($sendable | Where-Object { $_['status'] -eq 'leaver' -and [string]$_['employeeId'] -notin $heldIds }).Count
+$moversSent = @($sendable | Where-Object { $_['kind'] -eq 'moved' -and [string]$_['employeeId'] -notin $heldIds }).Count
 $md.Add('')
 $md.Add('<details><summary>Technical details</summary>')
 $md.Add('')

@@ -314,6 +314,30 @@ Describe 'Invoke-InboundProvisioning.ps1 mass-change guard at hospital scale (re
         { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -ChangeHistoryPath $h -QuarantinePath $script:Q -HidePayload -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*Mass-change guard*'
     }
 
+    It 'many sends on one day count as ONE day: seven same-day entries never unlock the 3-sigma threshold (review of PR #229)' {
+        # One approved 40-person event and six zero-change sends, all yesterday.
+        $h = Join-Path $TestDrive 'sameday.json'
+        $y = [datetime]::UtcNow.Date.AddDays(-1).ToString('yyyy-MM-dd')
+        $rows = @([ordered]@{ date = $y; disabling = 40; accessChanges = 0 }) + @(1..6 | ForEach-Object { [ordered]@{ date = $y; disabling = 0; accessChanges = 0 } })
+        (ConvertTo-Json -InputObject @($rows)) | Set-Content -LiteralPath $h
+        $f = New-ScaleFeed -Staff 100 -Leavers 30 -Name 'sameday'
+        { & $script:Inbound -CsvPath $f -StatePath (Get-StatePath) -ChangeHistoryPath $h -QuarantinePath $script:Q -HidePayload -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*threshold 10*'
+    }
+
+    It 'the history keeps one entry per date: a send adds to today, and dates older than 30 days are dropped' {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:Inbound, [ref]$null, [ref]$null)
+        $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Add-ChangeHistoryDay' }, $true)
+        . ([scriptblock]::Create($fn.Extent.Text))
+        $today = [datetime]'2026-11-06'
+        $rows = @(
+            @{ date = '2026-11-06'; disabling = 3; accessChanges = 1 },
+            @{ date = '2026-11-05'; disabling = 2; accessChanges = 0 },
+            @{ date = '2026-11-05'; disabling = 1; accessChanges = 4 },
+            @{ date = '2026-09-01'; disabling = 9; accessChanges = 9 })
+        $out = @(Add-ChangeHistoryDay -Rows $rows -Disabling 5 -AccessChanges 2 -Today $today)
+        ($out | ForEach-Object { "$($_.date)=$($_.disabling)/$($_.accessChanges)" }) -join ' ' | Should -Be '2026-11-05=3/4 2026-11-06=8/3'
+    }
+
     It 'a reviewed, unexpired bulk change ticket lets the event through; expired, too small or unlisted holds it back' {
         $f = New-ScaleFeed -Staff 100 -Leavers 40 -Name 'reorg'
         $exp = [datetime]::UtcNow.Date.AddDays(7).ToString('yyyy-MM-dd')
@@ -398,6 +422,36 @@ Describe 'Invoke-InboundProvisioning.ps1 UPNs: issued once, ASCII, collision-saf
         $u = Get-UserNames @($h, '100408,Jo,Lee,Nursing,Registered Nurse,200015,active,2020-01-01,,jo.lee@contosohealthlab.com', '100300,Jo,Lee,Nursing,Registered Nurse,200015,joiner,2026-11-09,,')
         $u['100408'] | Should -Be 'jo.lee@contosohealthlab.com'
         $u['100300'] | Should -Be 'jo.lee2@contosohealthlab.com'
+    }
+
+    It 'an issued UPN stays reserved after a name change: the second John Smith keeps john.smith2, a new hire never gets it (review of PR #229)' {
+        # Last push issued 100400 -> john.smith, 100500 -> john.smith2 (in -StatePath).
+        $state = Get-StatePath
+        @{ '100400' = @{ dept = 'Nursing'; jobTitle = 'Registered Nurse'; upn = 'john.smith@contosohealthlab.com' }
+            '100500' = @{ dept = 'Nursing'; jobTitle = 'Registered Nurse'; upn = 'john.smith2@contosohealthlab.com' } } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $state
+        # 100400 married (now Jones); a third John Smith is hired.
+        $f = Join-Path $TestDrive 'renamed.csv'
+        Set-Content -LiteralPath $f -Value @($script:H, '100400,John,Jones,Nursing,Registered Nurse,200015,active,2020-01-01,', '100500,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,', '100600,John,Smith,Nursing,Registered Nurse,200015,joiner,2026-11-09,')
+        $global:InboundOut.Clear()
+        & $script:Inbound -CsvPath $f -StatePath $state -UpnDomain 'contosohealthlab.com' -WhatIf -WarningAction SilentlyContinue
+        $m = @{}
+        foreach ($op in @((((@($global:InboundOut | Where-Object { $_ -match '^\s*\{' }) -join "`n") | ConvertFrom-Json -AsHashtable)['Operations']))) { $m[$op['bulkId']] = $op['data']['userName'] }
+        $m['100400'] | Should -Be 'john.smith@contosohealthlab.com'
+        $m['100500'] | Should -Be 'john.smith2@contosohealthlab.com'
+        $m['100600'] | Should -Be 'john.smith3@contosohealthlab.com'
+    }
+
+    It 'an issued UPN is reserved even for a worker no longer in the feed, and a row may not take another worker''s issued UPN' {
+        $state = Get-StatePath
+        @{ '100400' = @{ dept = 'Nursing'; jobTitle = 'Registered Nurse'; upn = 'ana.silva@contosohealthlab.com' } } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $state
+        $f = Join-Path $TestDrive 'gone.csv'
+        Set-Content -LiteralPath $f -Value @($script:H, '100700,Ana,Silva,Nursing,Registered Nurse,200015,joiner,2026-11-09,')
+        $global:InboundOut.Clear()
+        & $script:Inbound -CsvPath $f -StatePath $state -UpnDomain 'contosohealthlab.com' -WhatIf -WarningAction SilentlyContinue
+        ((@($global:InboundOut | Where-Object { $_ -match '^\s*\{' }) -join "`n") | ConvertFrom-Json -AsHashtable)['Operations'][0]['data']['userName'] | Should -Be 'ana.silva2@contosohealthlab.com'
+        $f2 = Join-Path $TestDrive 'steal.csv'
+        Set-Content -LiteralPath $f2 -Value @(($script:H + ',upn'), '100700,Ana,Silva,Nursing,Registered Nurse,200015,joiner,2026-11-09,,ana.silva@contosohealthlab.com')
+        { & $script:Inbound -CsvPath $f2 -StatePath $state -UpnDomain 'contosohealthlab.com' -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*issued to worker 100400*'
     }
 
     It 'the SCIM anchor is the employee id (externalId), so the engine matches on it and never on the name' {

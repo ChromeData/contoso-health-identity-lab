@@ -17,7 +17,10 @@
     What it does, per account:
       * only accounts directly in OU=Disabled at the domain root;
       * only accounts that are DISABLED (a rehire already switched back on is
-        left alone: its new groups may already be there);
+        left alone: its new groups may already be there). The account is
+        read again just before each removal; if it was switched on, moved
+        out of OU=Disabled or became protected since the run started (a
+        rehire in progress), the script stops on that account;
       * never a protected account (adminCount = 1: a member, or former member,
         of a privileged group). Tier 0 is cleaned by hand, on purpose;
       * removes every group in memberOf. The primary group (Domain Users) is
@@ -63,7 +66,7 @@ if (-not (Get-Command -Name Get-ADUser -ErrorAction SilentlyContinue)) { Import-
 $domainDn = (Get-ADDomain).DistinguishedName
 $disabledOu = "OU=Disabled,$domainDn"
 $filter = if ($EmployeeId) { "employeeID -eq '$EmployeeId'" } else { '*' }
-$found = @(Get-ADUser -Filter $filter -SearchBase $disabledOu -SearchScope OneLevel -Properties employeeID, adminCount, Enabled, MemberOf)
+$found = @(Get-ADUser -Filter $filter -SearchBase $disabledOu -SearchScope OneLevel -Properties employeeID, adminCount, Enabled, MemberOf, ObjectGUID)
 if ($found.Count -eq 0) {
     Write-Output "No account in $disabledOu$(if ($EmployeeId) { " has employeeID $EmployeeId" }): nothing to do."
     exit 0
@@ -81,6 +84,18 @@ foreach ($u in $found) {
     foreach ($g in $groups) {
         $gName = (([string]$g -split '(?<!\\),', 2)[0]) -replace '^CN=', ''
         if ($Apply -ne 'yes') { Write-Output "Dry run: would remove $name from $gName"; continue }
+        # Re-read the account just before EACH removal: a rehire may have
+        # switched it back on, or moved it out of OU=Disabled, while this run
+        # worked through earlier accounts. The list read at the start is
+        # stale by then. Changed = stop on this account, remove nothing more.
+        $now = Get-ADUser -Identity $u.ObjectGUID -Properties Enabled, adminCount
+        $nowAdmin = 0
+        if ($now -and $now.PSObject.Properties['adminCount'] -and $now.adminCount) { $nowAdmin = [int]$now.adminCount }
+        if (-not $now -or $now.Enabled -or [string]$now.DistinguishedName -ne [string]$u.DistinguishedName -or $nowAdmin -eq 1) {
+            Write-Output "Stopped on ${name}: the account changed during this run (enabled, moved or protected). A rehire is in progress; nothing more removed from it."
+            $skipped++
+            break
+        }
         Remove-ADGroupMember -Identity $g -Members $u.DistinguishedName -Confirm:$false
         Write-Output "Removed $name from $gName"
         $removed++

@@ -133,10 +133,13 @@
 
 .PARAMETER ChangeHistoryPath
     Optional JSON history of earlier successful runs: an array of
-    { "date": "YYYY-MM-DD", "disabling": n, "accessChanges": n }. With at least
-    7 days inside the last 30, the threshold may rise to mean + 3 sigma of that
-    kind, so a hospital's normal Monday does not trip it. A real send with no
-    failed batch appends today's counts. The GitHub pipeline runs on a fresh
+    { "date": "YYYY-MM-DD", "disabling": n, "accessChanges": n }, one entry
+    per date. With at least 7 distinct earlier dates inside the last 30 days,
+    the threshold may rise to mean + 3 sigma of that kind (one sample per
+    day: the day's total), so a hospital's normal Monday does not trip it.
+    Several sends on one day add to that day's one entry; they never count as
+    more days. A real send with no failed batch adds its counts to today's
+    entry, and dates older than 30 days are dropped. The GitHub pipeline runs on a fresh
     runner and passes no history (only the floor and the percentage apply);
     a scheduled HR extract host keeps one. Unreadable = stop, never "no history".
 
@@ -486,21 +489,49 @@ function Get-ChangeThreshold {
 }
 
 function Read-ChangeHistory {
-    # Counts of earlier successful runs inside the last 30 days, per kind.
+    # ONE sample per calendar day (UTC) inside the last 30 days, per kind:
+    # that day's total. Several sends on one day add up to one day; they do
+    # not count as several days (else seven sends in one afternoon would
+    # meet the "7 days" minimum, review of PR #229). Today is left out: it
+    # is not finished, and this run is being judged against it.
     # An unreadable file stops the run: "couldn't read" is never "no history".
     param([string]$Path, [datetime]$Today = [datetime]::UtcNow.Date)
     $out = @{ disabling = @(); accessChanges = @() }
     if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $out }
     try { $rows = @(Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable) }
     catch { throw "ChangeHistoryPath '$Path' is unreadable ($($_.Exception.Message)). Fix it, or pass no -ChangeHistoryPath." }
-    $d = [datetime]::MinValue
-    $recent = @($rows | Where-Object {
-            $_ -and [datetime]::TryParseExact([string]$_['date'], 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$d) -and
-            $d -le $Today -and $d -gt $Today.AddDays(-30)
-        })
-    $out.disabling = @($recent | ForEach-Object { [double]$_['disabling'] })
-    $out.accessChanges = @($recent | ForEach-Object { [double]$_['accessChanges'] })
+    $days = [ordered]@{}
+    foreach ($r in $rows) {
+        $d = [datetime]::MinValue
+        if (-not $r -or -not [datetime]::TryParseExact([string]$r['date'], 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$d)) { continue }
+        if ($d -ge $Today -or $d -le $Today.AddDays(-31)) { continue }
+        $k = $d.ToString('yyyy-MM-dd')
+        if (-not $days.Contains($k)) { $days[$k] = @{ disabling = 0.0; accessChanges = 0.0 } }
+        $days[$k].disabling += [double]$r['disabling']
+        $days[$k].accessChanges += [double]$r['accessChanges']
+    }
+    $out.disabling = @($days.Values | ForEach-Object { $_.disabling })
+    $out.accessChanges = @($days.Values | ForEach-Object { $_.accessChanges })
     return $out
+}
+
+function Add-ChangeHistoryDay {
+    # Adds this send's counts to TODAY's one entry (creating it), and keeps
+    # only the dates inside the 30-day window. Returns the new list.
+    param([object[]]$Rows = @(), [int]$Disabling, [int]$AccessChanges, [datetime]$Today = [datetime]::UtcNow.Date)
+    $key = $Today.ToString('yyyy-MM-dd')
+    $byDate = [ordered]@{}
+    foreach ($r in @($Rows | Where-Object { $_ })) {
+        $d = [datetime]::MinValue
+        if (-not [datetime]::TryParseExact([string]$r['date'], 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$d)) { continue }
+        if ($d -gt $Today -or $d -le $Today.AddDays(-31)) { continue }
+        $k = $d.ToString('yyyy-MM-dd')
+        if (-not $byDate.Contains($k)) { $byDate[$k] = [ordered]@{ date = $k; disabling = 0; accessChanges = 0 } }
+        $byDate[$k].disabling += [int]$r['disabling']; $byDate[$k].accessChanges += [int]$r['accessChanges']
+    }
+    if (-not $byDate.Contains($key)) { $byDate[$key] = [ordered]@{ date = $key; disabling = 0; accessChanges = 0 } }
+    $byDate[$key].disabling += $Disabling; $byDate[$key].accessChanges += $AccessChanges
+    return @($byDate.Values | Sort-Object { $_.date })
 }
 
 function Test-ApprovedBulkChange {
@@ -548,7 +579,12 @@ function Resolve-UserName {
     # employeeId -> userName (UPN) for every row in the WHOLE feed.
     # 1. A row's own 'upn' column wins (the HR system issued it at hire and it
     #    never changes). It is validated, never re-derived.
-    # 2. Otherwise the UPN is derived ONCE, deterministically: given.surname,
+    # 2. Then every UPN this script ISSUED before (-Issued: employeeId -> upn,
+    #    kept in -StatePath after each successful send). An issued UPN stays
+    #    with its worker for good, and is reserved even after a name change
+    #    or after the worker left the feed: the account in AD still holds it
+    #    (the UPN mapping is creation-only), so nobody else may get it.
+    # 3. Otherwise the UPN is derived ONCE, deterministically: given.surname,
     #    ASCII-normalised, and a suffix digit (2, 3, ...) for a collision. The
     #    worker with the lower employeeId keeps the plain name, so the same
     #    feed always gives the same answer.
@@ -557,26 +593,40 @@ function Resolve-UserName {
     # mapping: Only during object creation" (lab/scripts/mock-hr/README.md,
     # "UPNs: issued once"). The engine matches on externalId (employeeId),
     # never on the name.
-    param([Parameter(Mandatory)][object[]]$Rows, [Parameter(Mandatory)][string]$Domain)
+    param([Parameter(Mandatory)][object[]]$Rows, [Parameter(Mandatory)][string]$Domain, [System.Collections.IDictionary]$Issued = @{})
     $map = [ordered]@{}
-    $taken = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    # upn -> the employeeId that holds it (column, issued or derived).
+    $owner = [System.Collections.Generic.Dictionary[string, string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $hasUpnColumn = @($Rows[0].PSObject.Properties.Name) -contains 'upn'
     if ($hasUpnColumn) {
         foreach ($r in $Rows) {
             $u = ([string]$r.upn).Trim()
             if (-not $u) { continue }
             if ($u -notmatch '^[a-z0-9][a-z0-9.-]*@[a-z0-9.-]+\.[a-z]{2,}$') { throw "Row employeeId '$($r.employeeId)' has an invalid upn '$u' (lower-case ASCII local part @ domain)." }
-            if (-not $taken.Add($u)) { throw "Two rows carry the same upn '$u'. A UPN belongs to one worker." }
+            if ($owner.ContainsKey($u)) { throw "Two rows carry the same upn '$u'. A UPN belongs to one worker." }
+            $owner[$u] = [string]$r.employeeId
             $map[[string]$r.employeeId] = $u.ToLowerInvariant()
         }
+    }
+    $inFeed = [System.Collections.Generic.HashSet[string]]::new([string[]]@($Rows | ForEach-Object { [string]$_.employeeId }))
+    foreach ($id in @($Issued.Keys | Sort-Object { [long]$_ })) {
+        $u = ([string]$Issued[$id]).Trim().ToLowerInvariant()
+        if (-not $u) { continue }
+        $held = ''
+        if ($owner.TryGetValue($u, [ref]$held)) {
+            if ($held -ne [string]$id) { throw "upn '$u' was issued to worker $id, but row $held now carries it. A UPN belongs to one worker for good." }
+            continue
+        }
+        $owner[$u] = [string]$id
+        if ($inFeed.Contains([string]$id) -and -not $map.Contains([string]$id)) { $map[[string]$id] = $u }
     }
     $pending = @($Rows | Where-Object { -not $map.Contains([string]$_.employeeId) } | Sort-Object { [long]$_.employeeId })
     foreach ($r in $pending) {
         $g = ConvertTo-UpnLocalPart $r.givenName; $f = ConvertTo-UpnLocalPart $r.surname
         if (-not $g -or -not $f) { throw "Row employeeId '$($r.employeeId)': the name leaves no usable ASCII for a UPN. Give the row a upn." }
         $base = "$g.$f"; $cand = "$base@$Domain"; $n = 1
-        while ($taken.Contains($cand)) { $n++; $cand = "$base$n@$Domain" }
-        [void]$taken.Add($cand)
+        while ($owner.ContainsKey($cand)) { $n++; $cand = "$base$n@$Domain" }
+        $owner[$cand] = [string]$r.employeeId
         $map[[string]$r.employeeId] = $cand
     }
     return $map
@@ -620,10 +670,24 @@ foreach ($row in $roster) {
     }
 }
 
+# The last pushed roster (-StatePath): the baseline for the access-change
+# guard (birthright access follows dept / title, so they change access in
+# bulk) and the record of every UPN issued so far.
+$baseline = @{}
+if (Test-Path -LiteralPath $StatePath -PathType Leaf) {
+    try {
+        $prev = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json -AsHashtable
+        foreach ($k in @($prev.Keys)) { $baseline[$k] = $prev[$k] }
+    }
+    catch { throw "StatePath '$StatePath' is unreadable ($($_.Exception.Message)). Fix or delete it (deleting resets the baseline for the access-change guard)." }
+}
+else { Write-Host "Access-change guard: no baseline yet ($StatePath) - first push, nothing to compare." -ForegroundColor DarkGray }
 # UPNs for the WHOLE feed (before any filter), so a collision with a worker
 # who is not in this run is still seen, and the answer never depends on which
 # rows a push happened to change.
-try { $script:UserNames = Resolve-UserName -Rows $roster -Domain $UpnDomain }
+$issuedUpns = @{}
+foreach ($k in @($baseline.Keys)) { $v = $baseline[$k]; if ($v -is [System.Collections.IDictionary] -and $v['upn']) { $issuedUpns[[string]$k] = [string]$v['upn'] } }
+try { $script:UserNames = Resolve-UserName -Rows $roster -Domain $UpnDomain -Issued $issuedUpns }
 catch { Stop-InvalidFeed 'bad-upn' $_.Exception.Message }
 # Population for the percentage threshold: everyone not leaving, whole feed.
 $population = @($roster | Where-Object { $_.status -ne 'leaver' }).Count
@@ -656,17 +720,6 @@ Write-Host "Loaded $($roster.Count) HR record(s) to process (filter: $filterText
 $history = Read-ChangeHistory -Path $ChangeHistoryPath
 $disabling = @($roster | Where-Object { $_.status -eq 'leaver' })
 
-# Second count: department / job title changes against the last pushed roster.
-# Birthright access follows those attributes, so they change access in bulk.
-$baseline = @{}
-if (Test-Path -LiteralPath $StatePath -PathType Leaf) {
-    try {
-        $prev = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json -AsHashtable
-        foreach ($k in @($prev.Keys)) { $baseline[$k] = $prev[$k] }
-    }
-    catch { throw "StatePath '$StatePath' is unreadable ($($_.Exception.Message)). Fix or delete it (deleting resets the baseline for the access-change guard)." }
-}
-else { Write-Host "Access-change guard: no baseline yet ($StatePath) - first push, nothing to compare." -ForegroundColor DarkGray }
 $accessChanges = @(Get-AccessChange -Rows $roster -Baseline $baseline)
 
 $guardMessages = [System.Collections.Generic.List[string]]::new()
@@ -932,7 +985,8 @@ if ($failedBatches -gt 0) {
 }
 # Every batch accepted: this roster is the new access-change baseline
 # (merged, so a filtered run only moves the rows it pushed).
-foreach ($r in $roster) { $baseline[[string]$r.employeeId] = @{ dept = [string]$r.dept; jobTitle = [string]$r.jobTitle } }
+# The UPN sent is recorded too: it is issued for good (Resolve-UserName).
+foreach ($r in $roster) { $baseline[[string]$r.employeeId] = @{ dept = [string]$r.dept; jobTitle = [string]$r.jobTitle; upn = [string]$script:UserNames[[string]$r.employeeId] } }
 $stateDir = Split-Path -Parent $StatePath
 if ($stateDir -and -not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
 ($baseline | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $StatePath -Encoding utf8NoBOM
@@ -940,7 +994,7 @@ if ($stateDir -and -not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType
 if ($ChangeHistoryPath -and -not $script:GuardError) {
     $hist = @()
     if (Test-Path -LiteralPath $ChangeHistoryPath -PathType Leaf) { $hist = @(Get-Content -LiteralPath $ChangeHistoryPath -Raw | ConvertFrom-Json -AsHashtable) }
-    $hist += [ordered]@{ date = [datetime]::UtcNow.ToString('yyyy-MM-dd'); disabling = $disabling.Count; accessChanges = $accessChanges.Count }
-    (ConvertTo-Json -InputObject @($hist | Select-Object -Last 60) -Depth 3) | Set-Content -LiteralPath $ChangeHistoryPath -Encoding utf8NoBOM
+    $hist = Add-ChangeHistoryDay -Rows $hist -Disabling $disabling.Count -AccessChanges $accessChanges.Count
+    (ConvertTo-Json -InputObject @($hist) -Depth 3) | Set-Content -LiteralPath $ChangeHistoryPath -Encoding utf8NoBOM
 }
 if ($script:GuardError) { throw ("The other rows were sent. " + $script:GuardError) }
