@@ -310,6 +310,96 @@ without root:
 an owner step (a hardware security key); until it is registered, root is
 protected by its password and the emailed sign-in code only.
 
+## Session Manager: a server with no way in but a logged shell (`session-manager.tf`; ADR 0025)
+
+**Status: RAN · tenant** (2026-11-07, capture-log E125-E127), then turned
+off again (`enable_session_manager = false`: server and endpoints destroyed).
+
+**What it is.** One small Linux server (`lab-ssm-node-01`, t4g.micro, the
+smallest free-tier-eligible type) that has **no inbound port, no SSH key and
+no public IP**. Its subnet has no route to the internet. The only way in is
+an AWS Systems Manager **Session Manager** shell: the server's agent dials
+out to four private VPC endpoints, and a user's shell rides on that channel.
+Every command and its output is written to CloudWatch Logs
+(`/contoso-lab/session-manager`).
+
+**Who gets in.** Only someone who holds the Identity Center permission set
+**LabServerSession**, and that permission set is assigned only to the SCIM
+copy of the Entra PIM-for-Groups group `PIM-AWS-Lab-Admins`. So: no PIM
+activation, no AWS group membership, no LabServerSession, no shell.
+
+| LabServerSession may | It may not |
+|---|---|
+| Start a shell (`SSM-SessionManagerRunShell`) on a server tagged `session-access = lab-server-session` | Start a shell on an untagged server (seen live: AccessDenied) |
+| End or resume its own sessions | End someone else's session (seen live: AccessDenied) |
+| List servers and sessions | Port forwarding / SSH tunnels (`AWS-StartPortForwardingSession`: AccessDenied live), `ssm:SendCommand` (AccessDenied live), any EC2 write (`StopInstances`: UnauthorizedOperation live) |
+
+**Plain limits (true today, say them):**
+- LabServerSession shares its PIM group with LabAdministrator. An activated
+  member can pick either one at the access portal. A dedicated
+  `PIM-AWS-Server-Operators` group (an envs/dev change: modules/pim +
+  modules/apps) is a later step and is **not built**.
+- Inside the shell the user is `ssm-user`, which Amazon Linux lets run
+  `sudo` (seen live). The shell is fully logged, but it is root-capable.
+- Ending the PIM activation stops **new** AWS credentials once SCIM has run
+  (it disables the AWS user). Credentials already issued keep working until
+  their 1-hour expiry, and a shell that is already open stays open (seen
+  live, below). The preferences document caps every shell at 60 minutes. An
+  admin can cut an open shell at once with `aws ssm terminate-session`.
+- `cloudWatchEncryptionEnabled` is false: true would refuse every session
+  unless the log group had a customer KMS key ($1/month). CloudWatch Logs
+  still encrypts the data at rest with its own keys. The log group keeps 30
+  days; it is not WORM.
+
+**Apply (needs an activation).** IAM and Identity Center writes are denied to
+the operator, so this runs with `idlab-labadmin`:
+
+```bash
+# 1. adm-labops: PIM > My roles > Groups > PIM-AWS-Lab-Admins > Activate (reason)
+#    (or lab/scripts/demo/signin/identity.mjs activatePim). Wait for SCIM.
+aws sso login --profile idlab-labadmin
+aws sts get-caller-identity --profile idlab-labadmin   # must show 182002546409
+# 2. targeted apply of session-manager.tf only (19 resources), against the
+#    root's own state; OpenTofu wrote that state, so use tofu
+tofu plan  -var aws_profile=idlab-labadmin -var enable_session_manager=true \
+  -var session_group_entra_object_id=<PIM-AWS-Lab-Admins object id> \
+  -target=aws_vpc.ssm -target=aws_subnet.ssm -target=aws_security_group.ssm_node \
+  -target=aws_security_group.ssm_endpoints -target=aws_vpc_endpoint.ssm \
+  -target=aws_cloudwatch_log_group.ssm_sessions -target=aws_ssm_document.session_preferences \
+  -target=aws_iam_role.ssm_node -target=aws_iam_role_policy_attachment.ssm_node_core \
+  -target=aws_iam_role_policy.ssm_node_logs -target=aws_iam_instance_profile.ssm_node \
+  -target=aws_instance.ssm_node -target=aws_ec2_instance_state.ssm_node \
+  -target=aws_ssoadmin_permission_set.server_session \
+  -target=aws_ssoadmin_permission_set_inline_policy.server_session \
+  -target=aws_ssoadmin_account_assignment.server_session -out ssm.tfplan
+tofu apply ssm.tfplan                                   # expect 19 added
+# 3. a session (needs session-manager-plugin)
+aws ssm start-session --profile <LabServerSession profile> --target $(tofu output -raw session_node_instance_id)
+# 4. after the capture: the same targets with -destroy (or the flag false)
+```
+
+The CLI profile for the session (`~/.aws/config`): same `sso_session` as
+`idlab-labadmin`, `sso_role_name = LabServerSession`.
+
+**Timings seen live (2026-11-07 UTC):**
+
+| Step | Time | Took |
+|---|---|---|
+| PIM activation (adm-labops, 2 h, MFA + reason) | 00:52:33 | 33 s (headless sign-in + blade) |
+| In the AWS group (SCIM provision on demand by the operator, so not waiting up to 40 min) | 00:53:33 | 1 min |
+| `aws sso login` (device code, approved as adm-labops) | 01:03:28 | under 1 min once run |
+| Targeted apply, 19 resources | 01:07:56-01:09:36 | 1 min 40 s (endpoints ~1 min) |
+| Agent online (no internet, endpoints only) | 01:13:00 | ~3.5 min after launch |
+| First shell as LabServerSession (`whoami` ssm-user, `hostname` ip-10-42-0-23, `uptime`, no internet) | 01:13:32-01:13:56 | 24 s |
+| Transcript in CloudWatch, read as the operator | 01:14:10 | seconds (streaming) |
+| Denials: port forwarding, SendCommand, untagged server, EC2 stop | 01:14:50-01:15:24 | - |
+| Own session ended / someone else's refused | 01:16:10 / 01:15:58 | - |
+| PIM deactivated early | 01:18:00 | Entra group empty by 01:18:22 |
+| SCIM's scheduled cycle removed the AWS member and DISABLED the AWS user | 01:26:14 | ~8 min after deactivation (no on-demand push) |
+| New credentials request: refused ("SSO session ... invalid") | 01:27:09 | - |
+| Already-issued 1-hour credentials still opened a new shell | 01:26:56 | residual, until ~02:13 |
+| A shell opened at 01:17 before deactivation was still printing | 01:39 (and later) | residual: open sessions are not re-checked |
+
 ## Patient portal stand-in (`patient-portal.tf`)
 
 Something real behind the AWS door. The hospital's patient portal is run by
