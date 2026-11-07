@@ -891,6 +891,11 @@ run "lcw_leaver_trigger_creates_all_workforce_without_ca008" {
     condition     = output.all_workforce_group_object_id == "00000000-0000-0000-0000-00000000a11f"
     error_message = "enable_lcw_leaver_trigger alone must create All-Workforce (the scheduled leaver's trigger group), without enable_phishing_resistant_all_users"
   }
+
+  assert {
+    condition     = output.staff_passkey_rollout_enabled == false
+    error_message = "the leaver trigger alone must not switch on the staff passkey rollout (Invoke-PostApply.ps1 reads staff_passkey_rollout_enabled, not the shared group)"
+  }
 }
 
 run "lcw_leaver_trigger_off_plans_no_all_workforce" {

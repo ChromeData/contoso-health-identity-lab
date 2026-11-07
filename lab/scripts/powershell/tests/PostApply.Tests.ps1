@@ -255,6 +255,7 @@ Describe 'Invoke-PostApply.ps1 - plan' {
                 $o['break_glass_user_principal_names'] = @{ value = @('bg-admin-01@contosohealthlab.onmicrosoft.com', 'bg-admin-02@contosohealthlab.onmicrosoft.com') }
                 $o['access_package_ids'] = @{ value = @{ nurse = 'ap-1' } }
                 $o['all_workforce_group_object_id'] = @{ value = 'g-wf' }
+                $o['staff_passkey_rollout_enabled'] = @{ value = $true }
                 $o['ca_policy_display_names'] = @{ value = @{ CA001 = 'CA001 - x'; CA006 = 'CA006 - User risk high' } }
                 $o['pim_tier_group_mail_nicknames'] = @{ value = @{ 'PIM-Tier1-Helpdesk' = 'pim-tier1-helpdesk' } }
                 $o['access_review_definitions'] = @{ value = @{ 'privileged:X' = '{}' } }
@@ -342,6 +343,17 @@ Describe 'Invoke-PostApply.ps1 - plan' {
         $s = $p2 | Where-Object Id -eq 'build-account'
         $s.Applies | Should -BeFalse
         $s.Reason | Should -Match 'enable_global_admin_pim_policy'
+    }
+
+    It 'All-Workforce from the scheduled leaver alone does not start the staff passkey rollout' {
+        # enable_lcw_leaver_trigger creates the same group; the rollout flag is off.
+        $o = New-Outputs -AllOn
+        $o['staff_passkey_rollout_enabled'] = @{ value = $false }
+        $plan = Get-PostApplyPlan -Outputs $o
+        ($plan | Where-Object Id -eq 'auth-methods').Params.ContainsKey('IncludeStaffRollout') | Should -BeFalse
+        $o.Remove('staff_passkey_rollout_enabled')
+        $plan = Get-PostApplyPlan -Outputs $o
+        ($plan | Where-Object Id -eq 'auth-methods').Params.ContainsKey('IncludeStaffRollout') | Should -BeFalse -Because 'an older state without the flag output must not start the rollout'
     }
 
     It 'the vault feed command asks for the extended signals once the v2 columns exist' {
@@ -438,6 +450,7 @@ if (`$env:POSTAPPLY_FAIL -eq '$rel') { exit 1 }
             break_glass_user_principal_names         = @{ value = @('bg-admin-01@contosohealthlab.onmicrosoft.com') }
             access_package_ids                       = @{ value = @{ nurse = 'ap-1' } }
             all_workforce_group_object_id            = @{ value = 'g-wf' }
+            staff_passkey_rollout_enabled            = @{ value = $true }
             ca_policy_display_names                  = @{ value = @{ CA006 = 'CA006 - x' } }
             pim_tier_group_mail_nicknames            = @{ value = @{ 'PIM-Tier1-Helpdesk' = 'pim-tier1-helpdesk' } }
             access_review_definitions                = @{ value = @{ 'privileged:X' = '{}' } }

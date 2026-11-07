@@ -384,8 +384,16 @@ output "app_consent_reviewers_group_object_id" {
 }
 
 output "all_workforce_group_object_id" {
-  description = "Dynamic All-Workforce group (staff passkey profile target of Set-AuthenticationMethodsPolicy.ps1). null while enable_phishing_resistant_all_users is off."
+  description = "Dynamic All-Workforce group: the staff passkey profile target of Set-AuthenticationMethodsPolicy.ps1 AND the scheduled leaver's trigger group. Created by enable_phishing_resistant_all_users OR enable_lcw_leaver_trigger, so a non-null value does NOT mean the passkey rollout is on (read staff_passkey_rollout_enabled). null while both flags are off."
   value       = one(module.groups[*].all_workforce_group_object_id)
+}
+
+# WHY a separate flag output: All-Workforce is shared. Invoke-PostApply.ps1
+# used "the group exists" as the passkey-rollout switch, so turning on only the
+# scheduled leaver started (or failed) the staff passkey rollout.
+output "staff_passkey_rollout_enabled" {
+  description = "true only when the staff passkey rollout is on (enable_premium and enable_phishing_resistant_all_users). Invoke-PostApply.ps1 passes -IncludeStaffRollout only when this is true."
+  value       = var.enable_premium && var.enable_phishing_resistant_all_users
 }
 
 output "agent_runtime_uami_principal_id" {
