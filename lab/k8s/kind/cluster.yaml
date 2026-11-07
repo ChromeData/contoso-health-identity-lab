@@ -2,13 +2,24 @@
 # kind cluster "contoso-k8s": the local stand-in for AKS (lab/docs/STAND-INS.md).
 # One control-plane node, built from code, thrown away after every run.
 #
-# THIS FILE IS A TEMPLATE. __AUDIT_POLICY_PATH__ must be replaced with the
-# ABSOLUTE path of the audit-policy.yaml next to this file before kind reads
-# it. lab/k8s/ci/pipeline.sh does exactly this:
+# THIS FILE IS A TEMPLATE with two placeholders, both replaced by
+# lab/k8s/ci/pipeline.sh (render_kind_config) before kind reads it:
+#   __AUDIT_POLICY_PATH__  the ABSOLUTE path of the audit-policy.yaml next to
+#                          this file (why absolute: below)
+#   __SA_ISSUER__          the cluster's PUBLIC service-account issuer URL: the
+#                          static website of a throwaway storage account the
+#                          pipeline creates (stage 4), for example
+#                          https://stk8skv1234abcd.z20.web.core.windows.net
 #
-#   sed "s|__AUDIT_POLICY_PATH__|${LAB}/k8s/kind/audit-policy.yaml|" \
-#     "${LAB}/k8s/kind/cluster.yaml" > "${TMP}/cluster.yaml"
-#   kind create cluster --config "${TMP}/cluster.yaml"
+# Why a public issuer: Microsoft Entra Workload ID does not call the
+# cluster. It reads <issuer>/.well-known/openid-configuration, follows
+# jwks_uri and checks the service-account token's signature with those keys
+# (Microsoft Learn, "Workload identity federation"; azure-workload-identity
+# docs, "Self-managed clusters: OIDC issuer"). kind's default issuer,
+# https://kubernetes.default.svc.cluster.local, is unreachable from Entra.
+# The pipeline copies the API server's own discovery document and JWKS to
+# that website after the cluster starts (stage 5), so the keys Entra trusts
+# are exactly the keys this API server signs with.
 #
 # Why a rendered absolute path instead of a relative one:
 #   * extraMounts are bind mounts made by the Docker daemon, and kind resolves a
@@ -34,18 +45,6 @@ nodes:
     # own default is v1.37.0; 1.36 is pinned on purpose (verify: the kind
     # v0.33.0 release notes list v1.36.4 among the images built for it).
     image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
-    extraPortMappings:
-      # Vault's API: the vault Service is a NodePort on 30820 (Helm values in
-      # lab/terraform/k8s/platform). The Vault Terraform provider and the e2e
-      # test reach it at http://127.0.0.1:18200. The HOST port is bound to
-      # loopback only: this is a dev-mode Vault behind a root token, so it is
-      # never published on the LAN. (NodePort 30820 is still reachable on the
-      # kind node's IP from the local Docker bridge network, and the vault
-      # Service from every pod in the cluster: there is no network policy.)
-      - containerPort: 30820
-        hostPort: 18200
-        listenAddress: "127.0.0.1"
-        protocol: TCP
     extraMounts:
       # The audit policy, read-only, into the node container. kube-apiserver
       # runs as a static pod on that node, so the kubeadm patch below mounts
@@ -79,6 +78,18 @@ nodes:
               value: "100"
             - name: audit-log-maxbackup
               value: "1"
+            # Workload ID: tokens are signed with the cluster's own key
+            # (kubeadm's sa.key, unchanged) but name the public issuer, and
+            # the discovery document points at the published JWKS. The
+            # issuer must equal, character for character, the issuer in the
+            # Entra federated credential (lab/terraform/k8s/keyvault-trust).
+            # kind merges extraArgs by name, so this REPLACES kubeadm's
+            # default issuer. The default API audience follows the issuer
+            # (kube-apiserver: --api-audiences defaults to the issuer).
+            - name: service-account-issuer
+              value: __SA_ISSUER__
+            - name: service-account-jwks-uri
+              value: __SA_ISSUER__/openid/v1/jwks
           extraVolumes:
             - name: audit-policy
               hostPath: /etc/kubernetes/policies
