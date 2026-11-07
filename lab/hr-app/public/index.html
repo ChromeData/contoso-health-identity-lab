@@ -148,7 +148,16 @@ function showStatus(res) {
   $('#status').classList.add('show');
   const t0 = Date.now();
   const poll = async () => {
-    const r = await fetch(`/api/delivery/${res.commit}`); const d = await r.json();
+    let d;
+    try {
+      const r = await fetch(`/api/delivery/${res.commit}`); d = await r.json();
+      if (!r.ok || !d.state) throw new Error(d.error || 'no state');
+    } catch {
+      // A failed status check is not a failed delivery: say so, keep trying.
+      if (Date.now() - t0 > 15 * 60 * 1000) { line.textContent = 'The delivery status cannot be checked. Ask IT.'; return; }
+      line.textContent = 'Sending to IT systems... (status check failed, retrying)';
+      setTimeout(poll, 10000); return;
+    }
     if (d.state === 'delivered') { line.className = 'ok'; line.textContent = `Delivered to IT systems at ${fmtTime(d.finishedAt)}. IT sets up the account and access from here.`; return; }
     if (d.state === 'failed') { line.className = 'bad'; line.textContent = 'Not delivered. IT has the details and will contact HR.'; return; }
     if (d.state === 'local') { line.textContent = d.note; return; }
@@ -170,6 +179,7 @@ $('#change').onsubmit = async (e) => {
   e.preventDefault(); const f = e.target;
   const body = Object.fromEntries(new FormData(f));
   if (body.status !== 'leaver') delete body.endDate;
+  body.expected = editing;
   try { const res = await post(`/api/workers/${editing.employeeId}`, body); $('#edit').close(); showStatus(res); await load(); }
   catch (err) { alert(err.message); }
 };

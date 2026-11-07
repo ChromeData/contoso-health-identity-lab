@@ -66,9 +66,10 @@ export class GitHubStore {
   }
 
   // The integration's delivery status for one HR save: the hr-feed run on
-  // that commit. HR sees "sending / delivered / failed", not GitHub.
+  // that commit (push runs only: a manual dry run on the same commit sends
+  // nothing and must never read as delivered). HR sees "sending / delivered / failed", not GitHub.
   async delivery(commit) {
-    const out = await this.run(['api', `repos/${this.repo}/actions/workflows/hr-feed.yml/runs?head_sha=${commit}&per_page=1`]);
+    const out = await this.run(['api', `repos/${this.repo}/actions/workflows/hr-feed.yml/runs?head_sha=${commit}&event=push&per_page=1`]);
     const r = JSON.parse(out).workflow_runs?.[0];
     if (!r) return { state: 'queued' };
     if (r.status !== 'completed') return { state: 'sending', run: r.html_url };

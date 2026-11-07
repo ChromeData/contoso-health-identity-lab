@@ -149,6 +149,41 @@ test('GitHubStore: reads the hr-feed file, writes with its sha over stdin, maps 
   assert.deepEqual([body.sha, body.branch, Buffer.from(body.content, 'base64').toString()], ['blob1', 'hr-feed', 'x\n']);
   assert.ok(!calls[1].args.join(' ').includes(body.content), 'content goes over stdin, not argv');
   assert.equal((await g.delivery('c0ffee')).state, 'delivered');
+  assert.match(calls.at(-1).args[1], /head_sha=c0ffee&event=push&/, 'a manual dry run on the same commit must not count as delivered');
   fail = true;
   await assert.rejects(g.write('y\n', 'blob1', 'm'), (e) => e.conflict === true);
+});
+
+test('change: a stale edit (the record changed after HR opened it) is refused', () => {
+  const { r, cat } = fresh();
+  const opened = r.workers.find((w) => w.employeeId === '100310');
+  const left = change(r, '100310', { status: 'leaver', endDate: '2026-11-06' }, cat).roster;
+  assert.throws(() => change(left, '100310', { expected: opened, status: 'active', dept: 'Nursing', jobTitle: 'Registered Nurse' }, cat), (e) => e.status === 409 && /changed by someone else/.test(e.message));
+  assert.equal(change(r, '100310', { expected: opened, dept: 'Nursing', jobTitle: 'Registered Nurse' }, cat).kind, 'moved');
+});
+
+test('API: a foreign Host or Origin (DNS rebinding) is refused, page and token included', async (t) => {
+  const s = await serve(); t.after(() => s.srv.close());
+  const { request } = await import('node:http');
+  const get = (headers) => new Promise((ok, no) => {
+    const u = new URL(s.base);
+    request({ host: u.hostname, port: u.port, path: '/', headers }, (res) => { let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => ok({ status: res.statusCode, body: b })); }).on('error', no).end();
+  });
+  const evil = await get({ Host: 'attacker.example:8484' });
+  assert.equal(evil.status, 404);
+  assert.doesNotMatch(evil.body, /t0k/);
+  assert.equal((await get({ Host: 'localhost:8484' })).status, 200);
+  const r = await s.post('/api/workers', {}, { Origin: 'http://attacker.example' });
+  assert.equal(r.status, 403);
+});
+
+test('API: two hires at once both land, with different numbers (saves are queued)', async (t) => {
+  const s = await serve(); t.after(() => s.srv.close());
+  const h = (g) => s.post('/api/workers', { givenName: g, surname: 'Kim', dept: 'Nursing', jobTitle: 'Registered Nurse', manager: '200015', startDate: '2026-11-06' });
+  const [a, b] = await Promise.all([h('Alex'), h('Blair')]);
+  assert.deepEqual([a.status, b.status], [201, 201]);
+  const ids = [(await a.json()).worker.employeeId, (await b.json()).worker.employeeId].sort();
+  assert.deepEqual(ids, ['100493', '100494']);
+  const text = await readFile(s.file, 'utf8');
+  assert.match(text, /Alex,Kim/); assert.match(text, /Blair,Kim/);
 });

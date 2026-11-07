@@ -136,6 +136,12 @@ export function change(roster, employeeId, input, catalogue) {
   const idx = roster.workers.findIndex((w) => w.employeeId === employeeId);
   if (idx < 0) throw new HrError('No worker with that employee number.', 404);
   const before = roster.workers[idx];
+  // Stale-edit guard: the form sends the record as HR opened it. If someone
+  // changed the worker since (another tab made them a leaver), refuse rather
+  // than apply this edit's old status on top and switch them back on.
+  if (input.expected && COLUMNS.some((c) => (input.expected[c] ?? '') !== before[c])) {
+    throw new HrError(`${before.givenName} ${before.surname} was changed by someone else after you opened the record. Reload and try again.`, 409);
+  }
   const after = { ...before };
   const status = clean(input.status) || before.status;
   if (!STATUSES.has(status)) throw new HrError('Status must be joiner, active or leaver.');

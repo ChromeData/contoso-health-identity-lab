@@ -1,6 +1,6 @@
 # ADR 0027: An HR form stands in for the HR system; it sends through API-driven inbound provisioning to AD
 
-- **Status:** RAN · tenant (2026-11-07, capture log E120-E123): a test worker was hired, made a leaver and removed, all from the form. Timings are below.
+- **Status:** RAN · tenant (2026-11-07, capture log E120-E123): a test worker was hired and made a leaver from the form, then removed with the retake reset. Timings are in "Measured in the tenant" below. Option D is DESIGNED only.
 - **Date:** 2026-11-07
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** 2027-02-07, or when the lab gets a hosted HR app or a real HRIS tenant
@@ -68,8 +68,9 @@ keep the **AD** target, for these reasons:
   user's core attributes and of `accountEnabled`. If HR wrote straight to
   Entra, the same person would need a second, cloud-only account, or the AD
   account would be made by hand.
-- **The cost is time.** AD-first adds the Cloud Sync step (about 2 minutes,
-  measured below). A cloud-only target would skip it. We accept the delay.
+- **The cost is time.** AD-first adds the Cloud Sync step (2 min 35 s for
+  the hire, 46 s for the leaver, measured below). A cloud-only target would
+  skip it. We accept the delay.
 
 ## Decision 3: where it runs - a local page that sends through HR-SYNC
 
@@ -94,8 +95,8 @@ would also let IT create and disable workers with no HR record. That is the
 segregation-of-duties gap a hospital auditor looks for.
 
 **What HR sees.** HR never sees GitHub or the file. HR sees "Saved", then
-"Sending to IT systems", then "Delivered to IT systems at 19:46:41" (from
-the `hr-feed` run's result). If Microsoft logs a failure, the run turns red,
+"Sending to IT systems", then "Delivered to IT systems at 7:50:43 PM" (from
+the `hr-feed` push run's result). If Microsoft logs a failure, the run turns red,
 and the form says "Not delivered. IT has the details and will contact HR."
 
 **The roster file is the HR app's database table.** The file stays
@@ -106,6 +107,51 @@ history. The write sends the file's blob sha, so two saves at the same time
 cannot overwrite each other. The CSV path stays working for the existing
 pieces (Pester suites, `reset-demo-hire.sh`, the dry run). It is no longer
 the way HR makes a change.
+
+## Measured in the tenant (2026-11-07)
+
+Test worker "Test Hrform", Registered Nurse, Nursing. The form issued
+employee number 100493. Times are UTC. "+" counts from HR's click.
+
+**Hire** (capture log E121)
+
+| UTC | + | Step |
+|---|---|---|
+| 00:44:56 | 0:00 | HR clicks Hire; commit `bd188ae` on `hr-feed` |
+| 00:45:33 | 0:37 | `bulkUpload` answers 202 (run 42320098716, HR-SYNC) |
+| 00:45:40 | 0:44 | Provisioning log: created in on-premises AD |
+| 00:48:15 | 3:19 | Cloud Sync: Entra user created, enabled |
+| 00:49:32 | 4:36 | Dynamic groups: All-Nurses and the nurse auto-assignment group |
+| 00:50:43 | 5:47 | The form shows "Delivered" (the run waits for the provisioning log, which appeared about 4 minutes after the event) |
+| 01:10:33 | 25:37 | The joiner Lifecycle Workflow runs: account enabled, a Temporary Access Pass added, package requested (01:11:01). Its "email the TAP to the manager" task **failed**: the manager has no mail attribute (a lab gap, not caused by this change) |
+| 01:15:07 | 30:11 | "Nurse - Clinical Apps" delivered: App-AWS-IdentityCenter-Users and App-ServiceNow-Users |
+| 01:15:20 | 30:24 | AWS IAM Identity Center: user created (SCIM) |
+| 01:20:17 | 35:21 | ServiceNow: user created |
+
+The auto-assignment policy had not assigned the package after 21 minutes;
+the joiner workflow's request did. The slowest steps are the schedules
+after Entra (the workflow and the 40-minute app provisioning cycles), not
+the HR send.
+
+**Leaver** (capture log E122)
+
+| UTC | + | Step |
+|---|---|---|
+| 01:26:04 | 0:00 | HR sets Status to Leaver; commit `ada86b0` |
+| 01:26:33 | 0:29 | `bulkUpload` answers 202 (run 42324043896, attempt 1) |
+| 01:26:38 | 0:34 | Provisioning log: **failure**, `HybridIdentityServiceNoActiveAgents` (the agent on DC01 timed out). The run turned red; the form showed "Not delivered. IT has the details and will contact HR." The agent read "active" again at 01:32 |
+| 01:32:43 | 6:39 | IT re-runs the failed run (the documented recovery) |
+| 01:33:11 | 7:07 | `bulkUpload` 202 again (attempt 2) |
+| 01:33:14 | 7:10 | AD account disabled |
+| 01:34:00 | 7:56 | Cloud Sync: Entra "Account enabled: No" |
+| 01:34:26 | 8:22 | Removed from All-Nurses and the auto-assignment group |
+| 01:39:03 | 12:59 | The form's status for this save reads "delivered" |
+| 01:37:10 | 11:06 | ServiceNow: user disabled |
+| __AWSL__ | __AWSLD__ | AWS: user disabled (SCIM) |
+
+With the agent answering, the leaver took 49 seconds from the send to
+"Account enabled: No" in Entra. The failure shows the safety net works:
+nothing was half-done, HR was told, and one re-run finished it.
 
 ## Consequences
 

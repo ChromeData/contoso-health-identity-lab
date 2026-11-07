@@ -42,8 +42,18 @@ export function makeApp({ store, rules, today = () => new Date().toLocaleDateStr
     return { roster, version, catalogue: jobCatalogue(rules, roster.workers) };
   }
 
+  // Saves run one at a time in this process (a queue), so two clicks can
+  // never read the same roster and overwrite each other. Across processes
+  // the store's own version check catches it (GitHub: the blob sha).
+  let queue = Promise.resolve();
+  function save(apply) {
+    const run = queue.then(() => saveNow(apply));
+    queue = run.catch(() => {});
+    return run;
+  }
+
   // Apply one HR action and save it; on a write conflict re-read and re-apply once.
-  async function save(apply) {
+  async function saveNow(apply) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const { roster, version, catalogue } = await load();
       const result = apply(roster, catalogue);
@@ -72,8 +82,19 @@ export function makeApp({ store, rules, today = () => new Date().toLocaleDateStr
     res.end(data);
   }
 
+  // DNS rebinding guard: a foreign page that points its own hostname at
+  // 127.0.0.1 still sends its own name in Host (and Origin). Only this
+  // machine's loopback names are served; the form token stays unreadable.
+  const LOCAL = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/;
+  function localOnly(req) {
+    if (!LOCAL.test(req.headers.host ?? '')) throw new HrError('Not found.', 404);
+    const origin = req.headers.origin;
+    if (origin && origin !== 'null' && !LOCAL.test(origin.replace(/^https?:\/\//, ''))) throw new HrError('Not allowed from another site.', 403);
+  }
+
   return async function handle(req, res) {
     try {
+      localOnly(req);
       const url = new URL(req.url, 'http://127.0.0.1');
       if (req.method === 'GET' && url.pathname === '/') {
         return send(res, 200, (await page).replace('__FORM_TOKEN__', token).replace('__TODAY__', today()), 'text/html');
