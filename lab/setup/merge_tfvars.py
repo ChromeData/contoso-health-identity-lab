@@ -78,17 +78,41 @@ class Refused(Exception):
     pass
 
 
+def strip_comment(line):
+    """The line without a trailing # or // comment (a # inside a string stays)."""
+    in_str, esc = False, False
+    for i, ch in enumerate(line):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == '\\':
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == '#' or line.startswith('//', i):
+            return line[:i]
+    return line
+
+
 def value_of(block):
     """The assignment's value text, comments and whitespace removed."""
-    body = ''.join(l for l in block.splitlines(keepends=True) if not l.lstrip().startswith(('#', '//')))
+    body = ''.join(strip_comment(l) for l in block.splitlines(keepends=True))
     return re.sub(r'\s+', '', body.split('=', 1)[1])
+
+
+# An old value that names nothing yet (the example file ships "") may be
+# filled in: there is no live resource to replace.
+UNSET = ('""', 'null', '')
 
 
 def merge(old_text, new_text, keep_old=(), refuse_change=()):
     old, new = parse(old_text), parse(new_text)
     old_map = dict(old)
     for k, block in new:
-        if k in refuse_change and k in old_map and value_of(old_map[k]) != value_of(block):
+        if k in refuse_change and k in old_map and value_of(old_map[k]) not in UNSET and value_of(old_map[k]) != value_of(block):
             raise Refused(f'{k} differs from the existing terraform.tfvars: changing it would replace a live resource. Change the file by hand on purpose, or unset the override.')
     new_keys = [k for k, _ in new]
     parts = []
