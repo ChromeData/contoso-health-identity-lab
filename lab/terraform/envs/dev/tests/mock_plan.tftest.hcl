@@ -216,18 +216,18 @@ run "plan_lab_itdr_hold_back" {
 
   assert {
     condition = alltrue([for k in [
-      "tier0_logon_without_checkout", "ad_privileged_group_change", "kerberoast_rc4_service_ticket",
+      "ad_privileged_group_change", "kerberoast_rc4_service_ticket",
       "dcsync_replication_request",
-    ] : !contains(var.itdr_exclude_rules, k) && contains(output.itdr_rule_keys, k)]) && contains(var.itdr_exclude_rules, "dc_logon_outside_operator_allowlist") && !contains(output.itdr_rule_keys, "dc_logon_outside_operator_allowlist")
-    error_message = "ITDR release v1: DC01 SecurityEvent rows exist, so the four core SecurityEvent rules deploy; dc_logon_outside_operator_allowlist (v2, operator watchlist) stays held back until enable_itdr_detections_v2"
+    ] : !contains(var.itdr_exclude_rules, k) && contains(output.itdr_rule_keys, k)]) && alltrue([for k in ["dc_logon_outside_operator_allowlist", "tier0_logon_without_checkout"] : contains(var.itdr_exclude_rules, k) && !contains(output.itdr_rule_keys, k)])
+    error_message = "ITDR release v1: DC01 SecurityEvent rows exist, so the three core SecurityEvent rules deploy; dc_logon_outside_operator_allowlist (v2, operator watchlist) stays held back until enable_itdr_detections_v2, and tier0_logon_without_checkout is retired from Sentinel (its source is Vault check-outs; ADR 0036)"
   }
   assert {
     condition     = !contains(output.itdr_rule_keys, "pim_activation_without_auth_context") && !contains(output.itdr_rule_keys, "vault_privileged_access_anomaly") && !contains(output.itdr_rule_keys, "identity_risk")
     error_message = "the PREVIEW rule, the vault anomaly rule (extended feed) and identity_risk (risk tables) must be held back by lab.tfvars"
   }
   assert {
-    condition     = length(output.itdr_rule_keys) == 17 - length(var.itdr_exclude_rules) && length(var.itdr_exclude_rules) == 5
-    error_message = "lab.tfvars holds back exactly five of the seventeen ITDR rules (risk tables, v2 watchlist, extended vault feed, PREVIEW, the sod_violation_granted body); the other twelve deploy"
+    condition     = length(output.itdr_rule_keys) == 17 - length(var.itdr_exclude_rules) && length(var.itdr_exclude_rules) == 6
+    error_message = "lab.tfvars holds back exactly six of the seventeen ITDR rules (risk tables, v2 watchlist, extended vault feed, PREVIEW, the sod_violation_granted body, the Vault-check-out DC logon rule retired by ADR 0036); the other eleven deploy"
   }
 }
 
@@ -245,7 +245,7 @@ run "plan_lab_itdr_hold_back_la_alerts" {
   }
 
   assert {
-    condition     = length(output.itdr_rule_keys) == 12 && contains(output.itdr_rule_keys, "tier0_logon_without_checkout") && !contains(output.itdr_rule_keys, "dc_logon_outside_operator_allowlist")
+    condition     = length(output.itdr_rule_keys) == 11 && !contains(output.itdr_rule_keys, "tier0_logon_without_checkout") && !contains(output.itdr_rule_keys, "dc_logon_outside_operator_allowlist")
     error_message = "the lab.tfvars hold-back list applies on the Log Analytics path too"
   }
 }
