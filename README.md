@@ -296,8 +296,10 @@ Written down on purpose. A reviewer will find these in ten minutes; better they 
   trailers (`Co-Authored-By: Claude`) show this.
 - The owner approved what the assistant did. He did not personally review every line.
 - Until 2026-11-06 the assistant also typed some apply approvals on the owner's behalf. From now on
-  only the owner approves an apply, by hand, from his own GitHub session. The gate refuses an
-  approval that mentions an assistant or a delegation (PR #228).
+  only the owner approves an apply, by hand, from his own GitHub session. This is a rule, not a
+  code check: today the gate (`.github/scripts/apply-approval-gate.sh`) reads only the first
+  word of the comment. PR #228 (open) proposes that the gate refuse an approval that mentions
+  an assistant or a delegation.
 
 ## After the trials end (2026-11-26)
 
