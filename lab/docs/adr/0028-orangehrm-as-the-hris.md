@@ -211,7 +211,7 @@ OrangeHRM keeps an anonymised "Purged Employee" row, so `hris.sh free-id
 as the operator removed the `hr-feed` row and the AD account; the
 ServiceNow record was deleted as the ServiceNow admin (read back: none);
 Cloud Sync deleted the Entra user, `--purge-entra` emptied Deleted users,
-and SCIM removed the AWS user (times in E173).
+and SCIM removed the AWS user (Entra gone by 19:29:32, AWS by 19:57:04; read back 0 everywhere at 19:57:16, E173). DC01 was deallocated again.
 
 **Read the timings this way.** HR's part, OrangeHRM to Active Directory,
 took 1:31 for the hire, 0:45 for the job change and 0:39 for the leaver.
