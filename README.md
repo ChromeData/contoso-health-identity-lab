@@ -308,7 +308,16 @@ The Microsoft 365 E5, Entra ID Governance and Intune trials end on 2026-11-26 (E
   Governance or Intune licences.
 - **Keeps working:** the Terraform code, the offline tests, the pipeline and the capture log. The
   capture-log rows still prove what ran on the date they record. They do not prove it still runs.
-- **Detections:** when Sentinel's free period ends, `enable_la_alerts` moves the rules to Log
-  Analytics scheduled query alerts (`modules/monitoring`; verify: the workspace's Sentinel trial end date).
+- **Detections:** the move to Log Analytics is not automatic. Today `lab.tfvars` has
+  `enable_sentinel = true` and `enable_la_alerts = false`. When Sentinel's free period ends, an
+  operator must set `enable_sentinel = false` and `enable_la_alerts = true` in one change, then
+  apply it through the gate (a precondition in `modules/monitoring/main.tf` refuses both on).
+  The same KQL then runs as Log Analytics scheduled query alerts. The alert email goes out only
+  when `alert_email` is set. The rules in `sentinel_only_rule_keys` do not carry over: they look
+  back 14 days, and a Log Analytics alert looks back at most 2 days. They are
+  `security_info_registered_risky`, `sod_violation_granted`,
+  `dormant_privileged_account_reactivation` and `keyvault_bulk_secret_read`; output
+  `itdr_sentinel_only_rule_keys` lists the ones selected (`modules/monitoring/itdr_v2.tf`,
+  `itdr_v3.tf`; verify: the workspace's Sentinel trial end date).
 - **What to say:** "This ran in a trial tenant until 2026-11-26. The evidence rows are dated. A
   reviewer who signs in later finds the paid features switched off."

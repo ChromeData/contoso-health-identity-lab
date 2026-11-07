@@ -202,7 +202,7 @@ combinations that cannot work.
 | `enable_dc` | `false` | DC01 domain controller VM (dc-vm) | nothing: free tier, Azure compute cost |
 | `enable_intune_vm` | `false` | Windows 11 VM, Entra joined + Intune enrolled, the CA005 compliant device (intune-vm) | `enable_premium` + the human steps in `lab/scripts/intune/README.md` |
 | `enable_sentinel` | `false` | Sentinel onboarding + the core rules (monitoring). **Starts the 31-day trial** | Entra logs flowing for a few hours; not with `enable_la_alerts` |
-| `enable_la_alerts` | `false` | The same rules as Log Analytics alerts, the post-trial path (monitoring) | not with `enable_sentinel` |
+| `enable_la_alerts` | `false` | The same rules as Log Analytics alerts, the post-trial path (monitoring), except `sentinel_only_rule_keys` (14-day look-back; no Log Analytics equivalent) | not with `enable_sentinel` |
 | `enable_access_reviews` | `false` | Shorthand for the three tier flags below (deprecated alias) | `enable_governance` + a fallback reviewer group |
 | `enable_access_reviews_privileged` | `false` | ADR 0012 T1: quarterly default-deny reviews of every PIM-governed group and of Global Administrator eligibility (rendered bodies) | `enable_governance` |
 | `enable_access_reviews_requestable` | `false` | ADR 0012 T2: half-yearly `removeAccess` review, only on requestable packages that outlive 180 days or allow extension | `enable_governance` |
