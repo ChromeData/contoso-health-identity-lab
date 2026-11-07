@@ -105,6 +105,13 @@ export function checkCallback(pendingEntry, loginCookie, active) {
   return { ok: true };
 }
 
+// One login id per browser: a second /login (another tab) reuses the
+// browser's existing cr_login value instead of replacing it, so the first
+// tab's callback still matches. A missing or malformed value gets a new one.
+export function browserLoginId(existing, make = () => b64u(crypto.randomBytes(24))) {
+  return existing && /^[A-Za-z0-9_-]{32}$/.test(existing) ? existing : make();
+}
+
 export function readConf(file = CONF) {
   if (!fs.existsSync(file)) throw new Error(`no IdP config at ${file}: run node lab/okta-migration/cutover.mjs prestage`);
   const c = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -155,7 +162,7 @@ export function serve({ port = PORT, conf = CONF } = {}) {
       if (url.pathname === '/login') {
         const { verifier, challenge } = pkcePair();
         const state = b64u(crypto.randomBytes(16)); const nonce = b64u(crypto.randomBytes(16));
-        const browser = b64u(crypto.randomBytes(24));
+        const browser = browserLoginId((req.headers.cookie || '').match(/(?:^|;\s*)cr_login=([A-Za-z0-9_-]+)/)?.[1]);
         pending.set(state, { verifier, nonce, idp: c.active, t: Date.now(), browser });
         return send(302, '', { location: authorizeUrl(c[c.active], { state, nonce, challenge, redirect: `http://localhost:${port}/callback` }), 'set-cookie': `cr_login=${browser}; HttpOnly; SameSite=Lax; Path=/callback; Max-Age=600` });
       }
@@ -164,7 +171,9 @@ export function serve({ port = PORT, conf = CONF } = {}) {
         const p = pending.get(url.searchParams.get('state'));
         const loginCookie = (req.headers.cookie || '').match(/(?:^|;\s*)cr_login=([A-Za-z0-9_-]+)/)?.[1];
         const chk = checkCallback(p, loginCookie, c.active);
-        if (p) pending.delete(url.searchParams.get('state'));
+        // A callback from another browser does not consume the state: the
+        // browser that started the login can still finish it.
+        if (p && !/another browser/.test(chk.why || '')) pending.delete(url.searchParams.get('state'));
         if (!chk.ok) return send(chk.code, `<p>Sign-in refused: ${esc(chk.why)}. <a href="/login">Sign in again</a>.</p>`);
         const idp = c[p.idp];
         const tok = await getJson(idp.token_endpoint, {
