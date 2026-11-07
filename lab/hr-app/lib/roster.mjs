@@ -109,6 +109,11 @@ function checkManager(workers, manager, self) {
   if (manager === self) throw new HrError('A worker cannot be their own manager.');
 }
 
+// The local part of the userName the sender builds (given.surname, lowercased).
+export function accountName(givenName, surname) {
+  return `${givenName}.${surname}`.toLowerCase();
+}
+
 // HIRE. HR gives name, job, department, manager, start date. The HR app
 // issues the employee number. Status is 'joiner' (SCIM active=true).
 export function hire(roster, input, catalogue) {
@@ -125,6 +130,18 @@ export function hire(roster, input, catalogue) {
   checkManager(roster.workers, manager, null);
   const dupe = roster.workers.find((w) => w.status !== 'leaver' && w.givenName.toLowerCase() === givenName.toLowerCase() && w.surname.toLowerCase() === surname.toLowerCase());
   if (dupe) throw new HrError(`${givenName} ${surname} already works here. Change their record instead.`, 409);
+  // The directory account name. Invoke-InboundProvisioning.ps1 builds the
+  // userName as given.surname, lowercased: no employee number in it. So two
+  // different splits ("Alex.J Kim" / "Alex J.Kim") or a leaver whose disabled
+  // account still sits in AD would give two workers ONE account name, and the
+  // second hire could never get its own account. Check every worker on the
+  // roster, leavers included; refuse a space (an invalid UPN).
+  const account = accountName(givenName, surname);
+  if (/\s/.test(account)) throw new HrError('Names with a space cannot make a directory account name. Use a hyphen (for example Mary-Ann).');
+  const clash = roster.workers.find((w) => accountName(w.givenName, w.surname) === account);
+  if (clash) {
+    throw new HrError(`The account name ${account} already belongs to ${clash.givenName} ${clash.surname} (${clash.status === 'leaver' ? 'a leaver whose account still exists' : 'a current worker'}). Ask IT for a different account name before hiring.`, 409);
+  }
   const employeeId = nextEmployeeId(roster.workers, dept, jobTitle);
   const worker = { employeeId, givenName, surname, dept, jobTitle, manager, status: 'joiner', startDate, endDate: '' };
   return { roster: { ...roster, workers: [...roster.workers, worker] }, worker, kind: 'hired' };

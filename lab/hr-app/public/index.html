@@ -158,7 +158,7 @@ function showStatus(res) {
       line.textContent = 'Sending to IT systems... (status check failed, retrying)';
       setTimeout(poll, 10000); return;
     }
-    if (d.state === 'delivered') { line.className = 'ok'; line.textContent = `Delivered to IT systems at ${fmtTime(d.finishedAt)}. IT sets up the account and access from here.`; return; }
+    if (d.state === 'accepted') { line.className = 'ok'; line.textContent = `Accepted by IT systems at ${fmtTime(d.finishedAt)}. IT confirms the account and access from here.`; return; }
     if (d.state === 'failed') { line.className = 'bad'; line.textContent = 'Not delivered. IT has the details and will contact HR.'; return; }
     if (d.state === 'local') { line.textContent = d.note; return; }
     if (Date.now() - t0 > 15 * 60 * 1000) { line.textContent = 'Still sending. IT is told if it does not arrive.'; return; }

@@ -148,7 +148,7 @@ test('GitHubStore: reads the hr-feed file, writes with its sha over stdin, maps 
   const body = JSON.parse(calls[1].input);
   assert.deepEqual([body.sha, body.branch, Buffer.from(body.content, 'base64').toString()], ['blob1', 'hr-feed', 'x\n']);
   assert.ok(!calls[1].args.join(' ').includes(body.content), 'content goes over stdin, not argv');
-  assert.equal((await g.delivery('c0ffee')).state, 'delivered');
+  assert.equal((await g.delivery('c0ffee')).state, 'accepted', 'a green run is accepted, not confirmed');
   assert.match(calls.at(-1).args[1], /head_sha=c0ffee&event=push&/, 'a manual dry run on the same commit must not count as delivered');
   fail = true;
   await assert.rejects(g.write('y\n', 'blob1', 'm'), (e) => e.conflict === true);
@@ -186,4 +186,15 @@ test('API: two hires at once both land, with different numbers (saves are queued
   assert.deepEqual(ids, ['100493', '100494']);
   const text = await readFile(s.file, 'utf8');
   assert.match(text, /Alex,Kim/); assert.match(text, /Blair,Kim/);
+});
+
+test('hire refuses an account name that is already taken (other split, or a leaver) and names with a space', () => {
+  const { r, cat } = fresh();
+  const ok = { dept: 'Nursing', jobTitle: 'Registered Nurse', manager: '200015', startDate: '2026-11-09' };
+  const a = hire(r, { ...ok, givenName: 'Alex.J', surname: 'Kim' }, cat);
+  assert.throws(() => hire(a.roster, { ...ok, givenName: 'Alex', surname: 'J.Kim' }, cat), (e) => e.status === 409 && /alex\.j\.kim already belongs to Alex\.J Kim/.test(e.message));
+  // Dana Okafor is a leaver: her disabled account still exists in AD.
+  assert.throws(() => hire(r, { ...ok, givenName: 'Dana', surname: 'Okafor' }, cat), (e) => e.status === 409 && /a leaver whose account still exists/.test(e.message));
+  assert.throws(() => hire(r, { ...ok, givenName: 'Mary Ann', surname: 'Kim' }, cat), /hyphen/);
+  assert.equal(hire(r, { ...ok, givenName: 'Mary-Ann', surname: 'Kim' }, cat).worker.employeeId, '100493');
 });

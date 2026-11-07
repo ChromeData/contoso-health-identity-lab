@@ -30,7 +30,7 @@ token is passed to it).
    copies it to Entra ID. Group rules, auto-assignment, AWS SCIM and
    ServiceNow follow.
 
-The form shows "Sending to IT systems", then "Delivered" or "Not delivered"
+The form shows "Sending to IT systems", then "Accepted by IT systems" (Microsoft answered 202 and logged no failure while the run waited; not a confirmation) or "Not delivered"
 from the run's result. Measured timings: [ADR 0027, "Measured in the tenant"](../docs/adr/0027-hr-form-as-the-hr-system.md#measured-in-the-tenant-2026-11-07)
 and capture log E121-E123.
 
