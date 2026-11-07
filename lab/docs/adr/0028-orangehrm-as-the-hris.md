@@ -193,7 +193,25 @@ last click (the Save that finishes the task).
 
 **Leaver** (E172): Terminate Employment, date today, reason Resigned
 
-LEAVER_ROWS
+| UTC | + | Step |
+|---|---|---|
+| 18:37:19 | 0:00 | HR saves Terminate Employment (date 2026-11-07, Resigned) |
+| 18:37:23 | 0:04 | Connector: "SEND Test Hris leaves"; commit `a4ec768` |
+| 18:37:55 | 0:36 | `bulkUpload` 202 (run 42402205564), SCIM `active:false` |
+| 18:37:58 | 0:39 | AD account disabled |
+| 18:47:56 | 10:37 | Cloud Sync: Entra "Account enabled: No" |
+| by 18:50:47 | 13:28 | Dynamic groups: out of All-ICU and the ICU auto-assignment group |
+| 18:55:10 | 17:51 | **Gap seen:** the ICU auto-assignment policy delivered "ICU - Critical Care Apps" (App-ICU-CriticalCare-Users) to the already-disabled account, 35 minutes after the job change. The policy's rule matches department ICU and does not exclude disabled accounts. The account cannot sign in (Entra disabled), and the user was deleted at clean-up. Fix (not built here): add `accountEnabled -eq true` to the birthright auto-assignment rules. "Nurse - Clinical Apps" went into its 3-day grace period, as before |
+| 18:57:24 | 20:05 | ServiceNow: user disabled (40-minute cycle) |
+| 19:16:29 | 39:10 | AWS IAM Identity Center: user disabled (SCIM, 40-minute cycle) |
+
+**Clean-up** (E173): OrangeHRM Terminate then Maintenance > Purge (19:17:02;
+OrangeHRM keeps an anonymised "Purged Employee" row, so `hris.sh free-id
+100493` freed the number for retakes); `reset-demo-hire.sh 100493 --apply`
+as the operator removed the `hr-feed` row and the AD account; the
+ServiceNow record was deleted as the ServiceNow admin (read back: none);
+Cloud Sync deleted the Entra user, `--purge-entra` emptied Deleted users,
+and SCIM removed the AWS user (times in E173).
 
 **Read the timings this way.** HR's part, OrangeHRM to Active Directory,
 took 1:31 for the hire, 0:45 for the job change and 0:39 for the leaver.

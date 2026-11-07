@@ -6,6 +6,8 @@
 #   ./hris.sh install    first run only: OrangeHRM's own CLI installer
 #   ./hris.sh connector  create the connector's read-only view and account
 #   ./hris.sh seed       first run only: load the Contoso roster (hr_feed.csv)
+#   ./hris.sh free-id N  retake reset: let a PURGED worker's employee number
+#                        be used again (OrangeHRM keeps it taken after a purge)
 #   ./hris.sh status     is it up, and how many workers it holds
 #   ./hris.sh down       stop it (data kept in the Docker volumes)
 #   ./hris.sh destroy    stop it and delete all its data
@@ -123,6 +125,17 @@ SQL
     fi
     node seed.mjs "$ROSTER" | sql_root orangehrm
     echo "Seeded $(grep -c '^[0-9]' "$ROSTER") workers."
+    ;;
+  free-id)
+    # OrangeHRM keeps a purged record (anonymised as "Purged Employee") and
+    # its Employee Id, so Add Employee refuses that number again. A real
+    # HRIS never reuses a number; the lab's retake reset does, on purpose,
+    # so a re-recorded demo hire (Sam Rivera, 400104) gets the same number.
+    # Only a purged record's number is freed; a current or past worker's is
+    # never touched.
+    id="${2:-}"
+    [[ "$id" =~ ^[0-9]{6}$ ]] || { echo "usage: hris.sh free-id <6-digit employee number>" >&2; exit 2; }
+    echo "UPDATE hs_hr_employee SET employee_id = NULL WHERE employee_id = '$id' AND purged_at IS NOT NULL; SELECT ROW_COUNT() AS freed; SELECT COUNT(*) AS still_in_use FROM hs_hr_employee WHERE employee_id = '$id';" | sql_root orangehrm --table
     ;;
   status)
     docker compose ps --format '{{.Service}} {{.State}} {{.Ports}}'

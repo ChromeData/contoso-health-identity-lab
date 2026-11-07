@@ -64,9 +64,15 @@ service sets the AD account's first password itself.
 1. OrangeHRM: the worker must be a past employee (Terminate Employment).
    Then **Maintenance > Purge Records > Purge Employee Records**, pick the
    worker, Purge. (OrangeHRM asks for the Admin password again.)
-2. The rest is unchanged: `lab/scripts/demo/reset-demo-hire.sh <number> --apply`
+   OrangeHRM keeps an anonymised "Purged Employee" row that still holds the
+   number. `orangehrm/hris.sh free-id <number>` frees it, so the retake gets
+   the same number (a real HRIS never reuses one; the lab does on purpose).
+2. Do step 1 first. If the row leaves `hr-feed` while OrangeHRM still has
+   the worker, the connector sends the worker again as a new hire.
+3. The rest is unchanged: `lab/scripts/demo/reset-demo-hire.sh <number> --apply`
    as the operator removes the row on `hr-feed` and the AD account
-   (lab/scripts/demo/README.md).
+   (lab/scripts/demo/README.md). ServiceNow keeps an inactive record: an
+   admin deletes it before the retake.
 
 ## Rehearse without a person
 
@@ -89,7 +95,7 @@ node orangehrm/hr-clicks.mjs purge --name "Test Hris"
 |---|---|
 | `orangehrm/compose.yaml` | OrangeHRM + MariaDB, 127.0.0.1 only, secrets as files |
 | `orangehrm/Dockerfile` | Native arm64 OrangeHRM 5.9 (the official image is amd64 only) |
-| `orangehrm/hris.sh` | up, install, connector, seed, status, down, destroy; Keychain passwords |
+| `orangehrm/hris.sh` | up, install, connector, seed, free-id, status, down, destroy; Keychain passwords |
 | `orangehrm/seed.mjs` | The go-live load: the `hr-feed` roster into OrangeHRM |
 | `orangehrm/connector-view.sql` | The one view the connector may read (8 fields) |
 | `orangehrm/hr-clicks.mjs` | Rehearsal driver: HR's clicks, screenshots, click times |
