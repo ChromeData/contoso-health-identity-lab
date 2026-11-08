@@ -192,6 +192,20 @@ check "pam_oidc_app_requires_sso_apps" {
   }
 }
 
+check "claims_viewer_requires_sso_apps" {
+  assert {
+    condition     = !var.enable_claims_viewer_app || (var.enable_premium && var.enable_sso_apps)
+    error_message = "enable_claims_viewer_app = true has no effect unless enable_premium and enable_sso_apps are both true (the Claims Viewer app lives in modules/apps)."
+  }
+}
+
+check "adfs_https_requires_dc" {
+  assert {
+    condition     = !var.enable_adfs_https || var.enable_dc
+    error_message = "enable_adfs_https = true has no effect unless enable_dc is true (the 443 rule is on DC01's NSG)."
+  }
+}
+
 check "servicenow_sso_requires_sso_apps" {
   assert {
     condition     = !var.enable_servicenow_sso || (var.enable_premium && var.enable_sso_apps)
@@ -203,6 +217,13 @@ check "servicenow_provisioning_requires_sso_apps" {
   assert {
     condition     = !var.enable_servicenow_provisioning || (var.enable_premium && var.enable_sso_apps)
     error_message = "enable_servicenow_provisioning = true has no effect unless enable_premium and enable_sso_apps are both true (the ServiceNow provisioning app lives in modules/apps)."
+  }
+}
+
+check "clinic_results_requires_sso_apps" {
+  assert {
+    condition     = !var.enable_clinic_results_app || (var.enable_premium && var.enable_sso_apps)
+    error_message = "enable_clinic_results_app = true has no effect unless enable_premium and enable_sso_apps are both true (Clinic Lab Results lives in modules/apps, CA061 in modules/conditional-access)."
   }
 }
 
@@ -239,6 +260,13 @@ check "nhi_governance_requires_premium" {
   assert {
     condition     = !var.enable_nhi_governance || var.enable_premium
     error_message = "enable_nhi_governance = true has no effect unless enable_premium = true (App-Consent-Reviewers lives in the premium-tier modules/groups)."
+  }
+}
+
+check "lcw_leaver_trigger_requires_premium" {
+  assert {
+    condition     = !var.enable_lcw_leaver_trigger || var.enable_premium
+    error_message = "enable_lcw_leaver_trigger = true has no effect unless enable_premium = true (the All-Workforce trigger group lives in the premium-tier modules/groups; dynamic groups are P1). New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver will then refuse to run because the group does not exist."
   }
 }
 
@@ -325,8 +353,8 @@ module "groups" {
   break_glass_domain = var.onmicrosoft_domain
 
   # Optional groups, each behind the flag of the feature that consumes it.
-  enable_nhi_governance  = var.enable_nhi_governance               # App-Consent-Reviewers
-  enable_workforce_group = var.enable_phishing_resistant_all_users # All-Workforce (passkey rollout)
+  enable_nhi_governance  = var.enable_nhi_governance                                                # App-Consent-Reviewers
+  enable_workforce_group = var.enable_phishing_resistant_all_users || var.enable_lcw_leaver_trigger # All-Workforce (passkey rollout; scheduled leaver trigger)
 }
 
 # -----------------------------------------------------------------------------
@@ -409,6 +437,12 @@ module "conditional_access" {
   # strength (enable_phishing_resistant_all_users). Never All users.
   enable_shared_clinical_ca       = var.enable_shared_clinical_ca
   ca060_clinical_group_object_ids = [module.groups[0].all_nurses_group_object_id, module.groups[0].all_icu_group_object_id]
+
+  # CA061 Clinic Lab Results (Okta -> Entra wave 1): the same flag as the app
+  # itself - no app, no CA061. One app, its one group.
+  enable_clinic_results_ca = var.enable_clinic_results_app && var.enable_sso_apps
+  ca061_app_ids            = var.enable_clinic_results_app && var.enable_sso_apps ? [module.apps[0].clinic_results_client_id] : []
+  ca061_group_object_ids   = var.enable_clinic_results_app && var.enable_sso_apps ? [module.apps[0].clinic_results_users_group_object_id] : []
 }
 
 # -----------------------------------------------------------------------------
@@ -522,7 +556,9 @@ module "dc_vm" {
   key_vault_id        = module.keyvault.key_vault_id
   allowed_ip_ranges   = var.operator_ip_ranges
   vm_size             = var.dc_vm_size
-  tags                = var.tags
+  # 443 to DC01 only for the temporary AD FS exercise (lab/adfs).
+  adfs_https_enabled = var.enable_adfs_https
+  tags               = var.tags
 }
 
 # -----------------------------------------------------------------------------
@@ -715,6 +751,13 @@ module "apps" {
   servicenow_provisioning_job_enabled = var.servicenow_provisioning_job_enabled
   servicenow_provisioning_credentials = var.servicenow_provisioning_credentials
 
+  # ServiceNow access fulfilment (default false): the app ServiceNow uses to
+  # add/remove people on Clinical access packages after a manager approves in
+  # ServiceNow. No Graph permission; one catalog role on the Clinical catalog.
+  # Without governance there is no catalog, so the flag needs both.
+  enable_servicenow_fulfilment     = var.enable_servicenow_fulfilment && var.enable_governance
+  servicenow_fulfilment_catalog_id = var.enable_servicenow_fulfilment && var.enable_governance ? module.entitlement[0].catalog_id : ""
+
   # okta-clinic-idp (default false): Entra as the OIDC identity provider for
   # the acquired clinic's Okta org (runbook Phase 1, ADR 0022). The ONE
   # principal on it is App-Okta-Federation-Users; the client secret is a
@@ -722,6 +765,19 @@ module "apps" {
   enable_okta_federation                = var.enable_okta_federation
   okta_org_domain                       = var.okta_org_domain
   okta_federation_users_group_object_id = module.groups[0].app_access_group_object_ids["okta"]
+
+  # Clinic Lab Results (default false): the first app moved off the clinic's
+  # Okta (lab/okta-migration wave 1). Its group lives in this module, like
+  # PAM-Operators; CA061 above targets it.
+  enable_clinic_results_app = var.enable_clinic_results_app
+
+  # Contoso Claims Viewer (default false): the app migrated off AD FS
+  # (lab/adfs, ADR 0009 phase 3). Its two groups come from AD through Cloud
+  # Sync, so their ids are inputs, not module.groups outputs.
+  enable_claims_viewer_app                 = var.enable_claims_viewer_app
+  claims_viewer_clinicians_group_object_id = var.claims_viewer_clinicians_group_object_id
+  claims_viewer_admins_group_object_id     = var.claims_viewer_admins_group_object_id
+  claims_viewer_saml_signing_cert_end_date = var.claims_viewer_saml_signing_cert_end_date
 }
 
 # -----------------------------------------------------------------------------

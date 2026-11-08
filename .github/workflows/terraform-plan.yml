@@ -64,7 +64,7 @@ jobs:
           if ! files="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"; then
             echo "::warning::git diff failed; failing closed (tf=true)"
             echo "tf=true" >> "$GITHUB_OUTPUT"
-          elif grep -qE '^(lab/terraform/|\.github/workflows/terraform-plan\.yml$|\.github/scripts/plain-plan\.py$)' <<< "$files"; then
+          elif grep -qE '^(lab/terraform/|\.github/workflows/terraform-plan\.yml$|\.github/scripts/plain-plan\.py$|\.github/scripts/pipeline-config\.sh$)' <<< "$files"; then
             echo "tf=true" >> "$GITHUB_OUTPUT"
           else
             echo "tf=false" >> "$GITHUB_OUTPUT"
@@ -100,14 +100,12 @@ jobs:
       TF_VAR_key_vault_name: ${{ vars.TF_KEY_VAULT_NAME || 'kv-idlab' }}
       TF_VAR_onmicrosoft_domain: ${{ vars.TF_ONMICROSOFT_DOMAIN }}
       TF_VAR_pim_approver_object_ids: ${{ vars.TF_PIM_APPROVER_OBJECT_IDS || '[]' }}
-      # PRIVACY, not credentials: GitHub masks *secrets* in public run logs but
-      # prints *variables* in every step's env header. Your home IP and email
-      # are therefore stored as repository SECRETS purely so they are masked.
-      # Dependabot-triggered runs see only *Dependabot* secrets, so store every
-      # TF_* secret there too, or the plan shows false removals (the comment
-      # names the missing ones).
-      TF_VAR_operator_ip_ranges: ${{ secrets.TF_OPERATOR_IP_RANGES || '[]' }}
-      TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+      # PRIVACY values (operator IP ranges, alert email, app owner ids, SAML
+      # certificate emails, PIM alert mailbox) are NOT here and NOT GitHub
+      # secrets: step "Pipeline config from Key Vault" reads them with this
+      # job's OIDC sign-in (envs/bootstrap pipeline-config.tf) and exports
+      # them masked. No value is stored in GitHub, Dependabot runs included.
+      PIPELINE_CONFIG_VAULT: ${{ vars.TF_PIPELINE_CONFIG_VAULT || 'kv-idlab-cicd-20f1' }}
       TF_VAR_sentinel_playbook_id: ${{ vars.TF_SENTINEL_PLAYBOOK_ID }}
       TF_VAR_key_vault_secrets_officer_ids: ${{ vars.TF_KV_SECRETS_OFFICER_IDS || '[]' }}
       TF_VAR_access_review_fallback_group_object_id: ${{ vars.TF_ACCESS_REVIEW_FALLBACK_GROUP_OBJECT_ID }}
@@ -119,9 +117,8 @@ jobs:
       TF_VAR_intune_vm_admin_login_object_ids: ${{ vars.TF_INTUNE_VM_ADMIN_LOGIN_OBJECT_IDS || '[]' }}
       # Senior-scope extensions (all staging flags live in lab.tfvars). Tenant
       # identifiers come from Variables; owner ids and the certificate mailbox
-      # are SECRETS so the env header masks them, AND sensitive Terraform
-      # variables: masking covers only the whole secret string (not each id
-      # of a JSON list) and never the PR comment. aws_scim_credentials is
+      # come from the pipeline config vault (masked per element) AND are
+      # sensitive Terraform variables, so the PR comment never shows them. aws_scim_credentials is
       # NEVER passed here: it is written once by a local seeding apply.
       TF_VAR_pim_tier0_approver_object_ids: ${{ vars.TF_PIM_TIER0_APPROVER_OBJECT_IDS || '[]' }}
       TF_VAR_privileged_review_reviewer_group_object_id: ${{ vars.TF_PRIVILEGED_REVIEW_REVIEWER_GROUP_OBJECT_ID }}
@@ -131,14 +128,9 @@ jobs:
       TF_VAR_aws_saml_acs_urls: ${{ vars.TF_AWS_SAML_ACS_URLS || '[]' }}
       TF_VAR_aws_access_portal_url: ${{ vars.TF_AWS_ACCESS_PORTAL_URL }}
       TF_VAR_aws_scim_template_id: ${{ vars.TF_AWS_SCIM_TEMPLATE_ID }}
-      TF_VAR_app_owner_object_ids: ${{ secrets.TF_APP_OWNER_OBJECT_IDS || '[]' }}
       # The APPLY app owns every app in modules/apps, whoever runs the plan.
       TF_VAR_apply_client_id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
-      TF_VAR_saml_cert_notification_emails: ${{ secrets.TF_SAML_CERT_NOTIFICATION_EMAILS || '[]' }}
       TF_VAR_containment_playbook_id: ${{ vars.TF_CONTAINMENT_PLAYBOOK_ID }}
-      # PIM notification mailbox (modules/pim): a SECRET for the same reason as
-      # the alert email. Unset = '' = tenant-default PIM notifications.
-      TF_VAR_pim_alert_mailbox: ${{ secrets.TF_PIM_ALERT_MAILBOX }}
       # CA010-Exclusion-<reason> groups, excluded next to break-glass (group
       # ids, so a Variable). Unset = none. Set here, not only in a local
       # terraform.tfvars, or the next CI apply removes the exception.
@@ -186,6 +178,13 @@ jobs:
           client-id: ${{ vars.AZURE_PLAN_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # The five privacy values, from Key Vault, as the PLAN app (Key Vault
+      # Secrets User on that vault only). Fails closed: a value it cannot
+      # read stops the job instead of planning its removal.
+      - name: Pipeline config from Key Vault (OIDC, no stored secret)
+        id: config
+        run: .github/scripts/pipeline-config.sh
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
@@ -277,6 +276,24 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
         working-directory: ${{ env.TF_WORKING_DIR }}
 
+      # The change set ("<actions> <address>" per changed resource) and its
+      # sha256, for the apply gate: terraform-apply.yml refuses to apply when
+      # the saved plan on main changes a different set of resources than this
+      # PR's plan (karen-review A2). Addresses and actions only, never values.
+      # continue-on-error: without it the comment carries no fingerprint, and
+      # the apply gate then says "not compared" and shows the full saved plan.
+      - name: Change set fingerprint
+        id: changeset
+        if: ${{ !cancelled() && steps.plan.outputs.plan_exit == '0' }}
+        continue-on-error: true
+        run: |
+          plan_json="${RUNNER_TEMP}/plan-cs.json"
+          trap 'rm -f "$plan_json"' EXIT
+          terraform show -json tfplan > "$plan_json"
+          "${GITHUB_WORKSPACE}/.github/scripts/plan-changeset.sh" "$plan_json" > "${RUNNER_TEMP}/changeset.txt"
+          echo "sha256=$(sha256sum "${RUNNER_TEMP}/changeset.txt" | cut -c1-64)" >> "$GITHUB_OUTPUT"
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
       - name: Post plan to PR
         if: ${{ !cancelled() }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -286,14 +303,8 @@ jobs:
           VALIDATE: ${{ steps.validate.outcome }}
           PLAN_EXIT: ${{ steps.plan.outputs.plan_exit || 'not run' }}
           SUMMARY_FILE: ${{ runner.temp }}/plain-summary.md
-          # In a Dependabot run `secrets` holds Dependabot secrets only. Each
-          # EMPTY_* is the string true/false (is it unset?), never a value.
-          DEPENDABOT_RUN: ${{ github.actor == 'dependabot[bot]' }}
-          EMPTY_TF_OPERATOR_IP_RANGES: ${{ secrets.TF_OPERATOR_IP_RANGES == '' }}
-          EMPTY_TF_ALERT_EMAIL: ${{ secrets.TF_ALERT_EMAIL == '' }}
-          EMPTY_TF_APP_OWNER_OBJECT_IDS: ${{ secrets.TF_APP_OWNER_OBJECT_IDS == '' }}
-          EMPTY_TF_SAML_CERT_NOTIFICATION_EMAILS: ${{ secrets.TF_SAML_CERT_NOTIFICATION_EMAILS == '' }}
-          EMPTY_TF_PIM_ALERT_MAILBOX: ${{ secrets.TF_PIM_ALERT_MAILBOX == '' }}
+          CHANGESET_FILE: ${{ runner.temp }}/changeset.txt
+          CHANGESET_SHA256: ${{ steps.changeset.outputs.sha256 }}
         with:
           script: |
             const fs = require('fs');
@@ -311,6 +322,7 @@ jobs:
                 ? '_No plain-English summary this time (its step failed). The full plan is under Technical details below._'
                 : '**What this change does:** not known yet. The plan did not finish; Technical details below show which step failed.';
             }
+            if (summary.length > 30000) summary = summary.slice(0, 30000) + '\n... [truncated]';
             const checks = [
               ['formatting', process.env.FMT === 'success'],
               ['setup', process.env.INIT === 'success'],
@@ -323,36 +335,31 @@ jobs:
             const checksLine = failed.length === 0
               ? 'Terraform checks: formatting, setup, validation and plan all passed.'
               : `Terraform checks: **${listed} did not pass** (see Technical details below).`;
-            // GitHub comment hard limit is 65536 chars; truncate the plan,
-            // leaving room for the summary (plain-plan.py caps its bullets).
-            const MAX = Math.max(20000, 60000 - summary.length);
-            if (plan.length > MAX) {
-              plan = plan.slice(0, MAX) + '\n\n... [truncated — see the full plan in the Actions log] ...';
+            // Dependabot runs need the same OIDC sign-in as any PR (they read the
+            // pipeline config vault too); without it the config step fails.
+            // Change set + fingerprint for the apply gate (plan-changeset.sh).
+            // Only when the step succeeded, so a stale fingerprint is never kept.
+            let changeset = '';
+            const fp = /^[0-9a-f]{64}$/.test(process.env.CHANGESET_SHA256 || '') ? process.env.CHANGESET_SHA256 : '';
+            if (fp) {
+              try { changeset = fs.readFileSync(process.env.CHANGESET_FILE, 'utf8').trim(); } catch { changeset = ''; }
+              if (changeset.length > 15000) changeset = changeset.slice(0, 15000) + '\n... [truncated]';
             }
-            // verify: Dependabot runs honour id-token: write + vars; if not,
-            // azure/login fails and this comment shows every step skipped.
-            const banner = [];
-            const missing = Object.keys(process.env)
-              .filter(k => k.startsWith('EMPTY_TF_') && process.env[k] === 'true')
-              .map(k => k.slice('EMPTY_'.length)).sort();
-            if (process.env.DEPENDABOT_RUN === 'true' && missing.length > 0) {
-              const msg = `Dependabot run without these Dependabot secrets: ${missing.join(', ')}. ` +
-                'A Key Vault firewall, NSG, action-group, app-owner, certificate-mailbox or ' +
-                'PIM-notification removal they feed is NOT real drift unless the repo secret ' +
-                'is unset too. Store every TF_* secret you use as a Dependabot secret as well.';
-              core.warning(msg);
-              banner.push('> [!WARNING]', `> ${msg}`, '');
-            }
+            const changesetBlock = fp ? [
+              '<details><summary>Change set the apply gate compares (actions and addresses)</summary>',
+              '', '```text', changeset || '(no resource changes)', '```', '',
+              `Fingerprint: \`${fp.slice(0, 12)}\``, '</details>', '',
+              `<!-- plan-changeset-sha256: ${fp} -->`, '',
+            ] : [];
             // The marker heading stays the FIRST line: the upsert below
             // matches on it (startsWith).
-            const body = [
+            const render = (planText) => [
               '## Terraform plan — `lab/terraform/envs/dev`',
               '',
               summary,
               '',
               checksLine,
               '',
-              ...banner,
               '<details><summary>Technical details: step results and the full Terraform plan</summary>',
               '',
               `| step | result |`,
@@ -363,13 +370,26 @@ jobs:
               `| plan exit code | \`${process.env.PLAN_EXIT}\` |`,
               '',
               '```terraform',
-              plan,
+              planText,
               '```',
               '',
               '</details>',
               '',
+              ...changesetBlock,
               `_Authenticated to Entra via OIDC (PLAN app, read-only). Commit ${context.sha.slice(0,7)}._`,
             ].join('\n');
+            // GitHub's comment limit is 65536 characters. Everything except
+            // the plan (summary, banner, change set, fingerprint) is sized
+            // first; the plan gets only the space that is left, so a long
+            // change set can never push the comment over the limit.
+            const LIMIT = 65000;
+            const NOTE = '\n\n... [truncated — see the full plan in the Actions log] ...';
+            const room = LIMIT - render('').length;
+            if (plan.length > room) {
+              plan = plan.slice(0, Math.max(0, room - NOTE.length)) + NOTE;
+            }
+            const body = render(plan);
+            if (body.length > 65536) core.warning(`Plan comment is ${body.length} characters; GitHub may refuse it.`);
             // Upsert: find our previous comment and edit it instead of spamming.
             // Bot-authored only (a user comment copying the heading is never
             // edited) and paginated (found even on PRs with >30 comments).

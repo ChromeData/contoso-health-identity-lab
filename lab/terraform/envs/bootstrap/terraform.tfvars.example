@@ -57,6 +57,10 @@ enable_evidence_pack          = false
 evidence_storage_account_name = "stidlabevidence7f3a"
 evidence_resource_group_name  = "rg-identity-lab"
 
+# CanNotDelete lock on that same evidence account (main.tf). CI cannot remove
+# it; a human Owner can. The operator can too until its Owner is cut.
+enable_evidence_delete_lock = false
+
 # PIM-Demo-Readers' Azure half (read-only presenter): Reader, Microsoft
 # Sentinel Reader and Log Analytics Reader on this subscription, for a group
 # whose members are eligible-only. After the envs/dev apply that creates it:
@@ -80,3 +84,10 @@ enable_azure_guardrails     = false
 standing_owner_effect       = "Audit"
 keyvault_protection_effect  = "Audit"
 owner_allowed_principal_ids = [] # ["33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"]
+
+# Pipeline config vault (pipeline-config.tf): the five privacy values the
+# Terraform workflows read over GitHub OIDC instead of from GitHub secrets.
+# Seed the values with lab/scripts/operator/set-pipeline-config.sh after the
+# apply; then delete the GitHub (and Dependabot) secrets of the same names.
+enable_pipeline_config_vault = false
+pipeline_config_vault_name   = "" # e.g. "kv-idlab-cicd-20f1" (= vars.TF_PIPELINE_CONFIG_VAULT)

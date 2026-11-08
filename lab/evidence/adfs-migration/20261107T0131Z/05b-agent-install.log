@@ -1,0 +1,13 @@
+run command lab-457b44ad: lab/adfs/scripts/12-Install-ConnectHealthAgent.ps1 on vm-dc01
+[connect-health] downloading https://go.microsoft.com/fwlink/?LinkID=518973
+[connect-health] signature Valid (CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US); installing quietly
+{
+    "installed":  true,
+    "services":  {
+                     "name":  "AzureADConnectHealthAgent",
+                     "status":  "Stopped"
+                 },
+    "registered":  false,
+    "next":  "README step 5: RDP to DC01, run Register-MicrosoftEntraConnectHealthAgent, sign in as a Hybrid Identity Administrator with MFA."
+}
+state: Succeeded, exit code: 0

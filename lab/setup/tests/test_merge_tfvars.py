@@ -1,0 +1,150 @@
+"""Tests for lab/setup/merge_tfvars.py (stdlib only, no tenant).
+
+    python3 -I -m unittest discover -s lab/setup/tests -p 'test_merge_tfvars.py' -v
+"""
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SCRIPT = os.path.join(HERE, '..', 'merge_tfvars.py')
+sys.path.insert(0, os.path.join(HERE, '..'))
+import merge_tfvars as m  # noqa: E402
+
+OLD = '''subscription_id = "old-sub"
+log_analytics_workspace_id = "/subscriptions/x/loga"
+pipeline_config_vault_name = "kv-custom-name"
+pipeline_config_writer_object_ids = ["11111111-1111-1111-1111-111111111111"]
+
+# Added after setup: the evidence pack.
+enable_evidence_pack = true
+evidence_storage_account_name = "stevidence"
+'''
+
+NEW = '''subscription_id = "new-sub"
+log_analytics_workspace_id = "/subscriptions/x/loga"
+pipeline_config_vault_name = "kv-custom-name"
+pipeline_config_writer_object_ids = ["22222222-2222-2222-2222-222222222222"]
+'''
+
+
+def run(old, new, *args):
+    with tempfile.TemporaryDirectory() as d:
+        po, pn = os.path.join(d, 'old'), os.path.join(d, 'new')
+        if old is not None:
+            open(po, 'w').write(old)
+        open(pn, 'w').write(new)
+        return subprocess.run([sys.executable, '-I', SCRIPT, po, pn, *args], capture_output=True, text=True)
+
+
+class MergeTests(unittest.TestCase):
+    def test_new_keys_win(self):
+        out = m.merge(OLD, NEW)
+        self.assertIn('subscription_id = "new-sub"', out)
+        self.assertNotIn('old-sub', out)
+
+    def test_keys_only_in_old_are_kept_with_their_comment(self):
+        out = m.merge(OLD, NEW)
+        self.assertIn('enable_evidence_pack = true', out)
+        self.assertIn('evidence_storage_account_name = "stevidence"', out)
+        self.assertIn('# Added after setup: the evidence pack.', out)
+
+    def test_keep_old_keeps_the_old_writer(self):
+        out = m.merge(OLD, NEW, keep_old=['pipeline_config_writer_object_ids'])
+        self.assertIn('11111111-1111-1111-1111-111111111111', out)
+        self.assertNotIn('22222222-2222-2222-2222-222222222222', out)
+
+    def test_no_old_file_is_the_new_file(self):
+        r = run(None, NEW)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout, NEW)
+
+    def test_custom_vault_name_change_is_refused(self):
+        new = NEW.replace('kv-custom-name', 'kv-idlab-cicd-20f1')
+        r = run(OLD, new, '--refuse-change', 'pipeline_config_vault_name')
+        self.assertEqual(r.returncode, 3)
+        self.assertIn('pipeline_config_vault_name', r.stderr)
+        self.assertEqual(r.stdout, '')
+
+    def test_same_vault_name_is_fine(self):
+        r = run(OLD, NEW, '--refuse-change', 'pipeline_config_vault_name')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('pipeline_config_vault_name = "kv-custom-name"', r.stdout)
+
+    def test_first_run_vault_name_is_not_refused(self):
+        r = run('subscription_id = "a"\n', NEW, '--refuse-change', 'pipeline_config_vault_name')
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_inline_comment_is_not_a_change(self):
+        old = OLD.replace('"kv-custom-name"', '"kv-custom-name" # pipeline config vault')
+        r = run(old, NEW, '--refuse-change', 'pipeline_config_vault_name')
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_hash_inside_the_string_still_counts(self):
+        self.assertEqual(m.value_of('x = "a#b" # c\n'), '"a#b"')
+
+    def test_empty_example_name_may_be_filled_in(self):
+        old = OLD.replace('"kv-custom-name"', '""')
+        r = run(old, NEW, '--refuse-change', 'pipeline_config_vault_name')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('pipeline_config_vault_name = "kv-custom-name"', r.stdout)
+
+    def test_multiline_map_and_list_are_copied_whole(self):
+        old = OLD + '''lab_list = [
+  "a", # one
+  "b",
+]
+lab_map = {
+  "x" = "/subscriptions/1/resourceGroups/rg/providers/A/b"
+  "y" = "{not a brace}"
+}
+'''
+        out = m.merge(old, NEW)
+        self.assertIn('lab_list = [\n  "a", # one\n  "b",\n]\n', out)
+        self.assertIn('lab_map = {\n  "x" = "/subscriptions/1/resourceGroups/rg/providers/A/b"\n  "y" = "{not a brace}"\n}\n', out)
+        # still a parseable file: every key appears once
+        keys = [k for k, _ in m.parse(out)]
+        self.assertEqual(len(keys), len(set(keys)))
+
+    def test_unclosed_value_fails(self):
+        with self.assertRaises(m.Unsupported):
+            m.parse('x = [\n  "a",\n')
+
+    def test_block_comment_is_refused_not_activated(self):
+        old = OLD + '/*\nenable_hr_sync = true\n*/\n'
+        r = run(old, NEW)
+        self.assertEqual(r.returncode, 4)
+        self.assertEqual(r.stdout, '')
+        self.assertIn('block comment', r.stderr)
+
+    def test_block_comment_after_a_value_is_refused(self):
+        r = run(OLD + 'x = 1 /* old: 2 */\n', NEW)
+        self.assertEqual(r.returncode, 4)
+
+    def test_indented_assignment_is_refused_not_dropped(self):
+        r = run(OLD + '  enable_hr_sync = true\n', NEW)
+        self.assertEqual(r.returncode, 4)
+        self.assertIn('column 0', r.stderr)
+
+    def test_heredoc_is_refused(self):
+        r = run(OLD + 'note = <<EOT\nhello\nEOT\n', NEW)
+        self.assertEqual(r.returncode, 4)
+
+    def test_slash_slash_comment_is_still_fine(self):
+        r = run('// a comment\n' + OLD, NEW)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_slashes_inside_a_string_are_data(self):
+        r = run(OLD + 'url = "https://x/*y*/"\n', NEW)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('url = "https://x/*y*/"', r.stdout)
+
+    def test_bad_flag_is_usage_error(self):
+        r = run(OLD, NEW, '--nope', 'x')
+        self.assertEqual(r.returncode, 2)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -19,13 +19,29 @@ run reads the current state and only adds what is missing.
               (printed by 02-Configure-Domain.ps1); userPrincipalName straight
               from the HR userName (the verified suffix, not the AD domain);
               the custom SCIM hireDate formatted into msDS-cloudExtensionAttribute1;
-              start.
+              with --mail-domain, AD mail = <HR userName local part>@<that
+              domain>, on every update (see MAIL below); start.
+
+MAIL (why --mail-domain exists; karen-review follow-up, E121):
+  The API2AD template maps mail <- Join("@", <userName local part>,
+  DefaultDomain()) and only when the object is CREATED (flowType
+  ObjectAddOnly; live read 2026-11-07). In the lab no synced worker had a
+  mail value in Entra (Graph read 2026-11-07), so the joiner workflow's
+  "Generate TAP and send email" task failed for the manager Grace Mwangi.
+  Two causes fit, and both are fixed the same way: DefaultDomain() is the AD
+  domain (corp.contosohealthlab.com), which is not a verified Entra domain,
+  and accounts that existed before the job (matched, not created) never got
+  mail at all (verify: read Grace's AD mail on DC01 the next time it runs).
+  --mail-domain writes mail with a VERIFIED domain and flowType Always, so
+  the next HR send for a worker sets it. Cloud Sync then carries AD mail to
+  Entra mail.
 
 Usage (repo root, after az login as an admin):
   lab/scripts/dc/configure-sync.py cloudsync --domain corp.example.com \\
       --ou "OU=Workforce,DC=corp,DC=example,DC=com" --ou "OU=Disabled,DC=corp,DC=example,DC=com"
   lab/scripts/dc/configure-sync.py hrapp --domain corp.example.com --sp <spId> --job <jobId> \\
-      --default-ou "OU=Workforce,DC=corp,DC=example,DC=com" --parent-dn-file parentDN.txt
+      --default-ou "OU=Workforce,DC=corp,DC=example,DC=com" --parent-dn-file parentDN.txt \\
+      --mail-domain example.com
 
 Facts this encodes (checked against the live tenant, 2026-10-27):
   * the API2AD job has no schema/parseExpression; the TEMPLATE endpoint
@@ -40,6 +56,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -91,6 +108,18 @@ def mapping(target, source):
 def set_mapping(attr_mappings, target, source):
     attr_mappings[:] = [m for m in attr_mappings if m["targetAttributeName"] != target]
     attr_mappings.append(mapping(target, source))
+
+
+def mail_mapping_source(domain):
+    """The expression for AD mail: <userName local part>@<domain>.
+
+    Same local part as the template's sAMAccountName / mail mappings
+    (Replace removes everything from '@'). The domain must be a plain DNS
+    name, so nothing from the caller can change the expression's shape.
+    """
+    if not re.fullmatch(r"(?=.{1,253}$)([A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}", domain or ""):
+        raise SystemExit(f"--mail-domain is not a DNS name: {domain!r}")
+    return f'Join("@", Replace([userName], , "(?<Suffix>@(.)*)", "Suffix", "", , ), "{domain}")'
 
 
 def cloudsync(a):
@@ -174,8 +203,13 @@ def hrapp(a):
         if m["targetAttributeName"] == "userPrincipalName":
             m["source"] = {"expression": "[userName]", "name": "userName", "type": "Attribute", "parameters": []}
     set_mapping(maps, EXT, parse(f'FormatDateTime([{HIRE}], , "yyyy-MM-ddTHH:mm:ssZ", "yyyyMMddHHmmss.fZ")'))
+    if a.mail_domain:
+        # set_mapping writes flowType Always: existing workers get mail on
+        # their next HR send, not only new ones.
+        set_mapping(maps, "mail", parse(mail_mapping_source(a.mail_domain)))
     az("PUT", sch_url, sch)
-    print("mappings: parentDistinguishedName, userPrincipalName <- userName, hireDate -> " + EXT)
+    print("mappings: parentDistinguishedName, userPrincipalName <- userName, hireDate -> " + EXT
+          + (f", mail <- <local part>@{a.mail_domain} (Always)" if a.mail_domain else ""))
     st = az("GET", base + f"/jobs/{a.job}")
     if st["schedule"]["state"] != "Active":
         az("POST", base + f"/jobs/{a.job}/start")
@@ -194,6 +228,7 @@ def main():
     h.add_argument("--job", required=True)
     h.add_argument("--default-ou", required=True)
     h.add_argument("--parent-dn-file", help="file holding the parentDistinguishedName expression from 02-Configure-Domain.ps1")
+    h.add_argument("--mail-domain", help="verified Entra domain for AD mail (<userName local part>@<domain>, every update); see MAIL above")
     a = ap.parse_args()
     (cloudsync if a.cmd == "cloudsync" else hrapp)(a)
 

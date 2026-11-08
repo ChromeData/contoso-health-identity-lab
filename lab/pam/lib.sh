@@ -464,7 +464,7 @@ policy_count() {
   printf '%s' "$v"
 }
 
-# --- dependency gate (CyberArk: "usages" must be handled before a CPM change) --
+# --- dependency gate ("usages" must be handled before a password change) ------
 # dep_gate SAM DEPS_FILE
 #   0  every dependency recorded for SAM is resolved (or the list is empty)
 #   1  unresolved dependencies (one per line on stdout)
@@ -523,16 +523,15 @@ record_override() { # record_override SAM ACTION JUSTIFICATION OPERATOR UNRESOLV
 # window (UTC), ASSIGNED TO THE OPERATOR asking (no borrowing a colleague's
 # change) and carries enough APPROVALS:
 #
-# Dual control (the CyberArk equivalent: dual-control access approval on the
-# Safe, with a minimum number of approvers - verify the exact Master Policy /
-# Safe setting names on your PVWA version). The approvals are ServiceNow's own
+# Dual control (access approval with a minimum number of approvers; in the
+# Microsoft design, ADR 0036, a PIM activation approval). The approvals are ServiceNow's own
 # records, table sysapproval_approver (one row per approver per change). One
 # counts only if it is
 #   * in state "approved" (requested / rejected / cancelled ones do not),
 #   * from someone who is NOT the requester: neither the operator asking for
 #     the account nor the change's requested_by (no self-approval),
 #   * from an authorised approver for SAFE: operators.json lists SAFE in that
-#     person's `approves` (CyberArk: the Safe permission to authorise
+#     person's `approves` (the permission to authorise
 #     account requests),
 # and each person counts once. pam-policy.json tiers.<TIER>.approvals_required
 # is the number of distinct approvals the tier needs: tier0 2 (two people,
@@ -630,7 +629,7 @@ itsm_validate() {
   printf '%s\n' "$counted"
 }
 
-# --- operators (CyberArk: Safe membership) ------------------------------------
+# --- operators (who may check out what) ---------------------------------------
 # operators.json says which person may check out from which library set /
 # sign with which SSH role. A name not listed gets nothing.
 operator_allowed() { # operator_allowed NAME KIND(libraries|ssh_roles) ITEM
