@@ -679,3 +679,28 @@ Describe 'Splunk break-glass search: one result per throttle key (PR #230 review
         $bgSpl | Should -Match 'IPAddress=coalesce\(IPAddress, ""\)'
     }
 }
+
+Describe 'KQL break-glass-signin: one row per account keeps every sign-in IP, result and correlation id (PR #230 review)' {
+    BeforeAll {
+        $bgKql = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'kql' 'break-glass-signin.kql')
+        $bgCases = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'monitoring' 'kusto-harness' 'cases' 'break-glass-signin.json') | ConvertFrom-Json
+    }
+
+    It 'summarizes by account only, and collects IPAddresses, ResultTypes and CorrelationIds next to arg_max' {
+        $bgKql | Should -Match 'by UserPrincipalName, UserId'
+        $bgKql | Should -Match 'IPAddresses = make_set\(IPAddress, \d+\)'
+        $bgKql | Should -Match 'ResultTypes = make_set\(tostring\(ResultType\), \d+\)'
+        $bgKql | Should -Match 'CorrelationIds = make_set\(CorrelationId, \d+\)'
+        $project = ([regex]::Match($bgKql, '(?ms)^\| project (.+?)^\| sort')).Groups[1].Value
+        foreach ($c in 'IPAddresses', 'ResultTypes', 'CorrelationIds') { $project | Should -Match "\b$c\b" -Because "$c must reach the alert" }
+    }
+
+    It 'has an engine case where an older success from another IP survives in the one row' {
+        $c = @($bgCases.cases | Where-Object id -EQ 'two-ips-one-row-keeps-both')[0]
+        $c | Should -Not -BeNullOrEmpty
+        $c.expectRows | Should -Be 1
+        @($c.tables.SigninLogs).Count | Should -Be 2
+        @($c.expect[0].IPAddresses).Count | Should -Be 2
+        $c.expect[0].ResultTypes | Should -Contain '0'
+    }
+}

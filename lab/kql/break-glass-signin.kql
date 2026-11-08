@@ -107,11 +107,17 @@ union
 // makes one alert per row (AlertPerResult), so two break-glass accounts seen
 // in the same minute become two alerts, each groupable into its own
 // account's incident, instead of one alert naming both (review of #230).
+// The newest row's fields stay in the plain columns; IPAddresses, ResultTypes
+// and CorrelationIds keep EVERY sign-in of the account in the window, so an
+// older success from another IP is still in the alert, not only in the raw
+// logs (review of #230). Capped at 50 each (one NRT minute holds far fewer).
 | summarize arg_max(TimeGenerated, SignInType, MatchedBy, IPAddress, Country, AppDisplayName,
                     ClientAppUsed, ResultType, ResultDescription, ConditionalAccessStatus, CorrelationId),
-            SignIns = count(), SignInTypes = make_set(SignInType, 2)
+            SignIns = count(), SignInTypes = make_set(SignInType, 2),
+            IPAddresses = make_set(IPAddress, 50), ResultTypes = make_set(tostring(ResultType), 50),
+            CorrelationIds = make_set(CorrelationId, 50)
     by UserPrincipalName, UserId
 | project TimeGenerated, SignInType, SignInTypes, SignIns, UserPrincipalName, UserId, MatchedBy, IPAddress, Country,
           AppDisplayName, ClientAppUsed, ResultType, ResultDescription,
-          ConditionalAccessStatus, CorrelationId
+          ConditionalAccessStatus, CorrelationId, IPAddresses, ResultTypes, CorrelationIds
 | sort by TimeGenerated desc
