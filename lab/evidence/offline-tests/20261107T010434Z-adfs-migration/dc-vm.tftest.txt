@@ -1,0 +1,19 @@
+tests/operator_ip.tftest.hcl... in progress
+  run "empty_list_means_no_inbound_rules"... pass
+  run "single_slash32_is_accepted"... pass
+  run "several_slash32_entries_are_accepted"... pass
+  run "unchanged_outbound_and_dc_disk_shape"... pass
+  run "slash24_is_rejected"... pass
+  run "slash31_is_rejected"... pass
+  run "any_address_is_rejected"... pass
+  run "one_wide_entry_among_slash32s_is_rejected"... pass
+  run "bare_address_without_prefix_is_rejected"... pass
+  run "ipv6_host_is_rejected"... pass
+  run "malformed_address_is_rejected"... pass
+  run "https_closed_by_default"... pass
+  run "https_open_only_with_flag_and_only_from_allowlist"... pass
+  run "https_flag_with_empty_allowlist_opens_nothing"... pass
+tests/operator_ip.tftest.hcl... tearing down
+tests/operator_ip.tftest.hcl... pass
+
+Success! 14 passed, 0 failed.

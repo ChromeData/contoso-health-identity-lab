@@ -79,7 +79,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$Columns = 'employeeId', 'givenName', 'surname', 'dept', 'jobTitle', 'manager', 'status', 'startDate', 'endDate'
+# 'upn' (optional column, the HR-issued UPN) counts too: a push that only
+# corrects a worker's upn must still be sent (review of PR #229).
+$Columns = 'employeeId', 'givenName', 'surname', 'dept', 'jobTitle', 'manager', 'status', 'startDate', 'endDate', 'upn'
 
 function Read-HrFeed {
     # The same reading rules as Invoke-InboundProvisioning.ps1: '#' comment
@@ -175,9 +177,15 @@ if ($OutputPath) {
     ConvertTo-Json -InputObject @($changes) -Depth 5 | Set-Content -LiteralPath $OutputPath -Encoding utf8NoBOM
 }
 if ($BaselineStatePath) {
-    # Invoke-InboundProvisioning.ps1 -StatePath shape: employeeId -> { dept, jobTitle }.
+    # Invoke-InboundProvisioning.ps1 -StatePath shape: employeeId -> { dept,
+    # jobTitle, upn }. upn = the previous version's HR-issued upn column, so
+    # a value HR has issued stays reserved for that worker on this runner.
     $baseline = [ordered]@{}
-    foreach ($id in $previous.Keys) { $baseline[$id] = [ordered]@{ dept = $previous[$id]['dept']; jobTitle = $previous[$id]['jobTitle'] } }
+    foreach ($id in $previous.Keys) {
+        $b = [ordered]@{ dept = $previous[$id]['dept']; jobTitle = $previous[$id]['jobTitle'] }
+        if ($previous[$id]['upn']) { $b['upn'] = $previous[$id]['upn'] }
+        $baseline[$id] = $b
+    }
     $dir = Split-Path -Parent $BaselineStatePath
     if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     ($baseline | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $BaselineStatePath -Encoding utf8NoBOM
