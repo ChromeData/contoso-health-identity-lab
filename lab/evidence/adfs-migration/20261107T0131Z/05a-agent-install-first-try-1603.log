@@ -1,0 +1,12 @@
+run command lab-9ac74be6: lab/adfs/scripts/12-Install-ConnectHealthAgent.ps1 on vm-dc01
+[connect-health] downloading https://go.microsoft.com/fwlink/?LinkID=518973
+[connect-health] signature Valid (CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US); installing quietly
+--- stderr ---
+Installer exit code 1603.
+At C:\Packages\Plugins\Microsoft.CPlat.Core.RunCommandHandlerWindows\2.0.23\Downloads\Script_lab-9ac74be6_0.ps1:67 
+char:30
++ ... f ($p.ExitCode -ne 0) { throw "Installer exit code $($p.ExitCode)." }
++                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Installer exit code 1603.:String) [], RuntimeException
+    + FullyQualifiedErrorId : Installer exit code 1603.
+state: Failed, exit code: 1

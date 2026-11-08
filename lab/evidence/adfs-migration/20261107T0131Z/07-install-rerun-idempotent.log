@@ -1,0 +1,14 @@
+run command lab-4b5b816c: lab/adfs/scripts/10-Install-Adfs.ps1 on vm-dc01
+[adfs-install] LAB SHORTCUT: AD FS goes on this domain controller only because the Azure trial has no room for another VM. Production uses a dedicated AD FS server (a farm of two or more) behind a Web Application Proxy, never a domain controller.
+[adfs-install] ADFS-Federation role already installed
+[adfs-install] AD FS farm already configured
+{
+    "federationService":  "sts.corp.contosohealthlab.com",
+    "identifier":  "http://sts.corp.contosohealthlab.com/adfs/services/trust",
+    "serviceState":  "Running",
+    "tlsThumbprint":  "02A90ECFA659A24CAEA1D7E312C42B63787F02B6",
+    "auditLevel":  "Verbose",
+    "gmsaHasSeAudit":  true,
+    "metadataUrl":  "https://sts.corp.contosohealthlab.com/FederationMetadata/2007-06/FederationMetadata.xml"
+}
+state: Succeeded, exit code: 0
