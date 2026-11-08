@@ -313,7 +313,11 @@ Describe 'Notify playbook: one ticket and one card per incident (review finding 
 
     It 'posts the card only while the incident (read now, not the trigger copy) lacks the teams-card-posted label, and writes the label only after a delivered card' {
         $t = $na.If_Teams_configured
-        $t.runAfter.If_ServiceNow_configured | Should -Be @('Succeeded', 'Failed', 'Skipped', 'TimedOut')
+        # Parallel with ServiceNow (PR #230 review): a slow ServiceNow never holds the card.
+        @($t.runAfter.Keys) | Should -Be @('Map_severity_to_priority')
+        $t.runAfter.Map_severity_to_priority | Should -Be @('Succeeded')
+        @($na.If_ServiceNow_configured.runAfter.Keys) | Should -Be @('Map_severity_to_priority')
+        ($t | ConvertTo-Json -Depth 50) | Should -Not -Match "(body|outputs|actions)\\('(Find_open_ticket|Create_ServiceNow_incident|Add_work_note_for_joined_alert)'\\)"
         $t.actions.Read_incident_now.inputs.method | Should -Be 'GET'
         $t.actions.Read_incident_now.inputs.authentication.type | Should -Be 'ManagedServiceIdentity'
         $t.actions.If_no_card_yet.runAfter.Read_incident_now | Should -Be @('Succeeded')

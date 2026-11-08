@@ -40,7 +40,8 @@ once the account exists: Lifecycle Workflows, access packages, CA and PIM.
 | File | Role |
 |---|---|
 | `hr_feed.csv` | Sample roster: Dana Okafor (protagonist) + joiners, actives, a mover, and a leaver, plus the IT personas: Joan Ferris (IT Director), Ava Lin (IAM Engineer), Raj Patel (Service Desk Analyst) and Mei Tanaka (Access Governance Lead). Their workforce accounts get no admin role; their separate `adm-` accounts come from `lab/iga/admin-accounts.json` (`New-AdminAccounts.ps1`). Column contract is documented in the file header. |
-| `.gitignore` | Keeps `.state/` (the mass-change guard's last-pushed roster) out of git. |
+| `.gitignore` | Keeps `.state/` (the mass-change guard's last-pushed roster and quarantine files) out of git. |
+| `approved-bulk-changes.json` | Reviewed bulk HR events (change ticket, kind, maximum count, expiry) that may pass the mass-change guard. Changed only through a reviewed pull request. Ships empty. |
 | `Invoke-InboundProvisioning.ps1` | Reads the CSV, maps each row to a SCIM Enterprise User, chunks into ≤50-record batches, and POSTs SCIM `bulkUpload` payloads to the provisioning job. `-EmployeeId`, `-UseAzureCliToken`, `-ResultPath` and `-HidePayload` are the pipeline path (below). |
 | `Get-HrFeedChange.ps1` | Compares the CSV with an earlier version: who was hired, left, moved, came back, was updated or deleted. The first step of `hr-feed.yml`. |
 | `Write-HrFeedSummary.ps1` | Waits (bounded) for the provisioning log and writes the plain-English run summary. The last step of `hr-feed.yml`. |
@@ -48,15 +49,66 @@ once the account exists: Lifecycle Workflows, access packages, CA and PIM.
 
 ## Key constraints (baked into the script)
 
-- **Mass-change guard (risk register R10).** A run that would DISABLE more
-  than `-MaxChanges` accounts (default 10 `leaver` rows) stops before sending
-  anything, `-WhatIf` included: a broken HR extract that marks a ward as
-  leavers must not disable it mid-shift. It applies the same limit to
-  access-changing records: `active`/`joiner` rows whose department or job
-  title differ from the last roster pushed (`-StatePath`, default
+- **Mass-change guard (risk register R10), scaled to the hospital.** Two
+  counts per run: accounts it would DISABLE (`leaver` rows), and
+  access-changing records (`active`/`joiner` rows whose department or job
+  title differ from the last roster pushed, `-StatePath`, default
   `.state/last-pushed-roster.json`, gitignored), because birthright clinical
-  access now follows those attributes. `-Force` pushes a reviewed bulk
-  change. Pester: `lab/scripts/powershell/tests/Invoke-InboundProvisioning.Tests.ps1`.
+  access follows those attributes. The threshold is the largest of: a floor
+  (`-MaxChanges`, default 10), a share of the population
+  (`-MaxChangePercent`, default 1 percent of the joiner and active rows in
+  the whole file: 200 people at 20,000), and, when a history file is kept
+  (`-ChangeHistoryPath`, at least 7 distinct earlier dates in the last 30),
+  the mean plus 3 standard deviations of the daily totals. The file keeps
+  one entry per date: several sends on one day add to that day, so they
+  never count as more days. WHY: a fixed 10 trips on every normal
+  Monday at 20,000 staff (about 15 leavers a day), and people then learn to
+  override it (hostile review, finding C2).
+  - **Over the threshold, the rows of that kind are held back, not the whole
+    run.** They go to a quarantine file (`-QuarantinePath`, ids, status and
+    kind only), every other row is still sent, and the run ends with an error
+    so the step fails visibly. All rows of that kind are held, not "the
+    first N", because in a bad export nobody knows which N are real. This is
+    what Entra's own "accidental deletions" threshold does for provisioning.
+  - **A planned bulk event passes with its change ticket.**
+    `-BulkChangeTicket CHG0040021` passes only if that ticket is listed in
+    `approved-bulk-changes.json` (kind, maximum count, expiry date). That
+    file changes only through a reviewed pull request, so the review is the
+    approval. It ships empty. `-Force` stays as the console override for an
+    administrator in an emergency.
+  - Pester: `lab/scripts/powershell/tests/Invoke-InboundProvisioning.Tests.ps1`.
+- **UPNs: issued once, never re-derived (review finding C3).** If the file has
+  a `upn` column, a row's value is used as it is (the HR system issued it at
+  hire; it is validated, and no two rows may share one). Otherwise the UPN is
+  derived once from the whole file: `given.surname`, ASCII only (an accent is
+  dropped, `O'Brien` becomes `obrien`, a space is removed), and a suffix digit
+  for a collision (`john.smith2`). The worker with the lower employee id keeps
+  the plain name, so the same file always gives the same answer, and a
+  collision with a worker who is not in this push is still seen. Every UPN
+  sent is recorded in the `-StatePath` file (employee id -> UPN) after a
+  send with no failed batch. A recorded UPN stays with its worker and stays
+  reserved, also after a name change or after the worker leaves the file, so
+  `john.smith2` is never handed to someone else. On the GitHub runner that
+  file is rebuilt from the previous commit of `hr_feed.csv`, so there the
+  lasting record is the `upn` column only. A name that
+  leaves no usable ASCII is refused. Two settings in the provisioning app
+  keep a name change from renaming anyone (tenant-time steps, verify on the
+  app): the matching attribute is `externalId` (the employee id), and the
+  `userPrincipalName` and `sAMAccountName` mappings use **Apply this mapping:
+  Only during object creation**. Downstream, AWS IAM Identity Center and
+  ServiceNow match on `userName`/`user_name` today (E57). The production
+  target is to match on the employee id or the Entra object id, so a UPN is
+  never a join key. That part is DESIGNED. The HR form (`lab/hr-app`) should
+  issue the UPN at hire and store it in the `upn` column, the same way it
+  issues the employee number.
+- **Rehire.** A rehire is the same AD account (matched on the employee id),
+  switched back on. The `parentDistinguishedName` expression
+  (`02-Configure-Domain.ps1`, applied Always) moves an active account out of
+  `OU=Disabled` into the new department's OU. Birthright follows the new
+  department and title. `lab/scripts/dc/Clear-LeaverAdGroups.ps1` removes
+  every on-premises group from disabled leavers in `OU=Disabled`, so a rehire
+  comes back with no old groups. It is BUILT, with offline tests, and not yet
+  run on DC01.
 - **Hire date.** `startDate` travels as `hireDate` in the custom SCIM
   extension `urn:ietf:params:scim:schemas:extension:contoso:1.0:User`: every
   birthright rule requires `employeeHireDate` on or before today. A
@@ -188,9 +240,10 @@ log. Microsoft's log can lag several minutes, so "not logged yet" is a note,
 not a failure; a failure Microsoft logged turns the run red. The summary
 prints first and last name, job title and department only (never the
 employee id, UPN, manager, dates or a token), and the log prints no SCIM
-payload. The mass-change guard counts this push's rows: more than 10 people
-switched off, or more than 10 department/title changes against the previous
-version of the file, stops the run before anything is sent.
+payload. The mass-change guard counts this push's rows: more people switched off, or
+more department/title changes against the previous version of the file,
+than the larger of 10 and 1 percent of the staff in the file. Those rows are
+held back (quarantined) and the run turns red. The other rows still go.
 
 **Preview without sending:** *Actions → hr-feed → Run workflow*, keep
 *dry run* ticked (any branch, no sign-in). With dry run off it sends the

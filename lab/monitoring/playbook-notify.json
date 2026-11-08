@@ -358,12 +358,10 @@
             },
             "If_Teams_configured": {
               "type": "If",
+              "description": "Runs in parallel with If_ServiceNow_configured (both run after Map_severity_to_priority only), so a slow or failing ServiceNow never delays the card. The card branch reads nothing from the ServiceNow branch; duplicate cards are prevented by the teams-card-posted label and one-at-a-time runs.",
               "runAfter": {
-                "If_ServiceNow_configured": [
-                  "Succeeded",
-                  "Failed",
-                  "Skipped",
-                  "TimedOut"
+                "Map_severity_to_priority": [
+                  "Succeeded"
                 ]
               },
               "expression": {
