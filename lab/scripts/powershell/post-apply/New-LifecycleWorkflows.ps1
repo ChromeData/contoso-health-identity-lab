@@ -778,6 +778,18 @@ if ($LeaverExtensionLogicAppName -and -not $IncludeLeaveDateLeaver) { throw '-Le
 if ($LeaverExtensionLogicAppName -and -not $OfflinePreview -and -not $LeaverExtensionSubscriptionId) { throw '-LeaverExtensionLogicAppName needs -LeaverExtensionSubscriptionId (where the Logic App lives).' }
 
 # ---- Custom task extension for the leaver (ADR 0029) --------------------------
+function Get-ExtensionDrift {
+    # Owned fields of an existing customTaskExtension that differ from the
+    # desired body: the Logic App it calls and the token type. Pure.
+    param([System.Collections.IDictionary]$Existing, [System.Collections.IDictionary]$Desired)
+    $e = $Existing['endpointConfiguration']; $d = $Desired['endpointConfiguration']
+    foreach ($k in 'subscriptionId', 'resourceGroupName', 'logicAppWorkflowName') {
+        if (-not $e -or [string]$e[$k] -ne [string]$d[$k]) { "$k '$(if ($e) { $e[$k] })' -> '$($d[$k])'" }
+    }
+    $ea = if ($Existing['authenticationConfiguration']) { [string]$Existing['authenticationConfiguration']['@odata.type'] } else { '' }
+    if ($ea -ne [string]$Desired['authenticationConfiguration']['@odata.type']) { "authentication '$ea' -> '$($Desired['authenticationConfiguration']['@odata.type'])'" }
+}
+
 # Find by display name, else create. PoP token (Learn: new extensions are PoP
 # only); NO callbackConfiguration = fire and forget, so the Logic App's
 # identity needs no Lifecycle Workflows permission.
@@ -804,7 +816,28 @@ if ($LeaverExtensionLogicAppName) {
     else {
         $found = @(Get-GraphCollection -Uri "$lcw/customTaskExtensions" | Where-Object { [string]$_['displayName'] -eq $extensionName })
         if ($found.Count -gt 1) { throw "$($found.Count) custom task extensions are named '$extensionName' - delete the extras first." }
-        if ($found.Count -eq 1) { $extensionId = [string]$found[0]['id']; Add-Result $extensionName $extensionId 'up-to-date' 'existing extension reused' }
+        if ($found.Count -eq 1) {
+            $extensionId = [string]$found[0]['id']
+            # Reuse only if it points at THIS Logic App with a PoP token; a
+            # renamed or moved app must not leave leavers calling the old one.
+            $have = Invoke-Graph -Method GET -Uri "$lcw/customTaskExtensions/$extensionId"
+            $drift = @(Get-ExtensionDrift -Existing $have -Desired $extBody)
+            if (-not $drift) { Add-Result $extensionName $extensionId 'up-to-date' 'existing extension reused' }
+            elseif (-not $UpdateExisting) {
+                Write-Warning "  '$extensionName' differs: $($drift -join '; '). Re-run with -UpdateExisting to point it at the new Logic App."
+                Add-Result $extensionName $extensionId 'FAILED' "drift: $($drift -join '; ')"
+                $failures++
+            }
+            elseif ($PSCmdlet.ShouldProcess($extensionName, "update custom task extension ($($drift -join '; '))")) {
+                Invoke-Graph -Method PATCH -Uri "$lcw/customTaskExtensions/$extensionId" -Body ([ordered]@{
+                        endpointConfiguration       = $extBody.endpointConfiguration
+                        authenticationConfiguration = $extBody.authenticationConfiguration
+                        clientConfiguration         = $extBody.clientConfiguration
+                    }) | Out-Null
+                Add-Result $extensionName $extensionId 'updated' ($drift -join '; ')
+            }
+            else { Add-Result $extensionName $extensionId 'whatif-update' ($drift -join '; ') }
+        }
         elseif ($PSCmdlet.ShouldProcess($extensionName, 'create custom task extension')) {
             $extensionId = [string](Invoke-Graph -Method POST -Uri "$lcw/customTaskExtensions" -Body $extBody)['id']
             Add-Result $extensionName $extensionId 'created'
@@ -1082,6 +1115,15 @@ function Get-OnDemandSubject {
         }
         if ($Kind -eq 'joiner' -and [string]$u['department'] -ne $JoinerDepartment -and -not $SkipGuards) {
             Write-Warning "  ${upn}: department '$($u['department'])' is outside the joiner scope ('$JoinerDepartment'). Skipped (use -Force to override)."
+            $rejected++
+            continue
+        }
+        # Same guard as the joiner's scope rule (accountEnabled eq true): an
+        # on-demand run ignores the scope, and its "Enable user account" task
+        # would switch a terminated worker back on (seen 2026-11-07 on the
+        # scheduled path). Off only where the workflow owns enablement.
+        if ($Kind -eq 'joiner' -and $u['accountEnabled'] -ne $true -and -not $SkipGuards -and -not $ManageOnPremisesAccounts) {
+            Write-Warning "  ${upn}: account is DISABLED - a joiner run would enable it again (HR may have terminated them). Skipped (use -Force to override)."
             $rejected++
             continue
         }

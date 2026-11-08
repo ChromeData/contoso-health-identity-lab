@@ -106,3 +106,44 @@ Describe 'New-LifecycleWorkflows.ps1 -OfflinePreview' {
         { & $script:Lcw -OfflinePreview -LeaverExtensionLogicAppName 'la-x' } | Should -Throw '*needs -IncludeLeaveDateLeaver*'
     }
 }
+
+Describe 'New-LifecycleWorkflows.ps1 guards (pure functions)' {
+    BeforeAll {
+        . (Get-ScriptFunctionBlock -Path $script:Lcw -Name 'Get-OnDemandSubject', 'Get-ExtensionDrift')
+        $script:graph = 'https://graph.microsoft.com/v1.0'
+        $script:JoinerDepartment = 'Nursing'
+        $script:ManageOnPremisesAccounts = $false
+        function Invoke-Graph { param($Method, $Uri) $global:LcwUsers[[uri]::UnescapeDataString(($Uri -split '/users/')[1].Split('?')[0])] }
+    }
+    BeforeEach { Mock Write-Host {} }
+    AfterAll { Remove-Variable -Name LcwUsers -Scope Global -ErrorAction SilentlyContinue }
+
+    It 'an on-demand joiner run refuses a DISABLED Nursing user (it would enable a terminated worker)' {
+        $global:LcwUsers = @{ 'a@x.test' = @{ id = 'u-a'; displayName = 'A'; department = 'Nursing'; accountEnabled = $false; onPremisesSyncEnabled = $true } }
+        $r = Get-OnDemandSubject -UserPrincipalNames 'a@x.test' -Kind joiner -SkipGuards $false -WarningAction SilentlyContinue
+        $r.Rejected | Should -Be 1
+        @($r.Subjects).Count | Should -Be 0
+    }
+
+    It 'an on-demand joiner run admits an ENABLED Nursing user, and -Force (SkipGuards) admits a disabled one' {
+        $global:LcwUsers = @{ 'b@x.test' = @{ id = 'u-b'; displayName = 'B'; department = 'Nursing'; accountEnabled = $true; onPremisesSyncEnabled = $true }
+            'c@x.test' = @{ id = 'u-c'; displayName = 'C'; department = 'Nursing'; accountEnabled = $false; onPremisesSyncEnabled = $true } }
+        (Get-OnDemandSubject -UserPrincipalNames 'b@x.test' -Kind joiner -SkipGuards $false).Subjects[0].id | Should -Be 'u-b'
+        (Get-OnDemandSubject -UserPrincipalNames 'c@x.test' -Kind joiner -SkipGuards $true).Subjects[0].id | Should -Be 'u-c'
+    }
+
+    It 'Get-ExtensionDrift: none when the extension calls the same Logic App with PoP; names a renamed or moved app' {
+        $want = @{ endpointConfiguration = @{ subscriptionId = 's1'; resourceGroupName = 'RG-IDENTITY-LAB'; logicAppWorkflowName = 'la-new' }
+            authenticationConfiguration = @{ '@odata.type' = '#microsoft.graph.azureAdPopTokenAuthentication' } }
+        $same = @{ endpointConfiguration = @{ subscriptionId = 's1'; resourceGroupName = 'RG-IDENTITY-LAB'; logicAppWorkflowName = 'la-new' }
+            authenticationConfiguration = @{ '@odata.type' = '#microsoft.graph.azureAdPopTokenAuthentication' } }
+        @(Get-ExtensionDrift -Existing $same -Desired $want) | Should -BeNullOrEmpty
+        $old = @{ endpointConfiguration = @{ subscriptionId = 's1'; resourceGroupName = 'RG-OLD'; logicAppWorkflowName = 'la-old' }
+            authenticationConfiguration = @{ '@odata.type' = '#microsoft.graph.azureAdTokenAuthentication' } }
+        $d = @(Get-ExtensionDrift -Existing $old -Desired $want)
+        $d.Count | Should -Be 3
+        ($d -join ' ') | Should -Match 'logicAppWorkflowName'
+        ($d -join ' ') | Should -Match 'resourceGroupName'
+        ($d -join ' ') | Should -Match 'authentication'
+    }
+}

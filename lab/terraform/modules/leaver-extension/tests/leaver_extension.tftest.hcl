@@ -67,6 +67,10 @@ run "workflow_contract" {
     error_message = "the only request the workflow sends is adminRemove"
   }
   assert {
+    condition     = jsondecode(file("${path.module}/logic-app.json")).resources[0].properties.definition.actions.Check_subject_id.actions.Every_page.type == "Until" && strcontains(file("${path.module}/logic-app.json"), "@odata.nextLink")
+    error_message = "every page of the user's assignments is visited (Until loop on @odata.nextLink), not just the first"
+  }
+  assert {
     condition     = strcontains(file("${path.module}/logic-app.json"), "automaticRequestSettings")
     error_message = "only assignments made by an automatic policy are removed"
   }
