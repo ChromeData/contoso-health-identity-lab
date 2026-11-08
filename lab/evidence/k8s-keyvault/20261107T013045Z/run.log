@@ -1,0 +1,2702 @@
+
+==> [1/12] preflight
+[01:30:47Z] kind v0.33.0 at /Users/michaelwilliams/.local/bin/kind: sha256 matches the pin
+[01:30:47Z] kubectl v1.37.1 at /Users/michaelwilliams/.local/bin/kubectl: sha256 matches the pin
+[01:30:48Z] bash      3.2.57(1)-release
+[01:30:48Z] docker    29.5.2 (linux/arm64)
+[01:30:48Z] kind      v0.33.0   (/Users/michaelwilliams/.local/bin/kind)
+[01:30:48Z] kubectl   v1.37.1   (/Users/michaelwilliams/.local/bin/kubectl)
+[01:30:48Z] terraform 1.16.5
+[01:30:56Z] checkov   3.3.20
+[01:30:56Z] jq        jq-1.7.1-apple
+[01:30:58Z] az       2.91.0 as the operator (service principal 4b73af70...), subscription de0b2a93...
+[01:30:58Z] KEEP_CLUSTER=0  kube context=kind-contoso-k8s  kubeconfig=/Users/michaelwilliams/.kube/contoso-k8s-kv.config
+
+==> [2/12] terraform fmt / validate / test
+[01:30:58Z] terraform fmt -check -recursive lab/terraform/k8s
+[01:30:58Z] init + validate lab/terraform/k8s/platform
+      Initializing provider plugins...
+      - Reusing previous version of hashicorp/helm from the dependency lock file
+      - Reusing previous version of hashicorp/kubernetes from the dependency lock file
+      - Using previously-installed hashicorp/helm v3.3.0
+      - Using previously-installed hashicorp/kubernetes v3.3.0
+      
+      Terraform has been successfully initialized!
+      Success! The configuration is valid.
+      
+[01:30:59Z] init + validate lab/terraform/k8s/identity
+      Initializing provider plugins...
+      - Reusing previous version of hashicorp/kubernetes from the dependency lock file
+      - Using previously-installed hashicorp/kubernetes v3.3.0
+      
+      Terraform has been successfully initialized!
+      Success! The configuration is valid.
+      
+[01:31:00Z] init + validate lab/terraform/k8s/keyvault-trust
+      Initializing provider plugins...
+      - Reusing previous version of hashicorp/azurerm from the dependency lock file
+      - Reusing previous version of hashicorp/azuread from the dependency lock file
+      - Using previously-installed hashicorp/azurerm v4.81.0
+      - Using previously-installed hashicorp/azuread v3.10.0
+      
+      Terraform has been successfully initialized!
+      Success! The configuration is valid.
+      
+[01:31:02Z] terraform test lab/terraform/k8s/platform
+      tests/platform.tftest.hcl... in progress
+        run "namespaces_carry_the_pod_security_levels"... pass
+        run "csi_release_is_pinned_and_wired_for_the_lab"... pass
+        run "non_kind_context_is_rejected"... pass
+      tests/platform.tftest.hcl... tearing down
+      tests/platform.tftest.hcl... pass
+      
+      Success! 3 passed, 0 failed.
+[01:31:02Z] terraform test lab/terraform/k8s/identity
+      tests/identity.tftest.hcl... in progress
+        run "secret_provider_class_serves_one_secret_through_workload_id"... pass
+        run "workload_service_accounts_mount_no_api_token"... pass
+        run "human_rbac_has_no_secrets_and_no_cluster_scope"... pass
+        run "app_deployer_cannot_write_pods"... pass
+        run "admission_policy_binds_nightly_report_to_code_and_pipeline"... pass
+        run "tag_only_app_image_is_rejected"... pass
+        run "catch_all_launcher_group_is_rejected"... pass
+        run "non_kind_context_is_rejected"... pass
+      tests/identity.tftest.hcl... tearing down
+      tests/identity.tftest.hcl... pass
+      
+      Success! 8 passed, 0 failed.
+[01:31:03Z] terraform test lab/terraform/k8s/keyvault-trust
+      tests/keyvault_trust.tftest.hcl... in progress
+        run "fic_trusts_exactly_nightly_report_for_token_exchange"... pass
+        run "key_vault_grant_is_one_secret_read_only"... pass
+        run "subject_matches_the_identity_root"... pass
+        run "kind_default_issuer_is_rejected"... pass
+        run "trailing_slash_issuer_is_rejected"... pass
+        run "http_issuer_is_rejected"... pass
+      tests/keyvault_trust.tftest.hcl... tearing down
+      tests/keyvault_trust.tftest.hcl... pass
+      
+      Success! 6 passed, 0 failed.
+
+==> [3/12] checkov
+[01:31:04Z] inline Checkov skips: none
+[01:31:04Z] checkov --framework terraform  lab/terraform/k8s
+terraform scan results:
+
+Passed checks: 11, Failed checks: 0, Skipped checks: 0
+
+
+[01:31:11Z] checkov --framework kubernetes lab/k8s/manifests (except negative/)
+kubernetes scan results:
+
+Passed checks: 88, Failed checks: 0, Skipped checks: 0
+
+
+
+==> [4/12] azure: vault, issuer, trust
+[01:31:16Z] resource group rg-k8skv-test-864b1cef (eastus2), tagged delete-after=2026-11-08T01:31Z
+/opt/homebrew/Caskroom/azure-cli/2.91.0/libexec/lib/python3.14/site-packages/azure/mgmt/resource/deploymentstacks/models/_models.py:119: SyntaxWarning: "\/" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\/"? A raw string is also an option.
+  following actions are automatically appended to 'excludedActions': '*\/read' and
+[01:31:18Z] storage account stk8skv864b1cef: static website = the cluster's public issuer
+[01:31:43Z] Key Vault kv-k8s-864b1cef (Azure RBAC, Standard, no purge protection: purged at teardown)
+[01:32:22Z] seeded kv-k8s-864b1cef/clinical-db: version bd8a2658... (sha256 77d8268ec50b..., value not printed)
+[01:32:24Z] stored clinical-other (the decoy the workload must be refused; value not printed)
+[01:32:24Z] terraform apply lab/terraform/k8s/keyvault-trust (app registration, federated credential, Key Vault Secrets User on clinical-db)
+      Initializing the backend...
+      
+      Initializing provider plugins...
+      - Reusing previous version of hashicorp/azuread from the dependency lock file
+      - Reusing previous version of hashicorp/azurerm from the dependency lock file
+      - Using previously-installed hashicorp/azuread v3.10.0
+      - Using previously-installed hashicorp/azurerm v4.81.0
+      
+      Terraform has been successfully initialized!
+      data.azurerm_subscription.current: Reading...
+      data.azurerm_subscription.current: Read complete after 1s [id=/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274]
+      
+      Terraform used the selected providers to generate the following execution
+      plan. Resource actions are indicated with the following symbols:
+        + create
+      
+      Terraform will perform the following actions:
+      
+        # azuread_application.nightly_report will be created
+        + resource "azuread_application" "nightly_report" {
+            + app_role_ids                = (known after apply)
+            + client_id                   = (known after apply)
+            + description                 = "Throwaway workload identity for the lab's kind cluster (lab/k8s/ci/pipeline.sh run 864b1cef). Federated credential only; deleted with the cluster."
+            + disabled_by_microsoft       = (known after apply)
+            + display_name                = "k8s-nightly-report-864b1cef"
+            + id                          = (known after apply)
+            + logo_url                    = (known after apply)
+            + notes                       = "Owner: the lab operator (pipeline). Never add a password or certificate credential: the only way in is the federated credential."
+            + oauth2_permission_scope_ids = (known after apply)
+            + object_id                   = (known after apply)
+            + prevent_duplicate_names     = false
+            + publisher_domain            = (known after apply)
+            + sign_in_audience            = "AzureADMyOrg"
+            + tags                        = (known after apply)
+            + template_id                 = (known after apply)
+      
+            + feature_tags (known after apply)
+          }
+      
+        # azuread_application_federated_identity_credential.nightly_report will be created
+        + resource "azuread_application_federated_identity_credential" "nightly_report" {
+            + application_id = (known after apply)
+            + audiences      = [
+                + "api://AzureADTokenExchange",
+              ]
+            + credential_id  = (known after apply)
+            + description    = "Only SA clinical-apps/nightly-report on this run's kind issuer."
+            + display_name   = "kind-clinical-apps-nightly-report"
+            + id             = (known after apply)
+            + issuer         = "https://stk8skv864b1cef.z20.web.core.windows.net"
+            + subject        = "system:serviceaccount:clinical-apps:nightly-report"
+          }
+      
+        # azuread_service_principal.nightly_report will be created
+        + resource "azuread_service_principal" "nightly_report" {
+            + account_enabled              = true
+            + app_role_assignment_required = true
+            + app_role_ids                 = (known after apply)
+            + app_roles                    = (known after apply)
+            + application_tenant_id        = (known after apply)
+            + client_id                    = (known after apply)
+            + display_name                 = (known after apply)
+            + homepage_url                 = (known after apply)
+            + id                           = (known after apply)
+            + logout_url                   = (known after apply)
+            + notes                        = "Throwaway workload identity (lab/k8s/ci/pipeline.sh run 864b1cef)."
+            + oauth2_permission_scope_ids  = (known after apply)
+            + oauth2_permission_scopes     = (known after apply)
+            + object_id                    = (known after apply)
+            + redirect_uris                = (known after apply)
+            + saml_metadata_url            = (known after apply)
+            + service_principal_names      = (known after apply)
+            + sign_in_audience             = (known after apply)
+            + tags                         = (known after apply)
+            + type                         = (known after apply)
+      
+            + feature_tags (known after apply)
+      
+            + features (known after apply)
+          }
+      
+        # azurerm_role_assignment.secret_reader will be created
+        + resource "azurerm_role_assignment" "secret_reader" {
+            + condition_version                = (known after apply)
+            + description                      = "nightly-report (kind run 864b1cef) may read this one secret."
+            + id                               = (known after apply)
+            + name                             = (known after apply)
+            + principal_id                     = (known after apply)
+            + principal_type                   = "ServicePrincipal"
+            + role_definition_id               = "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6"
+            + role_definition_name             = (known after apply)
+            + scope                            = "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/resourceGroups/rg-k8skv-test-864b1cef/providers/Microsoft.KeyVault/vaults/kv-k8s-864b1cef/secrets/clinical-db"
+            + skip_service_principal_aad_check = (known after apply)
+          }
+      
+      Plan: 4 to add, 0 to change, 0 to destroy.
+      
+      Changes to Outputs:
+        + client_id                   = (known after apply)
+        + entra_trust                 = {
+            + audiences = [
+                + "api://AzureADTokenExchange",
+              ]
+            + issuer    = "https://stk8skv864b1cef.z20.web.core.windows.net"
+            + subject   = "system:serviceaccount:clinical-apps:nightly-report"
+          }
+        + key_vault_grant             = {
+            + role  = "Key Vault Secrets User"
+            + scope = "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/resourceGroups/rg-k8skv-test-864b1cef/providers/Microsoft.KeyVault/vaults/kv-k8s-864b1cef/secrets/clinical-db"
+          }
+        + service_principal_object_id = (known after apply)
+      azuread_application.nightly_report: Creating...
+      azuread_application.nightly_report: Creation complete after 3s [id=/applications/55f32d07-0acb-436b-8709-33b34d1f0460]
+      azuread_service_principal.nightly_report: Creating...
+      azuread_application_federated_identity_credential.nightly_report: Creating...
+      azuread_service_principal.nightly_report: Creation complete after 3s [id=/servicePrincipals/e808bc19-7caf-441d-8c9d-a25b7685b068]
+      azuread_application_federated_identity_credential.nightly_report: Creation complete after 7s [id=55f32d07-0acb-436b-8709-33b34d1f0460/federatedIdentityCredential/f73e9546-ca5f-430d-a371-bf858f22a68e]
+      azurerm_role_assignment.secret_reader: Creating...
+      azurerm_role_assignment.secret_reader: Still creating... [00m10s elapsed]
+      azurerm_role_assignment.secret_reader: Still creating... [00m20s elapsed]
+      azurerm_role_assignment.secret_reader: Still creating... [00m30s elapsed]
+      azurerm_role_assignment.secret_reader: Creation complete after 31s [id=/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/resourceGroups/rg-k8skv-test-864b1cef/providers/Microsoft.KeyVault/vaults/kv-k8s-864b1cef/secrets/clinical-db/providers/Microsoft.Authorization/roleAssignments/263c1912-eb88-e6de-f3be-860eb5665349]
+      
+      Apply complete! Resources: 4 added, 0 changed, 0 destroyed.
+      
+      Outputs:
+      
+      client_id = "35080341-cac0-4201-a2a0-10f17921b81d"
+      entra_trust = {
+        "audiences" = tolist([
+          "api://AzureADTokenExchange",
+        ])
+        "issuer" = "https://stk8skv864b1cef.z20.web.core.windows.net"
+        "subject" = "system:serviceaccount:clinical-apps:nightly-report"
+      }
+      key_vault_grant = {
+        "role" = "Key Vault Secrets User"
+        "scope" = "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/resourceGroups/rg-k8skv-test-864b1cef/providers/Microsoft.KeyVault/vaults/kv-k8s-864b1cef/secrets/clinical-db"
+      }
+      service_principal_object_id = "e808bc19-7caf-441d-8c9d-a25b7685b068"
+
+==> [5/12] kind cluster + public issuer
+[01:33:24Z] creating cluster contoso-k8s (issuer https://stk8skv864b1cef.z20.web.core.windows.net, audit policy lab/k8s/kind/audit-policy.yaml)
+Creating cluster "contoso-k8s" ...
+ • Ensuring node image (kindest/node:v1.36.4) 🖼️  ...
+ ✓ Ensuring node image (kindest/node:v1.36.4) 🖼️
+ • Preparing nodes 📦   ...
+ ✓ Preparing nodes 📦 
+ • Writing configuration 📜  ...
+ ✓ Writing configuration 📜
+ • Starting control-plane 🕹️  ...
+ ✓ Starting control-plane 🕹️
+ • Installing CNI 🔌  ...
+ ✓ Installing CNI 🔌
+ • Installing StorageClass 💾  ...
+ ✓ Installing StorageClass 💾
+ • Waiting ≤ 3m0s for control-plane = Ready ⏳  ...
+ ✓ Waiting ≤ 3m0s for control-plane = Ready ⏳
+ • Ready after 18s 💚
+Set kubectl context to "kind-contoso-k8s"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-contoso-k8s --kubeconfig /Users/michaelwilliams/.kube/contoso-k8s-kv.config
+
+Have a question, bug, or feature request? Let us know! https://kind.sigs.k8s.io/#community 🙂
+node/contoso-k8s-control-plane condition met
+      NAME                        STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION              CONTAINER-RUNTIME
+      contoso-k8s-control-plane   Ready    control-plane   25s   v1.36.4   172.19.0.2    <none>        Debian GNU/Linux 13 (trixie)   6.8.0-117-generic (arm64)   containerd://2.3.4
+Alive[################################################################]  100.0000%Finished[#############################################################]  100.0000%
+Alive[################################################################]  100.0000%Finished[#############################################################]  100.0000%
+[01:34:17Z] public: https://stk8skv864b1cef.z20.web.core.windows.net/.well-known/openid-configuration (sha256 ca4f197fa0b9..., same bytes as the API server's)
+[01:34:17Z] public: https://stk8skv864b1cef.z20.web.core.windows.net/openid/v1/jwks (sha256 272c0a334ec3..., same bytes as the API server's)
+
+==> [6/12] terraform apply platform
+      Initializing the backend...
+      
+      Initializing provider plugins...
+      - Reusing previous version of hashicorp/kubernetes from the dependency lock file
+      - Reusing previous version of hashicorp/helm from the dependency lock file
+      - Using previously-installed hashicorp/kubernetes v3.3.0
+      - Using previously-installed hashicorp/helm v3.3.0
+      
+      Terraform has been successfully initialized!
+      
+      Terraform used the selected providers to generate the following execution
+      plan. Resource actions are indicated with the following symbols:
+        + create
+      
+      Terraform will perform the following actions:
+      
+        # helm_release.csi_secrets_store_provider_azure will be created
+        + resource "helm_release" "csi_secrets_store_provider_azure" {
+            + atomic                     = false
+            + chart                      = "csi-secrets-store-provider-azure"
+            + cleanup_on_fail            = false
+            + create_namespace           = false
+            + dependency_update          = false
+            + disable_crd_hooks          = false
+            + disable_openapi_validation = false
+            + disable_webhooks           = false
+            + force_update               = false
+            + id                         = (known after apply)
+            + lint                       = false
+            + max_history                = 3
+            + metadata                   = (known after apply)
+            + name                       = "csi-azure"
+            + namespace                  = "secrets-store"
+            + pass_credentials           = false
+            + recreate_pods              = false
+            + render_subchart_notes      = true
+            + replace                    = false
+            + repository                 = "https://azure.github.io/secrets-store-csi-driver-provider-azure/charts"
+            + reset_values               = false
+            + reuse_values               = false
+            + set_wo                     = (write-only attribute)
+            + skip_crds                  = false
+            + status                     = "deployed"
+            + take_ownership             = false
+            + timeout                    = 600
+            + upgrade_install            = false
+            + values                     = [
+                + <<-EOT
+                      "linux":
+                        "image":
+                          "repository": "mcr.microsoft.com/oss/v2/azure/secrets-store/provider-azure"
+                          "tag": "v1.8.2@sha256:6be3919093995af5754e4cd0e2dad5f8659baa594b27e9d6f5c2866f893ee26a"
+                      "secrets-store-csi-driver":
+                        "enableSecretRotation": true
+                        "install": true
+                        "linux":
+                          "crds":
+                            "image":
+                              "repository": "mcr.microsoft.com/oss/v2/kubernetes-csi/secrets-store/driver-crds"
+                              "tag": "v1.5.6@sha256:cb0112636dc4d22c38fa4ef8d46c6eb1d6e4c8b4d2228a233474769a0cd2048c"
+                          "image":
+                            "digest": "sha256:5f91243cfd60dcf82b744a87279eda9b9ae0a7ca18828472ba91b366af415430"
+                            "repository": "mcr.microsoft.com/oss/v2/kubernetes-csi/secrets-store/driver"
+                            "tag": "v1.5.6"
+                          "livenessProbeImage":
+                            "digest": "sha256:59b9d034842849bdae41ca5be7c52b5e9ab2a4d18485dfdf16521f3ec74c047a"
+                            "repository": "mcr.microsoft.com/oss/v2/kubernetes-csi/livenessprobe"
+                            "tag": "v2.15.0"
+                          "registrarImage":
+                            "digest": "sha256:6cb172e3de7e9ec36dfca179dbfd6be8c9bf7a14374afe780c2dd11ea7512ab1"
+                            "repository": "mcr.microsoft.com/oss/v2/kubernetes-csi/csi-node-driver-registrar"
+                            "tag": "v2.14.0"
+                        "rotationPollInterval": "10s"
+                        "syncSecret":
+                          "enabled": false
+                        "tokenRequests":
+                        - "audience": "api://AzureADTokenExchange"
+                        "windows":
+                          "enabled": false
+                      "windows":
+                        "enabled": false
+                  EOT,
+              ]
+            + verify                     = false
+            + version                    = "1.8.2"
+            + wait                       = true
+            + wait_for_jobs              = false
+          }
+      
+        # kubernetes_namespace_v1.clinical_apps will be created
+        + resource "kubernetes_namespace_v1" "clinical_apps" {
+            + id                               = (known after apply)
+            + wait_for_default_service_account = false
+      
+            + metadata {
+                + generation       = (known after apply)
+                + labels           = {
+                    + "app.kubernetes.io/managed-by"               = "terraform"
+                    + "app.kubernetes.io/part-of"                  = "contoso-health-identity-lab"
+                    + "pod-security.kubernetes.io/audit"           = "restricted"
+                    + "pod-security.kubernetes.io/audit-version"   = "v1.36"
+                    + "pod-security.kubernetes.io/enforce"         = "restricted"
+                    + "pod-security.kubernetes.io/enforce-version" = "v1.36"
+                    + "pod-security.kubernetes.io/warn"            = "restricted"
+                    + "pod-security.kubernetes.io/warn-version"    = "v1.36"
+                  }
+                + name             = "clinical-apps"
+                + resource_version = (known after apply)
+                + uid              = (known after apply)
+              }
+          }
+      
+        # kubernetes_namespace_v1.secrets_store will be created
+        + resource "kubernetes_namespace_v1" "secrets_store" {
+            + id                               = (known after apply)
+            + wait_for_default_service_account = false
+      
+            + metadata {
+                + generation       = (known after apply)
+                + labels           = {
+                    + "app.kubernetes.io/managed-by"               = "terraform"
+                    + "app.kubernetes.io/part-of"                  = "contoso-health-identity-lab"
+                    + "pod-security.kubernetes.io/audit"           = "baseline"
+                    + "pod-security.kubernetes.io/audit-version"   = "v1.36"
+                    + "pod-security.kubernetes.io/enforce"         = "privileged"
+                    + "pod-security.kubernetes.io/enforce-version" = "v1.36"
+                    + "pod-security.kubernetes.io/warn"            = "baseline"
+                    + "pod-security.kubernetes.io/warn-version"    = "v1.36"
+                  }
+                + name             = "secrets-store"
+                + resource_version = (known after apply)
+                + uid              = (known after apply)
+              }
+          }
+      
+      Plan: 3 to add, 0 to change, 0 to destroy.
+      
+      Changes to Outputs:
+        + clinical_namespace      = "clinical-apps"
+        + csi_namespace           = "secrets-store"
+        + csi_release             = {
+            + chart_version  = "1.8.2"
+            + driver_image   = "mcr.microsoft.com/oss/v2/kubernetes-csi/secrets-store/driver@sha256:5f91243cfd60dcf82b744a87279eda9b9ae0a7ca18828472ba91b366af415430"
+            + name           = "csi-azure"
+            + provider_image = "mcr.microsoft.com/oss/v2/azure/secrets-store/provider-azure:v1.8.2@sha256:6be3919093995af5754e4cd0e2dad5f8659baa594b27e9d6f5c2866f893ee26a"
+          }
+        + pod_security            = {
+            + clinical-apps = "restricted"
+            + secrets-store = "privileged"
+          }
+        + token_exchange_audience = "api://AzureADTokenExchange"
+      kubernetes_namespace_v1.secrets_store: Creating...
+      kubernetes_namespace_v1.secrets_store: Creation complete after 0s [id=secrets-store]
+      helm_release.csi_secrets_store_provider_azure: Creating...
+      helm_release.csi_secrets_store_provider_azure: Still creating... [00m10s elapsed]
+      helm_release.csi_secrets_store_provider_azure: Creation complete after 19s [id=csi-azure]
+      kubernetes_namespace_v1.clinical_apps: Creating...
+      kubernetes_namespace_v1.clinical_apps: Creation complete after 0s [id=clinical-apps]
+      
+      Apply complete! Resources: 3 added, 0 changed, 0 destroyed.
+      
+      live: CSIDriver secrets-store.csi.k8s.io tokenRequests audiences=["api://AzureADTokenExchange"]
+      NAME                                         DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE   CONTAINERS                                           IMAGES                                                                                                                                                                                                                                                                                                                                                                                                         SELECTOR
+      csi-azure-csi-secrets-store-provider-azure   1         1         0       1            0           kubernetes.io/os=linux   2s    provider-azure-installer                             mcr.microsoft.com/oss/v2/azure/secrets-store/provider-azure:v1.8.2@sha256:6be3919093995af5754e4cd0e2dad5f8659baa594b27e9d6f5c2866f893ee26a                                                                                                                                                                                                                                                                     app=csi-secrets-store-provider-azure
+      secrets-store-csi-driver                     1         1         0       1            0           kubernetes.io/os=linux   2s    node-driver-registrar,secrets-store,liveness-probe   mcr.microsoft.com/oss/v2/kubernetes-csi/csi-node-driver-registrar@sha256:6cb172e3de7e9ec36dfca179dbfd6be8c9bf7a14374afe780c2dd11ea7512ab1,mcr.microsoft.com/oss/v2/kubernetes-csi/secrets-store/driver@sha256:5f91243cfd60dcf82b744a87279eda9b9ae0a7ca18828472ba91b366af415430,mcr.microsoft.com/oss/v2/kubernetes-csi/livenessprobe@sha256:59b9d034842849bdae41ca5be7c52b5e9ab2a4d18485dfdf16521f3ec74c047a   app=secrets-store-csi-driver
+
+==> [7/12] terraform apply identity
+      Initializing the backend...
+      
+      Initializing provider plugins...
+      - Reusing previous version of hashicorp/kubernetes from the dependency lock file
+      - Using previously-installed hashicorp/kubernetes v3.3.0
+      
+      Terraform has been successfully initialized!
+      
+      Terraform used the selected providers to generate the following execution
+      plan. Resource actions are indicated with the following symbols:
+        + create
+      
+      Terraform will perform the following actions:
+      
+        # kubernetes_manifest.secret_provider_class will be created
+        + resource "kubernetes_manifest" "secret_provider_class" {
+            + manifest = {
+                + apiVersion = "secrets-store.csi.x-k8s.io/v1"
+                + kind       = "SecretProviderClass"
+                + metadata   = {
+                    + labels    = {
+                        + "app.kubernetes.io/managed-by" = "terraform"
+                        + "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                      }
+                    + name      = "nightly-report-db"
+                    + namespace = "clinical-apps"
+                  }
+                + spec       = {
+                    + parameters = {
+                        + clientID       = "35080341-cac0-4201-a2a0-10f17921b81d"
+                        + keyvaultName   = "kv-k8s-864b1cef"
+                        + objects        = <<-EOT
+                              "array":
+                              - |
+                                "objectAlias": "db"
+                                "objectName": "clinical-db"
+                                "objectType": "secret"
+                                "objectVersion": ""
+                          EOT
+                        + tenantId       = "86a2e327-4951-4348-a3c4-6f4b79ffd8f2"
+                        + usePodIdentity = "false"
+                      }
+                    + provider   = "azure"
+                  }
+              }
+            + object   = {
+                + apiVersion = "secrets-store.csi.x-k8s.io/v1"
+                + kind       = "SecretProviderClass"
+                + metadata   = {
+                    + annotations                = (known after apply)
+                    + creationTimestamp          = (known after apply)
+                    + deletionGracePeriodSeconds = (known after apply)
+                    + deletionTimestamp          = (known after apply)
+                    + finalizers                 = (known after apply)
+                    + generateName               = (known after apply)
+                    + generation                 = (known after apply)
+                    + labels                     = (known after apply)
+                    + managedFields              = (known after apply)
+                    + name                       = "nightly-report-db"
+                    + namespace                  = "clinical-apps"
+                    + ownerReferences            = (known after apply)
+                    + resourceVersion            = (known after apply)
+                    + selfLink                   = (known after apply)
+                    + uid                        = (known after apply)
+                  }
+                + spec       = {
+                    + parameters    = {
+                        + clientID       = "35080341-cac0-4201-a2a0-10f17921b81d"
+                        + keyvaultName   = "kv-k8s-864b1cef"
+                        + objects        = <<-EOT
+                              "array":
+                              - |
+                                "objectAlias": "db"
+                                "objectName": "clinical-db"
+                                "objectType": "secret"
+                                "objectVersion": ""
+                          EOT
+                        + tenantId       = "86a2e327-4951-4348-a3c4-6f4b79ffd8f2"
+                        + usePodIdentity = "false"
+                      }
+                    + provider      = "azure"
+                    + secretObjects = (known after apply)
+                  }
+              }
+      
+            + field_manager {
+                + force_conflicts = true
+              }
+          }
+      
+        # kubernetes_manifest.workload_identity_policy will be created
+        + resource "kubernetes_manifest" "workload_identity_policy" {
+            + manifest = {
+                + apiVersion = "admissionregistration.k8s.io/v1"
+                + kind       = "ValidatingAdmissionPolicy"
+                + metadata   = {
+                    + annotations = {
+                        + "contoso.health/purpose" = "Workloads in clinical-apps: digest-pinned images, no API token, and only the pipeline may run the approved build as nightly-report."
+                      }
+                    + labels      = {
+                        + "app.kubernetes.io/managed-by" = "terraform"
+                        + "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                      }
+                    + name        = "clinical-apps-workload-identity"
+                  }
+                + spec       = {
+                    + failurePolicy    = "Fail"
+                    + matchConstraints = {
+                        + namespaceSelector = {
+                            + matchLabels = {
+                                + "kubernetes.io/metadata.name" = "clinical-apps"
+                              }
+                          }
+                        + resourceRules     = [
+                            + {
+                                + apiGroups   = [
+                                    + "",
+                                  ]
+                                + apiVersions = [
+                                    + "v1",
+                                  ]
+                                + operations  = [
+                                    + "CREATE",
+                                    + "UPDATE",
+                                  ]
+                                + resources   = [
+                                    + "pods",
+                                    + "pods/ephemeralcontainers",
+                                  ]
+                              },
+                            + {
+                                + apiGroups   = [
+                                    + "apps",
+                                  ]
+                                + apiVersions = [
+                                    + "v1",
+                                  ]
+                                + operations  = [
+                                    + "CREATE",
+                                    + "UPDATE",
+                                  ]
+                                + resources   = [
+                                    + "deployments",
+                                    + "replicasets",
+                                  ]
+                              },
+                          ]
+                      }
+                    + validations      = [
+                        + {
+                            + expression        = "variables.images.all(i, i.matches(\"@sha256:[0-9a-f]{64}$\"))"
+                            + message           = "image not pinned by digest: every container image in clinical-apps must be <repo>[:tag]@sha256:<64 hex>"
+                            + messageExpression = "'image not pinned by digest: ' + variables.images.filter(i, !i.matches(\"@sha256:[0-9a-f]{64}$\")).join(', ')"
+                            + reason            = "Invalid"
+                          },
+                        + {
+                            + expression        = "!variables.runsAsNightlyReport || variables.images.all(i, variables.approvedDigests.exists(d, i.endsWith('@' + d)))"
+                            + message           = "service account nightly-report may run only the approved app image"
+                            + messageExpression = "'service account nightly-report may run only the approved app image, not: ' + variables.images.filter(i, !variables.approvedDigests.exists(d, i.endsWith('@' + d))).join(', ')"
+                            + reason            = "Forbidden"
+                          },
+                        + {
+                            + expression = "has(variables.podSpec.automountServiceAccountToken) && variables.podSpec.automountServiceAccountToken == false"
+                            + message    = "automountServiceAccountToken must be false in the pod spec (workloads here get no Kubernetes API token)"
+                            + reason     = "Invalid"
+                          },
+                        + {
+                            + expression        = "!(variables.runsAsNightlyReport || variables.wasNightlyReport) || variables.trustedLauncher"
+                            + message           = "only the release pipeline may create or change a workload that runs as service account nightly-report"
+                            + messageExpression = "'only the release pipeline may create or change a workload that runs as service account nightly-report, not ' + request.userInfo.username"
+                            + reason            = "Forbidden"
+                          },
+                      ]
+                    + variables        = [
+                        + {
+                            + expression = "request.resource.resource == 'pods' ? object.spec : object.spec.template.spec"
+                            + name       = "podSpec"
+                          },
+                        + {
+                            + expression = <<-EOT
+                                  (variables.podSpec.containers
+                                    + (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])
+                                    + (has(variables.podSpec.ephemeralContainers) ? variables.podSpec.ephemeralContainers : [])
+                                  ).map(c, c.image)
+                              EOT
+                            + name       = "images"
+                          },
+                        + {
+                            + expression = <<-EOT
+                                  has(variables.podSpec.serviceAccountName) && variables.podSpec.serviceAccountName != ''
+                                    ? variables.podSpec.serviceAccountName
+                                    : (has(variables.podSpec.serviceAccount) && variables.podSpec.serviceAccount != ''
+                                        ? variables.podSpec.serviceAccount : 'default')
+                              EOT
+                            + name       = "serviceAccount"
+                          },
+                        + {
+                            + expression = "variables.serviceAccount == \"nightly-report\""
+                            + name       = "runsAsNightlyReport"
+                          },
+                        + {
+                            + expression = "request.resource.resource == 'pods' ? oldObject.spec : oldObject.spec.template.spec"
+                            + name       = "oldPodSpec"
+                          },
+                        + {
+                            + expression = <<-EOT
+                                  oldObject != null && (
+                                    has(variables.oldPodSpec.serviceAccountName) && variables.oldPodSpec.serviceAccountName != ''
+                                      ? variables.oldPodSpec.serviceAccountName
+                                      : (has(variables.oldPodSpec.serviceAccount) && variables.oldPodSpec.serviceAccount != ''
+                                          ? variables.oldPodSpec.serviceAccount : 'default')
+                                  ) == "nightly-report"
+                              EOT
+                            + name       = "wasNightlyReport"
+                          },
+                        + {
+                            + expression = jsonencode(
+                                  [
+                                    + "sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e",
+                                  ]
+                              )
+                            + name       = "approvedDigests"
+                          },
+                        + {
+                            + expression = <<-EOT
+                                  request.userInfo.username.startsWith('system:serviceaccount:kube-system:')
+                                    || request.userInfo.username == 'system:kube-controller-manager'
+                                    || (has(request.userInfo.groups)
+                                        && request.userInfo.groups.exists(g, g in ["kubeadm:cluster-admins"]))
+                              EOT
+                            + name       = "trustedLauncher"
+                          },
+                      ]
+                  }
+              }
+            + object   = {
+                + apiVersion = "admissionregistration.k8s.io/v1"
+                + kind       = "ValidatingAdmissionPolicy"
+                + metadata   = {
+                    + annotations                = (known after apply)
+                    + creationTimestamp          = (known after apply)
+                    + deletionGracePeriodSeconds = (known after apply)
+                    + deletionTimestamp          = (known after apply)
+                    + finalizers                 = (known after apply)
+                    + generateName               = (known after apply)
+                    + generation                 = (known after apply)
+                    + labels                     = (known after apply)
+                    + managedFields              = (known after apply)
+                    + name                       = "clinical-apps-workload-identity"
+                    + namespace                  = (known after apply)
+                    + ownerReferences            = (known after apply)
+                    + resourceVersion            = (known after apply)
+                    + selfLink                   = (known after apply)
+                    + uid                        = (known after apply)
+                  }
+                + spec       = {
+                    + auditAnnotations = (known after apply)
+                    + failurePolicy    = "Fail"
+                    + matchConditions  = (known after apply)
+                    + matchConstraints = {
+                        + excludeResourceRules = (known after apply)
+                        + matchPolicy          = (known after apply)
+                        + namespaceSelector    = {
+                            + matchExpressions = (known after apply)
+                            + matchLabels      = {
+                                + "kubernetes.io/metadata.name" = "clinical-apps"
+                              }
+                          }
+                        + objectSelector       = {
+                            + matchExpressions = (known after apply)
+                            + matchLabels      = (known after apply)
+                          }
+                        + resourceRules        = [
+                            + {
+                                + apiGroups     = [
+                                    + "",
+                                  ]
+                                + apiVersions   = [
+                                    + "v1",
+                                  ]
+                                + operations    = [
+                                    + "CREATE",
+                                    + "UPDATE",
+                                  ]
+                                + resourceNames = (known after apply)
+                                + resources     = [
+                                    + "pods",
+                                    + "pods/ephemeralcontainers",
+                                  ]
+                                + scope         = (known after apply)
+                              },
+                            + {
+                                + apiGroups     = [
+                                    + "apps",
+                                  ]
+                                + apiVersions   = [
+                                    + "v1",
+                                  ]
+                                + operations    = [
+                                    + "CREATE",
+                                    + "UPDATE",
+                                  ]
+                                + resourceNames = (known after apply)
+                                + resources     = [
+                                    + "deployments",
+                                    + "replicasets",
+                                  ]
+                                + scope         = (known after apply)
+                              },
+                          ]
+                      }
+                    + paramKind        = {
+                        + apiVersion = (known after apply)
+                        + kind       = (known after apply)
+                      }
+                    + validations      = [
+                        + {
+                            + expression        = "variables.images.all(i, i.matches(\"@sha256:[0-9a-f]{64}$\"))"
+                            + message           = "image not pinned by digest: every container image in clinical-apps must be <repo>[:tag]@sha256:<64 hex>"
+                            + messageExpression = "'image not pinned by digest: ' + variables.images.filter(i, !i.matches(\"@sha256:[0-9a-f]{64}$\")).join(', ')"
+                            + reason            = "Invalid"
+                          },
+                        + {
+                            + expression        = "!variables.runsAsNightlyReport || variables.images.all(i, variables.approvedDigests.exists(d, i.endsWith('@' + d)))"
+                            + message           = "service account nightly-report may run only the approved app image"
+                            + messageExpression = "'service account nightly-report may run only the approved app image, not: ' + variables.images.filter(i, !variables.approvedDigests.exists(d, i.endsWith('@' + d))).join(', ')"
+                            + reason            = "Forbidden"
+                          },
+                        + {
+                            + expression        = "has(variables.podSpec.automountServiceAccountToken) && variables.podSpec.automountServiceAccountToken == false"
+                            + message           = "automountServiceAccountToken must be false in the pod spec (workloads here get no Kubernetes API token)"
+                            + messageExpression = (known after apply)
+                            + reason            = "Invalid"
+                          },
+                        + {
+                            + expression        = "!(variables.runsAsNightlyReport || variables.wasNightlyReport) || variables.trustedLauncher"
+                            + message           = "only the release pipeline may create or change a workload that runs as service account nightly-report"
+                            + messageExpression = "'only the release pipeline may create or change a workload that runs as service account nightly-report, not ' + request.userInfo.username"
+                            + reason            = "Forbidden"
+                          },
+                      ]
+                    + variables        = [
+                        + {
+                            + expression = "request.resource.resource == 'pods' ? object.spec : object.spec.template.spec"
+                            + name       = "podSpec"
+                          },
+                        + {
+                            + expression = <<-EOT
+                                  (variables.podSpec.containers
+                                    + (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])
+                                    + (has(variables.podSpec.ephemeralContainers) ? variables.podSpec.ephemeralContainers : [])
+                                  ).map(c, c.image)
+                              EOT
+                            + name       = "images"
+                          },
+                        + {
+                            + expression = <<-EOT
+                                  has(variables.podSpec.serviceAccountName) && variables.podSpec.serviceAccountName != ''
+                                    ? variables.podSpec.serviceAccountName
+                                    : (has(variables.podSpec.serviceAccount) && variables.podSpec.serviceAccount != ''
+                                        ? variables.podSpec.serviceAccount : 'default')
+                              EOT
+                            + name       = "serviceAccount"
+                          },
+                        + {
+                            + expression = "variables.serviceAccount == \"nightly-report\""
+                            + name       = "runsAsNightlyReport"
+                          },
+                        + {
+                            + expression = "request.resource.resource == 'pods' ? oldObject.spec : oldObject.spec.template.spec"
+                            + name       = "oldPodSpec"
+                          },
+                        + {
+                            + expression = <<-EOT
+                                  oldObject != null && (
+                                    has(variables.oldPodSpec.serviceAccountName) && variables.oldPodSpec.serviceAccountName != ''
+                                      ? variables.oldPodSpec.serviceAccountName
+                                      : (has(variables.oldPodSpec.serviceAccount) && variables.oldPodSpec.serviceAccount != ''
+                                          ? variables.oldPodSpec.serviceAccount : 'default')
+                                  ) == "nightly-report"
+                              EOT
+                            + name       = "wasNightlyReport"
+                          },
+                        + {
+                            + expression = jsonencode(
+                                  [
+                                    + "sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e",
+                                  ]
+                              )
+                            + name       = "approvedDigests"
+                          },
+                        + {
+                            + expression = <<-EOT
+                                  request.userInfo.username.startsWith('system:serviceaccount:kube-system:')
+                                    || request.userInfo.username == 'system:kube-controller-manager'
+                                    || (has(request.userInfo.groups)
+                                        && request.userInfo.groups.exists(g, g in ["kubeadm:cluster-admins"]))
+                              EOT
+                            + name       = "trustedLauncher"
+                          },
+                      ]
+                  }
+              }
+      
+            + field_manager {
+                + force_conflicts = true
+              }
+          }
+      
+        # kubernetes_manifest.workload_identity_policy_binding will be created
+        + resource "kubernetes_manifest" "workload_identity_policy_binding" {
+            + manifest = {
+                + apiVersion = "admissionregistration.k8s.io/v1"
+                + kind       = "ValidatingAdmissionPolicyBinding"
+                + metadata   = {
+                    + labels = {
+                        + "app.kubernetes.io/managed-by" = "terraform"
+                        + "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                      }
+                    + name   = "clinical-apps-workload-identity"
+                  }
+                + spec       = {
+                    + matchResources    = {
+                        + namespaceSelector = {
+                            + matchLabels = {
+                                + "kubernetes.io/metadata.name" = "clinical-apps"
+                              }
+                          }
+                      }
+                    + policyName        = "clinical-apps-workload-identity"
+                    + validationActions = [
+                        + "Deny",
+                      ]
+                  }
+              }
+            + object   = {
+                + apiVersion = "admissionregistration.k8s.io/v1"
+                + kind       = "ValidatingAdmissionPolicyBinding"
+                + metadata   = {
+                    + annotations                = (known after apply)
+                    + creationTimestamp          = (known after apply)
+                    + deletionGracePeriodSeconds = (known after apply)
+                    + deletionTimestamp          = (known after apply)
+                    + finalizers                 = (known after apply)
+                    + generateName               = (known after apply)
+                    + generation                 = (known after apply)
+                    + labels                     = (known after apply)
+                    + managedFields              = (known after apply)
+                    + name                       = "clinical-apps-workload-identity"
+                    + namespace                  = (known after apply)
+                    + ownerReferences            = (known after apply)
+                    + resourceVersion            = (known after apply)
+                    + selfLink                   = (known after apply)
+                    + uid                        = (known after apply)
+                  }
+                + spec       = {
+                    + matchResources    = {
+                        + excludeResourceRules = (known after apply)
+                        + matchPolicy          = (known after apply)
+                        + namespaceSelector    = {
+                            + matchExpressions = (known after apply)
+                            + matchLabels      = {
+                                + "kubernetes.io/metadata.name" = "clinical-apps"
+                              }
+                          }
+                        + objectSelector       = {
+                            + matchExpressions = (known after apply)
+                            + matchLabels      = (known after apply)
+                          }
+                        + resourceRules        = (known after apply)
+                      }
+                    + paramRef          = {
+                        + name                    = (known after apply)
+                        + namespace               = (known after apply)
+                        + parameterNotFoundAction = (known after apply)
+                        + selector                = {
+                            + matchExpressions = (known after apply)
+                            + matchLabels      = (known after apply)
+                          }
+                      }
+                    + policyName        = "clinical-apps-workload-identity"
+                    + validationActions = [
+                        + "Deny",
+                      ]
+                  }
+              }
+      
+            + field_manager {
+                + force_conflicts = true
+              }
+          }
+      
+        # kubernetes_role_binding_v1.human["app-deployer"] will be created
+        + resource "kubernetes_role_binding_v1" "human" {
+            + id = (known after apply)
+      
+            + metadata {
+                + generation       = (known after apply)
+                + labels           = {
+                    + "app.kubernetes.io/managed-by" = "terraform"
+                    + "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  }
+                + name             = "app-deployer--k8s-clinical-deployers"
+                + namespace        = "clinical-apps"
+                + resource_version = (known after apply)
+                + uid              = (known after apply)
+              }
+      
+            + role_ref {
+                + api_group = "rbac.authorization.k8s.io"
+                + kind      = "Role"
+                + name      = "app-deployer"
+              }
+      
+            + subject {
+                + api_group = "rbac.authorization.k8s.io"
+                + kind      = "Group"
+                + name      = "k8s-clinical-deployers"
+                + namespace = "default"
+              }
+          }
+      
+        # kubernetes_role_binding_v1.human["auditor"] will be created
+        + resource "kubernetes_role_binding_v1" "human" {
+            + id = (known after apply)
+      
+            + metadata {
+                + generation       = (known after apply)
+                + labels           = {
+                    + "app.kubernetes.io/managed-by" = "terraform"
+                    + "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  }
+                + name             = "auditor--k8s-clinical-auditors"
+                + namespace        = "clinical-apps"
+                + resource_version = (known after apply)
+                + uid              = (known after apply)
+              }
+      
+            + role_ref {
+                + api_group = "rbac.authorization.k8s.io"
+                + kind      = "Role"
+                + name      = "auditor"
+              }
+      
+            + subject {
+                + api_group = "rbac.authorization.k8s.io"
+                + kind      = "Group"
+                + name      = "k8s-clinical-auditors"
+                + namespace = "default"
+              }
+          }
+      
+        # kubernetes_role_v1.human["app-deployer"] will be created
+        + resource "kubernetes_role_v1" "human" {
+            + id = (known after apply)
+      
+            + metadata {
+                + annotations      = {
+                    + "contoso.health/purpose" = "Ship and operate workloads in clinical-apps through Deployments. Pods and ReplicaSets read-only. No secrets, no RBAC, no service-account tokens, no exec."
+                  }
+                + generation       = (known after apply)
+                + labels           = {
+                    + "app.kubernetes.io/managed-by" = "terraform"
+                    + "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  }
+                + name             = "app-deployer"
+                + namespace        = "clinical-apps"
+                + resource_version = (known after apply)
+                + uid              = (known after apply)
+              }
+      
+            + rule {
+                + api_groups = [
+                    + "apps",
+                  ]
+                + resources  = [
+                    + "deployments",
+                  ]
+                + verbs      = [
+                    + "create",
+                    + "delete",
+                    + "get",
+                    + "list",
+                    + "patch",
+                    + "update",
+                    + "watch",
+                  ]
+              }
+            + rule {
+                + api_groups = [
+                    + "apps",
+                  ]
+                + resources  = [
+                    + "replicasets",
+                  ]
+                + verbs      = [
+                    + "get",
+                    + "list",
+                    + "watch",
+                  ]
+              }
+            + rule {
+                + api_groups = [
+                    + null,
+                  ]
+                + resources  = [
+                    + "configmaps",
+                    + "services",
+                  ]
+                + verbs      = [
+                    + "create",
+                    + "delete",
+                    + "get",
+                    + "list",
+                    + "patch",
+                    + "update",
+                    + "watch",
+                  ]
+              }
+            + rule {
+                + api_groups = [
+                    + null,
+                  ]
+                + resources  = [
+                    + "pods",
+                  ]
+                + verbs      = [
+                    + "get",
+                    + "list",
+                    + "watch",
+                  ]
+              }
+            + rule {
+                + api_groups = [
+                    + null,
+                  ]
+                + resources  = [
+                    + "pods/log",
+                  ]
+                + verbs      = [
+                    + "get",
+                  ]
+              }
+          }
+      
+        # kubernetes_role_v1.human["auditor"] will be created
+        + resource "kubernetes_role_v1" "human" {
+            + id = (known after apply)
+      
+            + metadata {
+                + annotations      = {
+                    + "contoso.health/purpose" = "Read-only review of clinical-apps workloads and events. No secrets, no writes."
+                  }
+                + generation       = (known after apply)
+                + labels           = {
+                    + "app.kubernetes.io/managed-by" = "terraform"
+                    + "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  }
+                + name             = "auditor"
+                + namespace        = "clinical-apps"
+                + resource_version = (known after apply)
+                + uid              = (known after apply)
+              }
+      
+            + rule {
+                + api_groups = [
+                    + null,
+                  ]
+                + resources  = [
+                    + "configmaps",
+                    + "events",
+                    + "pods",
+                    + "services",
+                  ]
+                + verbs      = [
+                    + "get",
+                    + "list",
+                    + "watch",
+                  ]
+              }
+            + rule {
+                + api_groups = [
+                    + "apps",
+                  ]
+                + resources  = [
+                    + "deployments",
+                  ]
+                + verbs      = [
+                    + "get",
+                    + "list",
+                    + "watch",
+                  ]
+              }
+          }
+      
+        # kubernetes_service_account_v1.workload["nightly-report"] will be created
+        + resource "kubernetes_service_account_v1" "workload" {
+            + automount_service_account_token = false
+            + default_secret_name             = (known after apply)
+            + id                              = (known after apply)
+      
+            + metadata {
+                + annotations      = {
+                    + "azure.workload.identity/client-id" = "35080341-cac0-4201-a2a0-10f17921b81d"
+                    + "contoso.health/purpose"            = "Approved workload. The only service account an Entra federated credential (../keyvault-trust) trusts."
+                  }
+                + generation       = (known after apply)
+                + labels           = {
+                    + "app.kubernetes.io/managed-by" = "terraform"
+                    + "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  }
+                + name             = "nightly-report"
+                + namespace        = "clinical-apps"
+                + resource_version = (known after apply)
+                + uid              = (known after apply)
+              }
+          }
+      
+        # kubernetes_service_account_v1.workload["unapproved-job"] will be created
+        + resource "kubernetes_service_account_v1" "workload" {
+            + automount_service_account_token = false
+            + default_secret_name             = (known after apply)
+            + id                              = (known after apply)
+      
+            + metadata {
+                + annotations      = {
+                    + "contoso.health/purpose" = "Negative control. Same namespace, but no federated credential trusts it: Entra refuses its token."
+                  }
+                + generation       = (known after apply)
+                + labels           = {
+                    + "app.kubernetes.io/managed-by" = "terraform"
+                    + "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  }
+                + name             = "unapproved-job"
+                + namespace        = "clinical-apps"
+                + resource_version = (known after apply)
+                + uid              = (known after apply)
+              }
+          }
+      
+      Plan: 9 to add, 0 to change, 0 to destroy.
+      
+      Changes to Outputs:
+        + human_rbac            = {
+            + app-deployer = "k8s-clinical-deployers"
+            + auditor      = "k8s-clinical-auditors"
+          }
+        + secret_provider_class = {
+            + client_id    = "35080341-cac0-4201-a2a0-10f17921b81d"
+            + key_vault    = "kv-k8s-864b1cef"
+            + mounted_file = "/mnt/secrets-store/db"
+            + name         = "nightly-report-db"
+            + secret       = "clinical-db"
+          }
+        + service_accounts      = [
+            + "nightly-report",
+            + "unapproved-job",
+          ]
+      kubernetes_service_account_v1.workload["unapproved-job"]: Creating...
+      kubernetes_service_account_v1.workload["nightly-report"]: Creating...
+      kubernetes_role_v1.human["auditor"]: Creating...
+      kubernetes_role_v1.human["app-deployer"]: Creating...
+      kubernetes_role_v1.human["app-deployer"]: Creation complete after 0s [id=clinical-apps/app-deployer]
+      kubernetes_role_v1.human["auditor"]: Creation complete after 0s [id=clinical-apps/auditor]
+      kubernetes_service_account_v1.workload["nightly-report"]: Creation complete after 0s [id=clinical-apps/nightly-report]
+      kubernetes_service_account_v1.workload["unapproved-job"]: Creation complete after 0s [id=clinical-apps/unapproved-job]
+      kubernetes_role_binding_v1.human["auditor"]: Creating...
+      kubernetes_role_binding_v1.human["app-deployer"]: Creating...
+      kubernetes_role_binding_v1.human["app-deployer"]: Creation complete after 0s [id=clinical-apps/app-deployer--k8s-clinical-deployers]
+      kubernetes_role_binding_v1.human["auditor"]: Creation complete after 0s [id=clinical-apps/auditor--k8s-clinical-auditors]
+      kubernetes_manifest.secret_provider_class: Creating...
+      kubernetes_manifest.workload_identity_policy: Creating...
+      kubernetes_manifest.secret_provider_class: Creation complete after 0s
+      kubernetes_manifest.workload_identity_policy: Creation complete after 0s
+      kubernetes_manifest.workload_identity_policy_binding: Creating...
+      kubernetes_manifest.workload_identity_policy_binding: Creation complete after 0s
+      
+      Apply complete! Resources: 9 added, 0 changed, 0 destroyed.
+      
+      live: binding clinical-apps-workload-identity validationActions=["Deny"]
+      live: policy matches CREATE+UPDATE of pods,pods/ephemeralcontainers,deployments,replicasets
+PASS  admission policy live: Deny, 4 rules, pods + deployments matched
+
+==> [8/12] deploy workload
+networkpolicy.networking.k8s.io/nightly-report-deny-ingress created
+deployment.apps/nightly-report created
+Waiting for deployment "nightly-report" rollout to finish: 0 of 1 updated replicas are available...
+deployment "nightly-report" successfully rolled out
+      NAME                              READY   STATUS    RESTARTS   AGE   IP           NODE                        NOMINATED NODE   READINESS GATES
+      nightly-report-75897d5f47-6gzb8   1/1     Running   0          34s   10.244.0.7   contoso-k8s-control-plane   <none>           <none>
+
+==> [9/12] rotate secret (no restart)
+PASS  before: nightly-report-75897d5f47-6gzb8 serves the seeded value (sha256 77d8268ec50b...)
+[01:35:17Z] rotated kv-k8s-864b1cef/clinical-db: version 6e941ff7... (sha256 9ab1e2b8cd42..., value not printed)
+PASS  driver rewrote /mnt/secrets-store/db in ~5s (in-pod sha256 9ab1e2b8cd42..., value not printed)
+PASS  same pod, same uid 709d407a..., still Ready, no container restarted
+      restart counts before = after: nightly-report=0
+
+==> [10/12] drift: detect + heal
+[01:35:22Z] drift, out of band, as the kind admin (kubernetes-admin):
+[01:35:22Z]   + subject User/mallory on rolebinding app-deployer--k8s-clinical-deployers
+      rolebinding.rbac.authorization.k8s.io/app-deployer--k8s-clinical-deployers patched
+[01:35:22Z] mallory can now create deployments in clinical-apps: the drift is a real grant
+      
+      Terraform used the selected providers to generate the following execution
+      plan. Resource actions are indicated with the following symbols:
+        ~ update in-place
+      
+      Terraform will perform the following actions:
+      
+        # kubernetes_role_binding_v1.human["app-deployer"] will be updated in-place
+        ~ resource "kubernetes_role_binding_v1" "human" {
+              id = "clinical-apps/app-deployer--k8s-clinical-deployers"
+      
+            - subject {
+                - api_group = "rbac.authorization.k8s.io" -> null
+                - kind      = "User" -> null
+                - name      = "mallory" -> null
+                  # (1 unchanged attribute hidden)
+              }
+      
+              # (3 unchanged blocks hidden)
+          }
+      
+      Plan: 0 to add, 1 to change, 0 to destroy.
+
+DRIFT DETECTED  kubernetes_role_binding_v1.human["app-deployer"] (update)
+                apply removes: User/mallory
+
+PASS  terraform plan -detailed-exitcode = 2, on exactly the tampered resource
+      kubernetes_role_binding_v1.human["app-deployer"]: Modifying... [id=clinical-apps/app-deployer--k8s-clinical-deployers]
+      kubernetes_role_binding_v1.human["app-deployer"]: Modifications complete after 0s [id=clinical-apps/app-deployer--k8s-clinical-deployers]
+      
+      Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
+      
+PASS  drift healed: plan -detailed-exitcode = 0, mallory can no longer create deployments
+
+==> [11/12] e2e tests
+
+[01:35:25Z] == (a) platform: kind node, CSI driver + Azure provider, public issuer, Pod Security labels
+      contoso-k8s-control-plane kubelet=v1.36.4
+PASS  node(s) Ready
+PASS  Secrets Store CSI Driver pods Ready
+PASS  Azure Key Vault provider pods Ready
+      CSIDriver secrets-store.csi.k8s.io tokenRequests audiences=["api://AzureADTokenExchange"]
+PASS  CSIDriver requests tokens for exactly one audience: api://AzureADTokenExchange
+      clinical-apps enforce=restricted warn=restricted audit=restricted; secrets-store enforce=privileged warn=baseline (CSI node plugin)
+PASS  PSA: clinical-apps enforce/warn/audit=restricted, secrets-store enforce=privileged warn=baseline
+      https://stk8skv864b1cef.z20.web.core.windows.net/.well-known/openid-configuration: public sha256 ca4f197fa0b9..., API server ca4f197fa0b9...
+      https://stk8skv864b1cef.z20.web.core.windows.net/openid/v1/jwks: public sha256 272c0a334ec3..., API server 272c0a334ec3...
+PASS  the public issuer serves the API server's own discovery document and JWKS
+
+[01:35:27Z] == (b) workload: nightly-report gets its credential from a CSI volume
+PASS  nightly-report pod Ready: nightly-report-75897d5f47-6gzb8
+      pod nightly-report-75897d5f47-6gzb8 containers=[nightly-report] initContainers=[]
+PASS  nothing injected: the pod runs only the app container
+PASS  the pod mounts SecretProviderClass nightly-report-db through the CSI driver
+      in-pod sha256 9ab1e2b8cd42...  current 9ab1e2b8cd42...  (value not printed)
+PASS  /mnt/secrets-store/db in 'nightly-report' hashes to the CURRENT value (seeded, then rotated)
+PASS  app container has no Kubernetes API token (automount off, nothing at the default path)
+      projected serviceAccountToken volumes in the pod spec: 0
+PASS  the pod spec holds no projected service-account token at all
+PASS  Deployment: no env value, no secretKeyRef/envFrom Secret, no Secret volume, automount off
+      SecretProviderClass nightly-report-db: provider=azure usePodIdentity=false clientID=35080341... secretObjects=0
+PASS  SecretProviderClass: Workload ID (this app's client id), no secretObjects (never a Kubernetes Secret)
+
+[01:35:28Z] == (c) Entra Workload ID + Key Vault RBAC: who gets a token, and what it is worth
+      iss=https://stk8skv864b1cef.z20.web.core.windows.net aud=api://AzureADTokenExchange sub=system:serviceaccount:clinical-apps:nightly-report lifetime=600s
+PASS  TokenRequest for clinical-apps/nightly-report: iss=public issuer, aud=[api://AzureADTokenExchange], <= 600s
+      Entra: HTTP 200, token_type=Bearer, expires_in=3599s
+PASS  Entra exchanges it for an access token (federated credential, no client secret)
+      aud=cfa8b339-82a2-471a-a3c9-0fc0be7a4093 appid=35080341... tid=86a2e327... idtyp=app lifetime=3900s
+PASS  the access token is for Key Vault, issued to this app, in this tenant
+      GET secrets/clinical-db -> HTTP 200; sha256 9ab1e2b8cd42... (current 9ab1e2b8cd42..., value not printed)
+PASS  it can read clinical-db (sha256 = current value)
+      GET secrets/clinical-other -> HTTP 403 Forbidden/ForbiddenByRbac
+PASS  it cannot read clinical-other in the SAME vault (403, Azure RBAC)
+      PUT secrets/clinical-db -> HTTP 403 Forbidden/ForbiddenByRbac
+PASS  it cannot write clinical-db (403)
+      GET secrets -> HTTP 403 Forbidden/ForbiddenByRbac
+PASS  it cannot list the vault's secrets (403)
+      presented: aud=api://AzureADTokenExchange sub=system:serviceaccount:clinical-apps:unapproved-job
+      Entra: HTTP 401 invalid_client AADSTS700213 AADSTS700213: No matching federated identity record found for presented assertion subject 'system:serviceaccou
+PASS  Entra refuses unapproved-job's token (same audience, no federated credential)
+      presented: aud=https://stk8skv864b1cef.z20.web.core.windows.net sub=system:serviceaccount:clinical-apps:nightly-report
+      Entra: HTTP 401 invalid_client AADSTS700212 AADSTS700212: No matching federated identity record found for presented assertion audience 'https://stk8skv864
+PASS  Entra refuses nightly-report's token WITHOUT the exchange audience
+      GET https://127.0.0.1:16443/api as nightly-report: default-audience token -> HTTP 200; aud=api://AzureADTokenExchange token -> HTTP 401
+PASS  the Kubernetes API refuses the exchange-audience token (401; a default-audience one: 200)
+
+[01:35:33Z] == (d) identity = namespace + name, not just a name
+      created namespace other-team + serviceaccount other-team/nightly-report (deleted at the end of (d))
+PASS  fixture: namespace other-team with its own service account named nightly-report
+      presented: aud=api://AzureADTokenExchange sub=system:serviceaccount:other-team:nightly-report
+      Entra: HTTP 401 invalid_client AADSTS700213 AADSTS700213: No matching federated identity record found for presented assertion subject 'system:serviceaccou
+PASS  Entra refuses other-team/nightly-report (same name, same audience, other namespace)
+      control: GET /api with a token for other-team/ephemeral (claim sa uid a098a8ab...) -> HTTP 200
+      deleted + recreated other-team/ephemeral (same name, uid c2d93bfa...): the old token -> HTTP 401
+      control: a fresh token for the recreated service account -> HTTP 200
+PASS  a token dies with its ServiceAccount: SA deleted + recreated (same name) -> old token 401
+      namespace other-team and its service accounts are gone
+PASS  fixture namespace other-team deleted again
+      pod e2e-spc-borrow (SA unapproved-job, same image, same SecretProviderClass): phase=Pending started=false; FailedMount: Entra AADSTS700213
+PASS  a real pod as unapproved-job naming nightly-report-db never starts (Entra refuses the driver's token)
+
+[01:35:52Z] == (e) no static secret anywhere in the namespace
+      searched clinical-apps: ConfigMap=1 Deployment=1 Pod=1 ReplicaSet=1 (plain, base64, decoded Secret data)
+PASS  the value is in no Secret/ConfigMap/Deployment/ReplicaSet/Pod in clinical-apps
+PASS  no legacy long-lived service-account token Secrets in clinical-apps
+PASS  service accounts nightly-report + unapproved-job: automountServiceAccountToken=false
+
+[01:35:53Z] == (f) RBAC as code: can-i matrix, impersonated groups (AKS: Entra group object IDs)
+      kubectl auth can-i as each identity; namespace clinical-apps, last column kube-system
+                         create    patch     get       create    imper-    pods/     list pods
+                         deploys   pods      secrets   rolebind  sonate    exec      kube-sys
+      deployer           yes       no        no        no        no        no        no
+      auditor            no        no        no        no        no        no        no
+      SA nightly-report  no        no        no        no        no        no        no
+      SA unapproved-job  no        no        no        no        no        no        no
+      expected: only the deployer may create Deployments; every other cell no (* = mismatch)
+PASS  RBAC matrix: 4 identities x 7 permissions, every cell as expected
+      deployment.apps/e2e-rbac-probe
+PASS  deployer: can create a Deployment in clinical-apps (server-side dry run)
+      can-i list pods -> yes
+      can-i get pods/log -> yes
+PASS  deployer: can list pods and read pods/log (positive control)
+      can-i create pods -> no
+      can-i update pods -> no
+      can-i patch pods -> no
+      can-i delete pods -> no
+      can-i deletecollection pods -> no
+PASS  deployer: cannot create / update / patch / delete pods (no bare pod, no in-place image swap)
+      can-i list replicasets -> yes
+      can-i create replicasets -> no
+      can-i update replicasets -> no
+      can-i patch replicasets -> no
+      can-i delete replicasets -> no
+PASS  deployer: ReplicaSets read-only (deleting one would restart nightly-report)
+      Error from server (Forbidden): secrets "e2e-audit-probe-013525-23459" is forbidden: User "e2e-deployer@contosohealth.io" cannot get resource "secrets" in API group "" in the namespace "clinical-apps"
+PASS  deployer: cannot get Secrets in clinical-apps
+      Error from server (Forbidden): pods is forbidden: User "e2e-deployer@contosohealth.io" cannot list resource "pods" in API group "" in the namespace "kube-system"
+PASS  deployer: cannot list pods in kube-system
+      error: failed to create token: serviceaccounts "nightly-report" is forbidden: User "e2e-deployer@contosohealth.io" cannot create resource "serviceaccounts/token" in API group "" in the namespace "clinical-apps"
+PASS  deployer: cannot mint a token for nightly-report (serviceaccounts/token)
+      can-i create rolebindings -> no
+PASS  deployer: cannot create RoleBindings (no self-escalation)
+      can-i create pods/exec -> no
+      can-i create pods/attach -> no
+      can-i create pods/portforward -> no
+      can-i update pods/ephemeralcontainers -> no
+      can-i patch pods/ephemeralcontainers -> no
+PASS  deployer: no exec / attach / port-forward / ephemeral containers on pods
+      pod/nightly-report-75897d5f47-6gzb8
+PASS  auditor: can list pods in clinical-apps
+      Error from server (Forbidden): secrets "e2e-audit-probe-013525-23459" is forbidden: User "e2e-auditor@contosohealth.io" cannot get resource "secrets" in API group "" in the namespace "clinical-apps"
+PASS  auditor: cannot get Secrets in clinical-apps
+      Error from server (Forbidden): secrets is forbidden: User "e2e-auditor@contosohealth.io" cannot list resource "secrets" in API group "" in the namespace "clinical-apps"
+PASS  auditor: cannot list Secrets in clinical-apps (not even their names)
+      Error from server (Forbidden): pods "nightly-report-75897d5f47-6gzb8" is forbidden: User "e2e-auditor@contosohealth.io" cannot delete resource "pods" in API group "" in the namespace "clinical-apps"
+PASS  auditor: cannot delete pods in clinical-apps (server-side dry run)
+      ClusterRoleBindings naming a k8s-clinical-* group: none
+PASS  no ClusterRoleBinding for the k8s-clinical-* groups (namespace-scoped only)
+
+[01:35:58Z] == (g) admission: ValidatingAdmissionPolicy clinical-apps-workload-identity + PSA
+      policy:  failurePolicy=Fail validations=4 match=core/pods|pods/ephemeralcontainers:CREATE+UPDATE apps/deployments|replicasets:CREATE+UPDATE
+      binding: clinical-apps-workload-identity validationActions=Deny
+PASS  VAP + binding installed: Deny on CREATE/UPDATE of pods + deployments in clinical-apps
+      nightly-report: docker.io/library/busybox:1.37.0@sha256:bdf57e528e45...
+PASS  the running nightly-report pod: every image (app + injected agent) is pinned by digest
+      pod/e2e-vap-approved
+PASS  control: the pipeline identity runs nightly-report on the approved digest -> admitted
+      Error from server (Forbidden): error when creating "STDIN": pods "e2e-vap-borrow" is forbidden: ValidatingAdmissionPolicy 'clinical-apps-workload-identity' with binding 'clinical-apps-workload-identity' denied request: service account nightly-report may run only the approved app image, not: registry.invalid/contoso-e2e/not-approved@sha256:a22b09f9c642bfa3a98789f7bce543da5155738c64cfffd5b3231deaa3feb0b7
+PASS  even the pipeline: nightly-report + a different digest-pinned image -> denied
+      pod/e2e-vap-other-sa
+PASS  control: unapproved-job may run that image -> admitted (the allowlist binds nightly-report)
+      The pods "e2e-vap-tag" is invalid: : ValidatingAdmissionPolicy 'clinical-apps-workload-identity' with binding 'clinical-apps-workload-identity' denied request: image not pinned by digest: docker.io/library/busybox:1.37.0
+PASS  tag-only image (docker.io/library/busybox:1.37.0, no @sha256 digest) -> denied
+      The pods "e2e-vap-automount" is invalid: : ValidatingAdmissionPolicy 'clinical-apps-workload-identity' with binding 'clinical-apps-workload-identity' denied request: automountServiceAccountToken must be false in the pod spec (workloads here get no Kubernetes API token)
+PASS  automountServiceAccountToken: true -> denied
+      deployment.apps/e2e-rbac-probe
+PASS  control: the deployer ships its own Deployment (as unapproved-job) -> admitted
+      Error from server (Forbidden): error when creating "STDIN": deployments.apps "e2e-rbac-probe" is forbidden: ValidatingAdmissionPolicy 'clinical-apps-workload-identity' with binding 'clinical-apps-workload-identity' denied request: only the release pipeline may create or change a workload that runs as service account nightly-report, not e2e-deployer@contosohealth.io
+PASS  deployer creates a Deployment AS nightly-report (approved image) -> denied
+      Error from server (Forbidden): deployments.apps "nightly-report" is forbidden: ValidatingAdmissionPolicy 'clinical-apps-workload-identity' with binding 'clinical-apps-workload-identity' denied request: service account nightly-report may run only the approved app image, not: registry.invalid/contoso-e2e/not-approved@sha256:a22b09f9c642bfa3a98789f7bce543da5155738c64cfffd5b3231deaa3feb0b7
+PASS  deployer re-points nightly-report to another image digest -> denied
+      Error from server (Forbidden): deployments.apps "nightly-report" is forbidden: ValidatingAdmissionPolicy 'clinical-apps-workload-identity' with binding 'clinical-apps-workload-identity' denied request: only the release pipeline may create or change a workload that runs as service account nightly-report, not e2e-deployer@contosohealth.io
+PASS  deployer keeps the image, swaps the command to print the secret -> denied
+      Error from server (Forbidden): deployments.apps "nightly-report" is forbidden: ValidatingAdmissionPolicy 'clinical-apps-workload-identity' with binding 'clinical-apps-workload-identity' denied request: only the release pipeline may create or change a workload that runs as service account nightly-report, not e2e-deployer@contosohealth.io
+PASS  deployer moves nightly-report to SA default + new command, one patch -> denied
+      deployment.apps/nightly-report
+PASS  control: the pipeline identity may move it off nightly-report -> admitted
+      Error from server (Forbidden): error when creating "/Users/michaelwilliams/lab-wt-k8skv/lab/k8s/manifests/negative/privileged-pod.yaml": pods "privileged-escape-attempt" is forbidden: violates PodSecurity "restricted:v1.36": host namespaces (hostPID=true), privileged (container "shell" must not set securityContext.privileged=true), allowPrivilegeEscalation != false (container "shell" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "shell" must set securityContext.capabilities.drop=["ALL"]; container "shell" must not include "SYS_ADMIN" in securityContext.capabilities.add), restricted volume types (volume "node-root" uses restricted volume type "hostPath"), runAsNonRoot != true (pod or container "shell" must set securityContext.runAsNonRoot=true), runAsUser=0 (container "shell" must not set runAsUser=0), seccompProfile (pod or container "shell" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+PASS  manifests/negative/privileged-pod.yaml rejected by Pod Security (enforce=restricted)
+
+[01:35:59Z] == (h) API-server audit log: who tried what, who changed what, what it never holds
+      2026-11-07T01:35:57.320627Z user=kubernetes-admin impersonating=e2e-deployer@contosohealth.io groups=k8s-clinical-deployers,system:authenticated get clinical-apps/secrets/e2e-audit-probe-013525-23459 -> 403 decision=forbid
+PASS  the deployer's forbidden Secret read is logged (403, impersonated user + group)
+      events: secrets=20 serviceaccounts/token=39 tokenreviews=0 not-metadata-or-with-body=0
+PASS  Secret / TokenRequest / TokenReview events: Metadata level, no request or response body
+      2026-11-07T01:35:22.845366Z patch by kubernetes-admin (kubectl/v1.37.1 (darwin/arm64))
+        level RequestResponse; requestObject: add /subjects/- User/mallory
+        responseObject.subjects: Group/k8s-clinical-deployers, User/mallory
+PASS  drift drill: kubernetes-admin patched the deployer RoleBinding, + User/mallory (bodies)
+      2026-11-07T01:35:24.717206Z patch by kubernetes-admin (HashiCorp/1.0 Terraform/1.16.5)
+        level RequestResponse
+        responseObject.subjects: Group/k8s-clinical-deployers
+PASS  drift drill: Terraform's revert of that RoleBinding (User/mallory gone) is logged after it
+      2026-11-07T01:34:41.170574Z patch by kubernetes-admin (terraform-provider-kubernetes_v3.3.0_x5/v0.0.0 (darwin/arm64))
+        level RequestResponse; responseObject: ValidatingAdmissionPolicy with 4 validations
+PASS  the ValidatingAdmissionPolicy write is logged with its body (RequestResponse)
+
+K8S E2E PASSED (66/66)
+
+==> [12/12] secrets out of state
+      searched for (counts only)       platform   identity      trust  audit log
+      clinical-db, 2 versions                 0          0          0          0
+        same, base64                          0          0          0          0
+      clinical-other (decoy)                  0          0          0          0
+        same, base64                          0          0          0          0
+      control: "clinical-apps" (> 0)          6         39          4        587
+PASS  clinical-db (all 2 versions) + decoy: 0 hits in 3 Terraform states + audit log
+
+==> teardown
+[01:36:09Z] terraform destroy lab/terraform/k8s/identity
+      kubernetes_service_account_v1.workload["unapproved-job"]: Refreshing state... [id=clinical-apps/unapproved-job]
+      kubernetes_service_account_v1.workload["nightly-report"]: Refreshing state... [id=clinical-apps/nightly-report]
+      kubernetes_role_v1.human["auditor"]: Refreshing state... [id=clinical-apps/auditor]
+      kubernetes_role_v1.human["app-deployer"]: Refreshing state... [id=clinical-apps/app-deployer]
+      kubernetes_role_binding_v1.human["auditor"]: Refreshing state... [id=clinical-apps/auditor--k8s-clinical-auditors]
+      kubernetes_role_binding_v1.human["app-deployer"]: Refreshing state... [id=clinical-apps/app-deployer--k8s-clinical-deployers]
+      kubernetes_manifest.secret_provider_class: Refreshing state...
+      kubernetes_manifest.workload_identity_policy: Refreshing state...
+      kubernetes_manifest.workload_identity_policy_binding: Refreshing state...
+      
+      Terraform used the selected providers to generate the following execution
+      plan. Resource actions are indicated with the following symbols:
+        - destroy
+      
+      Terraform will perform the following actions:
+      
+        # kubernetes_manifest.secret_provider_class will be destroyed
+        - resource "kubernetes_manifest" "secret_provider_class" {
+            - manifest = {
+                - apiVersion = "secrets-store.csi.x-k8s.io/v1"
+                - kind       = "SecretProviderClass"
+                - metadata   = {
+                    - labels    = {
+                        - "app.kubernetes.io/managed-by" = "terraform"
+                        - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                      }
+                    - name      = "nightly-report-db"
+                    - namespace = "clinical-apps"
+                  }
+                - spec       = {
+                    - parameters = {
+                        - clientID       = "35080341-cac0-4201-a2a0-10f17921b81d"
+                        - keyvaultName   = "kv-k8s-864b1cef"
+                        - objects        = <<-EOT
+                              "array":
+                              - |
+                                "objectAlias": "db"
+                                "objectName": "clinical-db"
+                                "objectType": "secret"
+                                "objectVersion": ""
+                          EOT
+                        - tenantId       = "86a2e327-4951-4348-a3c4-6f4b79ffd8f2"
+                        - usePodIdentity = "false"
+                      }
+                    - provider   = "azure"
+                  }
+              } -> null
+            - object   = {
+                - apiVersion = "secrets-store.csi.x-k8s.io/v1"
+                - kind       = "SecretProviderClass"
+                - metadata   = {
+                    - annotations                = null
+                    - creationTimestamp          = null
+                    - deletionGracePeriodSeconds = null
+                    - deletionTimestamp          = null
+                    - finalizers                 = null
+                    - generateName               = null
+                    - generation                 = null
+                    - labels                     = {
+                        - "app.kubernetes.io/managed-by" = "terraform"
+                        - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                      }
+                    - managedFields              = null
+                    - name                       = "nightly-report-db"
+                    - namespace                  = "clinical-apps"
+                    - ownerReferences            = null
+                    - resourceVersion            = null
+                    - selfLink                   = null
+                    - uid                        = null
+                  }
+                - spec       = {
+                    - parameters    = {
+                        - clientID       = "35080341-cac0-4201-a2a0-10f17921b81d"
+                        - keyvaultName   = "kv-k8s-864b1cef"
+                        - objects        = <<-EOT
+                              "array":
+                              - |
+                                "objectAlias": "db"
+                                "objectName": "clinical-db"
+                                "objectType": "secret"
+                                "objectVersion": ""
+                          EOT
+                        - tenantId       = "86a2e327-4951-4348-a3c4-6f4b79ffd8f2"
+                        - usePodIdentity = "false"
+                      }
+                    - provider      = "azure"
+                    - secretObjects = null
+                  }
+              } -> null
+      
+            - field_manager {
+                - force_conflicts = true -> null
+              }
+          }
+      
+        # kubernetes_manifest.workload_identity_policy will be destroyed
+        - resource "kubernetes_manifest" "workload_identity_policy" {
+            - manifest = {
+                - apiVersion = "admissionregistration.k8s.io/v1"
+                - kind       = "ValidatingAdmissionPolicy"
+                - metadata   = {
+                    - annotations = {
+                        - "contoso.health/purpose" = "Workloads in clinical-apps: digest-pinned images, no API token, and only the pipeline may run the approved build as nightly-report."
+                      }
+                    - labels      = {
+                        - "app.kubernetes.io/managed-by" = "terraform"
+                        - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                      }
+                    - name        = "clinical-apps-workload-identity"
+                  }
+                - spec       = {
+                    - failurePolicy    = "Fail"
+                    - matchConstraints = {
+                        - namespaceSelector = {
+                            - matchLabels = {
+                                - "kubernetes.io/metadata.name" = "clinical-apps"
+                              }
+                          }
+                        - resourceRules     = [
+                            - {
+                                - apiGroups   = [
+                                    - "",
+                                  ]
+                                - apiVersions = [
+                                    - "v1",
+                                  ]
+                                - operations  = [
+                                    - "CREATE",
+                                    - "UPDATE",
+                                  ]
+                                - resources   = [
+                                    - "pods",
+                                    - "pods/ephemeralcontainers",
+                                  ]
+                              },
+                            - {
+                                - apiGroups   = [
+                                    - "apps",
+                                  ]
+                                - apiVersions = [
+                                    - "v1",
+                                  ]
+                                - operations  = [
+                                    - "CREATE",
+                                    - "UPDATE",
+                                  ]
+                                - resources   = [
+                                    - "deployments",
+                                    - "replicasets",
+                                  ]
+                              },
+                          ]
+                      }
+                    - validations      = [
+                        - {
+                            - expression        = "variables.images.all(i, i.matches(\"@sha256:[0-9a-f]{64}$\"))"
+                            - message           = "image not pinned by digest: every container image in clinical-apps must be <repo>[:tag]@sha256:<64 hex>"
+                            - messageExpression = "'image not pinned by digest: ' + variables.images.filter(i, !i.matches(\"@sha256:[0-9a-f]{64}$\")).join(', ')"
+                            - reason            = "Invalid"
+                          },
+                        - {
+                            - expression        = "!variables.runsAsNightlyReport || variables.images.all(i, variables.approvedDigests.exists(d, i.endsWith('@' + d)))"
+                            - message           = "service account nightly-report may run only the approved app image"
+                            - messageExpression = "'service account nightly-report may run only the approved app image, not: ' + variables.images.filter(i, !variables.approvedDigests.exists(d, i.endsWith('@' + d))).join(', ')"
+                            - reason            = "Forbidden"
+                          },
+                        - {
+                            - expression = "has(variables.podSpec.automountServiceAccountToken) && variables.podSpec.automountServiceAccountToken == false"
+                            - message    = "automountServiceAccountToken must be false in the pod spec (workloads here get no Kubernetes API token)"
+                            - reason     = "Invalid"
+                          },
+                        - {
+                            - expression        = "!(variables.runsAsNightlyReport || variables.wasNightlyReport) || variables.trustedLauncher"
+                            - message           = "only the release pipeline may create or change a workload that runs as service account nightly-report"
+                            - messageExpression = "'only the release pipeline may create or change a workload that runs as service account nightly-report, not ' + request.userInfo.username"
+                            - reason            = "Forbidden"
+                          },
+                      ]
+                    - variables        = [
+                        - {
+                            - expression = "request.resource.resource == 'pods' ? object.spec : object.spec.template.spec"
+                            - name       = "podSpec"
+                          },
+                        - {
+                            - expression = <<-EOT
+                                  (variables.podSpec.containers
+                                    + (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])
+                                    + (has(variables.podSpec.ephemeralContainers) ? variables.podSpec.ephemeralContainers : [])
+                                  ).map(c, c.image)
+                              EOT
+                            - name       = "images"
+                          },
+                        - {
+                            - expression = <<-EOT
+                                  has(variables.podSpec.serviceAccountName) && variables.podSpec.serviceAccountName != ''
+                                    ? variables.podSpec.serviceAccountName
+                                    : (has(variables.podSpec.serviceAccount) && variables.podSpec.serviceAccount != ''
+                                        ? variables.podSpec.serviceAccount : 'default')
+                              EOT
+                            - name       = "serviceAccount"
+                          },
+                        - {
+                            - expression = "variables.serviceAccount == \"nightly-report\""
+                            - name       = "runsAsNightlyReport"
+                          },
+                        - {
+                            - expression = "request.resource.resource == 'pods' ? oldObject.spec : oldObject.spec.template.spec"
+                            - name       = "oldPodSpec"
+                          },
+                        - {
+                            - expression = <<-EOT
+                                  oldObject != null && (
+                                    has(variables.oldPodSpec.serviceAccountName) && variables.oldPodSpec.serviceAccountName != ''
+                                      ? variables.oldPodSpec.serviceAccountName
+                                      : (has(variables.oldPodSpec.serviceAccount) && variables.oldPodSpec.serviceAccount != ''
+                                          ? variables.oldPodSpec.serviceAccount : 'default')
+                                  ) == "nightly-report"
+                              EOT
+                            - name       = "wasNightlyReport"
+                          },
+                        - {
+                            - expression = jsonencode(
+                                  [
+                                    - "sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e",
+                                  ]
+                              )
+                            - name       = "approvedDigests"
+                          },
+                        - {
+                            - expression = <<-EOT
+                                  request.userInfo.username.startsWith('system:serviceaccount:kube-system:')
+                                    || request.userInfo.username == 'system:kube-controller-manager'
+                                    || (has(request.userInfo.groups)
+                                        && request.userInfo.groups.exists(g, g in ["kubeadm:cluster-admins"]))
+                              EOT
+                            - name       = "trustedLauncher"
+                          },
+                      ]
+                  }
+              } -> null
+            - object   = {
+                - apiVersion = "admissionregistration.k8s.io/v1"
+                - kind       = "ValidatingAdmissionPolicy"
+                - metadata   = {
+                    - annotations                = {
+                        - "contoso.health/purpose" = "Workloads in clinical-apps: digest-pinned images, no API token, and only the pipeline may run the approved build as nightly-report."
+                      }
+                    - creationTimestamp          = null
+                    - deletionGracePeriodSeconds = null
+                    - deletionTimestamp          = null
+                    - finalizers                 = null
+                    - generateName               = null
+                    - generation                 = null
+                    - labels                     = {
+                        - "app.kubernetes.io/managed-by" = "terraform"
+                        - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                      }
+                    - managedFields              = null
+                    - name                       = "clinical-apps-workload-identity"
+                    - namespace                  = null
+                    - ownerReferences            = null
+                    - resourceVersion            = null
+                    - selfLink                   = null
+                    - uid                        = null
+                  }
+                - spec       = {
+                    - auditAnnotations = null
+                    - failurePolicy    = "Fail"
+                    - matchConditions  = null
+                    - matchConstraints = {
+                        - excludeResourceRules = null
+                        - matchPolicy          = "Equivalent"
+                        - namespaceSelector    = {
+                            - matchExpressions = null
+                            - matchLabels      = {
+                                - "kubernetes.io/metadata.name" = "clinical-apps"
+                              }
+                          }
+                        - objectSelector       = {
+                            - matchExpressions = null
+                            - matchLabels      = null
+                          }
+                        - resourceRules        = [
+                            - {
+                                - apiGroups     = [
+                                    - "",
+                                  ]
+                                - apiVersions   = [
+                                    - "v1",
+                                  ]
+                                - operations    = [
+                                    - "CREATE",
+                                    - "UPDATE",
+                                  ]
+                                - resourceNames = null
+                                - resources     = [
+                                    - "pods",
+                                    - "pods/ephemeralcontainers",
+                                  ]
+                                - scope         = "*"
+                              },
+                            - {
+                                - apiGroups     = [
+                                    - "apps",
+                                  ]
+                                - apiVersions   = [
+                                    - "v1",
+                                  ]
+                                - operations    = [
+                                    - "CREATE",
+                                    - "UPDATE",
+                                  ]
+                                - resourceNames = null
+                                - resources     = [
+                                    - "deployments",
+                                    - "replicasets",
+                                  ]
+                                - scope         = "*"
+                              },
+                          ]
+                      }
+                    - paramKind        = {
+                        - apiVersion = null
+                        - kind       = null
+                      }
+                    - validations      = [
+                        - {
+                            - expression        = "variables.images.all(i, i.matches(\"@sha256:[0-9a-f]{64}$\"))"
+                            - message           = "image not pinned by digest: every container image in clinical-apps must be <repo>[:tag]@sha256:<64 hex>"
+                            - messageExpression = "'image not pinned by digest: ' + variables.images.filter(i, !i.matches(\"@sha256:[0-9a-f]{64}$\")).join(', ')"
+                            - reason            = "Invalid"
+                          },
+                        - {
+                            - expression        = "!variables.runsAsNightlyReport || variables.images.all(i, variables.approvedDigests.exists(d, i.endsWith('@' + d)))"
+                            - message           = "service account nightly-report may run only the approved app image"
+                            - messageExpression = "'service account nightly-report may run only the approved app image, not: ' + variables.images.filter(i, !variables.approvedDigests.exists(d, i.endsWith('@' + d))).join(', ')"
+                            - reason            = "Forbidden"
+                          },
+                        - {
+                            - expression        = "has(variables.podSpec.automountServiceAccountToken) && variables.podSpec.automountServiceAccountToken == false"
+                            - message           = "automountServiceAccountToken must be false in the pod spec (workloads here get no Kubernetes API token)"
+                            - messageExpression = null
+                            - reason            = "Invalid"
+                          },
+                        - {
+                            - expression        = "!(variables.runsAsNightlyReport || variables.wasNightlyReport) || variables.trustedLauncher"
+                            - message           = "only the release pipeline may create or change a workload that runs as service account nightly-report"
+                            - messageExpression = "'only the release pipeline may create or change a workload that runs as service account nightly-report, not ' + request.userInfo.username"
+                            - reason            = "Forbidden"
+                          },
+                      ]
+                    - variables        = [
+                        - {
+                            - expression = "request.resource.resource == 'pods' ? object.spec : object.spec.template.spec"
+                            - name       = "podSpec"
+                          },
+                        - {
+                            - expression = <<-EOT
+                                  (variables.podSpec.containers
+                                    + (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])
+                                    + (has(variables.podSpec.ephemeralContainers) ? variables.podSpec.ephemeralContainers : [])
+                                  ).map(c, c.image)
+                              EOT
+                            - name       = "images"
+                          },
+                        - {
+                            - expression = <<-EOT
+                                  has(variables.podSpec.serviceAccountName) && variables.podSpec.serviceAccountName != ''
+                                    ? variables.podSpec.serviceAccountName
+                                    : (has(variables.podSpec.serviceAccount) && variables.podSpec.serviceAccount != ''
+                                        ? variables.podSpec.serviceAccount : 'default')
+                              EOT
+                            - name       = "serviceAccount"
+                          },
+                        - {
+                            - expression = "variables.serviceAccount == \"nightly-report\""
+                            - name       = "runsAsNightlyReport"
+                          },
+                        - {
+                            - expression = "request.resource.resource == 'pods' ? oldObject.spec : oldObject.spec.template.spec"
+                            - name       = "oldPodSpec"
+                          },
+                        - {
+                            - expression = <<-EOT
+                                  oldObject != null && (
+                                    has(variables.oldPodSpec.serviceAccountName) && variables.oldPodSpec.serviceAccountName != ''
+                                      ? variables.oldPodSpec.serviceAccountName
+                                      : (has(variables.oldPodSpec.serviceAccount) && variables.oldPodSpec.serviceAccount != ''
+                                          ? variables.oldPodSpec.serviceAccount : 'default')
+                                  ) == "nightly-report"
+                              EOT
+                            - name       = "wasNightlyReport"
+                          },
+                        - {
+                            - expression = jsonencode(
+                                  [
+                                    - "sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e",
+                                  ]
+                              )
+                            - name       = "approvedDigests"
+                          },
+                        - {
+                            - expression = <<-EOT
+                                  request.userInfo.username.startsWith('system:serviceaccount:kube-system:')
+                                    || request.userInfo.username == 'system:kube-controller-manager'
+                                    || (has(request.userInfo.groups)
+                                        && request.userInfo.groups.exists(g, g in ["kubeadm:cluster-admins"]))
+                              EOT
+                            - name       = "trustedLauncher"
+                          },
+                      ]
+                  }
+              } -> null
+      
+            - field_manager {
+                - force_conflicts = true -> null
+              }
+          }
+      
+        # kubernetes_manifest.workload_identity_policy_binding will be destroyed
+        - resource "kubernetes_manifest" "workload_identity_policy_binding" {
+            - manifest = {
+                - apiVersion = "admissionregistration.k8s.io/v1"
+                - kind       = "ValidatingAdmissionPolicyBinding"
+                - metadata   = {
+                    - labels = {
+                        - "app.kubernetes.io/managed-by" = "terraform"
+                        - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                      }
+                    - name   = "clinical-apps-workload-identity"
+                  }
+                - spec       = {
+                    - matchResources    = {
+                        - namespaceSelector = {
+                            - matchLabels = {
+                                - "kubernetes.io/metadata.name" = "clinical-apps"
+                              }
+                          }
+                      }
+                    - policyName        = "clinical-apps-workload-identity"
+                    - validationActions = [
+                        - "Deny",
+                      ]
+                  }
+              } -> null
+            - object   = {
+                - apiVersion = "admissionregistration.k8s.io/v1"
+                - kind       = "ValidatingAdmissionPolicyBinding"
+                - metadata   = {
+                    - annotations                = null
+                    - creationTimestamp          = null
+                    - deletionGracePeriodSeconds = null
+                    - deletionTimestamp          = null
+                    - finalizers                 = null
+                    - generateName               = null
+                    - generation                 = null
+                    - labels                     = {
+                        - "app.kubernetes.io/managed-by" = "terraform"
+                        - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                      }
+                    - managedFields              = null
+                    - name                       = "clinical-apps-workload-identity"
+                    - namespace                  = null
+                    - ownerReferences            = null
+                    - resourceVersion            = null
+                    - selfLink                   = null
+                    - uid                        = null
+                  }
+                - spec       = {
+                    - matchResources    = {
+                        - excludeResourceRules = null
+                        - matchPolicy          = "Equivalent"
+                        - namespaceSelector    = {
+                            - matchExpressions = null
+                            - matchLabels      = {
+                                - "kubernetes.io/metadata.name" = "clinical-apps"
+                              }
+                          }
+                        - objectSelector       = {
+                            - matchExpressions = null
+                            - matchLabels      = null
+                          }
+                        - resourceRules        = null
+                      }
+                    - paramRef          = {
+                        - name                    = null
+                        - namespace               = null
+                        - parameterNotFoundAction = null
+                        - selector                = {
+                            - matchExpressions = null
+                            - matchLabels      = null
+                          }
+                      }
+                    - policyName        = "clinical-apps-workload-identity"
+                    - validationActions = [
+                        - "Deny",
+                      ]
+                  }
+              } -> null
+      
+            - field_manager {
+                - force_conflicts = true -> null
+              }
+          }
+      
+        # kubernetes_role_binding_v1.human["app-deployer"] will be destroyed
+        - resource "kubernetes_role_binding_v1" "human" {
+            - id = "clinical-apps/app-deployer--k8s-clinical-deployers" -> null
+      
+            - metadata {
+                - annotations      = {} -> null
+                - generation       = 0 -> null
+                - labels           = {
+                    - "app.kubernetes.io/managed-by" = "terraform"
+                    - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  } -> null
+                - name             = "app-deployer--k8s-clinical-deployers" -> null
+                - namespace        = "clinical-apps" -> null
+                - resource_version = "778" -> null
+                - uid              = "20b68860-1339-4d32-8907-84d4cf34799a" -> null
+                  # (1 unchanged attribute hidden)
+              }
+      
+            - role_ref {
+                - api_group = "rbac.authorization.k8s.io" -> null
+                - kind      = "Role" -> null
+                - name      = "app-deployer" -> null
+              }
+      
+            - subject {
+                - api_group = "rbac.authorization.k8s.io" -> null
+                - kind      = "Group" -> null
+                - name      = "k8s-clinical-deployers" -> null
+                - namespace = "default" -> null
+              }
+          }
+      
+        # kubernetes_role_binding_v1.human["auditor"] will be destroyed
+        - resource "kubernetes_role_binding_v1" "human" {
+            - id = "clinical-apps/auditor--k8s-clinical-auditors" -> null
+      
+            - metadata {
+                - annotations      = {} -> null
+                - generation       = 0 -> null
+                - labels           = {
+                    - "app.kubernetes.io/managed-by" = "terraform"
+                    - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  } -> null
+                - name             = "auditor--k8s-clinical-auditors" -> null
+                - namespace        = "clinical-apps" -> null
+                - resource_version = "660" -> null
+                - uid              = "4c513a6d-1a31-44a3-89e0-0d2d1937cb56" -> null
+                  # (1 unchanged attribute hidden)
+              }
+      
+            - role_ref {
+                - api_group = "rbac.authorization.k8s.io" -> null
+                - kind      = "Role" -> null
+                - name      = "auditor" -> null
+              }
+      
+            - subject {
+                - api_group = "rbac.authorization.k8s.io" -> null
+                - kind      = "Group" -> null
+                - name      = "k8s-clinical-auditors" -> null
+                - namespace = "default" -> null
+              }
+          }
+      
+        # kubernetes_role_v1.human["app-deployer"] will be destroyed
+        - resource "kubernetes_role_v1" "human" {
+            - id = "clinical-apps/app-deployer" -> null
+      
+            - metadata {
+                - annotations      = {
+                    - "contoso.health/purpose" = "Ship and operate workloads in clinical-apps through Deployments. Pods and ReplicaSets read-only. No secrets, no RBAC, no service-account tokens, no exec."
+                  } -> null
+                - generation       = 0 -> null
+                - labels           = {
+                    - "app.kubernetes.io/managed-by" = "terraform"
+                    - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  } -> null
+                - name             = "app-deployer" -> null
+                - namespace        = "clinical-apps" -> null
+                - resource_version = "656" -> null
+                - uid              = "ae7e3aaa-8e5e-4258-8e9b-bea7c4556c2e" -> null
+                  # (1 unchanged attribute hidden)
+              }
+      
+            - rule {
+                - api_groups     = [
+                    - "apps",
+                  ] -> null
+                - resource_names = [] -> null
+                - resources      = [
+                    - "deployments",
+                  ] -> null
+                - verbs          = [
+                    - "create",
+                    - "delete",
+                    - "get",
+                    - "list",
+                    - "patch",
+                    - "update",
+                    - "watch",
+                  ] -> null
+              }
+            - rule {
+                - api_groups     = [
+                    - "apps",
+                  ] -> null
+                - resource_names = [] -> null
+                - resources      = [
+                    - "replicasets",
+                  ] -> null
+                - verbs          = [
+                    - "get",
+                    - "list",
+                    - "watch",
+                  ] -> null
+              }
+            - rule {
+                - api_groups     = [
+                    - null,
+                  ] -> null
+                - resource_names = [] -> null
+                - resources      = [
+                    - "configmaps",
+                    - "services",
+                  ] -> null
+                - verbs          = [
+                    - "create",
+                    - "delete",
+                    - "get",
+                    - "list",
+                    - "patch",
+                    - "update",
+                    - "watch",
+                  ] -> null
+              }
+            - rule {
+                - api_groups     = [
+                    - null,
+                  ] -> null
+                - resource_names = [] -> null
+                - resources      = [
+                    - "pods",
+                  ] -> null
+                - verbs          = [
+                    - "get",
+                    - "list",
+                    - "watch",
+                  ] -> null
+              }
+            - rule {
+                - api_groups     = [
+                    - null,
+                  ] -> null
+                - resource_names = [] -> null
+                - resources      = [
+                    - "pods/log",
+                  ] -> null
+                - verbs          = [
+                    - "get",
+                  ] -> null
+              }
+          }
+      
+        # kubernetes_role_v1.human["auditor"] will be destroyed
+        - resource "kubernetes_role_v1" "human" {
+            - id = "clinical-apps/auditor" -> null
+      
+            - metadata {
+                - annotations      = {
+                    - "contoso.health/purpose" = "Read-only review of clinical-apps workloads and events. No secrets, no writes."
+                  } -> null
+                - generation       = 0 -> null
+                - labels           = {
+                    - "app.kubernetes.io/managed-by" = "terraform"
+                    - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  } -> null
+                - name             = "auditor" -> null
+                - namespace        = "clinical-apps" -> null
+                - resource_version = "659" -> null
+                - uid              = "10262140-5d31-4b31-84ee-eba7d362897d" -> null
+                  # (1 unchanged attribute hidden)
+              }
+      
+            - rule {
+                - api_groups     = [
+                    - null,
+                  ] -> null
+                - resource_names = [] -> null
+                - resources      = [
+                    - "configmaps",
+                    - "events",
+                    - "pods",
+                    - "services",
+                  ] -> null
+                - verbs          = [
+                    - "get",
+                    - "list",
+                    - "watch",
+                  ] -> null
+              }
+            - rule {
+                - api_groups     = [
+                    - "apps",
+                  ] -> null
+                - resource_names = [] -> null
+                - resources      = [
+                    - "deployments",
+                  ] -> null
+                - verbs          = [
+                    - "get",
+                    - "list",
+                    - "watch",
+                  ] -> null
+              }
+          }
+      
+        # kubernetes_service_account_v1.workload["nightly-report"] will be destroyed
+        - resource "kubernetes_service_account_v1" "workload" {
+            - automount_service_account_token = false -> null
+            - id                              = "clinical-apps/nightly-report" -> null
+              # (1 unchanged attribute hidden)
+      
+            - metadata {
+                - annotations      = {
+                    - "azure.workload.identity/client-id" = "35080341-cac0-4201-a2a0-10f17921b81d"
+                    - "contoso.health/purpose"            = "Approved workload. The only service account an Entra federated credential (../keyvault-trust) trusts."
+                  } -> null
+                - generation       = 0 -> null
+                - labels           = {
+                    - "app.kubernetes.io/managed-by" = "terraform"
+                    - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  } -> null
+                - name             = "nightly-report" -> null
+                - namespace        = "clinical-apps" -> null
+                - resource_version = "658" -> null
+                - uid              = "55b21934-540a-4b5a-942e-d3a8057b7850" -> null
+                  # (1 unchanged attribute hidden)
+              }
+          }
+      
+        # kubernetes_service_account_v1.workload["unapproved-job"] will be destroyed
+        - resource "kubernetes_service_account_v1" "workload" {
+            - automount_service_account_token = false -> null
+            - id                              = "clinical-apps/unapproved-job" -> null
+              # (1 unchanged attribute hidden)
+      
+            - metadata {
+                - annotations      = {
+                    - "contoso.health/purpose" = "Negative control. Same namespace, but no federated credential trusts it: Entra refuses its token."
+                  } -> null
+                - generation       = 0 -> null
+                - labels           = {
+                    - "app.kubernetes.io/managed-by" = "terraform"
+                    - "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
+                  } -> null
+                - name             = "unapproved-job" -> null
+                - namespace        = "clinical-apps" -> null
+                - resource_version = "657" -> null
+                - uid              = "ae09fc2b-6697-45c2-b4e4-5f0068f63a0c" -> null
+                  # (1 unchanged attribute hidden)
+              }
+          }
+      
+      Plan: 0 to add, 0 to change, 9 to destroy.
+      
+      Changes to Outputs:
+        - human_rbac            = {
+            - app-deployer = "k8s-clinical-deployers"
+            - auditor      = "k8s-clinical-auditors"
+          } -> null
+        - secret_provider_class = {
+            - client_id    = "35080341-cac0-4201-a2a0-10f17921b81d"
+            - key_vault    = "kv-k8s-864b1cef"
+            - mounted_file = "/mnt/secrets-store/db"
+            - name         = "nightly-report-db"
+            - secret       = "clinical-db"
+          } -> null
+        - service_accounts      = [
+            - "nightly-report",
+            - "unapproved-job",
+          ] -> null
+      kubernetes_service_account_v1.workload["nightly-report"]: Destroying... [id=clinical-apps/nightly-report]
+      kubernetes_service_account_v1.workload["unapproved-job"]: Destroying... [id=clinical-apps/unapproved-job]
+      kubernetes_role_binding_v1.human["auditor"]: Destroying... [id=clinical-apps/auditor--k8s-clinical-auditors]
+      kubernetes_role_binding_v1.human["app-deployer"]: Destroying... [id=clinical-apps/app-deployer--k8s-clinical-deployers]
+      kubernetes_service_account_v1.workload["nightly-report"]: Destruction complete after 0s
+      kubernetes_role_binding_v1.human["auditor"]: Destruction complete after 0s
+      kubernetes_role_binding_v1.human["app-deployer"]: Destruction complete after 0s
+      kubernetes_service_account_v1.workload["unapproved-job"]: Destruction complete after 0s
+      kubernetes_role_v1.human["auditor"]: Destroying... [id=clinical-apps/auditor]
+      kubernetes_role_v1.human["app-deployer"]: Destroying... [id=clinical-apps/app-deployer]
+      kubernetes_role_v1.human["auditor"]: Destruction complete after 0s
+      kubernetes_role_v1.human["app-deployer"]: Destruction complete after 0s
+      kubernetes_manifest.workload_identity_policy_binding: Destroying...
+      kubernetes_manifest.secret_provider_class: Destroying...
+      kubernetes_manifest.workload_identity_policy_binding: Destruction complete after 0s
+      kubernetes_manifest.secret_provider_class: Destruction complete after 0s
+      kubernetes_manifest.workload_identity_policy: Destroying...
+      kubernetes_manifest.workload_identity_policy: Destruction complete after 0s
+      
+      Destroy complete! Resources: 9 destroyed.
+[01:36:11Z] terraform destroy lab/terraform/k8s/platform
+      kubernetes_namespace_v1.secrets_store: Refreshing state... [id=secrets-store]
+      helm_release.csi_secrets_store_provider_azure: Refreshing state... [id=csi-azure]
+      kubernetes_namespace_v1.clinical_apps: Refreshing state... [id=clinical-apps]
+      
+      Terraform used the selected providers to generate the following execution
+      plan. Resource actions are indicated with the following symbols:
+        - destroy
+      
+      Terraform will perform the following actions:
+      
+        # helm_release.csi_secrets_store_provider_azure will be destroyed
+        - resource "helm_release" "csi_secrets_store_provider_azure" {
+            - atomic                     = false -> null
+            - chart                      = "csi-secrets-store-provider-azure" -> null
+            - cleanup_on_fail            = false -> null
+            - create_namespace           = false -> null
+            - dependency_update          = false -> null
+            - disable_crd_hooks          = false -> null
+            - disable_openapi_validation = false -> null
+            - disable_webhooks           = false -> null
+            - force_update               = false -> null
+            - id                         = "csi-azure" -> null
+            - lint                       = false -> null
+            - max_history                = 3 -> null
+            - metadata                   = {
+                - app_version    = "1.8.2" -> null
+                - chart          = "csi-secrets-store-provider-azure" -> null
+                - first_deployed = 1794015260 -> null
+                - last_deployed  = 1794015260 -> null
+                - name           = "csi-azure" -> null
+                - namespace      = "secrets-store" -> null
+                - notes          = <<-EOT
+                      The Secrets Store CSI Driver is getting deployed to your cluster.
+                      
+                      To verify that Secrets Store CSI Driver has started, run:
+                      
+                        kubectl --namespace=secrets-store get pods -l "app=secrets-store-csi-driver"
+                      
+                      Now you can follow these steps https://secrets-store-csi-driver.sigs.k8s.io/getting-started/usage.html
+                      to create a SecretProviderClass resource, and a deployment using the SecretProviderClass.
+                  EOT -> null
+                - revision       = 1 -> null
+                - values         = jsonencode(
+                      {
+                        - linux                    = {
+                            - image = {
+                                - repository = "mcr.microsoft.com/oss/v2/azure/secrets-store/provider-azure"
+                                - tag        = "v1.8.2@sha256:6be3919093995af5754e4cd0e2dad5f8659baa594b27e9d6f5c2866f893ee26a"
+                              }
+                          }
+                        - secrets-store-csi-driver = {
+                            - enableSecretRotation = true
+                            - install              = true
+                            - linux                = {
+                                - crds               = {
+                                    - image = {
+                                        - repository = "mcr.microsoft.com/oss/v2/kubernetes-csi/secrets-store/driver-crds"
+                                        - tag        = "v1.5.6@sha256:cb0112636dc4d22c38fa4ef8d46c6eb1d6e4c8b4d2228a233474769a0cd2048c"
+                                      }
+                                  }
+                                - image              = {
+                                    - digest     = "sha256:5f91243cfd60dcf82b744a87279eda9b9ae0a7ca18828472ba91b366af415430"
+                                    - repository = "mcr.microsoft.com/oss/v2/kubernetes-csi/secrets-store/driver"
+                                    - tag        = "v1.5.6"
+                                  }
+                                - livenessProbeImage = {
+                                    - digest     = "sha256:59b9d034842849bdae41ca5be7c52b5e9ab2a4d18485dfdf16521f3ec74c047a"
+                                    - repository = "mcr.microsoft.com/oss/v2/kubernetes-csi/livenessprobe"
+                                    - tag        = "v2.15.0"
+                                  }
+                                - registrarImage     = {
+                                    - digest     = "sha256:6cb172e3de7e9ec36dfca179dbfd6be8c9bf7a14374afe780c2dd11ea7512ab1"
+                                    - repository = "mcr.microsoft.com/oss/v2/kubernetes-csi/csi-node-driver-registrar"
+                                    - tag        = "v2.14.0"
+                                  }
+                              }
+                            - rotationPollInterval = "10s"
+                            - syncSecret           = {
+                                - enabled = false
+                              }
+                            - tokenRequests        = [
+                                - {
+                                    - audience = "api://AzureADTokenExchange"
+                                  },
+                              ]
+                            - windows              = {
+                                - enabled = false
+                              }
+                          }
+                        - windows                  = {
+                            - enabled = false
+                          }
+                      }
+                  ) -> null
+                - version        = "1.8.2" -> null
+              } -> null
+            - name                       = "csi-azure" -> null
+            - namespace                  = "secrets-store" -> null
+            - pass_credentials           = false -> null
+            - recreate_pods              = false -> null
+            - render_subchart_notes      = true -> null
+            - replace                    = false -> null
+            - repository                 = "https://azure.github.io/secrets-store-csi-driver-provider-azure/charts" -> null
+            - reset_values               = false -> null
+            - reuse_values               = false -> null
+            - set_wo                     = (write-only attribute) -> null
+            - skip_crds                  = false -> null
+            - status                     = "deployed" -> null
+            - take_ownership             = false -> null
+            - timeout                    = 600 -> null
+            - upgrade_install            = false -> null
+            - values                     = [
+                - <<-EOT
+                      "linux":
+                        "image":
+                          "repository": "mcr.microsoft.com/oss/v2/azure/secrets-store/provider-azure"
+                          "tag": "v1.8.2@sha256:6be3919093995af5754e4cd0e2dad5f8659baa594b27e9d6f5c2866f893ee26a"
+                      "secrets-store-csi-driver":
+                        "enableSecretRotation": true
+                        "install": true
+                        "linux":
+                          "crds":
+                            "image":
+                              "repository": "mcr.microsoft.com/oss/v2/kubernetes-csi/secrets-store/driver-crds"
+                              "tag": "v1.5.6@sha256:cb0112636dc4d22c38fa4ef8d46c6eb1d6e4c8b4d2228a233474769a0cd2048c"
+                          "image":
+                            "digest": "sha256:5f91243cfd60dcf82b744a87279eda9b9ae0a7ca18828472ba91b366af415430"
+                            "repository": "mcr.microsoft.com/oss/v2/kubernetes-csi/secrets-store/driver"
+                            "tag": "v1.5.6"
+                          "livenessProbeImage":
+                            "digest": "sha256:59b9d034842849bdae41ca5be7c52b5e9ab2a4d18485dfdf16521f3ec74c047a"
+                            "repository": "mcr.microsoft.com/oss/v2/kubernetes-csi/livenessprobe"
+                            "tag": "v2.15.0"
+                          "registrarImage":
+                            "digest": "sha256:6cb172e3de7e9ec36dfca179dbfd6be8c9bf7a14374afe780c2dd11ea7512ab1"
+                            "repository": "mcr.microsoft.com/oss/v2/kubernetes-csi/csi-node-driver-registrar"
+                            "tag": "v2.14.0"
+                        "rotationPollInterval": "10s"
+                        "syncSecret":
+                          "enabled": false
+                        "tokenRequests":
+                        - "audience": "api://AzureADTokenExchange"
+                        "windows":
+                          "enabled": false
+                      "windows":
+                        "enabled": false
+                  EOT,
+              ] -> null
+            - verify                     = false -> null
+            - version                    = "1.8.2" -> null
+            - wait                       = true -> null
+            - wait_for_jobs              = false -> null
+          }
+      
+        # kubernetes_namespace_v1.clinical_apps will be destroyed
+        - resource "kubernetes_namespace_v1" "clinical_apps" {
+            - id                               = "clinical-apps" -> null
+            - wait_for_default_service_account = false -> null
+      
+            - metadata {
+                - generation       = 0 -> null
+                - labels           = {
+                    - "app.kubernetes.io/managed-by"               = "terraform"
+                    - "app.kubernetes.io/part-of"                  = "contoso-health-identity-lab"
+                    - "pod-security.kubernetes.io/audit"           = "restricted"
+                    - "pod-security.kubernetes.io/audit-version"   = "v1.36"
+                    - "pod-security.kubernetes.io/enforce"         = "restricted"
+                    - "pod-security.kubernetes.io/enforce-version" = "v1.36"
+                    - "pod-security.kubernetes.io/warn"            = "restricted"
+                    - "pod-security.kubernetes.io/warn-version"    = "v1.36"
+                  } -> null
+                - name             = "clinical-apps" -> null
+                - resource_version = "644" -> null
+                - uid              = "0e8ac450-03ac-4150-8801-28a8f118e2ba" -> null
+              }
+          }
+      
+        # kubernetes_namespace_v1.secrets_store will be destroyed
+        - resource "kubernetes_namespace_v1" "secrets_store" {
+            - id                               = "secrets-store" -> null
+            - wait_for_default_service_account = false -> null
+      
+            - metadata {
+                - generation       = 0 -> null
+                - labels           = {
+                    - "app.kubernetes.io/managed-by"               = "terraform"
+                    - "app.kubernetes.io/part-of"                  = "contoso-health-identity-lab"
+                    - "pod-security.kubernetes.io/audit"           = "baseline"
+                    - "pod-security.kubernetes.io/audit-version"   = "v1.36"
+                    - "pod-security.kubernetes.io/enforce"         = "privileged"
+                    - "pod-security.kubernetes.io/enforce-version" = "v1.36"
+                    - "pod-security.kubernetes.io/warn"            = "baseline"
+                    - "pod-security.kubernetes.io/warn-version"    = "v1.36"
+                  } -> null
+                - name             = "secrets-store" -> null
+                - resource_version = "530" -> null
+                - uid              = "bca88514-3809-4aaa-95f4-837287f772cb" -> null
+              }
+          }
+      
+      Plan: 0 to add, 0 to change, 3 to destroy.
+      
+      Changes to Outputs:
+        - clinical_namespace      = "clinical-apps" -> null
+        - csi_namespace           = "secrets-store" -> null
+        - csi_release             = {
+            - chart_version  = "1.8.2"
+            - driver_image   = "mcr.microsoft.com/oss/v2/kubernetes-csi/secrets-store/driver@sha256:5f91243cfd60dcf82b744a87279eda9b9ae0a7ca18828472ba91b366af415430"
+            - name           = "csi-azure"
+            - provider_image = "mcr.microsoft.com/oss/v2/azure/secrets-store/provider-azure:v1.8.2@sha256:6be3919093995af5754e4cd0e2dad5f8659baa594b27e9d6f5c2866f893ee26a"
+          } -> null
+        - pod_security            = {
+            - clinical-apps = "restricted"
+            - secrets-store = "privileged"
+          } -> null
+        - token_exchange_audience = "api://AzureADTokenExchange" -> null
+      kubernetes_namespace_v1.clinical_apps: Destroying... [id=clinical-apps]
+      kubernetes_namespace_v1.clinical_apps: Still destroying... [id=clinical-apps, 00m10s elapsed]
+      kubernetes_namespace_v1.clinical_apps: Destruction complete after 13s
+      helm_release.csi_secrets_store_provider_azure: Destroying... [id=csi-azure]
+      helm_release.csi_secrets_store_provider_azure: Destruction complete after 1s
+      kubernetes_namespace_v1.secrets_store: Destroying... [id=secrets-store]
+      kubernetes_namespace_v1.secrets_store: Destruction complete after 6s
+      
+      Destroy complete! Resources: 3 destroyed.
+[01:36:32Z] kind delete cluster contoso-k8s
+      Deleting cluster "contoso-k8s" ...
+      Deleted nodes: ["contoso-k8s-control-plane"]
+[01:36:34Z] discarded local Terraform state of a deleted cluster: lab/terraform/k8s/platform
+[01:36:34Z] discarded local Terraform state of a deleted cluster: lab/terraform/k8s/identity
+[01:36:34Z] terraform destroy lab/terraform/k8s/keyvault-trust
+      azuread_application.nightly_report: Refreshing state... [id=/applications/55f32d07-0acb-436b-8709-33b34d1f0460]
+      azuread_application_federated_identity_credential.nightly_report: Refreshing state... [id=55f32d07-0acb-436b-8709-33b34d1f0460/federatedIdentityCredential/f73e9546-ca5f-430d-a371-bf858f22a68e]
+      azuread_service_principal.nightly_report: Refreshing state... [id=/servicePrincipals/e808bc19-7caf-441d-8c9d-a25b7685b068]
+      data.azurerm_subscription.current: Reading...
+      data.azurerm_subscription.current: Read complete after 1s [id=/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274]
+      azurerm_role_assignment.secret_reader: Refreshing state... [id=/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/resourceGroups/rg-k8skv-test-864b1cef/providers/Microsoft.KeyVault/vaults/kv-k8s-864b1cef/secrets/clinical-db/providers/Microsoft.Authorization/roleAssignments/263c1912-eb88-e6de-f3be-860eb5665349]
+      
+      Terraform used the selected providers to generate the following execution
+      plan. Resource actions are indicated with the following symbols:
+        - destroy
+      
+      Terraform will perform the following actions:
+      
+        # azuread_application.nightly_report will be destroyed
+        - resource "azuread_application" "nightly_report" {
+            - app_role_ids                   = {} -> null
+            - client_id                      = "35080341-cac0-4201-a2a0-10f17921b81d" -> null
+            - description                    = "Throwaway workload identity for the lab's kind cluster (lab/k8s/ci/pipeline.sh run 864b1cef). Federated credential only; deleted with the cluster." -> null
+            - device_only_auth_enabled       = false -> null
+            - display_name                   = "k8s-nightly-report-864b1cef" -> null
+            - fallback_public_client_enabled = false -> null
+            - group_membership_claims        = [] -> null
+            - id                             = "/applications/55f32d07-0acb-436b-8709-33b34d1f0460" -> null
+            - identifier_uris                = [] -> null
+            - notes                          = "Owner: the lab operator (pipeline). Never add a password or certificate credential: the only way in is the federated credential." -> null
+            - oauth2_permission_scope_ids    = {} -> null
+            - oauth2_post_response_required  = false -> null
+            - object_id                      = "55f32d07-0acb-436b-8709-33b34d1f0460" -> null
+            - owners                         = [] -> null
+            - prevent_duplicate_names        = false -> null
+            - publisher_domain               = "ContosoHealthLab.onmicrosoft.com" -> null
+            - sign_in_audience               = "AzureADMyOrg" -> null
+            - tags                           = [] -> null
+              # (9 unchanged attributes hidden)
+      
+            - api {
+                - known_client_applications      = [] -> null
+                - mapped_claims_enabled          = false -> null
+                - requested_access_token_version = 1 -> null
+              }
+      
+            - feature_tags {
+                - custom_single_sign_on = false -> null
+                - enterprise            = false -> null
+                - gallery               = false -> null
+                - hide                  = false -> null
+              }
+      
+            - optional_claims {
+              }
+      
+            - public_client {
+                - redirect_uris = [] -> null
+              }
+      
+            - single_page_application {
+                - redirect_uris = [] -> null
+              }
+      
+            - web {
+                - redirect_uris = [] -> null
+                  # (2 unchanged attributes hidden)
+      
+                - implicit_grant {
+                    - access_token_issuance_enabled = false -> null
+                    - id_token_issuance_enabled     = false -> null
+                  }
+              }
+          }
+      
+        # azuread_application_federated_identity_credential.nightly_report will be destroyed
+        - resource "azuread_application_federated_identity_credential" "nightly_report" {
+            - application_id = "/applications/55f32d07-0acb-436b-8709-33b34d1f0460" -> null
+            - audiences      = [
+                - "api://AzureADTokenExchange",
+              ] -> null
+            - credential_id  = "f73e9546-ca5f-430d-a371-bf858f22a68e" -> null
+            - description    = "Only SA clinical-apps/nightly-report on this run's kind issuer." -> null
+            - display_name   = "kind-clinical-apps-nightly-report" -> null
+            - id             = "55f32d07-0acb-436b-8709-33b34d1f0460/federatedIdentityCredential/f73e9546-ca5f-430d-a371-bf858f22a68e" -> null
+            - issuer         = "https://stk8skv864b1cef.z20.web.core.windows.net" -> null
+            - subject        = "system:serviceaccount:clinical-apps:nightly-report" -> null
+          }
+      
+        # azuread_service_principal.nightly_report will be destroyed
+        - resource "azuread_service_principal" "nightly_report" {
+            - account_enabled               = true -> null
+            - alternative_names             = [] -> null
+            - app_role_assignment_required  = true -> null
+            - app_role_ids                  = {} -> null
+            - app_roles                     = [] -> null
+            - application_tenant_id         = "86a2e327-4951-4348-a3c4-6f4b79ffd8f2" -> null
+            - client_id                     = "35080341-cac0-4201-a2a0-10f17921b81d" -> null
+            - display_name                  = "k8s-nightly-report-864b1cef" -> null
+            - id                            = "/servicePrincipals/e808bc19-7caf-441d-8c9d-a25b7685b068" -> null
+            - notes                         = "Throwaway workload identity (lab/k8s/ci/pipeline.sh run 864b1cef)." -> null
+            - notification_email_addresses  = [] -> null
+            - oauth2_permission_scope_ids   = {} -> null
+            - oauth2_permission_scopes      = [] -> null
+            - object_id                     = "e808bc19-7caf-441d-8c9d-a25b7685b068" -> null
+            - owners                        = [] -> null
+            - redirect_uris                 = [] -> null
+            - service_principal_names       = [] -> null
+            - sign_in_audience              = "AzureADMyOrg" -> null
+            - tags                          = [] -> null
+            - type                          = "Application" -> null
+              # (6 unchanged attributes hidden)
+      
+            - feature_tags {
+                - custom_single_sign_on = false -> null
+                - enterprise            = false -> null
+                - gallery               = false -> null
+                - hide                  = false -> null
+              }
+      
+            - features {
+                - custom_single_sign_on_app = false -> null
+                - enterprise_application    = false -> null
+                - gallery_application       = false -> null
+                - visible_to_users          = true -> null
+              }
+      
+            - saml_single_sign_on {
+                  # (1 unchanged attribute hidden)
+              }
+          }
+      
+        # azurerm_role_assignment.secret_reader will be destroyed
+        - resource "azurerm_role_assignment" "secret_reader" {
+            - description                            = "nightly-report (kind run 864b1cef) may read this one secret." -> null
+            - id                                     = "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/resourceGroups/rg-k8skv-test-864b1cef/providers/Microsoft.KeyVault/vaults/kv-k8s-864b1cef/secrets/clinical-db/providers/Microsoft.Authorization/roleAssignments/263c1912-eb88-e6de-f3be-860eb5665349" -> null
+            - name                                   = "263c1912-eb88-e6de-f3be-860eb5665349" -> null
+            - principal_id                           = "e808bc19-7caf-441d-8c9d-a25b7685b068" -> null
+            - principal_type                         = "ServicePrincipal" -> null
+            - role_definition_id                     = "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6" -> null
+            - role_definition_name                   = "Key Vault Secrets User" -> null
+            - scope                                  = "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/resourceGroups/rg-k8skv-test-864b1cef/providers/Microsoft.KeyVault/vaults/kv-k8s-864b1cef/secrets/clinical-db" -> null
+              # (3 unchanged attributes hidden)
+          }
+      
+      Plan: 0 to add, 0 to change, 4 to destroy.
+      
+      Changes to Outputs:
+        - client_id                   = "35080341-cac0-4201-a2a0-10f17921b81d" -> null
+        - entra_trust                 = {
+            - audiences = [
+                - "api://AzureADTokenExchange",
+              ]
+            - issuer    = "https://stk8skv864b1cef.z20.web.core.windows.net"
+            - subject   = "system:serviceaccount:clinical-apps:nightly-report"
+          } -> null
+        - key_vault_grant             = {
+            - role  = "Key Vault Secrets User"
+            - scope = "/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/resourceGroups/rg-k8skv-test-864b1cef/providers/Microsoft.KeyVault/vaults/kv-k8s-864b1cef/secrets/clinical-db"
+          } -> null
+        - service_principal_object_id = "e808bc19-7caf-441d-8c9d-a25b7685b068" -> null
+      azuread_application_federated_identity_credential.nightly_report: Destroying... [id=55f32d07-0acb-436b-8709-33b34d1f0460/federatedIdentityCredential/f73e9546-ca5f-430d-a371-bf858f22a68e]
+      azurerm_role_assignment.secret_reader: Destroying... [id=/subscriptions/de0b2a93-1c62-47b3-aaaf-1bdd1939a274/resourceGroups/rg-k8skv-test-864b1cef/providers/Microsoft.KeyVault/vaults/kv-k8s-864b1cef/secrets/clinical-db/providers/Microsoft.Authorization/roleAssignments/263c1912-eb88-e6de-f3be-860eb5665349]
+      azurerm_role_assignment.secret_reader: Destruction complete after 1s
+      azuread_service_principal.nightly_report: Destroying... [id=/servicePrincipals/e808bc19-7caf-441d-8c9d-a25b7685b068]
+      azuread_application_federated_identity_credential.nightly_report: Still destroying... [id=55f32d07-0acb-436b-8709-33b34d1f0460/fe...l/f73e9546-ca5f-430d-a371-bf858f22a68e, 00m10s elapsed]
+      azuread_service_principal.nightly_report: Still destroying... [id=/servicePrincipals/e808bc19-7caf-441d-8c9d-a25b7685b068, 00m10s elapsed]
+      azuread_application_federated_identity_credential.nightly_report: Still destroying... [id=55f32d07-0acb-436b-8709-33b34d1f0460/fe...l/f73e9546-ca5f-430d-a371-bf858f22a68e, 00m20s elapsed]
+      azuread_application_federated_identity_credential.nightly_report: Destruction complete after 23s
+      azuread_service_principal.nightly_report: Still destroying... [id=/servicePrincipals/e808bc19-7caf-441d-8c9d-a25b7685b068, 00m20s elapsed]
+      azuread_service_principal.nightly_report: Destruction complete after 22s
+      azuread_application.nightly_report: Destroying... [id=/applications/55f32d07-0acb-436b-8709-33b34d1f0460]
+      azuread_application.nightly_report: Still destroying... [id=/applications/55f32d07-0acb-436b-8709-33b34d1f0460, 00m10s elapsed]
+      azuread_application.nightly_report: Still destroying... [id=/applications/55f32d07-0acb-436b-8709-33b34d1f0460, 00m20s elapsed]
+      azuread_application.nightly_report: Destruction complete after 22s
+      
+      Destroy complete! Resources: 4 destroyed.
+[01:37:55Z] az group delete rg-k8skv-test-864b1cef (storage account + Key Vault)
+/opt/homebrew/Caskroom/azure-cli/2.91.0/libexec/lib/python3.14/site-packages/azure/mgmt/resource/deploymentstacks/models/_models.py:119: SyntaxWarning: "\/" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\/"? A raw string is also an option.
+  following actions are automatically appended to 'excludedActions': '*\/read' and
+[01:39:00Z] az keyvault purge kv-k8s-864b1cef (soft-deleted vault, no purge protection)
+[01:39:13Z] read back: resource group exists=false; app registrations=0; vault kv-k8s-864b1cef: gone
+
+==> summary
+  stage                                     secs  result evidence
+  [1/12] preflight                            12  PASS   
+  [2/12] terraform fmt / validate / test       6  PASS   3 roots, 17 tftest runs passed
+  [3/12] checkov                              12  PASS   11 terraform + 88 k8s passed, 0 failed
+  [4/12] azure: vault, issuer, trust         127  PASS   run 864b1cef: vault + issuer site + app 35080341...
+  [5/12] kind cluster + public issuer         54  PASS   issuer published: discovery doc + JWKS
+  [6/12] terraform apply platform             21  PASS   CSI driver + Azure provider Ready; 1 token audience
+  [7/12] terraform apply identity              3  PASS   9 added; live VAP: [Deny], 4 rules
+  [8/12] deploy workload                      34  PASS   pod Ready after 34s (mount = Entra + Key Vault yes)
+  [9/12] rotate secret (no restart)            7  PASS   new value live in ~5s, same pod
+  [10/12] drift: detect + heal                 3  PASS   DRIFT DETECTED (plan 2) -> healed (0)
+  [11/12] e2e tests                           35  PASS   66/66 assertions passed
+  [12/12] secrets out of state                 9  PASS   0 secret hits: 3 states + audit log
+  teardown                                   184  PASS   
+  total                                      507  PASS   
+exit 0

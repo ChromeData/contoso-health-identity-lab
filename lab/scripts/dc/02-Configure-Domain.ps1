@@ -19,9 +19,9 @@
       AD CS      Enterprise Root CA -> the DC auto-enrolls a certificate ->
                  LDAPS on 636 (Vault's LDAP secrets engine only talks LDAPS)
       Accounts   svc-vault-rotator  Vault's bind/reconcile account (CPM role)
-                 svc-pam-discovery  READ-ONLY bind for lab/pam/discover.sh (plain
-                                    Domain User: discovery must never run as
-                                    the Tier-0 rotator)
+                 (svc-pam-discovery, the read-only discovery bind, was retired on
+                                    2026-11-07 with the Vault stand-in, ADR 0036:
+                                    Remove-PamDiscoveryAccount.ps1. Not created.)
                  svc-backup         Vault STATIC role (scheduled rotation)
                  tier0-admin-01/02  Vault LIBRARY set (exclusive check-out),
                                     members of Domain Admins - the privileged
@@ -37,8 +37,6 @@
 
     SECRETS
       svc-vault-rotator's password -> Key Vault secret 'svc-vault-rotator'.
-      svc-pam-discovery's password -> Key Vault secret 'svc-pam-discovery'
-      (read by discover.sh from stdin, never a command-line argument).
       svc-backup and tier0-admin-0x get random passwords that are NOT stored:
       Vault rotates them on onboarding and becomes the only holder. (If Vault
       onboarding fails, reset them in ADUC - nothing is lost but a password.)
@@ -216,15 +214,10 @@ if ($rotator.Password) {
     Set-KeyVaultSecret -Vault $KeyVaultName -Name 'svc-vault-rotator' -Value $rotator.Password
     Write-Step '  svc-vault-rotator password stored in Key Vault (value not displayed)'
 }
-# Discovery binds READ-ONLY: a plain Domain User can read group membership,
-# adminCount and SPNs, which is all lab/pam/discover.sh needs. Never the
-# rotator - a scan should not hold Tier-0 Reset Password rights. Excluded from
-# onboarding by lab/pam/pam-policy.json, so Vault never rotates it away.
-$discovery = Confirm-User 'svc-pam-discovery' $svcOu 'Read-only LDAP bind for PAM discovery (lab/pam/discover.sh). Plain Domain User - no delegation.'
-if ($discovery.Password) {
-    Set-KeyVaultSecret -Vault $KeyVaultName -Name 'svc-pam-discovery' -Value $discovery.Password
-    Write-Step '  svc-pam-discovery password stored in Key Vault (value not displayed)'
-}
+# svc-pam-discovery (the read-only discovery bind for lab/pam/discover.sh) is
+# no longer created: it served the Vault stand-in that ADR 0036 retires.
+# lab/scripts/dc/Remove-PamDiscoveryAccount.ps1 removed it from DC01 and its
+# secret from Key Vault on 2026-11-07.
 $null = Confirm-User 'svc-backup' $svcOu 'Nightly backup service account - Vault STATIC role (scheduled rotation).'
 foreach ($n in 'tier0-admin-01', 'tier0-admin-02') {
     $t = Confirm-User $n $privOu 'Tier-0 admin - Vault LIBRARY (exclusive check-out), sessions recorded by Guacamole.'

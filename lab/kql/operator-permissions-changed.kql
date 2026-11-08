@@ -1,0 +1,97 @@
+// =============================================================================
+// Detection: The lab operator's own permissions, credentials or owners change
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, fourth set)
+// SPL twin:  lab/splunk/detections/operator-permissions-changed.spl
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   Any change to what the lab operator workload identity (ADR 0024) can do
+//   or who can act as it: an app role (application permission) granted to or
+//   removed from its service principal, a delegated grant or consent, a new
+//   or removed credential (certificate, secret, federated credential), an
+//   owner added, or an update to its application or service principal.
+//   By ANYONE, the operator itself included: ADR 0024's amendments let the
+//   operator apply its own envs/operator root, and "no new reach: already
+//   Tier 0" is exactly the reasoning a reviewer must see each time (review
+//   finding B1, 2026-11-07).
+//
+// TABLE / SOURCE
+//   AuditLogs, Category "ApplicationManagement", Result success. The
+//   operation names are the ones app-consent-granted.kql and
+//   app-credential-added.kql already match. Which object changed:
+//     - a TargetResources id (credential adds and app or SP updates name the
+//       app or service principal itself), or
+//     - a modified property ServicePrincipal.ObjectID / ServicePrincipal.AppId
+//       (app role assignments and owner adds name the RESOURCE first and the
+//       client in those properties; read live on 2026-11-07 on an "Add owner
+//       to service principal" row).
+//   Matched by the operator's IMMUTABLE ids (OperatorPrincipalIds: service
+//   principal object id, application object id, appId), rendered by
+//   modules/monitoring. An empty list matches nothing; the module refuses to
+//   deploy the rule with an empty list.
+//   Not covered: Azure RBAC role assignments to the operator (AzureActivity),
+//   which role-assigned-outside-pim.kql does not read either. Gap stated.
+//
+// LICENSE
+//   Entra ID Free audit logs, exported with P1. Runs as Sentinel or Log
+//   Analytics alert.
+//
+// MITRE ATT&CK
+//   T1098.001 Account Manipulation: Additional Cloud Credentials.
+//   T1098.003 Account Manipulation: Additional Cloud Roles.
+//
+// FALSE-POSITIVE NOTES
+//   - A reviewed envs/operator apply also fires. That is wanted: the incident
+//     is the record that a person looked at the change. Close it with the PR
+//     number.
+//   - The yearly certificate rotation (new-operator-cert.sh) fires.
+//
+// SEVERITY (the Severity column)
+//   High   : always. Medium only for a pure removal (an app role or a
+//            credential taken away), which shrinks reach.
+//
+// AUTOMATED RESPONSE
+//   Notify playbook (Teams card + ServiceNow ticket). Never containment.
+// =============================================================================
+
+let LookBack = 1h;
+let OperatorPrincipalIds = dynamic([]); // @@OPERATOR_PRINCIPAL_IDS@@
+let WatchedOperations = dynamic([
+    "Add app role assignment to service principal",
+    "Remove app role assignment from service principal",
+    "Add delegated permission grant",
+    "Remove delegated permission grant",
+    "Consent to application",
+    "Add service principal credentials",
+    "Remove service principal credentials",
+    "Update application - Certificates and secrets management",
+    "Add owner to service principal",
+    "Add owner to application",
+    "Update application",
+    "Update service principal"]);
+let RemovalOperations = dynamic([
+    "Remove app role assignment from service principal",
+    "Remove delegated permission grant",
+    "Remove service principal credentials"]);
+AuditLogs
+| where TimeGenerated > ago(LookBack)
+| where Category == "ApplicationManagement"
+| where Result =~ "success"
+| where OperationName in~ (WatchedOperations)
+| mv-apply tr = TargetResources on (
+    mv-apply mp = tr.modifiedProperties on (
+        summarize ClientIds = make_set_if(trim(@'"', tostring(mp.newValue)),
+                      tostring(mp.displayName) in~ ("ServicePrincipal.ObjectID", "ServicePrincipal.AppId")))
+    | summarize TargetIds = make_set(tostring(tr.id)), TargetNames = make_set(tostring(tr.displayName)),
+                ClientIds = make_set(ClientIds)
+  )
+| extend MatchedIds = set_intersect(set_union(TargetIds, ClientIds), OperatorPrincipalIds)
+| where array_length(MatchedIds) > 0
+| extend ActorUpn = tostring(InitiatedBy.user.userPrincipalName)
+| extend ActorApp = tostring(InitiatedBy.app.displayName)
+| extend ActorSpId = tostring(InitiatedBy.app.servicePrincipalId)
+| extend Actor = iff(isnotempty(ActorUpn), ActorUpn, ActorApp)
+| extend ActorIsOperator = isnotempty(ActorSpId) and ActorSpId in (OperatorPrincipalIds)
+| extend Severity = iff(OperationName in~ (RemovalOperations), "Medium", "High")
+| project TimeGenerated, Severity, OperationName, Actor, ActorUpn, ActorApp, ActorSpId, ActorIsOperator,
+          TargetNames, MatchedIds, CorrelationId
+| sort by TimeGenerated desc

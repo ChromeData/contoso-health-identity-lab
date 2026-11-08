@@ -19,7 +19,10 @@ Every layer sits behind a staging flag that is `false` in `lab.tfvars`
 CI identities live in a separate, human-applied `envs/bootstrap` root, and the
 AWS IAM Identity Center permission set in an equally separate, human-applied
 `aws/` root, and the Okta side of the acquired clinic's coexistence (ADR 0022) in
-a third human-applied root, `okta/`. Workforce users (Dana Okafor and colleagues) are **not**
+a third human-applied root, `okta/`. ("Human-applied" means applied
+outside CI, from the operator workstation. The owner starts or approves
+each such apply. Before 2026-11-07 AI helpers running as the lab operator
+also ran some of them, for example the `okta/` apply in PR #222.) Workforce users (Dana Okafor and colleagues) are **not**
 Terraform's: HR provisioning owns them.
 
 > **Status: BUILT.** Every directory validates and every mocked test passes
@@ -75,9 +78,9 @@ lab/terraform/
 │       ├── outputs.tf
 │       └── tests/                    ← mocked `terraform test` plan of the composition
 ├── k8s/                              ← kind cluster segment, local state, built + destroyed per run (see "Kubernetes workload identity")
-│   ├── platform/                     ← stage 1: namespaces + Pod Security labels, Vault Helm release; tests/ (mocked, run by CI)
-│   ├── identity/                     ← stage 2: Vault k8s auth/role/policy, service accounts, group RBAC, admission policy; tests/
-│   └── aks-mapping/                  ← PLAN-ONLY, never applied: Entra federated identity credential (azuread); tests/ (mocked)
+│   ├── keyvault-trust/               ← operator-applied per run: Entra app + federated credential, Key Vault Secrets User on one secret; tests/
+│   ├── platform/                     ← namespaces + Pod Security labels, CSI driver + Azure Key Vault provider; tests/ (mocked, run by CI)
+│   └── identity/                     ← service accounts, SecretProviderClass, group RBAC, admission policy; tests/
 ├── okta/                             ← HUMAN-applied, separate product: the Okta side of the clinic coexistence (ADR 0022)
 │   ├── .terraform.lock.hcl           ← okta/okta 4.20.0 hashes (HashiCorp Terraform 1.16.5, 3 platforms) - committed
 │   ├── versions.tf / providers.tf / variables.tf / main.tf / outputs.tf
@@ -124,7 +127,7 @@ and is heavily commented inline. Every module carries a
 | **pim** | `azuread_directory_role_assignment` (group → role, AU-scoped where set), `azuread_group_role_management_policy`, `azuread_group` (tier, approver and Azure groups), `azuread_administrative_unit`, `azurerm_pim_eligible_role_assignment`, `azurerm_role_management_policy` | Privileged-IAM-Admins (User Administrator): eligible membership, MFA + justification + approval, 4h, eligibility expires after 365 days. `enable_pim_tiers`: **8 Tier-0 groups** (Security, CA, Privileged Role, Privileged Authentication (2h), Hybrid Identity, Application, Cloud Application and Authentication Policy Administrator: MFA (or authentication context `c1` once CA021 is enforced) + justification + ticket + approval by `PIM-Approvers-Tier0`, 4h, eligibility 180 days) and **8 Tier-1 groups** (Intune with approval, Identity Governance + Lifecycle Workflows Administrator with approval, Helpdesk + Authentication Administrator, Groups, Exchange, SharePoint, Teams, License: MFA + justification, 8h, eligibility 365 days). `enable_helpdesk_au_scoping`: the help-desk roles scoped to `AU-Workforce-Standard`. `enable_global_admin_pim_policy`: Global Administrator's own policy (approval, 2h, named eligibility for 180 days), rendered for `post-apply/Set-DirectoryRolePimPolicies.ps1`. `enable_pim_azure_resources`: PIM-Azure-RG-Contributors **eligible** for Contributor on the lab RG (approval, 4h; human applier). `enable_pim_aws_admin`: PIM-AWS-Lab-Admins, eligible-only AWS admin (2h, MFA + justification, every activation mailed; ADR 0025). Outputs feed the privileged access reviews. [ADR 0020](../docs/adr/0020-pim-activation-design.md); see [`modules/pim/README.md`](modules/pim/README.md). |
 | **entitlement** | `azuread_access_package_catalog`, `azuread_access_package` ×4, `azuread_access_package_resource_catalog_association`, `azuread_access_package_resource_package_association`, `azuread_access_package_assignment_policy` (request packages only, + `assignment_review_settings` by tier) | Packages from `var.access_packages`, matching `lab/iga/access-catalog.json`: "Nurse – Clinical Apps" and "ICU – Critical Care Apps" are **T3 birthright** (no Terraform policy: their only policy is the HR-attribute automatic assignment from `post-apply/Set-AutoAssignmentPolicies.ps1`); "ICU – Float Access" and "Pharmacy – Controlled Substances Apps" are **T2 requestable** (approval, justification, 180-day expiry). Assigned groups only. Reviews per [ADR 0012](../docs/adr/0012-access-review-no-response-and-clinical-lockout.md), one flag per tier: `enable_access_reviews_privileged` (T1, quarterly, default deny), `enable_access_reviews_requestable` (T2, half-yearly, only on packages that outlive 180 days or allow extension), `enable_access_reviews_inactive`; a birthright clinical package is never reviewed by a person. Standalone review bodies (privileged, inactive-user) are rendered as output `access_review_definitions` for `post-apply/New-AccessReviewDefinitions.ps1`. `enable_b2b_governance`: external "Affiliated Partners" catalog + "Affiliated Physicians" package (connected-org requestors, sponsor approval, 90-day expiry, monthly review); connected org via `post-apply/New-B2BConnectedOrganization.ps1`. See [`modules/entitlement/README.md`](modules/entitlement/README.md). |
 | **pipeline-identity** | `azuread_application` ×2, `azuread_service_principal` ×2, `azuread_application_federated_identity_credential` ×2, `azuread_app_role_assignment` ×N, `data.azuread_service_principal` (Graph) | GitHub-OIDC **plan** (read-only, `pull_request`) and **apply** (write, `environment:prod`) identities. Called only from `envs/bootstrap`. Opt-in extra roles (`extra_*_graph_roles`; bootstrap `enable_app_management_roles` adds the four `modules/apps` needs, incl. Tier-0 `AppRoleAssignment.ReadWrite.All`); a write role can never be added to PLAN. |
-| **dc-vm** | `azurerm_windows_virtual_machine` (Server 2022 Azure Edition, Trusted Launch), `azurerm_managed_disk` (NTDS, caching None), `azurerm_network_security_group`, `azurerm_public_ip`, `azurerm_dev_test_global_vm_shutdown_schedule`, `azurerm_role_assignment` (VM identity → Key Vault Secrets Officer, ABAC-limited to `dc01-dsrm-password` + `svc-vault-rotator` + `svc-pam-discovery`; Key Vault ABAC is preview, verify:) | The on-prem AD for HR → AD → Cloud Sync. Promoted by `lab/scripts/dc/`. |
+| **dc-vm** | `azurerm_windows_virtual_machine` (Server 2022 Azure Edition, Trusted Launch), `azurerm_managed_disk` (NTDS, caching None), `azurerm_network_security_group`, `azurerm_public_ip`, `azurerm_dev_test_global_vm_shutdown_schedule`, `azurerm_role_assignment` (VM identity → Key Vault Secrets Officer, ABAC-limited to `dc01-dsrm-password` + `svc-vault-rotator`; Key Vault ABAC is preview, verify:) | The on-prem AD for HR → AD → Cloud Sync. Promoted by `lab/scripts/dc/`. |
 | **intune-vm** | `azurerm_windows_virtual_machine` (Windows 11 Enterprise, Trusted Launch, `license_type = Windows_Client`), `azurerm_virtual_machine_extension` (`AADLoginForWindows` with `mdmId` = Intune), `azurerm_role_assignment` ×N (*Virtual Machine Administrator Login* for listed users + the CA005 pilot group), `azurerm_subnet` + `azurerm_network_security_group` (RDP from operator IP only), `azurerm_public_ip`, `azurerm_dev_test_global_vm_shutdown_schedule`, `random_password` (local break-glass admin) | The "compliant device" CA005 needs: Entra joined + Intune auto-enrolled at apply time; people sign in with Entra credentials. Compliance policy comes from `lab/scripts/intune/New-IntuneComplianceBaseline.ps1`. |
 | **entra-diagnostics** | `azurerm_monitor_aad_diagnostic_setting` | Entra AuditLogs / SignInLogs / NonInteractive / ServicePrincipal / Provisioning → `loga-idlab` (+ RiskyUsers / UserRiskEvents / RiskyServicePrincipals / ServicePrincipalRiskEvents with bootstrap `enable_identity_protection_logs`, P2). Called from `envs/bootstrap` only. |
 | **azure-guardrails** | `azurerm_policy_definition` ×2, `azurerm_subscription_policy_assignment` ×2 | No new standing Owner (Owner matched at any scope, the allowed principals excluded) and Key Vaults keep soft delete + purge protection (Microsoft's built-in rule). Both **Audit** until a human sets Deny. Called from `envs/bootstrap` only (`enable_azure_guardrails`): APPLY's Contributor can't write policy. See [`modules/azure-guardrails/README.md`](modules/azure-guardrails/README.md). |
@@ -199,7 +202,7 @@ combinations that cannot work.
 | `enable_dc` | `false` | DC01 domain controller VM (dc-vm) | nothing: free tier, Azure compute cost |
 | `enable_intune_vm` | `false` | Windows 11 VM, Entra joined + Intune enrolled, the CA005 compliant device (intune-vm) | `enable_premium` + the human steps in `lab/scripts/intune/README.md` |
 | `enable_sentinel` | `false` | Sentinel onboarding + the core rules (monitoring). **Starts the 31-day trial** | Entra logs flowing for a few hours; not with `enable_la_alerts` |
-| `enable_la_alerts` | `false` | The same rules as Log Analytics alerts, the post-trial path (monitoring) | not with `enable_sentinel` |
+| `enable_la_alerts` | `false` | The same rules as Log Analytics alerts, the post-trial path (monitoring), except `sentinel_only_rule_keys` (14-day look-back; no Log Analytics equivalent) | not with `enable_sentinel` |
 | `enable_access_reviews` | `false` | Shorthand for the three tier flags below (deprecated alias) | `enable_governance` + a fallback reviewer group |
 | `enable_access_reviews_privileged` | `false` | ADR 0012 T1: quarterly default-deny reviews of every PIM-governed group and of Global Administrator eligibility (rendered bodies) | `enable_governance` |
 | `enable_access_reviews_requestable` | `false` | ADR 0012 T2: half-yearly `removeAccess` review, only on requestable packages that outlive 180 days or allow extension | `enable_governance` |
@@ -306,7 +309,7 @@ latest changes.
 | `envs/bootstrap` | ok | **Success** | clean |
 | `aws` (separate root, hashicorp/aws 6.69.1) | ok | **Success** | clean |
 | `okta` (separate root, okta/okta 4.20.0) | ok | **Success** | clean |
-| `k8s/platform`, `k8s/identity`, `k8s/aks-mapping` | ok | **Success** | clean |
+| `k8s/platform`, `k8s/identity`, `k8s/aks-mapping` (now `k8s/keyvault-trust`) | ok | **Success** | clean |
 
 What the committed code itself enforces (`validation` / `precondition` /
 `check` blocks and plain expressions, so you can check each in the file named):
@@ -374,9 +377,9 @@ directories, before `modules/apps/tests/okta.tftest.hcl` and the `okta` root.)
 | `modules/monitoring` | `itdr.tftest.hcl`, `itdr_v2.tftest.hcl` | 32 | Defaults create nothing; ITDR rules map the `.kql` columns; telemetry before Sentinel; containment only on High ITDR incidents, only with Sentinel and never on the SoD or vault rules; Log Analytics path skips the Sentinel-only rules; DC01 DCR events; ids rendered and display names refused; `operator_ips` watchlist ranges, expiry and owner rules; `vault_feed_v2_columns` |
 | `modules/pim` | `pim.tftest.hcl` | 46 | Defaults keep only the original binding; PIM-Demo-Readers holds exactly Global Reader + Security Reader, PT8H MFA activation with no approval, mailed, reviewed, outside the CA scope and the tier map; tier groups and their notifications; one approver warns; the `c1` context replaces MFA only once CA021 is enforced, and the two-apply switchover; Global Administrator refused in a tier group; Tier-0 roles cannot sit in Tier 1; approval cannot be waived on Tier 0; Tier-0 eligibility capped at 180 days; help-desk AU scoping; the Global Administrator policy bodies; Azure PIM shape; Privileged-IAM-Admins can hold neither Global Administrator nor a Tier-0 role |
 | `modules/pipeline-identity` | `plan_roles.tftest.hcl` | 5 | PLAN's opt-in Graph roles are an allow-list of read roles: ReadWrite, Invite, Create, Send and Manage roles refused |
-| `k8s/platform` | `platform.tftest.hcl` | 5 | Pod Security labels; Vault release pinned; injector webhook fails closed; weak root token and non-kind context refused |
-| `k8s/identity` | `identity.tftest.hcl` | 11 | Vault role trusts one service account; read-only policy on one path; no API token mounted; human RBAC has no secrets and no cluster scope; admission policy binds the workload to one digest and the pipeline |
-| `k8s/aks-mapping` | `aks_mapping.tftest.hcl` | 7 | The federated credential trusts exactly the workload; plain-http, kind, loopback and private-IP issuers refused |
+| `k8s/platform` | `platform.tftest.hcl` | 3 | Pod Security labels; CSI driver chart and every image pinned; one token audience; Secret sync off; rotation on; non-kind context refused |
+| `k8s/identity` | `identity.tftest.hcl` | 8 | SecretProviderClass serves one Key Vault secret through Workload ID, no Secret sync; no API token mounted; human RBAC has no secrets and no cluster scope; admission policy binds the workload to one digest and the pipeline |
+| `k8s/keyvault-trust` | `keyvault_trust.tftest.hcl` | 6 | The federated credential trusts exactly the workload; Key Vault Secrets User on one secret; kind, trailing-slash and plain-http issuers refused |
 
 Run them with `terraform`, not `tofu`: OpenTofu's mock providers fill in
 computed ids at plan time, which hid an "Invalid count argument" error in
@@ -387,7 +390,7 @@ first plan) caught. The `aws/` root documents its own checks in
 Run every directory the way CI does:
 
 ```bash
-for d in envs/dev envs/bootstrap aws okta k8s/platform k8s/identity k8s/aks-mapping modules/*; do
+for d in envs/dev envs/bootstrap aws okta k8s/platform k8s/identity k8s/keyvault-trust modules/*; do
   terraform -chdir="$d" init -backend=false -input=false >/dev/null &&
   terraform -chdir="$d" validate &&
   { [ -d "$d/tests" ] || continue; terraform -chdir="$d" test $( [ -f "$d/lab.tfvars" ] && echo -var-file=lab.tfvars ); }
@@ -769,44 +772,32 @@ working.
 
 ## Kubernetes workload identity (`k8s/`)
 
-A self-contained segment, **not** part of the apply order above. Two applied
-roots, with no Azure or Entra provider, configure a throwaway **kind**
-cluster (the AKS stand-in, see [`../docs/STAND-INS.md`](../docs/STAND-INS.md))
-that `lab/k8s/ci/pipeline.sh` builds, tests and destroys in one run, on a
-laptop or in `.github/workflows/k8s-identity.yml`. A third root,
-`k8s/aks-mapping` (`hashicorp/azuread`), is **plan-only and never applied**
-by anything: it writes the Entra Workload ID equivalent of the Vault role and
-is checked offline only (`fmt`, `validate`, mocked `test`), because Entra
-must fetch the cluster's OIDC issuer keys and kind's issuer is not public.
+A self-contained segment, **not** part of the apply order above. Three
+roots under `k8s/`, all applied by
+`lab/k8s/ci/pipeline.sh` as the lab operator, per run, against a throwaway
+**kind** cluster (the AKS stand-in, see [`../docs/STAND-INS.md`](../docs/STAND-INS.md))
+and throwaway Azure objects, then destroyed. Since ADR 0036 the secret store
+is **Azure Key Vault**, reached through **Microsoft Entra Workload ID** and the
+**Secrets Store CSI Driver** (the in-cluster HashiCorp Vault is retired).
 Design, decisions and how to run it: [`../k8s/README.md`](../k8s/README.md).
 
-- **Two stages** because the vault provider cannot be configured before Vault
-  exists: `k8s/platform` (helm + kubernetes providers: namespaces, Vault Helm
-  release), then `k8s/identity` (vault + kubernetes providers: Kubernetes auth
-  role bound to one service account with audience `vault`, read-one-path
-  policy, service accounts, group Roles/RoleBindings, and the
-  ValidatingAdmissionPolicy `clinical-apps-workload-identity` that binds the
-  `nightly-report` identity to one image digest and to the pipeline).
-- **Local state, no backend:** the cluster lives for one run. The secret's
-  value is seeded by the pipeline over Vault's HTTP API, never a Terraform
-  argument, so it is not in state. The Vault dev root token is an
-  `ephemeral`, `sensitive` variable that reaches Helm only through the
-  write-only `set_wo` (stage 1) and the Vault provider block (stage 2), so it
-  is in neither plan nor state; it does live inside the throwaway cluster (the
-  vault-0 StatefulSet env, Helm's release Secret, the dev-mode startup log)
-  until teardown (full list: [`k8s/platform/README.md`](k8s/platform/README.md#decisions)).
-  The local state is gitignored (`*.tfstate*`) anyway.
-- **Lock files** are committed like the other roots, but for `linux_amd64` +
-  `darwin_arm64` only (the CI runner and the dev Mac); `aks-mapping` locks
-  `hashicorp/azuread` 3.10.0, the version the lab's other Entra roots lock.
-- **Tested twice:** the three k8s roots' mocked tests
-  (`k8s/platform/tests/platform.tftest.hcl`,
-  `k8s/identity/tests/identity.tftest.hcl`,
-  `k8s/aks-mapping/tests/aks_mapping.tftest.hcl`, 23 runs) run in stage 2 of
-  `pipeline.sh` and in `lab-tests.yml` with every other directory. `terraform-plan.yml`'s `fmt -check -recursive` and Checkov
-  also cover `k8s/`, since they scan all of `lab/terraform/**`; the `envs/dev`
-  plan and apply do not include it (separate roots), and no workflow plans
-  `aks-mapping` against a tenant.
+- **`k8s/keyvault-trust`** (azuread + azurerm): the app registration (no
+  credential), one federated credential for
+  `system:serviceaccount:clinical-apps:nightly-report`, and Key Vault Secrets
+  User on ONE secret. `k8s/platform` (helm + kubernetes): namespaces and the
+  CSI driver + Azure provider. `k8s/identity` (kubernetes): service accounts,
+  the SecretProviderClass, group Roles/RoleBindings and the
+  ValidatingAdmissionPolicy `clinical-apps-workload-identity`.
+- **Local state, no backend:** each run's state lives as long as the run.
+  The secret's value is set in Key Vault by az, never a Terraform argument,
+  and no client secret exists, so no state holds a secret (stage 12 counts).
+- **Lock files** are committed for `linux_amd64` + `darwin_arm64`;
+  `keyvault-trust` locks azuread 3.10.0 and azurerm 4.81.0, the builds the
+  rest of the lab locks.
+- **Tested:** the three roots' mocked tests (17 runs) run in stage 2 of
+  `pipeline.sh` and in `lab-tests.yml`. `terraform-apply.yml`'s
+  `!lab/terraform/k8s/**` keeps them out of the Entra apply. The live run is
+  RAN · tenant (lab/evidence/k8s-keyvault/20261107T013045Z/, 66/66).
 
 ---
 

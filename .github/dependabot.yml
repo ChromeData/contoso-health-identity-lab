@@ -14,13 +14,14 @@ updates:
     commit-message:
       prefix: "ci"
 
-  # The three lab/terraform/k8s roots are listed too. platform and identity
-  # run against a throwaway kind cluster, and aks-mapping is never applied. A
-  # bump PR for them is checked by k8s-identity.yml (lab/k8s/ci/pipeline.sh).
+  # The three lab/terraform/k8s roots are listed too. All three are applied
+  # by the operator's local pipeline run against a throwaway kind cluster and
+  # throwaway Azure objects (lab/k8s/ci/pipeline.sh). A bump PR for them gets
+  # the static stages in k8s-identity.yml; the live run is a human step.
   # Their lock files hold linux_amd64 + darwin_arm64 hashes only (verify:
   # Dependabot's re-lock keeps both platforms on the first k8s bump PR).
-  # Image digests under lab/k8s and the Vault Agent digest in k8s/platform
-  # are not covered here; bump them by hand.
+  # Image digests under lab/k8s and the CSI driver / Azure provider digests
+  # in k8s/platform are not covered here; bump them by hand.
   - package-ecosystem: "terraform"
     directories:
       - "/lab/terraform/envs/dev"
@@ -28,7 +29,7 @@ updates:
       - "/lab/terraform/aws"
       - "/lab/terraform/k8s/platform"
       - "/lab/terraform/k8s/identity"
-      - "/lab/terraform/k8s/aks-mapping"
+      - "/lab/terraform/k8s/keyvault-trust"
     schedule:
       interval: "weekly"
     commit-message:

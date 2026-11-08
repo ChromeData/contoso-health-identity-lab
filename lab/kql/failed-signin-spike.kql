@@ -3,9 +3,13 @@
 // Lab:       Contoso Health Identity Platform
 // -----------------------------------------------------------------------------
 // WHAT IT CATCHES
-//   10+ failed sign-ins from ONE source IP within one fixed 10-minute clock bin
-//   (bin() floors TimeGenerated to :00, :10, :20, ...; the output TimeGenerated
-//   is the bin start). Two shapes fall out of the same query:
+//   10+ CREDENTIAL failures (wrong password, locked out, expired or missing
+//   password, disabled or unknown account) from ONE source IP inside any
+//   10-minute window that starts on a 5-minute boundary (hopping windows:
+//   :00-:10, :05-:15, :10-:20, ...; the output TimeGenerated is the window
+//   start). Since 2026-11-07 (review finding D1) MFA prompts and other
+//   interrupts no longer count, and a burst that straddles a clock boundary
+//   is no longer split in two. Two shapes fall out of the same query:
 //     - many distinct users, few attempts each  -> password spray
 //     - one user, many attempts                 -> brute force / credential stuffing
 //
@@ -22,20 +26,26 @@
 //
 // FALSE-POSITIVE NOTES
 //   - Shared egress NAT / corporate VPN / CGNAT can concentrate many users
-//     behind one IP; allow-list known corporate egress IPs (a watchlist).
+//     behind one IP. The hospital's own egress ranges (TrustedEgressRanges,
+//     rendered by modules/monitoring from var.trusted_egress_ranges; also the
+//     CA named location in production) are dropped from the brute-force
+//     shape: there one user's retries are normal. The spray shape still
+//     alerts from them (5+ users failing from one IP is never normal).
+//   - A spray spread across many IPs never reaches 10 per IP: that is what
+//     failed-signin-spray-by-asn.kql (distinct users per ASN, 1 h) is for.
 //   - A looping misconfigured client (old password cached) hammers one account
 //     — real, but operational not malicious; tune the single-user threshold.
-//   - MFA-required codes (e.g. 50074 / 50076) are "failures" but often benign
-//     interrupts; the credential-failure filter below narrows to real misses.
+//   - MFA-required codes (e.g. 50074 / 50076) and other interrupts are not
+//     credential failures and are not counted (CredentialFailureCodes below).
 //
 // TUNABLE THRESHOLDS
-//   FailureThreshold = 10 failures / IP / 10-minute clock bin. Window = 10m
-//   (per task spec).
-//   Known gap: the bins are tumbling, not sliding. A burst that straddles a
-//   bin boundary splits (9 at 12:09 + 9 at 12:10 = 18 in about a minute) and
-//   fires in neither bin. Change it in both twins at once (this file and
-//   lab/splunk/detections/failed-signin-spike.spl): hopping 10m windows on a
-//   5m step always catch 10+ failures that land inside any 5 minutes.
+//   FailureThreshold = 10 credential failures / IP / 10-minute window, windows
+//   every 5 minutes (each event counts in the two windows that contain it),
+//   so 10+ failures inside ANY 5 minutes always fire. One row per IP per run
+//   (the window with the most failures). Both twins changed together (this
+//   file and lab/splunk/detections/failed-signin-spike.spl).
+//   Still a gap: 9 failures per IP per 10 minutes, forever, from one IP.
+//   Smart lockout (50053) and the ASN rule are the backstop.
 //
 // SUGGESTED SENTINEL RULE
 //   As deployed by lab/terraform/modules/monitoring: Frequency 5m · Lookback
@@ -56,18 +66,24 @@
 //   to a CA named location / block list.
 // =============================================================================
 
-let FailureThreshold = 10;   // failed sign-ins from one IP in one Window bin
-let Window = 10m;            // tumbling clock bin (:00, :10, ...), not sliding
+let FailureThreshold = 10;   // credential failures from one IP in one window
+let Window = 10m;            // window length
+let Step = 5m;               // a new window starts every Step (hopping)
+// Real credential failures only (Microsoft Entra authentication error codes):
+// 50126 invalid username or password · 50053 locked (smart lockout) or
+// blocked · 50055 password expired · 50056 no or invalid password on record
+// · 50057 account disabled · 50034 user does not exist.
+let CredentialFailureCodes = dynamic(["50126", "50053", "50055", "50056", "50057", "50034"]);
+// The hospital's own egress ranges (CIDR). Empty = none trusted.
+let TrustedEgressRanges = dynamic([]); // @@TRUSTED_EGRESS_RANGES@@
 SigninLogs
 | where TimeGenerated > ago(1h)
-// ResultType is a STRING in SigninLogs; "0" == success, anything else is a
-// failed/aborted sign-in.
-| where ResultType != "0"
-// Optional: focus on real credential failures and drop benign MFA interrupts.
-// 50126 invalid username/password · 50053 account locked (smart lockout)
-// 50055 expired password · 50056 no/invalid password on record
-// (Comment this back in to cut MFA-prompt noise; verify codes for your tenant.)
-// | where ResultType in ("50126","50053","50055","50056")
+// ResultType is a STRING in SigninLogs.
+| where ResultType in (CredentialFailureCodes)
+// Each event belongs to the window that starts at its 5-minute bin and to
+// the one that started 5 minutes earlier.
+| extend WindowStart = pack_array(bin(TimeGenerated, Step), bin(TimeGenerated, Step) - Step)
+| mv-expand WindowStart to typeof(datetime)
 | summarize
       FailedCount   = count(),
       TargetedUsers = dcount(UserPrincipalName),
@@ -77,9 +93,14 @@ SigninLogs
       Country       = any(tostring(LocationDetails.countryOrRegion)),
       FirstSeen     = min(TimeGenerated),
       LastSeen      = max(TimeGenerated)
-    by IPAddress, bin(TimeGenerated, Window)
+    by IPAddress, WindowStart
 | where FailedCount >= FailureThreshold
 | extend Pattern = iff(TargetedUsers >= 5, "likely password spray", "likely brute force")
+| extend TrustedEgress = isnotnull(parse_ipv4(IPAddress)) and ipv4_is_in_any_range(IPAddress, TrustedEgressRanges)
+| where not(TrustedEgress and Pattern == "likely brute force")
+// One row per IP: the window with the most failures.
+| summarize arg_max(FailedCount, *) by IPAddress
+| extend TimeGenerated = WindowStart
 | project TimeGenerated, IPAddress, Country, FailedCount, TargetedUsers, Pattern,
           UserList, ErrorCodes, Apps, FirstSeen, LastSeen
 | sort by FailedCount desc

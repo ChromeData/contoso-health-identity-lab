@@ -13,7 +13,7 @@
 # use the absolute paths below.
 # =============================================================================
 set -euo pipefail
-umask 077   # every temp file (token header, Vault responses) is 0600
+umask 077   # every temp file (token header, Entra / Key Vault responses) is 0600
 
 K8S_CI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 K8S_DIR="$(cd "$K8S_CI_DIR/.." && pwd -P)"
@@ -29,8 +29,25 @@ KUBE_CONTEXT="kind-$KIND_CLUSTER_NAME"
 CP_CONTAINER="$KIND_CLUSTER_NAME-control-plane"
 AUDIT_LOG_IN_NODE=/var/log/kubernetes/audit/audit.log
 APP_NS=clinical-apps
-VAULT_NS=vault
+# The Secrets Store CSI Driver + Azure Key Vault provider (lab/terraform/k8s/platform).
+CSI_NS=secrets-store
 APP_DEPLOYMENT=nightly-report
+# The one Key Vault secret the workload may read, the decoy in the same vault
+# it must NOT read, the SecretProviderClass that serves it and where it lands.
+SECRET_NAME=clinical-db
+DECOY_SECRET=clinical-other
+SPC_NAME=nightly-report-db
+MOUNTED_FILE=/mnt/secrets-store/db
+# Entra Workload ID: the audience the CSI driver requests, the Key Vault
+# token scope, and the data-plane API version (Microsoft Learn, Key Vault
+# REST API reference).
+EXCHANGE_AUDIENCE=api://AzureADTokenExchange
+KV_SCOPE=https://vault.azure.net/.default
+KV_API_VERSION=7.5
+# Throwaway Azure objects live in the sandbox resource group (azure.sh AZ_RG,
+# envs/operator sandbox.tf), tagged per run, deleted at teardown. Same region
+# as the lab (rg-identity-lab).
+AZ_LOCATION=eastus2
 # The ValidatingAdmissionPolicy (and its binding) the identity root installs:
 # digest-pinned images, an image allowlist for the nightly-report identity,
 # no automounted API token. The e2e test matches denials by this name.
@@ -42,10 +59,6 @@ VAP_NAME=clinical-apps-workload-identity
 DRIFT_RB=app-deployer--k8s-clinical-deployers
 DRIFT_ADDR='kubernetes_role_binding_v1.human["app-deployer"]'
 DRIFT_USER=mallory
-# NodePort 30820 in the cluster -> 127.0.0.1:18200 on the host (kind
-# extraPortMappings). Overridable so a human can point the test elsewhere.
-VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:18200}"
-
 # Paths owned by the other parts of this segment.
 KIND_CONFIG_TEMPLATE="$K8S_DIR/kind/cluster.yaml"
 AUDIT_POLICY="$K8S_DIR/kind/audit-policy.yaml"
@@ -54,19 +67,19 @@ NEGATIVE_POD="$MANIFESTS_DIR/negative/privileged-pod.yaml"
 TF_K8S_DIR="$LAB_DIR/terraform/k8s"
 TF_PLATFORM="$TF_K8S_DIR/platform"
 TF_IDENTITY="$TF_K8S_DIR/identity"
-# Plan-only: the Entra Workload ID equivalent of the Vault role (a federated
-# identity credential). The pipeline runs fmt / validate / test on it and
-# NEVER plans it against Azure or applies it (kind's OIDC issuer is not
-# reachable from Entra, which must fetch the issuer's JWKS).
-TF_AKS_MAPPING="$TF_K8S_DIR/aks-mapping"
+# The Entra + Key Vault side: app registration, federated credential, and
+# Key Vault Secrets User on the one secret. Applied as the lab operator in
+# stage 4, destroyed at teardown.
+TF_KEYVAULT_TRUST="$TF_K8S_DIR/keyvault-trust"
 E2E_TEST="$K8S_DIR/test/k8s-e2e.sh"
 
-# Only used with KEEP_CLUSTER=1: the kept cluster's dev root token + the
-# sha256 of the CURRENT clinical/data/db value (seed.sha256: rewritten after
-# the stage-9 rotation), so a later run (or a standalone test run) can reuse
-# the cluster.
-# Gitignored by ci/.gitignore; removed again on the next full teardown.
+# Run state, 0600, gitignored by ci/.gitignore: run.env (this run's id and
+# the names of its throwaway Azure objects, so teardown can always find them,
+# and a standalone e2e run on a kept cluster knows where to look) and
+# seed.sha256 (the sha256 of the CURRENT clinical-db value; rewritten after
+# the stage-9 rotation). Removed again by a full teardown.
 STATE_DIR="$K8S_CI_DIR/.state"
+RUN_ENV="$STATE_DIR/run.env"
 
 # kubeconfig: kind, kubectl and the Terraform kubernetes/helm providers must
 # all use the SAME file. $KUBECONFIG may be a colon-separated list; kind
@@ -94,22 +107,27 @@ sha256_file() { sha256_stdin < "$1"; }
 
 cluster_exists() { kind get clusters 2>/dev/null | grep -qx "$KIND_CLUSTER_NAME"; }
 
-# vault_http METHOD PATH OUT [HEADER_FILE] [BODY_FILE|-]
-#   -> prints the HTTP status ("000" = Vault did not answer); body in OUT.
-# The token travels in a 0600 header file (curl -H @file), the body as a file
-# or stdin (--data-binary @-): neither ever appears in curl's argument list,
+# https_status METHOD URL OUT [HEADER_FILE] [BODY_FILE|-] [CONTENT_TYPE]
+#   -> prints the HTTP status ("000" = no answer); body in OUT.
+# Tokens travel in a 0600 header file (curl -H @file), bodies as a file or
+# stdin (--data-binary @-): neither ever appears in curl's argument list,
 # which any local user can read with `ps`.
-vault_http() {
-  local method="$1" path="$2" out="$3" hdr="${4:-}" body="${5:-}"
+https_status() {
+  local method="$1" url="$2" out="$3" hdr="${4:-}" body="${5:-}" ctype="${6:-application/json}"
   local -a args
-  args=(-sS --max-time 20 -o "$out" -w '%{http_code}' -X "$method")
+  args=(-sS --max-time 30 -o "$out" -w '%{http_code}' -X "$method")
   if [[ -n "$hdr" ]]; then args+=(-H "@$hdr"); fi
-  if [[ -n "$body" ]]; then args+=(-H 'Content-Type: application/json' --data-binary "@$body"); fi
-  curl "${args[@]}" "$VAULT_ADDR/v1/$path" 2>/dev/null || true
+  if [[ -n "$body" ]]; then args+=(-H "Content-Type: $ctype" --data-binary "@$body"); fi
+  curl "${args[@]}" "$url" 2>/dev/null || true
 }
 
-vault_errors() { # vault_errors RESPONSE_FILE -> Vault's error strings (never secret), one line
-  jq -r '(.errors // []) | join("; ")' "$1" 2>/dev/null || echo "(no JSON body)"
+# load_run_env: this run's ids (RUN_ID, AZ_RG, AZ_STORAGE, KV_NAME, KV_ID,
+# SA_ISSUER, AZ_TENANT_ID, WORKLOAD_CLIENT_ID) from $RUN_ENV. Identifiers
+# only, never a secret.
+load_run_env() {
+  [[ -s "$RUN_ENV" ]] || return 1
+  # shellcheck disable=SC1090  # written by azure.sh write_run_env
+  . "$RUN_ENV"
 }
 
 # wait_until SECONDS CMD... : retry CMD every 2s until it succeeds or time runs out

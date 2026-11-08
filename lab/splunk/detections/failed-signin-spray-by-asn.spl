@@ -1,0 +1,42 @@
+index=entra (sourcetype="azure:loganalytics:signinlogs" OR sourcetype="azure:loganalytics:aadnoninteractiveusersigninlogs") earliest=-1h latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Contoso ITDR - Password spray across one network (distinct users per ASN) ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/failed-signin-spray-by-asn.kql ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL. Written 2026-11-07 with the     ```
+``` fourth ITDR set (review findings B1, B2, C5, D1).                         ```
+``` Trusted ASNs: lookup contoso_trusted_asns.csv (asn), empty in the lab. ```
+``` ========================================================================== ```
+``` @stanza Contoso ITDR - Password spray across one network (distinct users per ASN) ```
+``` @conf description = Credential failures against 10+ distinct users, 3 or fewer tries each, from one ASN in 1 h, in either sign-in table. KQL twin: lab/kql/failed-signin-spray-by-asn.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */15 * * * * ```
+``` @conf dispatch.earliest_time = -1h ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 4 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = Asn ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| eval Asn=AutonomousSystemNumber
+| where isnotnull(Asn) AND Asn!=""
+| lookup contoso_trusted_asns.csv asn AS Asn OUTPUT asn AS TrustedAsn
+| where isnull(TrustedAsn)
+| eval Fail=if(in(ResultType, "50126", "50053", "50055", "50056", "50057", "50034"), 1, 0), Ok=if(ResultType=="0", 1, 0)
+| stats sum(Fail) AS Tries, min(eval(if(Fail==1, _time, null()))) AS FirstFail, max(eval(if(Ok==1, _time, null()))) AS LastOk, values(IPAddress) AS Ips BY Asn, UserPrincipalName
+| eventstats dc(eval(if(Tries>0 AND Tries<=3, UserPrincipalName, null()))) AS DistinctUsers BY Asn
+| where DistinctUsers >= 10
+| eval SprayUser=if(Tries>0 AND Tries<=3, UserPrincipalName, null()), Hit=if(Tries>0 AND Tries<=3 AND isnotnull(FirstFail) AND isnotnull(LastOk) AND LastOk>FirstFail, UserPrincipalName, null())
+| stats values(SprayUser) AS Users, values(Hit) AS Compromised, sum(eval(if(Tries<=3, Tries, 0))) AS FailedCount, values(Ips) AS Ips, first(DistinctUsers) AS DistinctUsers BY Asn
+| eval CompromisedCount=coalesce(mvcount(Compromised), 0)
+| eval Severity=if(CompromisedCount > 0, "High", "Medium"), TimeGenerated=strftime(now(), "%Y-%m-%dT%H:%M:%S%z")
+| table TimeGenerated, Severity, Asn, DistinctUsers, FailedCount, CompromisedCount, Users, Compromised, Ips

@@ -7,6 +7,8 @@
 # stub ServiceNow Table API on the same state, NOISE_SECURITY at a stub
 # Keychain. Proves:
 #   * the default is a dry run: decisions listed, nothing written anywhere;
+#   * label selector: an incident labelled "drill" is closed even outside the
+#     window, unless it also names a real person (then NEEDS-LEAD);
 #   * entities selector: an incident whose accounts are all lab test/admin
 #     accounts is closed; one with no account entity is left alone unless
 #     the window picks it;
@@ -57,7 +59,7 @@ tail = u.split("/incidents", 1)[1]
 if tail.startswith("?"):
     rows = [i for i in st["incidents"] if i["status"] != "Closed"] if "status ne 'Closed'" in u else st["incidents"]
     mo = re.search(r"[?&]skip=(\d+)", u); off = int(mo.group(1)) if mo else 0
-    o = {"value": [{"name": i["name"], "properties": {"incidentNumber": i["number"], "createdTimeUtc": i["created"], "severity": i["sev"], "title": i["title"], "status": i["status"]}} for i in rows[off:off + 2]]}
+    o = {"value": [{"name": i["name"], "properties": {"incidentNumber": i["number"], "createdTimeUtc": i["created"], "severity": i["sev"], "title": i["title"], "status": i["status"], "labels": [{"labelName": l, "labelType": "User"} for l in i.get("labels", [])]}} for i in rows[off:off + 2]]}
     if off + 2 < len(rows): o["nextLink"] = re.sub(r"[?&]skip=\d+", "", u) + "&skip=%d" % (off + 2)
     out(o)
 name = tail.lstrip("/").split("/")[0].split("?")[0]
@@ -117,7 +119,7 @@ fresh() {
   python3 - <<'PY'
 import json, os
 A = lambda upn, oid=None: {"friendlyName": upn, **({"aadUserId": oid} if oid else {})}
-inc = lambda n, created, accts, title="Contoso ITDR - Permission granted to an application", status="New": {"name": "inc-%d" % n, "number": n, "created": created, "sev": "Medium", "title": title, "status": status, "accounts": accts, "comments": []}
+inc = lambda n, created, accts, title="Contoso ITDR - Permission granted to an application", status="New", labels=(): {"name": "inc-%d" % n, "number": n, "created": created, "sev": "Medium", "title": title, "status": status, "accounts": accts, "comments": [], "labels": list(labels)}
 d = {"calls": [], "sn_calls": [],
      "users": {"aaaaaaaa-0000-4000-8000-000000000001": "test-user-b@contosohealthlab.com"},
      "incidents": [
@@ -129,7 +131,9 @@ d = {"calls": [], "sn_calls": [],
         inc(45, "2026-11-05T11:32:00Z", [A("dana.whitfield@contosohealthlab.com")]),
         inc(46, "2026-11-05T11:40:00Z", [{"accountName": "x"}]),
         inc(47, "2026-11-05T11:41:00Z", [{"aadUserId": "aaaaaaaa-0000-4000-8000-000000000001"}]),
-        inc(35, "2026-11-05T10:19:00Z", [], title="Contoso TEST - containment drill", status="Closed")],
+        inc(35, "2026-11-05T10:19:00Z", [], title="Contoso TEST - containment drill", status="Closed"),
+        inc(48, "2026-11-04T08:00:00Z", [], title="Contoso ITDR - Sign-in by a drill account", labels=["drill"]),
+        inc(49, "2026-11-04T08:05:00Z", [A("dana.whitfield@contosohealthlab.com")], labels=["drill"])],
      "tickets": [
         {"sys_id": "s43", "number": "INC0010002", "corr": "inc-43", "state": "1"},
         {"sys_id": "s44", "number": "INC0010003", "corr": "inc-44", "state": "1"},
@@ -150,6 +154,8 @@ fresh; run --since 2026-11-05T09:00Z --until 2026-11-05T13:30Z
 [ -n "$(line CLOSE 40)" ] && pass "#40 (adm- account, in window) -> CLOSE" || fail "#40: $out"
 [ -n "$(line CLOSE 43)" ] && pass "#43 (adm- account, outside the window) -> CLOSE by the entities selector" || fail "#43: $out"
 [ -n "$(line CLOSE 44)" ] && pass "#44 (no account entity, in window) -> CLOSE by the window" || fail "#44: $out"
+[ -n "$(line CLOSE 48)" ] && grep -A1 -E '^CLOSE +#48 ' <<<"$out" | grep -q 'labelled drill' && pass "#48 (labelled drill, no account entity, outside the window) -> CLOSE by the label" || fail "#48: $out"
+[ -n "$(line NEEDS-LEAD 49)" ] && pass "#49 (labelled drill but names a real person) -> NEEDS-LEAD" || fail "#49: $out"
 [ -n "$(line SKIP 31)" ] && pass "#31 (no account entity, outside the window) -> SKIP" || fail "#31: $out"
 [ -n "$(line NEEDS-LEAD 28)" ] && pass "#28 (the owner) -> NEEDS-LEAD" || fail "#28: $out"
 [ -n "$(line NEEDS-LEAD 45)" ] && pass "#45 (a real, non-lab account, in window) -> NEEDS-LEAD" || fail "#45: $out"
@@ -161,7 +167,7 @@ grep -q "INC0000060: no Sentinel incident" <<<"$out" && ! grep -q "ServiceNow IN
 # --- 2. apply ------------------------------------------------------------------------
 run --since 2026-11-05T09:00Z --until 2026-11-05T13:30Z --apply
 [ $rc -eq 0 ] && pass "--apply exits 0" || fail "apply: rc=$rc $out"
-[ "$(q '",".join(str(n) for n in sorted(I) if I[n]["status"]=="Closed")')" = "35,40,43,44,47" ] && pass "closed exactly #40 #43 #44 #47 (35 was closed already)" || fail "closed set: $(q '[(n,I[n]["status"]) for n in sorted(I)]')"
+[ "$(q '",".join(str(n) for n in sorted(I) if I[n]["status"]=="Closed")')" = "35,40,43,44,47,48" ] && pass "closed exactly #40 #43 #44 #47 #48 (35 was closed already)" || fail "closed set: $(q '[(n,I[n]["status"]) for n in sorted(I)]')"
 [ "$(q 'I[40]["classification"]')" = BenignPositive ] && grep -q "Build/test noise before recording: entities are lab test/admin accounts" <<<"$(q 'I[40]["comments"][-1]')" && pass "BenignPositive with a one-line reason comment" || fail "reason: $(q 'I[40]')"
 [ "$(q 'I[28]["status"]')" = New ] && [ "$(q 'I[45]["status"]')" = New ] && pass "owner and real-account incidents untouched without --lead-ok" || fail "NEEDS-LEAD closed"
 [ "$(q 'T["INC0010002"]["state"]+T["INC0010003"]["state"]+T["INC0010001"]["state"]')" = 666 ] && pass "tickets of #43, #44 and the already-closed #35 resolved (state 6)" || fail "tickets: $(q 'd["tickets"]')"

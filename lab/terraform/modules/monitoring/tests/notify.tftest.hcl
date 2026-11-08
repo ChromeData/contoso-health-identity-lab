@@ -114,3 +114,99 @@ run "itdr_keys_refused" {
   }
   expect_failures = [var.notify_on_alert_added_rule_keys]
 }
+
+# Review finding D2 (2026-11-07): one break-glass sign-in raised up to 12
+# alerts and three tickets (E49a, E49c). The NRT rule now groups by the
+# ACCOUNT only over 24 h, so late rows and new IPs of the same account join
+# one incident (the notify playbook then notes them on its one ticket).
+run "break_glass_groups_per_account_for_a_day" {
+  command = apply
+
+  assert {
+    condition = (
+      azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].incident[0].grouping[0].entity_matching_method == "Selected" &&
+      jsonencode(azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].incident[0].grouping[0].by_entities) == jsonencode(["Account"]) &&
+      azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].incident[0].grouping[0].lookback_duration == "P1D" &&
+      !azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].incident[0].grouping[0].reopen_closed_incidents
+    )
+    error_message = "Break-glass alerts must group by Account over 24 h (one incident, one ticket per account per day), never re-opening a closed incident."
+  }
+}
+
+run "break_glass_grouping_lookback_is_bounded" {
+  command = plan
+  variables {
+    break_glass_grouping_lookback = "P30D"
+  }
+  expect_failures = [var.break_glass_grouping_lookback]
+}
+
+# Review finding D3: the rule matches the accounts' immutable object ids,
+# so a renamed account still alerts. The ids reach the deployed query.
+run "break_glass_matches_object_ids" {
+  command = apply
+  variables {
+    break_glass_user_ids = ["55555555-5555-5555-5555-555555555555"]
+  }
+
+  assert {
+    condition     = strcontains(azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].query, "let BreakGlassUserIds = dynamic([\"55555555-5555-5555-5555-555555555555\"]); // @@BREAK_GLASS_USER_IDS@@")
+    error_message = "The break-glass user object ids must be rendered into the deployed query."
+  }
+  assert {
+    condition     = contains([for f in azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].entity_mapping[0].field_mapping : f.identifier], "AadUserId")
+    error_message = "The Account entity must carry the object id (AadUserId), not just the name."
+  }
+}
+
+run "break_glass_user_ids_must_be_guids" {
+  command = plan
+  variables {
+    break_glass_user_ids = ["bg-admin-01@contosohealthlab.onmicrosoft.com"]
+  }
+  expect_failures = [var.break_glass_user_ids]
+}
+
+# Drill noise (review finding D2): incidents naming a drill account are
+# labelled "drill" at creation; close-build-noise.sh closes them by label.
+run "drill_incidents_are_labelled" {
+  command = apply
+
+  assert {
+    condition = (
+      length(azurerm_sentinel_automation_rule.label_drill) == 1 &&
+      azurerm_sentinel_automation_rule.label_drill[0].triggers_when == "Created" &&
+      length(jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)) == 1 &&
+      jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)[0].conditionProperties.propertyName == "AccountName" &&
+      jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)[0].conditionProperties.operator == "StartsWith" &&
+      jsonencode(jsondecode(azurerm_sentinel_automation_rule.label_drill[0].condition_json)[0].conditionProperties.propertyValues) == jsonencode(["itdr-drill-"]) &&
+      !strcontains(azurerm_sentinel_automation_rule.label_drill[0].condition_json, "IncidentRelatedAnalyticRuleIds") &&
+      jsonencode(azurerm_sentinel_automation_rule.label_drill[0].action_incident[0].labels) == jsonencode(["drill"]) &&
+      azurerm_sentinel_automation_rule.label_drill[0].action_incident[0].status == null
+    )
+    error_message = "Drill incidents get the label 'drill' at creation and are NOT closed by the rule (the drill's containment must still run)."
+  }
+}
+
+run "drill_prefix_too_short_refused" {
+  command = plan
+  variables {
+    drill_account_prefixes = ["a"]
+  }
+  expect_failures = [var.drill_account_prefixes]
+}
+
+# Review of #230: one alert must never name two break-glass accounts. The
+# query returns one row per account and the NRT rule alerts per row.
+run "break_glass_one_alert_per_account" {
+  command = apply
+
+  assert {
+    condition     = azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].event_grouping[0].aggregation_method == "AlertPerResult"
+    error_message = "The break-glass NRT rule must raise one alert per result row (one row per account)."
+  }
+  assert {
+    condition     = strcontains(azurerm_sentinel_alert_rule_nrt.this["break_glass_signin"].query, "by UserPrincipalName, UserId")
+    error_message = "break-glass-signin.kql must summarize to one row per account."
+  }
+}

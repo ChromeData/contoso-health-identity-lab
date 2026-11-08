@@ -176,15 +176,16 @@ variable "operator_ip_ranges" {
     error_message = "Each operator_ip_ranges entry must be an IPv4 CIDR no wider than /24 (use a single host, e.g. 203.0.113.7/32)."
   }
 
-  # DC01 is Tier 0: with enable_dc the root refuses anything but single
+  # DC01 is Tier 0 and the v4 operator rule reads the same watchlist: with
+  # enable_dc or enable_itdr_detections_v4 the root refuses anything but single
   # hosts, the same rule modules/dc-vm and the monitoring watchlist enforce,
   # so the plan fails HERE with this message rather than deep in a module.
   # Cross-variable validation needs Terraform >= 1.9 (versions.tf).
   validation {
-    condition = !var.enable_dc || alltrue([
+    condition = !(var.enable_dc || var.enable_itdr_detections_v4) || alltrue([
       for c in var.operator_ip_ranges : try(endswith(c, "/32") && cidrnetmask(c) == "255.255.255.255", false)
     ])
-    error_message = "enable_dc = true: every operator_ip_ranges entry must be a single IPv4 host as /32 (DC01 RDP/LDAPS and the operator_ips watchlist admit single hosts only - ADR 0013)."
+    error_message = "enable_dc or enable_itdr_detections_v4 = true: every operator_ip_ranges entry must be a single IPv4 host as /32 (DC01 RDP/LDAPS and the operator_ips watchlist admit single hosts only - ADR 0013)."
   }
 }
 
@@ -655,6 +656,12 @@ variable "enable_pim_azure_resources" {
   default     = false
 }
 
+variable "enable_pim_keyvault_officers" {
+  type        = bool
+  description = "Make PIM-KeyVault-Secrets-Officers ELIGIBLE for Key Vault Secrets Officer on the lab vault (Azure PIM, MFA + justification + Tier-0 approval, 2h; ADR 0036). Needs enable_premium and a HUMAN applier with Owner / User Access Administrator on the vault - the CI APPLY identity cannot write PIM role-management policies (modules/pim/README.md)."
+  default     = false
+}
+
 variable "enable_pim_aws_admin" {
   type        = bool
   description = "AWS admin without root (ADR 0025): create PIM-AWS-Lab-Admins (modules/pim aws.tf; eligible-only, 2-hour MFA + justification activation, every activation mailed) and assign it to the AWS IAM Identity Center app as its second principal (modules/apps), so SCIM copies only ACTIVE members to AWS. lab/terraform/aws grants the SCIM copy the LabAdministrator permission set. Needs enable_premium and enable_sso_apps; eligibility is a post-apply step."
@@ -910,6 +917,30 @@ variable "enable_defender_for_identity" {
     cannot make).
   EOT
   default     = false
+}
+
+variable "enable_itdr_detections_v4" {
+  type        = bool
+  description = "Fourth ITDR set (modules/monitoring itdr_v4.tf, review findings B1, B2, C5, D1): operator sign-in outside its allowlist, operator permission changes, auth method added to a break-glass account, HR leaver lag, spray by ASN. Needs enable_itdr_detections and operator_principal_ids. Off: turn on in its own reviewed change."
+  default     = false
+}
+
+variable "operator_principal_ids" {
+  type        = list(string)
+  description = "The lab operator workload identity's ids (service principal object id, application object id, appId; ADR 0024, envs/operator outputs). Repo Variable TF_OPERATOR_PRINCIPAL_IDS (JSON list). Needed by enable_itdr_detections_v4."
+  default     = []
+}
+
+variable "trusted_egress_ranges" {
+  type        = list(string)
+  description = "The hospital's internet egress ranges (IPv4 CIDR); failed-signin-spike drops them from the brute-force shape only. None in the lab."
+  default     = []
+}
+
+variable "trusted_asns" {
+  type        = list(string)
+  description = "ASNs failed-signin-spray-by-asn ignores (the hospital's ISP). None in the lab."
+  default     = []
 }
 
 variable "enable_itdr_containment" {

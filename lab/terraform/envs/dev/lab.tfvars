@@ -53,6 +53,7 @@ enable_access_reviews_inactive    = true
 # role's own PIM policy, written by post-apply/Set-DirectoryRolePimPolicies.ps1.
 enable_pim_tiers               = true
 enable_pim_azure_resources     = false
+enable_pim_keyvault_officers   = false
 enable_helpdesk_au_scoping     = true
 enable_global_admin_pim_policy = true
 
@@ -205,7 +206,7 @@ containment_on_alert_added = false
 # vault_feed_v2_columns goes on in the SAME PR that runs
 # ingest-vault-audit.sh --signals all (else every Tier-0 check-out alerts).
 # operator_ips_expires_on = ADR 0013's review date: the operator_ips
-# watchlist rows (from operator_ip_ranges, enable_dc only) stop counting
+# watchlist rows (from operator_ip_ranges, enable_dc or enable_itdr_detections_v4 only) stop counting
 # after it, and the plan warns. A date is a policy knob, not a tenant id.
 enable_itdr_detections_v2 = true
 vault_feed_v2_columns     = false

@@ -44,6 +44,7 @@ mock_provider "azuread" {
         "SecurityEvents.Read.All"                              = "bf394140-e372-4bf9-a898-299cfc7564e5"
         "AccessReview.ReadWrite.All"                           = "ef5f7d5c-338f-44b0-86c3-351f46c8bb5f"
         "Reports.Read.All"                                     = "230c1aed-a721-4c5d-9cb4-a90514e508ef"
+        "DeviceManagementConfiguration.ReadWrite.All"          = "9241abd9-d0e6-425a-bd4f-47ba86e767a4"
       }
     }
   }
@@ -75,12 +76,19 @@ mock_provider "azurerm" {
   mock_data "azurerm_role_definition" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000001/providers/Microsoft.Authorization/roleDefinitions/b86a8fe4-44ce-4948-aee5-eccb2c155cd7" }
   }
+  mock_resource "azurerm_resource_group" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-lab-sandbox" }
+  }
   mock_resource "azurerm_role_definition" {
     defaults = { role_definition_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000001/providers/Microsoft.Authorization/roleDefinitions/99999999-9999-9999-9999-999999999999" }
   }
 }
 
 variables {
+  # Offline tests never depend on today's date: the Intune time box is pinned
+  # far in the future here; "intune_write_time_box_warns_after_the_trial"
+  # tests the warning itself.
+  intune_write_expires_utc  = "2999-01-01T00:00:00Z"
   subscription_id           = "00000000-0000-0000-0000-000000000001"
   tenant_id                 = "11111111-1111-1111-1111-111111111111"
   operator_certificate_path = "tests/fixtures/operator-test.crt"
@@ -118,6 +126,12 @@ run "grants_are_exactly_the_reviewed_lists" {
     # No session open (the default): only the standing, read-only set.
     condition     = toset(keys(azuread_app_role_assignment.operator)) == toset(var.operator_graph_roles) && length(azuread_app_role_assignment.operator_session) == 0
     error_message = "without a write session, exactly the standing Graph roles are granted"
+  }
+  assert {
+    # The sandbox resource group exists standing, but the operator gets NO
+    # write on it between sessions.
+    condition     = azurerm_resource_group.sandbox.name == "rg-lab-sandbox" && length(azurerm_pim_active_role_assignment.operator_sandbox) == 0 && length(azurerm_role_assignment.operator_sandbox_delegation) == 0
+    error_message = "without a write session, the operator has no role on rg-lab-sandbox"
   }
   assert {
     condition     = length([for r in keys(azuread_app_role_assignment.operator) : r if can(regex("ReadWrite|DeleteRestore|Create$", r))]) == 0
@@ -234,6 +248,25 @@ run "session_open_adds_writes_time_bound" {
   assert {
     condition     = !contains(keys(azurerm_role_assignment.operator), "Owner")
     error_message = "a session never brings back Owner"
+  }
+  assert {
+    # Contributor on the SANDBOX only, time-bound to the session.
+    condition     = length(azurerm_pim_active_role_assignment.operator_sandbox) == 1 && azurerm_pim_active_role_assignment.operator_sandbox[0].scope == azurerm_resource_group.sandbox.id && one(one(azurerm_pim_active_role_assignment.operator_sandbox[0].schedule).expiration).end_date_time == var.operator_write_session.expires_utc
+    error_message = "a session adds Contributor on rg-lab-sandbox only, ending at expires_utc"
+  }
+  assert {
+    # RBAC Administrator on the sandbox, CONSTRAINED: only the four data roles
+    # may be assigned or removed, so the operator cannot give itself a lasting
+    # Owner (or any management role) that outlives the session.
+    condition = length(azurerm_role_assignment.operator_sandbox_delegation) == 1 && azurerm_role_assignment.operator_sandbox_delegation[0].scope == azurerm_resource_group.sandbox.id && azurerm_role_assignment.operator_sandbox_delegation[0].condition_version == "2.0" && alltrue([
+      for id in ["b86a8fe4-44ce-4948-aee5-eccb2c155cd7", "4633458b-17de-408a-b874-0445c86b69e6", "ba92f5b4-2d11-453d-a403-e96b0029c9fe", "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1"] :
+      strcontains(azurerm_role_assignment.operator_sandbox_delegation[0].condition, id)
+    ]) && !strcontains(azurerm_role_assignment.operator_sandbox_delegation[0].condition, "8e3af657-a8ff-443c-a75c-2fe8c4bcb635") && !strcontains(azurerm_role_assignment.operator_sandbox_delegation[0].condition, "b24988ac-6180-42a0-ab88-20f7382dd24c") && strcontains(azurerm_role_assignment.operator_sandbox_delegation[0].condition, "roleAssignments/write") && strcontains(azurerm_role_assignment.operator_sandbox_delegation[0].condition, "roleAssignments/delete")
+    error_message = "the sandbox RBAC Administrator grant is constrained to the four data roles (never Owner or Contributor), for writes and deletes"
+  }
+  assert {
+    condition     = contains(var.operator_session_graph_roles, "DeviceManagementConfiguration.ReadWrite.All") && contains(var.operator_graph_roles, "DeviceManagementConfiguration.Read.All") && !contains(var.operator_graph_roles, "DeviceManagementConfiguration.ReadWrite.All")
+    error_message = "Intune write is a SESSION grant (time-boxed to the E5 trial); the standing list keeps Read.All"
   }
 }
 
@@ -356,4 +389,14 @@ run "operator_has_no_entra_owner" {
     condition     = length(azuread_application.operator.owners) == 0 && length(azuread_service_principal.operator.owners) == 0
     error_message = "the operator must have no Entra owner (accountable owner: the Identity Platform Owner role, lab/iga/nhi-owners.json)"
   }
+}
+
+run "intune_write_time_box_warns_after_the_trial" {
+  # The time box itself: with the end date in the past and the role still a
+  # session role, the check fails (a warning on a real plan).
+  command = plan
+  variables {
+    intune_write_expires_utc = "2026-01-02T00:00:00Z"
+  }
+  expect_failures = [check.intune_write_time_box]
 }

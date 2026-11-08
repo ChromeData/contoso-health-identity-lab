@@ -149,9 +149,9 @@ az vm run-command invoke -g $RG -n $VM --command-id RunPowerShellScript --script
    Test-NetConnection localhost -Port 636 | Select TcpTestSucceeded"
 ```
 
-- [ ] Domain, OUs, UPN suffix and the five accounts (`svc-vault-rotator`, `svc-pam-discovery`, `svc-backup`, `tier0-admin-01`/`02`) are listed
+- [ ] Domain, OUs, UPN suffix and the four accounts (`svc-vault-rotator`, `svc-backup`, `tier0-admin-01`/`02`) are listed
 - [ ] `TcpTestSucceeded : True` on 636 (LDAPS needs the DC certificate; re-run `certutil -pulse` if not)
-- [ ] Key Vault holds `dc01-dsrm-password`, `svc-vault-rotator` and `svc-pam-discovery` (names only: `az keyvault secret list --vault-name $KV -o table`)
+- [ ] Key Vault holds `dc01-dsrm-password` and `svc-vault-rotator` (names only: `az keyvault secret list --vault-name $KV -o table`)
 
 ## Why it's built this way
 
@@ -166,12 +166,24 @@ az vm run-command invoke -g $RG -n $VM --command-id RunPowerShellScript --script
   accounts, so `svc-vault-rotator` is granted on AdminSDHolder. That makes it
   Tier 0, the same position as any PAM reconcile account. Its password
   lives only in Key Vault and should be rotated by Vault (`ldap/rotate-root`).
-- **The DC's identity can write only its three build secrets.** An ABAC
+- **The DC's identity can write only its two build secrets.** An ABAC
   condition on its Key Vault Secrets Officer grant
-  (`lab/terraform/modules/dc-vm/main.tf`) limits it to `dc01-dsrm-password`,
-  `svc-vault-rotator` and `svc-pam-discovery` (the read-only discovery bind for
-  `lab/pam/discover.sh`); it cannot read or change any other secret's value
+  (`lab/terraform/modules/dc-vm/main.tf`) limits it to `dc01-dsrm-password`
+  and `svc-vault-rotator`; it cannot read or change any other secret's value
   in the vault (secret names stay visible through ARM).
 - **Single-DC lab shortcut.** The DC points DNS at itself and forwards to
   168.63.129.16. Add the DC IP to the VNet's DNS servers once member servers
   join.
+
+## Retired: `svc-pam-discovery` (2026-11-07)
+
+`svc-pam-discovery` was the read-only LDAP bind for `lab/pam/discover.sh`,
+the discovery step of the HashiCorp Vault stand-in. ADR 0036 retires that
+stand-in, so the account had no user. Its 30-day password would have expired
+on 2026-11-26. `Remove-PamDiscoveryAccount.ps1` (through `run-on-dc.py`)
+disabled and deleted the account, then deleted its Key Vault secret with the
+DC's own identity. It refuses any account that is not the plain bind at
+`OU=ServiceAccounts`. `02-Configure-Domain.ps1` no longer creates it, and the
+DC's Key Vault grant no longer names it. The local samba test harness
+(`lab/pam/test/samba-ad`) still seeds its own `svc-pam-discovery` in a
+throwaway container; that is not DC01.
