@@ -9,6 +9,7 @@ What is held:
     values (new in the Keychain, old in Key Vault), never a rollback;
   * run-on-dc.py gets BOTH passwords from memory on stdin, not from the Keychain;
   * a second run is refused while one holds the lock;
+  * differing Keychain / Key Vault copies stop the run before any write;
   * quote() round-trips spaces, quotes and backslashes the way security -i reads them.
 """
 import importlib.util
@@ -116,6 +117,18 @@ class Rollback(Harness):
     def test_old_check_error_is_not_success(self):
         rc = self.run_with("DEPENDENTS: NONE\nRESET: DONE x\nKERBEROS: PASS t\nKERBEROS-OLD: ERROR: timeout (not proof)\n")
         self.assertEqual(rc, 2)
+
+
+class CopiesDiffer(Harness):
+    def test_mismatch_stops_before_any_write(self):
+        # Greptile #262 (2nd pass): differing copies may follow a half-done run;
+        # overwriting the Keychain could lose the only working password.
+        self.vault["value"] = "fake-OTHER-value"
+        rc = self.run_with("RESET: DONE\n")
+        self.assertIn("differs", str(rc))
+        self.assertEqual(self.keychain["value"], OLD)
+        self.assertEqual(self.vault["value"], "fake-OTHER-value")
+        self.assertFalse([c for c in self.calls if c[0] in ("keychain", "run") or c == ("kv", "PUT")])
 
 
 class InMemoryHandOff(Harness):

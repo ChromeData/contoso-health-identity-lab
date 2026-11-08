@@ -16,7 +16,7 @@
     Steps:
       1. Refuse any account that is not contosoadmin.
       2. Look for Windows services and scheduled tasks on DC01 that run as
-         contosoadmin. They would break with a new password, so the script
+         contosoadmin (by name, UPN or SID). They would break with a new password, so the script
          stops before any change if it finds one (DEPENDENTS: FOUND).
       3. Set-ADAccountPassword -Reset (an admin reset: no old password
          needed). Read back pwdLastSet.
@@ -63,10 +63,18 @@ if (-not (Get-Command -Name Get-ADUser -ErrorAction SilentlyContinue)) { Import-
 $domain = Get-ADDomain
 $nb = $domain.NetBIOSName
 
-# 2. Dependents: anything on DC01 that logs on with this password.
-$pattern = "(^|\\)$SamAccountName(@|$)"
-$svc = @(Get-CimInstance Win32_Service | Where-Object { $_.StartName -and $_.StartName -match $pattern } | ForEach-Object Name)
-$tasks = @(Get-ScheduledTask | Where-Object { $_.Principal.UserId -and $_.Principal.UserId -match $pattern -and $_.Principal.LogonType -eq 'Password' } | ForEach-Object { $_.TaskPath + $_.TaskName })
+# 2. Dependents: anything on DC01 that logs on with this password, named by
+#    account name, UPN or SID (a task can store its principal as a SID).
+function Test-RunAsAccount {
+    param([string]$Principal, [string]$Sam, [string]$Sid)
+    if (-not $Principal) { return $false }
+    $p = $Principal.Trim()
+    if ($Sid -and $p -eq $Sid) { return $true }
+    return $p -match ('(^|\\){0}(@|$)' -f [regex]::Escape($Sam))
+}
+$sid = (Get-ADUser -Identity $SamAccountName).SID.Value
+$svc = @(Get-CimInstance Win32_Service | Where-Object { Test-RunAsAccount -Principal $_.StartName -Sam $SamAccountName -Sid $sid } | ForEach-Object Name)
+$tasks = @(Get-ScheduledTask | Where-Object { $_.Principal.LogonType -eq 'Password' -and (Test-RunAsAccount -Principal $_.Principal.UserId -Sam $SamAccountName -Sid $sid) } | ForEach-Object { $_.TaskPath + $_.TaskName })
 if ($svc.Count -or $tasks.Count) {
     Write-Output ('DEPENDENTS: FOUND services [{0}] tasks [{1}]; nothing changed' -f ($svc -join ', '), ($tasks -join ', '))
     exit 3

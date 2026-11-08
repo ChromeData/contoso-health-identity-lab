@@ -21,6 +21,8 @@ Order (nothing is printed, nothing is in argv, nothing is in a file):
   0. One rotation at a time: an exclusive lock (~/.contoso-operator/
      rotate-build-admin.lock, no secret in it) is held for the whole run.
   1. The current password is read from the Keychain into this process only.
+     If the Key Vault copy differs (an earlier run stopped half way), the
+     run STOPS before writing anything, so no working value is overwritten.
   2. A new 32-character password is made here (secrets module) and written
      into the SAME Keychain item through `security -i` on stdin (values are
      double-quoted with backslash and " escaped, so an old value with spaces or
@@ -180,7 +182,12 @@ def rotate():
     HIDE.append(old)
     token = get_token()
     cur = kv("GET", token)
-    print(f"before: Key Vault {VAULT}/{KV_SECRET} {'matches' if cur.get('value') == old else 'DIFFERS FROM'} Keychain {SERVICE}")
+    if cur.get("value") != old:
+        # Two different values = an earlier run may have stopped half way.
+        # Writing now could throw away the only copy of the working password.
+        raise SystemExit(f"STOP: Key Vault {VAULT}/{KV_SECRET} differs from Keychain {SERVICE}. "
+                         "Nothing changed. Find which one AD accepts, make both copies hold it, then run again.")
+    print(f"before: Key Vault {VAULT}/{KV_SECRET} matches Keychain {SERVICE}")
     tags = dict(cur.get("tags") or {})
 
     new = new_password()

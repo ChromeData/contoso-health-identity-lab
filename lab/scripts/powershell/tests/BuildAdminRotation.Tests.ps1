@@ -3,12 +3,13 @@
 #   * the old-password check says REFUSED only for SEC_E_LOGON_DENIED
 #     (0x8009030C), found anywhere in the exception chain;
 #   * a timeout or any other error is ERROR (never REFUSED);
-#   * a probe that returns a ticket is ACCEPTED.
+#   * a probe that returns a ticket is ACCEPTED;
+#   * a service or task "runs as contosoadmin" by name, UPN or SID.
 
 BeforeAll {
     $path = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' 'dc' 'Reset-BuildAdminPassword.ps1'))
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$null)
-    foreach ($n in 'Test-LogonDenied', 'Get-OldPasswordVerdict') {
+    foreach ($n in 'Test-LogonDenied', 'Get-OldPasswordVerdict', 'Test-RunAsAccount') {
         $f = $ast.FindAll({ param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -eq $n }, $true) | Select-Object -First 1
         if (-not $f) { throw "Reset-BuildAdminPassword.ps1 has no function $n" }
         . ([scriptblock]::Create($f.Extent.Text))
@@ -44,5 +45,21 @@ Describe 'Get-OldPasswordVerdict' {
     }
     It 'is ACCEPTED when the probe returns a ticket' {
         Get-OldPasswordVerdict -Probe { [pscustomobject]@{ ValidTo = [datetime]::UtcNow } } | Should -Be 'ACCEPTED'
+    }
+}
+
+Describe 'Test-RunAsAccount' {
+    BeforeAll { $script:Sid = 'S-1-5-21-1111111111-2222222222-3333333333-500' }
+    It 'matches <p>' -ForEach @(
+        @{ p = 'CORP\contosoadmin' }, @{ p = 'contosoadmin' }, @{ p = 'contosoadmin@corp.contosohealthlab.com' },
+        @{ p = 'S-1-5-21-1111111111-2222222222-3333333333-500' }
+    ) {
+        Test-RunAsAccount -Principal $p -Sam 'contosoadmin' -Sid $script:Sid | Should -BeTrue
+    }
+    It 'does not match <p>' -ForEach @(
+        @{ p = 'CORP\contosoadmin2' }, @{ p = 'LocalSystem' }, @{ p = 'S-1-5-18' }, @{ p = '' },
+        @{ p = 'S-1-5-21-1111111111-2222222222-3333333333-5001' }
+    ) {
+        Test-RunAsAccount -Principal $p -Sam 'contosoadmin' -Sid $script:Sid | Should -BeFalse
     }
 }
