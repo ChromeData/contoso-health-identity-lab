@@ -1,5 +1,5 @@
 # Vault server config for the lab stand-in (NOT dev mode: real init/unseal,
-# persistent storage, audit log - the parts that map to a CyberArk vault).
+# persistent storage, audit log - the parts that map to a managed vault such as Azure Key Vault).
 ui            = true
 disable_mlock = false
 

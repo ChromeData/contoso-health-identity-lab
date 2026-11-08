@@ -1,15 +1,15 @@
 # Vendor evaluation: PAM and IGA for Contoso Health
 
-- **Status:** Proposed. This is a desk review. No vendor POC has been run, and no quotes have been received.
+- **Status:** PAM part **superseded by [ADR 0036](adr/0036-microsoft-native-pam.md)** (2026-11-06): the owner decided against a PAM vendor, so the lab uses Microsoft products (Azure Key Vault, Azure Bastion session recording, Windows LAPS, Intune Endpoint Privilege Management, PIM). CyberArk is not part of the lab. The PAM vendor scoring below stays as the desk-review record of the market comparison that was rejected. The IGA part is still Proposed. This is a desk review. No vendor POC has been run, and no quotes have been received.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario, a fictional 5,000-user hospital. It is not a real employer and not a real procurement.
-- **Related:** [ADR 0007](adr/0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md) (PAM stand-ins), [ADR 0008](adr/0008-iga-entra-id-governance-midpoint-vs-sailpoint-saviynt.md) (IGA), [`STAND-INS.md`](STAND-INS.md), [`risk-register.md`](risk-register.md), [`roadmap.md`](roadmap.md)
+- **Related:** [ADR 0036](adr/0036-microsoft-native-pam.md) (Microsoft-native PAM, supersedes ADR 0007), [ADR 0007](adr/0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md) (PAM stand-ins), [ADR 0008](adr/0008-iga-entra-id-governance-midpoint-vs-sailpoint-saviynt.md) (IGA), [`STAND-INS.md`](STAND-INS.md), [`risk-register.md`](risk-register.md), [`roadmap.md`](roadmap.md)
 
 ## 1. Decision
 
 | Area | Decision | Confidence |
 |---|---|---|
-| **PAM** | **Buy a SaaS PAM.** Don't put the lab stand-ins into production. Run a two-vendor POC: **CyberArk Privilege Cloud** (preferred) against **BeyondTrust**, with Delinea as the price alternate. The POC acceptance tests in §7 and a 3-year quote decide the winner. | Medium. The three Leaders are within 4 points of each other on desk review (§4). Price alone can flip the order. |
+| **PAM** | **Use Microsoft-native PAM (ADR 0036). Don't buy a PAM vendor.** Key Vault holds secrets, Azure Bastion records admin sessions, Windows LAPS rotates local admin passwords, Intune EPM gives one approved app admin rights, and PIM keeps every role just-in-time. The earlier desk-review recommendation (a CyberArk / BeyondTrust / Delinea POC, §4 to §7) was rejected on 2026-11-06. | High on direction (owner decision). The licence fit is checked: EPM is in the lab's Microsoft 365 E5 SKU (`Intune-EPM` service plan). |
 | **IGA** | **Extend Entra ID Governance now. Don't buy SailPoint or Saviynt yet** (this confirms ADR 0008). Buy one when a trigger in §6 fires. | High for phase 1. SailPoint leads on capability, but only by 3 points, and the lead comes from clinical-app connectivity, which phase 1 doesn't need (§5). |
 | **Microsoft licensing** | Keep the Entra ID P1/P2 that comes with M365 E5. Add the Entra ID Governance step-up for every member user in scope. Buy Workload ID Premium only for service principals named by the NHI inventory. Don't buy Entra Suite unless Private Access or Internet Access comes into scope. | High on structure. The step-up price needs verifying (§8). |
 
@@ -64,14 +64,14 @@ Notes on the scores that differ:
 - **All three vendors.** Each says it was a Leader in Gartner's 2025 Magic Quadrant for PAM (vendor press releases, Oct 2025; Gartner report itself not read). That's why rows 1, 3, 4 and 5 are flat.
   - verify: each vendor's discovery depth for AD, local Windows and Linux in a POC.
   - verify: each vendor signs a HIPAA BAA for its SaaS. Session recordings of clinical screens can contain ePHI.
-- **CyberArk, row 6 = 5.** Conjur (the lab already uses Conjur OSS) plus Secrets Hub. Secrets Hub discovers and centrally manages secrets in Azure Key Vault, so developers keep using AKV natively (CyberArk product page).
+- **CyberArk, row 6 = 5.** Conjur plus Secrets Hub. Secrets Hub discovers and centrally manages secrets in Azure Key Vault, so developers keep using AKV natively (CyberArk product page).
   - **Ownership change.** Palo Alto Networks closed its acquisition of CyberArk on 2026-02-11 (PANW 10-Q). The products now carry the **Idira** brand (trade press, Apr–May 2026). This is a roadmap and pricing risk, and it's recorded in §9.
 - **BeyondTrust, row 2 = 5.** Privileged Remote Access is a separate product built for vendor and remote sessions. It has an Entra gallery SAML app with provisioning that covers PRA, Password Safe and Password Safe Cloud (BeyondTrust docs).
   - verify: BeyondTrust's current secrets/DevOps offering, which is the reason row 6 = 3.
 - **Delinea, row 6 = 4.** It completed the StrongDM acquisition on 2026-03-05, which adds just-in-time runtime authorization for humans and NHIs (Delinea release).
   - verify: whether Delinea has an Entra gallery app or documented SAML/SCIM.
   - verify: Delinea's SaaS vs on-prem (Secret Server) packaging.
-- **Lab stand-ins.** They score high on secrets because the Conjur policy allow/deny, the Vault Kubernetes auth and the per-request database logins all run (`lab/pam/conjur-demo.sh`, `lab/k8s/`, `lab/pam/dynamic-db/`). Re-scored on 2026-10-20 after the harness grew (41 → 54): rows 1, 2 and 4 rise by one because discovery to reconciliation, per-person ticket-gated sessions with SSH, and HA with a timed DR drill now run in the harness; row 3 rises by one because Entra sign-in to the broker is built, though never run. They still score low everywhere a production estate is judged: one small domain, no vendor access without a VPN, and Contoso carrying the HA, patching and 24×7 support itself (ADR 0007). The decision in §1 doesn't change.
+- **Lab stand-ins.** They scored high on secrets on 2026-10-20 because a Conjur allow/deny demo, the Vault Kubernetes auth and the per-request database logins all ran (`lab/k8s/`, `lab/pam/dynamic-db/`; ADR 0036 later removed the Conjur demo). Re-scored on 2026-10-20 after the harness grew (41 → 54): rows 1, 2 and 4 rise by one because discovery to reconciliation, per-person ticket-gated sessions with SSH, and HA with a timed DR drill now run in the harness; row 3 rises by one because Entra sign-in to the broker is built, though never run. They still score low everywhere a production estate is judged: one small domain, no vendor access without a VPN, and Contoso carrying the HA, patching and 24×7 support itself (ADR 0007). The decision in §1 doesn't change.
 
 **Sensitivity**
 
@@ -154,7 +154,7 @@ Two vendors, 30 days, run against DC01 and one clinical-vendor connection. Leave
 | 5 | Discover privileged and service accounts in `OU=PrivilegedAccounts` and `OU=ServiceAccounts`, bulk-onboard them through the API, and produce a reconciliation report | `lab/pam/discover.sh`, `onboard.sh`, `reconcile.sh` (harness) | fill after running | fill after running |
 | 6 | The reconcile account works with only delegated Reset Password + AdminSDHolder rights (not Domain Admin) | `lab/scripts/dc/02-Configure-Domain.ps1` | fill after running | fill after running |
 | 7 | Check-out, check-in and session events reach Sentinel and Splunk; record the minutes it takes | `lab/kql/`, `lab/splunk/` | fill after running | fill after running |
-| 8 | Workload secret allow/deny equivalent; AKV governance | `lab/pam/conjur-demo.sh` | fill after running | fill after running |
+| 8 | Workload secret allow/deny equivalent; AKV governance | `lab/k8s/` (Vault Kubernetes auth) | fill after running | fill after running |
 | 9 | Vendor session without a VPN, time-boxed, approved, recorded | scenario assumption | fill after running | fill after running |
 | 10 | SaaS SLA, connector failover, export of recordings at exit, BAA signed | R09 | fill after running | fill after running |
 | 11 | Check-out refused without an approved, in-window ServiceNow change assigned to the requester | `lab/pam/itsm-ticket.sh`, harness | fill after running | fill after running |
@@ -195,7 +195,7 @@ These are US list prices from Microsoft's Entra pricing page, read on 2026-10-20
 
 | Risk | Compensating control |
 |---|---|
-| **CyberArk ownership change.** Palo Alto Networks owns it and is moving it to the Idira brand. Pricing, bundling or roadmap may shift. | Get a multi-year price hold in the contract. Keep the challenger's POC results current, and keep the CyberArk → lab vocabulary map (ADR 0007) so the move stays vendor-portable. |
+| **CyberArk ownership change.** Palo Alto Networks owns it and is moving it to the Idira brand. Pricing, bundling or roadmap may shift. | Get a multi-year price hold in the contract. Keep the challenger's POC results current, and keep the PAM vocabulary map (`lab/pam/README.md`) so the move stays vendor-portable. Moot for the lab since ADR 0036 (no PAM vendor). |
 | **PAM SaaS stores ePHI-adjacent recordings.** | A signed BAA is an exit criterion (test 10). Set a recording retention period (owner: Compliance). HIPAA's six-year rule (§164.316(b)(2)) covers required documentation, not logs as such (verify: Contoso's records policy). |
 | **Entra can't govern EHR entitlements** (§5, row 2). | Owner attestations plus custom-data reviews, tracked as trigger 1. Model toxic combinations as separate access packages (ADR 0008). |
 | **Governance licence cost scales with every in-scope member.** | Budget for all 5,000. Check the Frontline Worker SKU for clinical staff (verify:). |
@@ -214,7 +214,7 @@ These are US list prices from Microsoft's Entra pricing page, read on 2026-10-20
 ## Evidence (lab files)
 
 - `lab/pam/README.md`: stand-in table, harness results, security notes, definition of done
-- `lab/pam/test/e2e.sh`, `lab/pam/psm-session.sh`, `lab/pam/vault-onboard-ad.sh`, `lab/pam/conjur-demo.sh`, `lab/pam/discover.sh`, `lab/pam/onboard.sh`, `lab/pam/reconcile.sh`, `lab/pam/itsm-ticket.sh`, `lab/pam/vault-ha.sh`, `lab/pam/dr-drill.sh`
+- `lab/pam/test/e2e.sh`, `lab/pam/psm-session.sh`, `lab/pam/vault-onboard-ad.sh`, `lab/pam/discover.sh`, `lab/pam/onboard.sh`, `lab/pam/reconcile.sh`, `lab/pam/itsm-ticket.sh`, `lab/pam/vault-ha.sh`, `lab/pam/dr-drill.sh`
 - `lab/pam/dynamic-db/README.md`, `lab/pam/test/e2e-dynamic-db.sh`: per-request database credentials
 - `lab/pam/midpoint/README.md`, `lab/pam/test/e2e-midpoint.sh`, `lab/evidence/midpoint/`: the midPoint certification campaign and its hashed evidence
 - `lab/docs/adr/0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md`, `lab/docs/adr/0008-iga-entra-id-governance-midpoint-vs-sailpoint-saviynt.md`

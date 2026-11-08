@@ -30,7 +30,7 @@
     THE RECONCILE-ACCOUNT TRADE-OFF (say this on camera)
       tier0-admin-0x are Domain Admins, so AdminSDHolder/SDProp overwrites any
       OU-level delegation on them. For Vault to rotate them, svc-vault-rotator
-      gets Reset Password on AdminSDHolder itself - exactly what a CyberArk CPM
+      gets Reset Password on AdminSDHolder itself - exactly what any PAM
       reconcile account needs. That makes svc-vault-rotator effectively Tier 0:
       its password is generated here, stored ONLY in Key Vault, and should be
       rotated by Vault itself (vault write -f ldap/rotate-root) once onboarded.

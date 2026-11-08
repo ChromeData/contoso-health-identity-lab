@@ -7,9 +7,12 @@
 | Owner | IAM Engineering. Accountable: CISO |
 | Principle | No standing admins. No secrets in the delivery pipeline; every remaining secret is inventoried with an owner, expiry and rotation. Every identity change goes through a PR. The lab's own long-lived secrets (e.g. the Splunk HEC token and the Okta client secret) are listed in `lab/iga/nhi-secrets-register.json` (names and store locations only) and checked by `06-NHI-Inventory.ps1 -SecretsRegisterPath` ([nhi-standard.md](nhi-standard.md) §4) |
 
-The lab runs Vault, Guacamole and Conjur in place of the CyberArk components
-(Digital Vault and CPM, PSM, and Secrets Manager), as described in
-`lab/docs/STAND-INS.md`. This standard is written for the capability, not for
+The lab's privileged-access products are Microsoft-native
+([ADR 0036](../adr/0036-microsoft-native-pam.md)): Azure Key Vault for secrets,
+Azure Bastion session recording for admin sessions, Windows LAPS for local
+admin passwords, Intune Endpoint Privilege Management for local admin rights,
+and PIM for just-in-time roles. A local Vault and Guacamole harness also
+exists (`lab/docs/STAND-INS.md`). This standard is written for the capability, not for
 any one product.
 
 ## 1. Tiers and account types
@@ -92,7 +95,7 @@ and in a hospital that means PHI. So they need approval, like Intune.
 | AD service account | Yes | At most every **30 days**, after a dependency check | `svc-backup` static role (`rotation_period=24h`, `lib.sh`) and the `svc/*` roles `onboard.sh` creates (`pam-policy.json` tier `svc`: 720 h). Onboarding and `rotate.sh` refuse while a consumer in `accounts-dependencies.json` is unresolved or the account has no record. Vault's own scheduled rotation doesn't ask, which is why the gate sits at onboarding |
 | Vault bind/reconcile account | Yes. Only the vault knows it | At onboarding (`--rotate-root`), then at least every **90 days** | `vault-onboard-ad.sh --rotate-root`. No scheduled re-rotation |
 | Break-glass password | Offline, sealed | After every use, and at least annually | Human step 6 in `lab/terraform/README.md` |
-| Workload secrets | Yes, issued by policy to a workload identity | Per secret owner, ≤ 90 days | Conjur `apps/nightly-report` (`lab/pam/conjur/policy.yml`) |
+| Workload secrets | Yes, issued by policy to a workload identity | Per secret owner, ≤ 90 days | Vault role `nightly-report` on kind (`lab/terraform/k8s/identity`); target: Azure Key Vault through Entra Workload ID (ADR 0036) |
 
 - A plaintext privileged credential **must not** appear on a command line, in
   Terraform state or in a repo. The lab pipes the bind password over stdin

@@ -105,6 +105,28 @@ export function checkCallback(pendingEntry, loginCookie, active) {
   return { ok: true };
 }
 
+// One login id per browser: a second /login (another tab) reuses the
+// browser's existing cr_login value instead of replacing it, so the first
+// tab's callback still matches. A missing or malformed value gets a new one.
+export function browserLoginId(existing, make = () => b64u(crypto.randomBytes(24))) {
+  return existing && /^[A-Za-z0-9_-]{32}$/.test(existing) ? existing : make();
+}
+
+// The login-id cookie. Path=/ on purpose: /login must SEE it to reuse it
+// (a cookie scoped to /callback is never sent to /login). HttpOnly, Lax,
+// 10 minutes - it names a browser, it is not a session.
+export const loginCookieHeader = (id) => `cr_login=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600`;
+
+// Every cr_login value the browser sent. A browser may send two (an old
+// Path=/callback cookie from an earlier version next to the Path=/ one, the
+// longer path first), so the callback matches against ALL of them.
+export function loginCookies(cookieHeader) {
+  return [...String(cookieHeader || '').matchAll(/(?:^|;\s*)cr_login=([A-Za-z0-9_-]+)/g)].map((m) => m[1]);
+}
+// Expires the Path=/callback cookie earlier versions set, so it stops
+// shadowing the current one.
+export const LEGACY_LOGIN_COOKIE_CLEAR = 'cr_login=; Path=/callback; Max-Age=0';
+
 export function readConf(file = CONF) {
   if (!fs.existsSync(file)) throw new Error(`no IdP config at ${file}: run node lab/okta-migration/cutover.mjs prestage`);
   const c = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -155,16 +177,21 @@ export function serve({ port = PORT, conf = CONF } = {}) {
       if (url.pathname === '/login') {
         const { verifier, challenge } = pkcePair();
         const state = b64u(crypto.randomBytes(16)); const nonce = b64u(crypto.randomBytes(16));
-        const browser = b64u(crypto.randomBytes(24));
+        // The Path=/ cookie is the one /login can see (the legacy one is
+        // scoped to /callback and never sent here).
+        const browser = browserLoginId(loginCookies(req.headers.cookie)[0]);
         pending.set(state, { verifier, nonce, idp: c.active, t: Date.now(), browser });
-        return send(302, '', { location: authorizeUrl(c[c.active], { state, nonce, challenge, redirect: `http://localhost:${port}/callback` }), 'set-cookie': `cr_login=${browser}; HttpOnly; SameSite=Lax; Path=/callback; Max-Age=600` });
+        return send(302, '', { location: authorizeUrl(c[c.active], { state, nonce, challenge, redirect: `http://localhost:${port}/callback` }), 'set-cookie': [loginCookieHeader(browser), LEGACY_LOGIN_COOKIE_CLEAR] });
       }
       if (url.pathname === '/callback') {
         if (url.searchParams.get('error')) return send(400, `<p>Sign-in refused by the IdP: ${esc(url.searchParams.get('error'))}: ${esc(url.searchParams.get('error_description') || '')}</p>`);
         const p = pending.get(url.searchParams.get('state'));
-        const loginCookie = (req.headers.cookie || '').match(/(?:^|;\s*)cr_login=([A-Za-z0-9_-]+)/)?.[1];
+        const sent = loginCookies(req.headers.cookie);
+        const loginCookie = sent.find((v) => p && v === p.browser) || sent[0];
         const chk = checkCallback(p, loginCookie, c.active);
-        if (p) pending.delete(url.searchParams.get('state'));
+        // A callback from another browser does not consume the state: the
+        // browser that started the login can still finish it.
+        if (p && !/another browser/.test(chk.why || '')) pending.delete(url.searchParams.get('state'));
         if (!chk.ok) return send(chk.code, `<p>Sign-in refused: ${esc(chk.why)}. <a href="/login">Sign in again</a>.</p>`);
         const idp = c[p.idp];
         const tok = await getJson(idp.token_endpoint, {
