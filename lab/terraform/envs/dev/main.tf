@@ -644,9 +644,11 @@ module "monitoring" {
   iac_principal_ids     = var.iac_principal_ids
   privileged_group_ids  = local.itdr_privileged_group_ids
   break_glass_group_ids = var.enable_premium ? [module.groups[0].break_glass_group_object_id] : []
-  # PIM-Azure-RG-Contributors: standing members are its intended path (the
-  # group is eligible for the Azure role) - reported on its own, Medium path.
-  azure_pim_group_ids = var.enable_premium ? [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null] : []
+  # PIM-Azure-RG-Contributors and PIM-KeyVault-Secrets-Officers: standing
+  # members are their intended path (the GROUP is eligible for the Azure
+  # role) - reported on their own, Medium path. A new member of either can
+  # request Tier-0 access (the DC's RG; the lab vault's secrets).
+  azure_pim_group_ids = var.enable_premium ? [for g in [module.pim[0].azure_pim_group_object_id, module.pim[0].keyvault_pim_group_object_id] : g if g != null] : []
   privileged_user_ids = distinct(concat(
     var.enable_premium ? module.groups[0].break_glass_user_object_ids : [],
     var.privileged_user_object_ids,
@@ -666,6 +668,11 @@ locals {
     [module.groups[0].break_glass_group_object_id, module.groups[0].priv_iam_admins_group_object_id],
     values(module.pim[0].tier_group_object_ids),
     [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null],
+    # PIM-KeyVault-Secrets-Officers (enable_pim_keyvault_officers): eligible
+    # for Key Vault Secrets Officer on the lab vault, so a member added is
+    # one activation away from writing Tier-0 secrets. Watched like
+    # PIM-Azure-RG-Contributors (null, so skipped, while the flag is off).
+    [for g in [module.pim[0].keyvault_pim_group_object_id] : g if g != null],
     # PIM-AWS-Lab-Admins (ADR 0025): members arrive only by PIM activation
     # (written by MS-PIM), so a direct add is a way around the 2-hour,
     # MFA + reason activation into AWS admin. Watched here, but deliberately
