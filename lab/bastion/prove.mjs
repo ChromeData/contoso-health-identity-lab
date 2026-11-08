@@ -94,6 +94,23 @@ async function waitFor(page, re, ms = 60000) {
 async function activateAzureRole(page, role, scopeText, step, shotPrefix) {
   await page.goto(PIM_AZURE, { waitUntil: 'domcontentloaded' });
   const rowFor = (f) => f.getByRole('row').filter({ hasText: scopeText }).filter({ has: f.getByText(role, { exact: true }) });
+  // Already active (a retry within the hour)? Then there is nothing to
+  // activate: record it and go on (Greptile).
+  for (let i = 0; i < 5; i++) {
+    const tab = await visible(page, (f) => f.getByRole('tab', { name: /Active assignments/i }));
+    if (tab) {
+      await tab.click().catch(() => {}); await sleep(3000);
+      const a = await visible(page, rowFor);
+      if (a && /Deactivate|Extend/i.test(await a.innerText().catch(() => ''))) {
+        mark(step, `PIM: ${role} on ${scopeText} already ACTIVE (no new activation)`, { shot: await snap(page, `${shotPrefix}-${role.replace(/\W+/g, '-').toLowerCase()}`) });
+        return;
+      }
+      const el = await visible(page, (f) => f.getByRole('tab', { name: /Eligible assignments/i }));
+      if (el) { await el.click().catch(() => {}); await sleep(2000); }
+      break;
+    }
+    await sleep(2000);
+  }
   let row = null;
   for (let i = 0; i < 30 && !row; i++) { row = await visible(page, rowFor); if (!row) await sleep(2000); }
   if (!row) throw new Error(`no eligible ${role} on ${scopeText} on the PIM page (owner step: capture.sh owner-steps)`);
@@ -178,6 +195,16 @@ try {
     await sess.waitForLoadState('domcontentloaded');
     // The RDP desktop is a canvas; give Windows time to log on and draw.
     await sleep(45000);
+    // A tab is not a session: require the remote-desktop canvas and no
+    // Bastion error or disconnect text (wrong password, NLA failure, timeout).
+    // Otherwise the step fails instead of recording a success (Greptile).
+    const sessText = (await text(sess)) || '';
+    const canvases = await sess.locator('canvas').count().catch(() => 0);
+    const bad = sessText.match(/(could not|couldn't|failed to connect|connection (?:error|failed)|disconnected|incorrect|invalid credentials|logon failure|authentication failed|session (?:has )?ended)/i);
+    if (bad || canvases === 0) {
+      await rawSnap(sess, '06-session-failed');
+      throw new Error(`the Bastion session did not connect (${bad ? `page says "${bad[0]}"` : 'no remote-desktop canvas'}); see 06-session-failed.png`);
+    }
     mark('connect', 'session open on DC01 through Bastion (browser, recorded)', { host: new URL(sess.url()).host, connect_s: Math.round((Date.now() - tConn) / 1000), shot: await rawSnap(sess, '06-session-desktop') });
     // The Windows key does not reach the session from a headless browser
     // (2026-11-07 run: Meta+R opened Server Manager's Help menu instead of
