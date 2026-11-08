@@ -418,7 +418,11 @@ done
     credentials (their subjects are pinned to the immutable owner@id/repo@id
     form, which the check's pattern does not recognise);
   - `evidence-store` (CKV_AZURE_33, CKV_AZURE_59) and `keyvault`
-    (CKV_AZURE_189), with the reasons in their `main.tf`.
+    (CKV_AZURE_189), with the reasons in their `main.tf`;
+  - `envs/operator`: CKV_AZURE_39 on the write-session role (ADR 0030). The
+    check flags any custom role with `actions = ["*"]`; this one removes
+    every `Microsoft.Authorization` write and delete, so it cannot assign
+    roles or remove locks (pinned by `tests/operator.tftest.hcl`).
 
   Until 2026-10-20 the first seven were a documented baseline of 8 failed
   checks. The eighth, CKV_AZURE_251, is fixed rather than skipped: the NTDS
