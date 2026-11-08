@@ -674,6 +674,12 @@ variable "enable_pim_demo_readers" {
   default     = false
 }
 
+variable "leaver_role_assignment_import_id" {
+  type        = string
+  description = "imports.tf: id of the leaver Logic App's catalog role assignment that run 42527718010 created but did not record in state. \"\" = no import."
+  default     = ""
+}
+
 variable "enable_lcw_leaver_extension" {
   type        = bool
   description = "ADR 0029: the Logic App (consumption, system-assigned identity, Access package assignment manager on the Clinical catalog) that the scheduled leave-date leaver calls to adminRemove birthright packages. Needs enable_premium + enable_governance. Then run post-apply/New-LifecycleWorkflows.ps1 -IncludeLeaveDateLeaver -LeaverExtensionLogicAppName <output leaver_extension_logic_app_name> -UpdateExisting."

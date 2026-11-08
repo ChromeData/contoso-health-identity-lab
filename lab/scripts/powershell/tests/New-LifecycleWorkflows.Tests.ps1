@@ -128,7 +128,7 @@ Describe 'New-LifecycleWorkflows.ps1 -OfflinePreview' {
 
 Describe 'New-LifecycleWorkflows.ps1 guards (pure functions)' {
     BeforeAll {
-        . (Get-ScriptFunctionBlock -Path $script:Lcw -Name 'Get-OnDemandSubject', 'Get-ExtensionDrift')
+        . (Get-ScriptFunctionBlock -Path $script:Lcw -Name 'Get-OnDemandSubject', 'Get-ExtensionDrift', 'ConvertTo-UnsignedTriggerUrl')
         $script:graph = 'https://graph.microsoft.com/v1.0'
         $script:JoinerDepartment = 'Nursing'
         $script:ManageOnPremisesAccounts = $false
@@ -227,5 +227,13 @@ Describe 'New-LifecycleWorkflows.ps1 against a mocked tenant (guards for the E12
         $r = @(& $script:Lcw -IncludeScheduledLeaver -WhatIf)
         @($r | Where-Object { $_.Workflow -eq 'Contoso - Leaver (HR disabled, scheduled)' -and $_.Action -eq 'whatif-create' }).Count | Should -Be 1
         Should -Invoke Invoke-MgGraphRequest -ParameterFilter { $Uri -like "*/groups?*mailNickname*all-workforce*" } -Times 1 -Exactly
+    }
+
+    It 'ConvertTo-UnsignedTriggerUrl drops the SAS parameters (sp, sv, sig) and keeps the rest' {
+        . (Get-ScriptFunctionBlock -Path $script:Lcw -Name 'ConvertTo-UnsignedTriggerUrl')
+        $u = ConvertTo-UnsignedTriggerUrl -CallbackUrl 'https://prod-01.eastus.logic.azure.com:443/workflows/abc/triggers/manual/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=SECRETVALUE'
+        $u | Should -Be 'https://prod-01.eastus.logic.azure.com/workflows/abc/triggers/manual/paths/invoke?api-version=2016-10-01'
+        $u | Should -Not -Match 'sig='
+        { ConvertTo-UnsignedTriggerUrl -CallbackUrl 'http://x.test/a?sig=1' } | Should -Throw '*not https*'
     }
 }

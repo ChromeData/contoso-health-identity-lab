@@ -884,12 +884,27 @@ if ($LeaverExtensionLogicAppName -and -not $IncludeLeaveDateLeaver) { throw '-Le
 if ($LeaverExtensionLogicAppName -and -not $OfflinePreview -and -not $LeaverExtensionSubscriptionId) { throw '-LeaverExtensionLogicAppName needs -LeaverExtensionSubscriptionId (where the Logic App lives).' }
 
 # ---- Custom task extension for the leaver (ADR 0029) --------------------------
+function ConvertTo-UnsignedTriggerUrl {
+    # The Logic App's trigger callback URL WITHOUT its SAS parameters
+    # (sp, sv, sig). Lifecycle Workflows authenticates with a PoP token that
+    # the AADPOP policy checks, so the SAS key is not needed, and a URL
+    # carrying it must never be stored in Graph or printed (the key is a
+    # bearer secret for the trigger). Graph refused the extension without a
+    # url ("Custom task extensions missing url", 2026-11-08). Pure.
+    param([Parameter(Mandatory)][string]$CallbackUrl)
+    $u = [uri]$CallbackUrl
+    if ($u.Scheme -ne 'https') { throw 'Logic App trigger URL is not https.' }
+    $keep = @($u.Query.TrimStart('?') -split '&' | Where-Object { $_ -and ($_ -split '=')[0] -notin 'sp', 'sv', 'sig' })
+    $q = if ($keep) { '?' + ($keep -join '&') } else { '' }
+    return "$($u.Scheme)://$($u.Authority)$($u.AbsolutePath)$q"
+}
+
 function Get-ExtensionDrift {
     # Owned fields of an existing customTaskExtension that differ from the
     # desired body: the Logic App it calls and the token type. Pure.
     param([System.Collections.IDictionary]$Existing, [System.Collections.IDictionary]$Desired)
     $e = $Existing['endpointConfiguration']; $d = $Desired['endpointConfiguration']
-    foreach ($k in 'subscriptionId', 'resourceGroupName', 'logicAppWorkflowName') {
+    foreach ($k in 'subscriptionId', 'resourceGroupName', 'logicAppWorkflowName', 'url') {
         if (-not $e -or [string]$e[$k] -ne [string]$d[$k]) { "$k '$(if ($e) { $e[$k] })' -> '$($d[$k])'" }
     }
     $ea = if ($Existing['authenticationConfiguration']) { [string]$Existing['authenticationConfiguration']['@odata.type'] } else { '' }
@@ -900,6 +915,17 @@ function Get-ExtensionDrift {
 # only); NO callbackConfiguration = fire and forget, so the Logic App's
 # identity needs no Lifecycle Workflows permission.
 $extensionName = 'Contoso - Remove birthright packages (leaver)'
+# The trigger URL comes from ARM (listCallbackUrl) through the Azure CLI
+# session, is stripped of its SAS parameters in memory, and is never printed.
+$leaverExtensionUrl = '<logic app trigger url, unsigned>'
+if ($LeaverExtensionLogicAppName -and -not $OfflinePreview) {
+    $cbUri = "https://management.azure.com/subscriptions/$LeaverExtensionSubscriptionId/resourceGroups/$LeaverExtensionResourceGroup/providers/Microsoft.Logic/workflows/$LeaverExtensionLogicAppName/triggers/manual/listCallbackUrl?api-version=2016-06-01"
+    $global:LASTEXITCODE = 0
+    $cb = az rest --method POST --url $cbUri --query value -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $cb) { throw "Could not read the trigger URL of Logic App '$LeaverExtensionLogicAppName' (az rest listCallbackUrl; needs the Azure CLI signed in with read on the Logic App)." }
+    $leaverExtensionUrl = ConvertTo-UnsignedTriggerUrl -CallbackUrl ([string]$cb).Trim()
+    Remove-Variable cb
+}
 $extensionId = $null
 if ($LeaverExtensionLogicAppName) {
     $extBody = [ordered]@{
@@ -910,6 +936,7 @@ if ($LeaverExtensionLogicAppName) {
             subscriptionId       = $(if ($OfflinePreview -and -not $LeaverExtensionSubscriptionId) { '<subscription id>' } else { $LeaverExtensionSubscriptionId })
             resourceGroupName    = $LeaverExtensionResourceGroup
             logicAppWorkflowName = $LeaverExtensionLogicAppName
+            url                  = $leaverExtensionUrl
         }
         authenticationConfiguration = [ordered]@{ '@odata.type' = '#microsoft.graph.azureAdPopTokenAuthentication' }
         clientConfiguration         = [ordered]@{ '@odata.type' = '#microsoft.graph.customExtensionClientConfiguration'; maximumRetries = 1; timeoutInMilliseconds = 1000 }

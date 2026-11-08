@@ -99,6 +99,9 @@ enable_b2b_governance = false
 # leavers (the LCW built-in task skips automatic-policy assignments). Plan:
 # the Logic App deployment + 1 catalog role assignment. Owner approves the apply.
 enable_lcw_leaver_extension = true
+# imports.tf: adopt the catalog role assignment run 42527718010 created but
+# did not record (read-back lag). Graph read 2026-11-08: it exists.
+leaver_role_assignment_import_id = "681ee67e-c3d3-41f7-837a-a1a18717d863"
 
 # Risk-based Conditional Access - CA006 (user risk High -> MFA + secure
 # password change) and CA007 (sign-in risk High -> block). Entra ID P2: flip
