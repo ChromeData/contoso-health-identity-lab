@@ -16,6 +16,9 @@
 #   * a remote host, https or a wildcard redirect is refused;
 #   * the other apps are unchanged.
 
+# time_sleep is mocked: a mocked apply never waits 90 s.
+mock_provider "time" {}
+
 mock_provider "azuread" {
   mock_data "azuread_client_config" {
     defaults = {
@@ -97,6 +100,7 @@ run "clinic_results_absent_by_default" {
       && length(azuread_application.clinic_results_api) == 0
       && length(azuread_service_principal.clinic_results_api) == 0
       && output.clinic_results_api_client_id == null
+      && length(time_sleep.clinic_results_api_sp_replication) == 0
       && length(azuread_app_role_assignment.clinic_results_users) == 0
       && output.clinic_results_client_id == null
       && output.clinic_results_users_group_object_id == null
@@ -181,6 +185,14 @@ run "clinic_results_on_plans_public_client_sp_group_one_assignment" {
       && length([for r in azuread_application.clinic_results[0].required_resource_access : r if r.resource_app_id == azuread_application.clinic_results_api[0].client_id]) == 1
     )
     error_message = "the client must be pre-authorized for Results.Read and declare it"
+  }
+  assert {
+    condition = (
+      time_sleep.clinic_results_api_sp_replication[0].create_duration == "90s"
+      && time_sleep.clinic_results_api_sp_replication[0].triggers["service_principal_object_id"] == azuread_service_principal.clinic_results_api[0].object_id
+      && time_sleep.clinic_results_api_sp_replication[0].triggers["api_client_id"] == azuread_service_principal.clinic_results_api[0].client_id
+    )
+    error_message = "CA061 must wait 90 s for the API's SP to replicate (run 42519889983: AppPrincipalObjectNotFound), keyed to that SP"
   }
   assert {
     condition     = output.clinic_results_api_client_id == "28282828-2828-2828-2828-282828282828" && output.clinic_results_api_client_id != output.clinic_results_client_id
