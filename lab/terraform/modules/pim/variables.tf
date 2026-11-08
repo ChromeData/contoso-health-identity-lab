@@ -765,6 +765,62 @@ variable "azure_pim_require_approval" {
 }
 
 # =============================================================================
+# Just-in-time Key Vault Secrets Officer (keyvault.tf) - OPTIONAL, off by default
+# =============================================================================
+
+variable "enable_pim_keyvault_officers" {
+  type        = bool
+  description = <<-EOT
+    Make a role-assignable group (PIM-KeyVault-Secrets-Officers) ELIGIBLE for
+    Key Vault Secrets Officer on the lab vault, with an MFA + justification +
+    approval activation policy (approvers: PIM-Approvers-Tier0). Needs
+    keyvault_pim_scope_id, Entra ID P2 for the eligible people, and Owner /
+    User Access Administrator for whoever applies it.
+  EOT
+  default     = false
+}
+
+variable "keyvault_pim_scope_id" {
+  type        = string
+  description = "Resource id of the lab Key Vault (/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.KeyVault/vaults/<name>)."
+  default     = ""
+
+  validation {
+    condition     = var.keyvault_pim_scope_id == "" || can(regex("^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[^/]+/providers/Microsoft\\.KeyVault/vaults/[A-Za-z0-9-]{3,24}$", var.keyvault_pim_scope_id))
+    error_message = "keyvault_pim_scope_id must be empty or a Key Vault id: /subscriptions/<guid>/resourceGroups/<rg>/providers/Microsoft.KeyVault/vaults/<name>."
+  }
+}
+
+variable "keyvault_pim_group_name" {
+  type        = string
+  description = "Display name of the group made eligible for Key Vault Secrets Officer."
+  default     = "PIM-KeyVault-Secrets-Officers"
+}
+
+variable "keyvault_pim_group_mail_nickname" {
+  type        = string
+  description = "mail_nickname (stable lookup key for scripts) of the Key Vault PIM group."
+  default     = "pim-keyvault-secrets-officers"
+}
+
+variable "keyvault_pim_activation_max_duration" {
+  type        = string
+  description = "Activation cap for Key Vault Secrets Officer. The vault holds Tier-0 secrets: PT2H by default, at most PT4H (the Tier-0 cap, ADR 0020)."
+  default     = "PT2H"
+
+  validation {
+    condition     = contains(["PT30M", "PT1H", "PT1H30M", "PT2H", "PT2H30M", "PT3H", "PT3H30M", "PT4H"], var.keyvault_pim_activation_max_duration)
+    error_message = "Use PT30M..PT4H in 30-minute steps (the Tier-0 activation cap is 4 hours, ADR 0020)."
+  }
+}
+
+variable "keyvault_pim_require_approval" {
+  type        = bool
+  description = "Require approval (PIM-Approvers-Tier0) to activate Key Vault Secrets Officer (default true: the vault holds Tier-0 secrets)."
+  default     = true
+}
+
+# =============================================================================
 # AWS administration through PIM for Groups (aws.tf) - OPTIONAL, off by default
 # =============================================================================
 

@@ -2,249 +2,169 @@
 # k8s/platform :: main.tf
 # -----------------------------------------------------------------------------
 # WHAT (stage 1 of 2 - stage 2 is ../identity):
-#   * namespace "vault"          PSA enforce=baseline (warn/audit=restricted)
-#   * namespace "clinical-apps"  PSA enforce/warn/audit=restricted, and the
-#                                opt-in label the Agent Injector webhook
-#                                selects on
-#   * helm_release "vault"       chart hashicorp/vault 0.34.1: a dev-mode Vault
-#                                server (image hashicorp/vault:2.1.1, the same
-#                                version as the Docker PAM stack, pinned by
-#                                digest like every image here) + the Vault
-#                                Agent Injector, server exposed on NodePort
-#                                30820 -> 127.0.0.1:18200 on the host (kind
-#                                extraPortMappings in lab/k8s/kind/cluster.yaml)
+#   * namespace "secrets-store"  the Secrets Store CSI Driver + the Azure Key
+#                                Vault provider (node plugins: PSA privileged,
+#                                see below)
+#   * namespace "clinical-apps"  PSA enforce/warn/audit=restricted
+#   * helm_release "csi_secrets_store_provider_azure"
+#                                chart csi-secrets-store-provider-azure 1.8.2
+#                                (Microsoft), which also installs its pinned
+#                                dependency secrets-store-csi-driver 1.5.6
+#                                (Kubernetes SIG Auth). Every image pinned by
+#                                digest.
 #
-# STAND-IN: Vault (Kubernetes auth + Agent Injector) stands in for the
-# Azure-native target on AKS: Entra Workload ID + the Key Vault CSI driver
-# (ADR 0036, lab/docs/STAND-INS.md). kind stands in for AKS.
+# HOW A POD GETS ITS SECRET (Microsoft Learn, "Access Azure Key Vault with
+# the CSI Driver Identity Provider", Workload ID tab): when the kubelet mounts
+# the pod's CSI volume, the driver requests a service-account token for the
+# POD's service account, audience api://AzureADTokenExchange (CSIDriver
+# spec.tokenRequests, set below). The Azure provider sends that token to
+# Microsoft Entra ID, which checks it against the federated credential in
+# ../keyvault-trust and returns an access token for Key Vault. The provider
+# reads the one secret and the driver writes it to a tmpfs file in the pod.
+# The app reads a file. It holds no token and no client library.
 #
-# DEV MODE IS A LAB SHORTCUT, AND IT IS ONLY ACCEPTABLE BECAUSE THE CLUSTER IS
-# EPHEMERAL: in-memory storage, auto-unsealed, plain HTTP, and a root token.
-# Production Vault runs HA with Raft storage, TLS, auto-unseal, and the root
-# token is revoked after initial setup (Terraform then authenticates with a
-# short-lived token from an auth method, e.g. JWT/OIDC from CI).
+# This replaces the earlier HashiCorp Vault (dev mode) + Agent Injector
+# stand-in. ADR 0036 ("Microsoft-native PAM"): where Microsoft offers the
+# product, the lab uses it. kind still stands in for AKS (STAND-INS.md).
 #
-# WHERE THE ROOT TOKEN LIVES (be precise about it in an interview):
-#   * NOT in git, NOT in a Terraform plan file, NOT in Terraform state: the
-#     variable is ephemeral and reaches Helm only via the write-only set_wo.
-#   * IT IS inside the cluster: the chart puts it in the Vault StatefulSet as
-#     the VAULT_DEV_ROOT_TOKEN_ID env var, and Helm keeps every release's
-#     values in its release record (a Secret in namespace "vault"), and dev
-#     mode prints it ("Root Token:") in the vault-0 container's startup log,
-#     which the pipeline never reads. All three die with the kind cluster.
-#     Nothing in clinical-apps can read namespace "vault" (no RBAC grants it).
-#   * With KEEP_CLUSTER=1 only, lab/k8s/ci/pipeline.sh also keeps it on the
-#     developer's disk (lab/k8s/ci/.state/vault-root-token, 0600, gitignored)
-#     so the next KEEP_CLUSTER=1 run can drive the kept Vault; the next full
-#     run deletes it. In that case the token is per cluster, not per run.
+# WHY THE DRIVER NAMESPACE IS PRIVILEGED (said out loud): the CSI node plugin
+# mounts into the kubelet's pod directories (hostPath /var/lib/kubelet with
+# Bidirectional mount propagation) and runs privileged. That is the job of
+# every CSI node plugin; Pod Security "baseline" forbids it. So the namespace
+# ENFORCES privileged and only WARNS/AUDITS at baseline, which records the
+# exception on every change. Nothing else runs there. clinical-apps stays
+# restricted: the app pod itself needs no privilege for a CSI volume.
 #
-# WHY THE WEBHOOK FAILS CLOSED: the chart's default injector failurePolicy is
-# Ignore, which means "if the injector is down, create the pod WITHOUT the
-# Vault Agent" - a silent failure. Here it is Fail, and the webhook only
-# matches namespaces that opt in with a label (clinical-apps), so an injector
-# outage blocks only the opted-in workloads instead of every pod in the
-# cluster (kube-system included).
+# WHAT THE DRIVER CAN DO (also said out loud): its ClusterRole may create
+# service-account tokens (serviceaccounts/token) so rotation can fetch a new
+# Key Vault value without the kubelet. Tokens it mints carry only the
+# api://AzureADTokenExchange audience (this file), which the Kubernetes API
+# refuses, so they open nothing in the cluster. Entra accepts one only for a
+# service account that has a federated credential.
 # =============================================================================
 
 locals {
   # ---- Pinned versions (bump deliberately, one PR each) ---------------------
-  vault_chart_repository = "https://helm.releases.hashicorp.com"
-  vault_chart_version    = "0.34.1"          # chart appVersion is 2.0.4; image overridden below
-  vault_image_repository = "hashicorp/vault" # Docker Hub official HashiCorp image
-  vault_image_version    = "2.1.1"           # same as lab/pam/docker-compose.yml
-  injector_image_version = "1.7.6"           # hashicorp/vault-k8s, the 0.34.1 chart default, pinned explicitly
+  # Chart index https://azure.github.io/secrets-store-csi-driver-provider-azure/charts
+  # read 2026-11-06: 1.8.2 created 2026-06-11 (older than two weeks), digest
+  # sha256:6ec47f4dfb81a49a5cc426ca965a97519551a020dbe3dafe49962a2f565cfbcb,
+  # appVersion 1.8.2, dependency secrets-store-csi-driver 1.5.6.
+  chart_repository = "https://azure.github.io/secrets-store-csi-driver-provider-azure/charts"
+  chart_name       = "csi-secrets-store-provider-azure"
+  chart_version    = "1.8.2"
 
-  # Image DIGESTS: the multi-arch index (manifest list) digest of each tag,
-  # resolved from registry-1.docker.io on 2026-10-20 (HEAD on
-  # /v2/<repo>/manifests/<tag>, Docker-Content-Digest header; both indexes
-  # cover linux/amd64 for CI and linux/arm64 for Apple Silicon). The tag stays
-  # in the reference for humans; the kubelet pulls by the digest, so a re-
-  # pushed tag cannot change what runs.
-  #
-  # WHY THIS MATTERS BEYOND HYGIENE: ../identity installs a
-  # ValidatingAdmissionPolicy on clinical-apps that rejects any container image
-  # without "@sha256:", and the Vault Agent containers the injector adds to app
-  # pods are containers too. The injector's mutating webhook runs BEFORE
-  # validating admission, so the policy sees (and judges) the injected agent.
-  # The chart renders the agent image as "<repository>:<tag>"
-  # (templates/injector-deployment.yaml, env AGENT_INJECT_VAULT_IMAGE), and
-  # vault-k8s 1.7.6 copies that string verbatim into the agent containers
-  # (agent-inject/agent/container_sidecar.go: Image: a.ImageName), so putting
-  # "<version>@sha256:<digest>" in `tag` yields a digest-pinned agent with no
-  # chart fork. ../identity's var.vault_agent_image must equal the output
-  # vault_agent_image below (its test checks this file for the digest).
-  vault_image_digest    = "sha256:47f14a6acb98f48d798a07df7c83f23a6e636e1cf724c5f8ff165cb32667a1e2"
-  injector_image_digest = "sha256:55e27b080c9b0469fd420dfb3631243488c6319504b779423caa46c529a95490"
-  vault_image_tag       = "${local.vault_image_version}@${local.vault_image_digest}"
-  injector_image_tag    = "${local.injector_image_version}@${local.injector_image_digest}"
+  # Image DIGESTS: the multi-arch index of each tag (linux/amd64 for CI,
+  # linux/arm64 for Apple Silicon), read from mcr.microsoft.com on 2026-11-06
+  # (HEAD /v2/<repo>/manifests/<tag>, Docker-Content-Digest). The kubelet
+  # pulls by digest, so a re-pushed tag cannot change what runs.
+  # The driver sub-chart has a `digest` field (renders repository@digest);
+  # the provider chart renders "<repository>:<tag>", so its digest rides in
+  # the tag, the same trick the Vault chart needed.
+  mcr = "mcr.microsoft.com/oss/v2"
+  images = {
+    provider = {
+      repository = "${local.mcr}/azure/secrets-store/provider-azure"
+      tag        = "v1.8.2"
+      digest     = "sha256:6be3919093995af5754e4cd0e2dad5f8659baa594b27e9d6f5c2866f893ee26a"
+    }
+    driver = {
+      repository = "${local.mcr}/kubernetes-csi/secrets-store/driver"
+      tag        = "v1.5.6"
+      digest     = "sha256:5f91243cfd60dcf82b744a87279eda9b9ae0a7ca18828472ba91b366af415430"
+    }
+    registrar = {
+      repository = "${local.mcr}/kubernetes-csi/csi-node-driver-registrar"
+      tag        = "v2.14.0"
+      digest     = "sha256:6cb172e3de7e9ec36dfca179dbfd6be8c9bf7a14374afe780c2dd11ea7512ab1"
+    }
+    liveness = {
+      repository = "${local.mcr}/kubernetes-csi/livenessprobe"
+      tag        = "v2.15.0"
+      digest     = "sha256:59b9d034842849bdae41ca5be7c52b5e9ab2a4d18485dfdf16521f3ec74c047a"
+    }
+    crds = {
+      repository = "${local.mcr}/kubernetes-csi/secrets-store/driver-crds"
+      tag        = "v1.5.6"
+      digest     = "sha256:cb0112636dc4d22c38fa4ef8d46c6eb1d6e4c8b4d2228a233474769a0cd2048c"
+    }
+  }
 
-  # ---- Names / ports shared with the rest of lab/k8s -------------------------
-  vault_namespace    = "vault"
+  # ---- Names shared with the rest of lab/k8s -------------------------------
+  csi_namespace      = "secrets-store"
   clinical_namespace = "clinical-apps"
-  vault_node_port    = 30820 # containerPort in lab/k8s/kind/cluster.yaml
-  vault_host_port    = 18200 # hostPort (127.0.0.1 only) in lab/k8s/kind/cluster.yaml
 
-  # Pod Security Admission policy version. Pinned instead of "latest" so a
-  # node-image bump cannot silently change what "restricted" means; bump it
-  # together with the kindest/node image (v1.36.x). verify: on a node image
-  # bump, re-check the PSA profile changelog for the new minor version.
-  psa_version = "v1.36"
+  # The ONE audience the driver may request tokens for. The chart default
+  # also lists api://AKSIdentityBinding (an AKS-only feature); dropped, so
+  # the driver mints nothing the lab does not use.
+  token_exchange_audience = "api://AzureADTokenExchange"
 
-  # Namespaces opt in to Vault Agent injection with this label (the webhook's
-  # namespaceSelector below). Only cluster-scoped namespace writers (cluster
-  # admins, this Terraform) can set it; the human RBAC in ../identity grants
-  # nothing on namespaces.
-  injection_label_key   = "contoso.health/vault-agent-injection"
-  injection_label_value = "enabled"
+  # Rotation: the driver re-reads every mounted object on this interval and
+  # rewrites the file in place (same pod, no restart; pipeline stage 9).
+  # 10s keeps stage 9 short; the price is one Key Vault read per pod every
+  # 10 s (Key Vault Standard: $0.03 per 10,000 operations). Production:
+  # minutes, sized to how fast a rotated credential must be live.
+  rotation_poll_interval = "10s"
+
+  psa_version = "v1.36" # bump together with the kindest/node image
 
   common_labels = {
     "app.kubernetes.io/part-of"    = "contoso-health-identity-lab"
     "app.kubernetes.io/managed-by" = "terraform"
   }
 
-  # ---- Helm values (everything except the root token) ------------------------
-  # Kept as one HCL object so it is reviewable in one place, yamlencode()d into
-  # `values`, and asserted on by tests/platform.tftest.hcl. Keys checked against
-  # values.yaml + templates/ of the vault-0.34.1 chart.
-  #
-  # Security contexts: the chart's defaults already satisfy PSA "baseline"
-  # (non-root uid 100, allowPrivilegeEscalation=false, no added capabilities).
-  # They are restated here WITH seccompProfile=RuntimeDefault and
-  # capabilities.drop=[ALL] so Vault's own pods also meet "restricted"; the
-  # namespace enforces baseline (contract) and only warns/audits restricted,
-  # so a regression shows up as a warning instead of a broken install.
-  # Overriding securityContext.pod REPLACES the chart default object, which is
-  # why runAsUser/runAsGroup/fsGroup are restated with the chart's values.
-  vault_values = {
-    global = {
-      enabled    = true
-      tlsDisable = true # dev mode serves plain HTTP; production enables TLS
-    }
-
-    server = {
+  # ---- Helm values -----------------------------------------------------------
+  # One HCL object, yamlencode()d into `values`, asserted on by
+  # tests/platform.tftest.hcl. Keys checked against values.yaml and
+  # templates/ of csi-secrets-store-provider-azure-1.8.2.tgz (and its bundled
+  # charts/secrets-store-csi-driver).
+  csi_values = {
+    linux = {
       image = {
-        repository = local.vault_image_repository
-        tag        = local.vault_image_tag
+        repository = local.images.provider.repository
+        tag        = "${local.images.provider.tag}@${local.images.provider.digest}"
       }
+    }
+    windows = { enabled = false }
 
-      # Dev mode: in-memory storage, auto-unsealed, root token from
-      # server.dev.devRootToken (supplied write-only via set_wo, never here).
-      dev = {
-        enabled = true
-      }
-      # dataStorage is only used by standalone/raft modes; off for clarity.
-      dataStorage = {
-        enabled = false
-      }
-
-      # NodePort so Terraform (stage 2), the seed step and the tests reach
-      # Vault at 127.0.0.1:18200 through kind's port mapping. Bound to
-      # 127.0.0.1 on the host, never to a public interface.
-      service = {
-        type     = "NodePort"
-        nodePort = local.vault_node_port
-      }
-
-      # ClusterRoleBinding of Vault's service account to system:auth-delegator.
-      # Required: the Kubernetes auth method (../identity) runs without a
-      # separate reviewer JWT, so Vault calls the TokenReview API with its OWN
-      # pod service-account token. This is the chart default; stated here
-      # because stage 2 depends on it.
-      authDelegator = {
-        enabled = true
-      }
-
-      # Requests sized for a 2-4 vCPU CI runner. No CPU limit (throttling a
-      # single dev server only makes the run flaky); memory is capped.
-      resources = {
-        requests = { cpu = "100m", memory = "128Mi" }
-        limits   = { memory = "512Mi" }
-      }
-
-      statefulSet = {
-        securityContext = {
-          pod = {
-            runAsNonRoot   = true
-            runAsUser      = 100
-            runAsGroup     = 1000
-            fsGroup        = 1000
-            seccompProfile = { type = "RuntimeDefault" }
-          }
-          container = {
-            allowPrivilegeEscalation = false
-            capabilities             = { drop = ["ALL"] }
-            # No readOnlyRootFilesystem: `vault server -dev` writes the token
-            # helper file (~/.vault-token) in the container. verify: if a
-            # future image moves HOME to an emptyDir, tighten this.
+    "secrets-store-csi-driver" = {
+      install = true
+      linux = {
+        image = {
+          repository = local.images.driver.repository
+          tag        = local.images.driver.tag
+          digest     = local.images.driver.digest
+        }
+        registrarImage = {
+          repository = local.images.registrar.repository
+          tag        = local.images.registrar.tag
+          digest     = local.images.registrar.digest
+        }
+        livenessProbeImage = {
+          repository = local.images.liveness.repository
+          tag        = local.images.liveness.tag
+          digest     = local.images.liveness.digest
+        }
+        crds = {
+          image = {
+            repository = local.images.crds.repository
+            tag        = "${local.images.crds.tag}@${local.images.crds.digest}"
           }
         }
       }
-    }
+      windows = { enabled = false }
 
-    injector = {
-      enabled  = true
-      replicas = 1
+      enableSecretRotation = true
+      rotationPollInterval = local.rotation_poll_interval
 
-      image = {
-        repository = "hashicorp/vault-k8s"
-        tag        = local.injector_image_tag
-      }
+      # Never copy a Key Vault value into a Kubernetes Secret (it would sit in
+      # etcd, base64 only). No SecretProviderClass here declares
+      # secretObjects either; the e2e test checks the namespace holds none.
+      syncSecret = { enabled = false }
 
-      # The Vault Agent sidecar/init containers the injector adds to app pods.
-      # Same Vault image (and digest) as the server. The tag carries the
-      # digest: see vault_image_digest above for why that works and why the
-      # clinical-apps admission policy needs it.
-      agentImage = {
-        repository = local.vault_image_repository
-        tag        = local.vault_image_tag
-      }
-
-      # Smaller than the chart defaults (250m/64Mi requests) so the app pod
-      # schedules comfortably on a CI runner.
-      agentDefaults = {
-        cpuRequest = "50m"
-        cpuLimit   = "500m"
-        memRequest = "32Mi"
-        memLimit   = "128Mi"
-      }
-
-      webhook = {
-        # Fail closed (see header). The chart default is Ignore.
-        failurePolicy = "Fail"
-        namespaceSelector = {
-          matchLabels = {
-            (local.injection_label_key) = local.injection_label_value
-          }
-        }
-        # objectSelector keeps the chart default (excludes the injector's own
-        # pods); Helm deep-merges this map with the chart's webhook defaults.
-      }
-
-      resources = {
-        requests = { cpu = "50m", memory = "64Mi" }
-        limits   = { memory = "256Mi" }
-      }
-
-      securityContext = {
-        pod = {
-          runAsNonRoot   = true
-          runAsUser      = 100
-          runAsGroup     = 1000
-          fsGroup        = 1000
-          seccompProfile = { type = "RuntimeDefault" }
-        }
-        container = {
-          allowPrivilegeEscalation = false
-          capabilities             = { drop = ["ALL"] }
-        }
-      }
-    }
-
-    ui = {
-      enabled = false # API only; the lab drives Vault from Terraform and curl
-    }
-    csi = {
-      enabled = false # the injector is the delivery path (README: injector vs CSI)
+      # 600 s is the API minimum; set explicitly so the driver never asks
+      # for a longer-lived token than the e2e test checks (k8s-e2e.sh and
+      # pipeline.sh read this back from the live CSIDriver).
+      tokenRequests = [{ audience = local.token_exchange_audience, expirationSeconds = 600 }]
     }
   }
 }
@@ -253,18 +173,17 @@ locals {
 # Namespaces + Pod Security Admission
 # -----------------------------------------------------------------------------
 
-resource "kubernetes_namespace_v1" "vault" {
+resource "kubernetes_namespace_v1" "secrets_store" {
   metadata {
-    name = local.vault_namespace
+    name = local.csi_namespace
     labels = merge(local.common_labels, {
-      # Vault's chart needs nothing beyond baseline, so baseline is enforced.
-      # warn/audit at restricted record any drift from the hardened contexts
-      # above without blocking the install.
-      "pod-security.kubernetes.io/enforce"         = "baseline"
+      # CSI node plugins need privileged hostPath mounts (header). Enforce
+      # privileged; warn + audit at baseline so the exception stays visible.
+      "pod-security.kubernetes.io/enforce"         = "privileged"
       "pod-security.kubernetes.io/enforce-version" = local.psa_version
-      "pod-security.kubernetes.io/warn"            = "restricted"
+      "pod-security.kubernetes.io/warn"            = "baseline"
       "pod-security.kubernetes.io/warn-version"    = local.psa_version
-      "pod-security.kubernetes.io/audit"           = "restricted"
+      "pod-security.kubernetes.io/audit"           = "baseline"
       "pod-security.kubernetes.io/audit-version"   = local.psa_version
     })
   }
@@ -274,92 +193,51 @@ resource "kubernetes_namespace_v1" "clinical_apps" {
   metadata {
     name = local.clinical_namespace
     labels = merge(local.common_labels, {
-      # Workload namespace: restricted, enforced. The injected Vault Agent
-      # containers must pass too (they run non-root, drop ALL, no privilege
-      # escalation; seccomp comes from the pod-level RuntimeDefault in
-      # lab/k8s/manifests). A privileged pod is rejected at admission - the
-      # e2e test proves it with lab/k8s/manifests/negative/privileged-pod.yaml.
+      # Workload namespace: restricted, enforced. A privileged pod is
+      # rejected at admission - the e2e test proves it with
+      # lab/k8s/manifests/negative/privileged-pod.yaml.
       "pod-security.kubernetes.io/enforce"         = "restricted"
       "pod-security.kubernetes.io/enforce-version" = local.psa_version
       "pod-security.kubernetes.io/warn"            = "restricted"
       "pod-security.kubernetes.io/warn-version"    = local.psa_version
       "pod-security.kubernetes.io/audit"           = "restricted"
       "pod-security.kubernetes.io/audit-version"   = local.psa_version
-
-      # Opt in to Vault Agent injection (webhook namespaceSelector).
-      (local.injection_label_key) = local.injection_label_value
     })
   }
+
+  # Destroy order, not create order, is the point: the workload namespace is
+  # destroyed BEFORE the CSI driver. A pod with a CSI volume can only be
+  # unmounted while the driver runs; with the driver gone first, the pod and
+  # then the namespace stay Terminating (seen in the first live run,
+  # 2026-11-07: destroy timed out after 5 min on namespace clinical-apps).
+  depends_on = [helm_release.csi_secrets_store_provider_azure]
 }
 
 # -----------------------------------------------------------------------------
-# Vault (dev mode) + Agent Injector
+# Secrets Store CSI Driver + Azure Key Vault provider
 # -----------------------------------------------------------------------------
 
-# Every input that defines the release, in one non-secret object. When any of
-# it changes - values, chart version, or the root-token revision - this object
-# is replaced, and replace_triggered_by below turns that into a full
-# reinstall of the release instead of an in-place `helm upgrade`.
-#
-# WHY reinstall instead of upgrade: the Helm provider only merges set_wo
-# values on create, or on an update that bumps set_wo_revision. An ordinary
-# upgrade would therefore re-render the chart WITHOUT devRootToken, i.e. with
-# the chart's default token "root". Reinstalling always goes through create,
-# which always applies set_wo. Losing Vault's data on reinstall costs nothing:
-# dev mode is in-memory anyway, and stage 2 + the seed step recreate it.
-resource "terraform_data" "vault_release_inputs" {
-  triggers_replace = {
-    chart_version  = local.vault_chart_version
-    values_sha256  = sha256(yamlencode(local.vault_values))
-    token_revision = var.vault_dev_root_token_revision
-  }
-}
+resource "helm_release" "csi_secrets_store_provider_azure" {
+  name             = "csi-azure"
+  namespace        = kubernetes_namespace_v1.secrets_store.metadata[0].name
+  create_namespace = false # owned above (PSA labels)
 
-resource "helm_release" "vault" {
-  name             = "vault"
-  namespace        = kubernetes_namespace_v1.vault.metadata[0].name
-  create_namespace = false # owned by kubernetes_namespace_v1.vault (PSA labels)
+  repository = local.chart_repository
+  chart      = local.chart_name
+  version    = local.chart_version
+  # verify: the chart is fetched over HTTPS and pinned by version; its
+  # digest is recorded above but Helm provenance (`verify = true`) is not
+  # enabled (no chart signing key is wired in). Accepted residual risk for
+  # an ephemeral lab cluster.
 
-  repository = local.vault_chart_repository
-  chart      = "vault"
-  version    = local.vault_chart_version
-  # verify: the chart is fetched over HTTPS and pinned by version, but not by
-  # digest, and Helm provenance (`verify = true`) is not enabled because no
-  # HashiCorp chart signing key is wired into the lab. Accepted residual risk
-  # for an ephemeral lab cluster.
+  values = [yamlencode(local.csi_values)]
 
-  values = [yamlencode(local.vault_values)]
-
-  # The root token: write-only (never in plan or state). type = "string" stops
-  # Helm from coercing an all-digit token into a number.
-  set_wo = [
-    {
-      name  = "server.dev.devRootToken"
-      value = var.vault_dev_root_token
-      type  = "string"
-    },
-  ]
-  # Must be >= 1 or the provider silently skips set_wo (and Vault would boot
-  # with the chart default token "root").
-  set_wo_revision = var.vault_dev_root_token_revision
-
-  # Block until the Vault server and the injector are Ready, so stage 2 and the
-  # workload rollout never race a half-started Vault or a missing webhook
-  # backend (the webhook fails closed).
+  # Block until the driver and provider DaemonSets are Ready and the
+  # SecretProviderClass CRD exists, so ../identity can create one.
   wait    = true
   timeout = 600
 
-  # Not atomic: on a failed install, keep the pods so `kubectl describe` /
-  # logs show why. The pipeline's EXIT trap tears the cluster down anyway.
-  atomic          = false
+  atomic          = false # keep failed pods for `kubectl describe`
   cleanup_on_fail = false
   max_history     = 3
-
-  # The injector's webhook targets clinical-apps by label; create that
-  # namespace first so the first pod there is guaranteed to be selected.
-  depends_on = [kubernetes_namespace_v1.clinical_apps]
-
-  lifecycle {
-    replace_triggered_by = [terraform_data.vault_release_inputs]
-  }
 }

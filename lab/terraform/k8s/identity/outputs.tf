@@ -2,42 +2,19 @@
 # k8s/identity :: outputs.tf
 # -----------------------------------------------------------------------------
 # Identifiers and paths only - never a secret value (Terraform does not know
-# the KV value; the pipeline seeds it). The e2e test and the README verify
+# the Key Vault value; the pipeline sets it). The e2e test and the README verify
 # list use these names.
 # =============================================================================
 
-output "kv_mount_path" {
-  description = "KV v2 mount for clinical app secrets."
-  value       = vault_mount.clinical.path
-}
-
-output "secret_api_path" {
-  description = "Vault API path of the workload secret (the path, not the value): what the agent template reads and the pipeline seeds."
-  value       = "${vault_mount.clinical.path}/data/${local.app_secret_name}"
-}
-
-output "vault_auth_path" {
-  description = "Mount path of the Kubernetes auth method (login at auth/<this>/login; matches the injector's authPath)."
-  value       = "auth/${vault_auth_backend.kubernetes.path}"
-}
-
-output "vault_role" {
-  description = "The one Vault role that trusts a Kubernetes identity, and what it is bound to."
+output "secret_provider_class" {
+  description = "The SecretProviderClass the Deployment's CSI volume names, and what it serves (identifiers only)."
   value = {
-    name                    = vault_kubernetes_auth_backend_role.nightly_report.role_name
-    bound_service_accounts  = vault_kubernetes_auth_backend_role.nightly_report.bound_service_account_names
-    bound_namespaces        = vault_kubernetes_auth_backend_role.nightly_report.bound_service_account_namespaces
-    audience                = vault_kubernetes_auth_backend_role.nightly_report.audience
-    token_policies          = vault_kubernetes_auth_backend_role.nightly_report.token_policies
-    token_ttl_seconds       = vault_kubernetes_auth_backend_role.nightly_report.token_ttl
-    token_max_ttl_seconds   = vault_kubernetes_auth_backend_role.nightly_report.token_max_ttl
-    identity_alias_keyed_by = vault_kubernetes_auth_backend_role.nightly_report.alias_name_source
+    name         = kubernetes_manifest.secret_provider_class.manifest.metadata.name
+    key_vault    = var.key_vault_name
+    secret       = var.secret_name
+    mounted_file = "/mnt/secrets-store/${local.mounted_file_name}"
+    client_id    = var.workload_client_id
   }
-}
-
-output "vault_policy_name" {
-  description = "Policy attached to tokens issued by the nightly-report role."
-  value       = vault_policy.nightly_report_read.name
 }
 
 output "service_accounts" {

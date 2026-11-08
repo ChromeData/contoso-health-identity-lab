@@ -3,17 +3,15 @@
 # -----------------------------------------------------------------------------
 # WHAT (stage 2 of 2; ../platform must be applied first):
 #
-#   Vault (dev-mode, in-cluster, reached at 127.0.0.1:18200)
-#     * KV v2 mount           clinical/
-#     * policy                nightly-report-read  = read on clinical/data/db, nothing else
-#     * auth method           kubernetes/ (Vault validates pod tokens with the
-#                             TokenReview API, using its own service account)
-#     * role                  nightly-report: ONLY service account nightly-report
-#                             in ONLY namespace clinical-apps, ONLY tokens whose
-#                             audience is "vault"; Vault token TTL 15 min, max 15 min
 #   Kubernetes (namespace clinical-apps)
-#     * service accounts      nightly-report (approved), unapproved-job (negative
-#                             control: no role binds it). Neither auto-mounts a token.
+#     * service accounts      nightly-report (approved; annotated with the
+#                             Entra client id of ../keyvault-trust), and
+#                             unapproved-job (negative control: no federated
+#                             credential trusts it). Neither auto-mounts a token.
+#     * SecretProviderClass   nightly-report-db: the Azure provider, Workload
+#                             ID (clientID), ONE Key Vault secret, mounted as
+#                             the file "db". No secretObjects: never synced
+#                             into a Kubernetes Secret.
 #     * Roles + RoleBindings  app-deployer -> group k8s-clinical-deployers
 #                             auditor      -> group k8s-clinical-auditors
 #                             Namespaced only: no ClusterRole(Binding) here.
@@ -24,29 +22,26 @@
 #                             nightly-report (see below)
 #
 # THE FLOW THIS ENABLES (the "no static secret" claim):
-#   kubelet projects a 10-minute token for SA nightly-report, audience "vault"
-#   -> the injected Vault Agent logs in to auth/kubernetes, role nightly-report
-#   -> Vault sends the token to the Kubernetes TokenReview API (is it valid, for
-#      audience "vault"?) and checks SA name + namespace against the role
-#   -> Vault returns a 15-minute Vault token carrying nightly-report-read
-#   -> the agent renders clinical/data/db to /vault/secrets/db (memory-backed)
+#   the kubelet mounts the pod's CSI volume -> the Secrets Store CSI Driver
+#   requests a token for SA nightly-report, audience api://AzureADTokenExchange
+#   -> the Azure provider sends it to Microsoft Entra ID as a client assertion
+#   -> Entra checks it against the federated credential (issuer, subject,
+#      audience) in ../keyvault-trust and returns a Key Vault access token
+#   -> Key Vault checks Azure RBAC (Secrets User on that ONE secret)
+#   -> the driver writes the value to /mnt/secrets-store/db (tmpfs, in the pod)
 #   No Kubernetes Secret, env var or manifest value ever holds the password,
-#   and the secret VALUE is not in this Terraform either: the pipeline seeds
-#   it through the Vault API after this stage, so it never enters state.
+#   and the VALUE is not in this Terraform either: the pipeline sets it in Key
+#   Vault (stage 4), so it never enters state.
 #
-# STAND-IN (lab/docs/STAND-INS.md): the exchange is a Kubernetes identity
-# in, a scoped secret out. On AKS the Azure-native version (the target,
-# ADR 0036) is Entra Workload ID: a
-# federated identity credential trusts the cluster's OIDC issuer, the pod's
-# projected token (audience api://AzureADTokenExchange) is exchanged for an
-# Entra token, and Key Vault RBAC replaces the Vault policy. That FIC is
-# written, plan-only, in ../aks-mapping.
+# This replaces HashiCorp Vault's Kubernetes auth + Agent Injector (ADR 0036,
+# "Microsoft-native PAM"). Key Vault, Entra Workload ID and the Azure
+# provider are the real products; kind stands in for AKS (STAND-INS.md).
 #
 # IDENTITY BORROWING, AND HOW IT IS CLOSED (README "Who can act as
 # nightly-report"). Kubernetes lets anyone who can create a pod in a namespace
 # run it as ANY service account there, and a running pod's container image is
 # mutable in place: so "can deploy" used to mean "can be nightly-report" and
-# "can read /vault/secrets/db" (swap the image or the command, read pods/log).
+# "can read /mnt/secrets-store/db" (swap the image or the command, read pods/log).
 # Three layers now stand in the way, each tested:
 #   1. RBAC (below): app-deployer has NO create/update/patch/delete on pods
 #      or ReplicaSets, only on Deployments/ConfigMaps/Services, plus read on
@@ -56,7 +51,7 @@
 #      ReplicaSets in clinical-apps, Deny:
 #        (1) every image pinned by digest
 #        (2) a workload running as nightly-report runs ONLY the approved app
-#            digest + the Vault Agent digest (identity bound to code)
+#            digest (identity bound to code)
 #        (3) automountServiceAccountToken: false in the pod spec
 #        (4) only the launcher groups (the pipeline) and the kube-system
 #            controllers may create a workload that runs as nightly-report,
@@ -65,14 +60,15 @@
 #            change too (identity bound to who deploys it)
 #      Rule (4) is what closes "same image, different command": the approved
 #      image is a general-purpose busybox, so (2) alone would still let a
-#      deployer patch the Deployment's args (or an agent-inject-command
-#      annotation) to print the file. (2) still matters: it binds what even
+#      deployer patch the Deployment's args to print the file. (2) still matters: it binds what even
 #      the pipeline may run as nightly-report to a reviewed digest.
-#   3. Vault: the role still trusts exactly one SA in one namespace.
+#   3. Entra: the federated credential trusts exactly one SA in one
+#      namespace, and Key Vault RBAC grants that SA one secret.
 # What is NOT closed, said out loud: the deployer can still DELETE the
 # nightly-report Deployment (availability, not identity: DELETE is not an
 # operation the policy matches, see below) and then create a Deployment of
-# that name under another service account, which no Vault role trusts. Every
+# that name under another service account, which no federated credential
+# trusts. Every
 # other write to that workload - image, command, annotations, replicas, a
 # `rollout restart`, moving it off nightly-report - is refused by (4), and
 # deployments/scale and ReplicaSet writes are not granted. A cluster admin
@@ -82,36 +78,16 @@
 locals {
   # ---- Shared names (must match lab/k8s/manifests and lab/k8s/test) ---------
   clinical_namespace = "clinical-apps" # created by ../platform with PSA labels
-  kv_mount_path      = "clinical"
-  app_secret_name    = "db"
-  vault_auth_path    = "kubernetes" # the injector's default authPath is auth/kubernetes
-  vault_role_name    = "nightly-report"
-  vault_policy_name  = "nightly-report-read"
   approved_sa        = "nightly-report"
 
-  # Audience the workload's projected token must carry. A token minted for the
-  # API server (default audience) is refused by this role, so a token stolen
-  # from some other context cannot be replayed at Vault, and a Vault-audience
-  # token is useless against the API server.
-  vault_audience = "vault"
-
-  # 15 minutes. The agent renews within this window and re-authenticates
-  # (with a fresh projected token) when max TTL is reached, so a leaked Vault
-  # token is worthless after 15 minutes at most.
-  vault_token_ttl_seconds = 900
-
-  # Vault runs in the cluster, so it reaches the API server by its in-cluster
-  # name. No CA or reviewer JWT is configured: Vault reads its own pod's
-  # service-account token and CA (disable_local_ca_jwt = false). That needs
-  # the system:auth-delegator ClusterRoleBinding the chart creates
-  # (../platform server.authDelegator). verify: Vault re-reads the local
-  # token file periodically, so kubelet's token rotation does not break
-  # TokenReview (true since Vault 1.9.3).
-  kubernetes_host = "https://kubernetes.default.svc:443"
+  # The SecretProviderClass the Deployment's CSI volume names, and the file
+  # name the secret appears under (objectAlias) in /mnt/secrets-store.
+  secret_provider_class = "nightly-report-db"
+  mounted_file_name     = "db"
 
   service_accounts = {
-    "nightly-report" = "Approved workload. The only service account a Vault role (nightly-report) binds."
-    "unapproved-job" = "Negative control. Same namespace, but no Vault role binds it: its token is refused at login."
+    "nightly-report" = "Approved workload. The only service account an Entra federated credential (../keyvault-trust) trusts."
+    "unapproved-job" = "Negative control. Same namespace, but no federated credential trusts it: Entra refuses its token."
   }
 
   # ---- Human RBAC (groups) ---------------------------------------------------
@@ -122,7 +98,7 @@ locals {
   # Kubernetes the same intent becomes Azure role assignments on the
   # namespace scope. The rules themselves carry over unchanged.
   #
-  # Neither role gets: secrets (the whole point - secrets live in Vault, and
+  # Neither role gets: secrets (the whole point - secrets live in Key Vault, and
   # nothing here should even be able to list Kubernetes Secrets), RBAC objects
   # (no self-escalation), serviceaccounts / serviceaccounts/token (no minting
   # tokens for nightly-report), pods/exec|attach|portforward|ephemeralcontainers
@@ -181,8 +157,10 @@ locals {
   # Compared as digests, not whole strings: the same bytes may be referenced
   # as docker.io/library/busybox:1.37.0@sha256:X or busybox@sha256:X, and the
   # kubelet verifies content against the digest, so the digest IS the code.
+  # One build only: with the CSI driver nothing is injected into the pod, so
+  # the app image is the only container that runs as nightly-report.
   nightly_report_approved_digests = distinct([
-    for ref in [var.nightly_report_app_image, var.vault_agent_image] : split("@", ref)[1]
+    for ref in [var.nightly_report_app_image] : split("@", ref)[1]
   ])
 
   # RE2, used by CEL matches(): a reference ending in @sha256:<64 hex>.
@@ -196,8 +174,8 @@ locals {
     # Pod) carry the spec directly; Deployments and ReplicaSets carry it in
     # their pod template. request.resource is always set, unlike object.kind.
     { name = "podSpec", expression = "request.resource.resource == 'pods' ? object.spec : object.spec.template.spec" },
-    # Every container that will run: app containers, init containers (the
-    # injected vault-agent-init is one) and ephemeral debug containers.
+    # Every container that will run: app containers, init containers and
+    # ephemeral debug containers.
     {
       name = "images"
       expression = trimspace(<<-CEL
@@ -274,16 +252,16 @@ locals {
       reason            = "Invalid"
     },
     {
-      # (2) Identity bound to code: nightly-report runs one reviewed build
-      # (plus the Vault Agent the injector adds), whoever deploys it.
+      # (2) Identity bound to code: nightly-report runs one reviewed build,
+      # whoever deploys it.
       expression        = "!variables.runsAsNightlyReport || variables.images.all(i, variables.approvedDigests.exists(d, i.endsWith('@' + d)))"
-      message           = "service account nightly-report may run only the approved app image and the Vault Agent image"
-      messageExpression = "'service account nightly-report may run only the approved app image and the Vault Agent image, not: ' + variables.images.filter(i, !variables.approvedDigests.exists(d, i.endsWith('@' + d))).join(', ')"
+      message           = "service account nightly-report may run only the approved app image"
+      messageExpression = "'service account nightly-report may run only the approved app image, not: ' + variables.images.filter(i, !variables.approvedDigests.exists(d, i.endsWith('@' + d))).join(', ')"
       reason            = "Forbidden"
     },
     {
-      # (3) No API-server token in workload pods: the only credential is the
-      # projected audience=vault token. Must be stated in the pod spec (the
+      # (3) No API-server token in workload pods: the pod holds no token at
+      # all (the CSI driver requests its own). Must be stated in the pod spec (the
       # ServiceAccount's own false is a default a pod spec can override).
       expression = "has(variables.podSpec.automountServiceAccountToken) && variables.podSpec.automountServiceAccountToken == false"
       message    = "automountServiceAccountToken must be false in the pod spec (workloads here get no Kubernetes API token)"
@@ -317,94 +295,69 @@ resource "kubernetes_service_account_v1" "workload" {
     name      = each.key
     namespace = local.clinical_namespace
     labels    = local.common_labels
-    annotations = {
-      "contoso.health/purpose" = each.value
-    }
+    annotations = merge(
+      { "contoso.health/purpose" = each.value },
+      # Entra Workload ID convention: the client id this SA signs in as. The
+      # CSI path reads clientID from the SecretProviderClass, not from here;
+      # the annotation records the pairing on the identity itself (and is
+      # what the workload identity webhook would read on AKS).
+      each.key == local.approved_sa ? { "azure.workload.identity/client-id" = var.workload_client_id } : {},
+    )
   }
 
-  # No API-server token is mounted by default. The pod gets exactly one
-  # credential: the projected, audience-"vault", 10-minute token declared in
-  # lab/k8s/manifests (volume vault-token), which is useless against the API
-  # server. (Kubernetes >= 1.24 also no longer creates long-lived token
-  # Secrets for service accounts; nothing here asks for one.)
+  # No API-server token is mounted. The pod holds NO token at all: the CSI
+  # driver asks the kubelet for one (audience api://AzureADTokenExchange) at
+  # mount time and hands it only to the Azure provider. (Kubernetes >= 1.24
+  # also no longer creates long-lived token Secrets; nothing asks for one.)
   automount_service_account_token = false
 }
 
 # -----------------------------------------------------------------------------
-# Vault: where the secret lives, and who may read it
+# The ONE Key Vault secret, as a CSI volume source
 # -----------------------------------------------------------------------------
-
-resource "vault_mount" "clinical" {
-  path        = local.kv_mount_path
-  type        = "kv"
-  options     = { version = "2" }
-  description = "Contoso Health clinical app secrets (KV v2). Values are seeded by lab/k8s/ci/pipeline.sh, never by Terraform."
-}
-
-# JSON policy syntax (Vault accepts HCL or JSON). JSON is used so the test can
-# jsondecode() it and assert the EXACT path set and capabilities, rather than
-# pattern-matching HCL text. Rendered, it reads:
-#   path "clinical/data/db" { capabilities = ["read"] }
-# KV v2 data lives under <mount>/data/<name>; reading the metadata, listing,
-# writing or deleting are all different paths/capabilities and are denied.
-resource "vault_policy" "nightly_report_read" {
-  name = local.vault_policy_name
-  policy = jsonencode({
-    path = {
-      "${vault_mount.clinical.path}/data/${local.app_secret_name}" = {
-        capabilities = ["read"]
+# Fields from Microsoft Learn, "Access Azure Key Vault with the CSI Driver
+# Identity Provider" (Workload ID tab): usePodIdentity "false" + clientID =
+# Workload ID. objectAlias names the file. No secretObjects block, so the
+# driver never creates a Kubernetes Secret from it. A SecretProviderClass
+# holds identifiers only (vault name, tenant, client id), no value.
+#
+# WHO CAN USE IT: any pod in clinical-apps can NAME this class, but the
+# driver always requests the token for the POD's own service account. Only
+# nightly-report has a federated credential, so a pod running as anything
+# else gets an Entra refusal and no file (the e2e test proves it).
+resource "kubernetes_manifest" "secret_provider_class" {
+  manifest = {
+    apiVersion = "secrets-store.csi.x-k8s.io/v1"
+    kind       = "SecretProviderClass"
+    metadata = {
+      name      = local.secret_provider_class
+      namespace = local.clinical_namespace
+      labels    = local.common_labels
+    }
+    spec = {
+      provider = "azure"
+      parameters = {
+        usePodIdentity = "false"
+        clientID       = var.workload_client_id
+        keyvaultName   = var.key_vault_name
+        tenantId       = var.tenant_id
+        # The provider takes `objects` as a YAML string with an array of
+        # YAML strings (its documented format).
+        objects = yamlencode({
+          array = [yamlencode({
+            objectName    = var.secret_name
+            objectType    = "secret"
+            objectAlias   = local.mounted_file_name
+            objectVersion = ""
+          })]
+        })
       }
     }
-  })
-}
+  }
 
-# -----------------------------------------------------------------------------
-# Vault: Kubernetes auth method (Entra Workload ID on AKS is the target)
-# -----------------------------------------------------------------------------
-
-resource "vault_auth_backend" "kubernetes" {
-  type        = "kubernetes"
-  path        = local.vault_auth_path
-  description = "Pods prove their identity with a projected service-account token (validated via TokenReview)."
-}
-
-resource "vault_kubernetes_auth_backend_config" "in_cluster" {
-  backend         = vault_auth_backend.kubernetes.path
-  kubernetes_host = local.kubernetes_host
-
-  # Explicit: use Vault's own pod service-account token as the TokenReview
-  # reviewer and its mounted CA, instead of a long-lived reviewer JWT stored
-  # in Vault config (which is exactly the kind of static secret this segment
-  # exists to remove).
-  disable_local_ca_jwt = false
-}
-
-resource "vault_kubernetes_auth_backend_role" "nightly_report" {
-  backend   = vault_auth_backend.kubernetes.path
-  role_name = local.vault_role_name
-
-  # Exactly one service account in exactly one namespace. Referencing the SA
-  # resource also orders creation: the SA exists before Vault trusts it.
-  bound_service_account_names      = [kubernetes_service_account_v1.workload[local.approved_sa].metadata[0].name]
-  bound_service_account_namespaces = [kubernetes_service_account_v1.workload[local.approved_sa].metadata[0].namespace]
-
-  audience = local.vault_audience
-
-  # Key the Vault identity alias on the SA's UID, not its name: if the SA is
-  # deleted and a new one is created with the same name, it gets a NEW Vault
-  # entity instead of inheriting the old one's identity and metadata.
-  alias_name_source = "serviceaccount_uid"
-
-  token_policies = [vault_policy.nightly_report_read.name]
-  token_ttl      = local.vault_token_ttl_seconds
-  token_max_ttl  = local.vault_token_ttl_seconds
-
-  # The built-in "default" policy stays attached: it is what lets the agent
-  # look up and renew its own token (and lets the e2e test read the TTL via
-  # token/lookup-self). It grants no access to any secret path.
-  token_no_default_policy = false
-
-  depends_on = [vault_kubernetes_auth_backend_config.in_cluster]
+  field_manager {
+    force_conflicts = true
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -462,16 +415,13 @@ resource "kubernetes_role_binding_v1" "human" {
 # WHY A VAP, NOT A WEBHOOK: it runs inside the API server, so there is no
 # extra pod to keep alive, no TLS to manage, and no way for it to be "down"
 # and fail open. WHY TERRAFORM: it is identity policy, reviewed with the
-# Vault role it protects. kubernetes_manifest (the provider has no typed
+# service account and the federated credential it protects. kubernetes_manifest (the provider has no typed
 # binding resource) needs the API server at PLAN time; this root already
 # requires a live cluster (stage 2 runs after ../platform), and the mocked
 # tests do not.
 #
-# INJECTION ORDER: the Vault Agent Injector is a MUTATING webhook; mutating
-# admission runs before validating admission, so this policy judges the pod
-# WITH the vault-agent-init and vault-agent containers already added. That
-# is why ../platform pins the agent image by digest, and why rule (2) allows
-# var.vault_agent_image next to the app image.
+# NOTHING IS INJECTED: the CSI driver adds no container to the pod, so the
+# policy judges exactly the containers the Deployment declares.
 #
 # Pod Security Admission is a built-in validating plugin ordered before
 # ValidatingAdmissionPolicy, so a privileged pod is still rejected with the

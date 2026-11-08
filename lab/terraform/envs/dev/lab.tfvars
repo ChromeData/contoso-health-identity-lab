@@ -53,6 +53,7 @@ enable_access_reviews_inactive    = true
 # role's own PIM policy, written by post-apply/Set-DirectoryRolePimPolicies.ps1.
 enable_pim_tiers               = true
 enable_pim_azure_resources     = false
+enable_pim_keyvault_officers   = false
 enable_helpdesk_au_scoping     = true
 enable_global_admin_pim_policy = true
 

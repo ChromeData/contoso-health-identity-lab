@@ -123,7 +123,7 @@ SailPoint's lead rests entirely on row 2, which is why row 2 is also the main bu
 
 - **Contoso would become the vendor.** It would carry HA and DR, patching, CPM-style plugins for every target type, auditor-grade reports, and 24×7 support for Tier 0. The harness proves a 3-node cluster and a DR drill can be built (R09); it doesn't make running them for Tier 0 a small team's job.
 - **The stand-ins still have a job.** They prove the patterns and become the **POC acceptance tests** in §7. Each `test/e2e.sh` assertion maps to a vendor test.
-- **Workload secrets on AKS.** Use Microsoft's native pattern, Entra Workload ID plus the Key Vault CSI driver (`STAND-INS.md`; `lab/terraform/k8s/aks-mapping`, written but never applied), not a self-run Vault.
+- **Workload secrets on AKS.** Use Microsoft's native pattern, Entra Workload ID plus the Key Vault CSI driver (`lab/terraform/k8s/keyvault-trust`, RAN · tenant on kind, `lab/evidence/k8s-keyvault/20261107T013045Z/`), not a self-run Vault.
 
 **Buy now: commercial SaaS PAM.** No Microsoft product vaults and rotates AD Tier-0 or server credentials, or records those sessions. PIM covers Entra and Azure roles only. PIM and PAM are complementary.
 
@@ -223,7 +223,7 @@ These are US list prices from Microsoft's Entra pricing page, read on 2026-10-20
 - `lab/terraform/README.md`: license requirements per resource
 - `lab/terraform/envs/dev/README.md`: staging flags, licensing tier per piece
 - `lab/terraform/modules/pipeline-identity/main.tf`: PLAN and APPLY service principals
-- `lab/terraform/k8s/aks-mapping`: Entra Workload ID federated credential (never applied)
+- `lab/terraform/k8s/keyvault-trust`: Entra Workload ID federated credential + one-secret Key Vault grant (applied per pipeline run)
 - `lab/scripts/dc/02-Configure-Domain.ps1`: delegated reconcile rights
 
 ## 10. Sources (accessed 2026-10-20)
