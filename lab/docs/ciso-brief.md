@@ -76,7 +76,8 @@ also run end to end on local stand-ins. Since 2026-10-28 the controls run in a r
 | Compliant-device access | Intune Plan 1 | $8 / user / month (verify:) | $480,000 | $1,920,000 |
 | Conditional Access for workload identities | Workload ID Premium | $3 / workload identity / month (verify:) | per app, not per user | per app, not per user |
 | SIEM detections | Microsoft Sentinel | $4.76 / GB analysed, pay-as-you-go, eastus2 (Azure Retail Prices API, read 2026-11-06; verify: what the meter includes) | about $6,700 for sign-in logs (estimate below) | about $27,000 for sign-in logs (estimate below) |
-| Enterprise PAM and IGA | CyberArk, SailPoint or Saviynt | quote-based | evaluate in Q2 |
+| Enterprise IGA | SailPoint or Saviynt | quote-based | evaluate in Q2 | evaluate in Q2 |
+| PAM | Microsoft-native (ADR 0036): Key Vault, Bastion Premium (only while recording), Windows LAPS, Intune EPM, PIM | Bastion Premium $0.45 / hour (eastus2, 2026-11-07), run only while recording; EPM is in the lab's Microsoft 365 E5 SKU (`Intune-EPM` plan) | no PAM vendor licence (verify: Contoso's E5 agreement) | no PAM vendor licence (verify: Contoso's E5 agreement) |
 
 Read the table as an upper bound. P1 and Intune are already included in
 Microsoft 365 E3, and P2 in E5 (verify: Contoso's current agreement).

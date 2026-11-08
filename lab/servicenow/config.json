@@ -1,0 +1,54 @@
+{
+  "$comment": [
+    "What lab/servicenow/apply.py builds on the ServiceNow PDI. Names, not sys_ids: apply.py finds each record by name and creates or updates it, so a re-run changes only what differs.",
+    "Access packages are named, not pinned by id: apply.py resolves each one live through Microsoft Graph as the lab operator and fails if a name matches zero or two packages.",
+    "No secrets here. The repo is public."
+  ],
+  "tenantId": "86a2e327-4951-4348-a3c4-6f4b79ffd8f2",
+  "fulfilmentAppDisplayName": "ServiceNow - Access Fulfilment",
+  "jwtProvider": "Contoso - Entra access fulfilment",
+  "catalog": "Service Catalog",
+  "category": {
+    "title": "Access & accounts",
+    "description": "Ask for access to a hospital app, report a leaver, or get help signing in."
+  },
+  "iamQueue": {
+    "name": "IAM Operations",
+    "description": "Identity and access management: access requests that need a person, sign-in and MFA problems, leaver access removal. Changes in Entra carry the ticket number.",
+    "roles": ["itil"],
+    "members": ["ava.lin@contosohealthlab.com", "raj.patel@contosohealthlab.com"],
+    "membersNote": "ServiceNow accounts come from Entra provisioning (App-ServiceNow-Users); queue membership and the itil role are ServiceNow's own, set here."
+  },
+  "requestItem": {
+    "name": "Request app access",
+    "short_description": "Ask for access to a clinical app. Your manager approves; access is granted in Microsoft Entra ID automatically and ends on the date you choose.",
+    "description": "<p>Use this when your job needs an app your role does not give you on day one, for example <b>ICU float cover</b>.</p><p>What happens next:</p><ol><li>Your manager gets an approval.</li><li>When they approve, ServiceNow asks Microsoft Entra ID to grant the access. You usually have it within a few minutes.</li><li>Access ends by itself on the end date (180 days at most).</li></ol><p>No patient data is entered here.</p>",
+    "apps": [
+      {
+        "value": "icu_float",
+        "text": "ICU float cover: ICU critical-care apps",
+        "accessPackage": "ICU - Float Access"
+      },
+      {
+        "value": "pharmacy",
+        "text": "Pharmacy: controlled-substance dispensing",
+        "accessPackage": "Pharmacy - Controlled Substances Apps"
+      },
+      {
+        "value": "other",
+        "text": "Another app (the IAM team reviews it)",
+        "accessPackage": null
+      }
+    ]
+  },
+  "leaverItem": {
+    "name": "Report a leaver: remove app access",
+    "short_description": "For managers: someone is leaving. HR disables the account; this removes the extra app access they asked for."
+  },
+  "accessRequestList": {
+    "view": "contoso_access_requests",
+    "title": "Access requests (IAM)",
+    "columns": ["number", "requested_for", "approval", "state", "assignment_group", "opened_at", "closed_at", "calendar_duration", "correlation_display"],
+    "note": "One list, grouped by state (the group headers carry the counts) with Duration = opened to closed (time to fulfil). A list, not a sys_report chart: on dev459905 the report_view field ACLs refused the chart to an itil user (seen 2026-11-07), while lists follow the ordinary read ACLs the queue already uses."
+  }
+}

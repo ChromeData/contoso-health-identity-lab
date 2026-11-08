@@ -165,23 +165,26 @@ A RAN · tenant status names the E-rows behind it. Values not measured yet
 Apart from the stand-ins below, everything is the real Microsoft, AWS and
 ServiceNow product, on free or trial licensing (the Okta coexistence,
 `lab/terraform/okta/` and `modules/apps/okta.tf`, is applied against an Okta
-Integrator Free org, E58). CyberArk, SailPoint and Saviynt are licensed to organisations and the
+Integrator Free org, E58). SailPoint, Saviynt and Workday are licensed to organisations and the
 author holds no licence, so a named stand-in does the same job and is said to
-be one:
+be one. For privileged access the lab's target is Microsoft-native
+([ADR 0036](lab/docs/adr/0036-microsoft-native-pam.md)): Azure Key Vault, Azure
+Bastion session recording, Windows LAPS, Intune Endpoint Privilege Management
+and PIM. CyberArk and Conjur are not part of the lab. The local Vault and
+Guacamole harness below is the earlier build of the same ideas:
 
 | Stand-in here | Replaces |
 |---|---|
-| HashiCorp Vault (LDAP secrets engine, exclusive library check-out) | CyberArk Digital Vault + CPM |
-| Apache Guacamole (recorded RDP / SSH, injected credentials) + Vault SSH CA | CyberArk PSM and PSM for SSH |
-| CyberArk Conjur OSS | Conjur Enterprise / CyberArk Secrets Manager |
-| Vault database secrets engine | CyberArk zero-standing-privilege database access |
-| Vault Raft cluster with a transit auto-unseal | CyberArk Vault HA / DR Vault; Azure Key Vault auto-unseal in production |
+| HashiCorp Vault (LDAP secrets engine, exclusive library check-out) | Azure Key Vault (secrets) and Windows LAPS (rotation), ADR 0036 |
+| Apache Guacamole (recorded RDP / SSH, injected credentials) + Vault SSH CA | Azure Bastion session recording (Premium SKU), ADR 0036 |
+| Vault database secrets engine | Microsoft Entra authentication to the database (no password) |
+| Vault Raft cluster with a transit auto-unseal | Not needed with Azure Key Vault, a managed service with built-in replication |
 | Samba AD domain controller (harness only) | DC01, the lab's Windows Server domain controller in Azure |
 | Linux xrdp container, AD logon by Kerberos (harness only) | An RDP session to DC01 |
 | Mock ServiceNow Table API: changes and their approvals (harness only) | A ServiceNow developer instance at tenant time |
 | Evolveum midPoint | SailPoint / Saviynt |
 | Mock HR feed (CSV + script calling the real Entra inbound provisioning API) | Workday |
-| kind cluster with Vault Kubernetes auth | AKS with Entra Workload ID or CyberArk Secrets Manager |
+| kind cluster with Vault Kubernetes auth | AKS with Entra Workload ID and Azure Key Vault |
 | Splunk Enterprise trial in a container, fed by a replay script (synthetic events: 22 of 22 searches fire, E61) and, since 2026-11-05, by a polling bridge on the operator Mac that copies new Log Analytics rows every 5 minutes (E113). The bridge stops when the laptop sleeps | Production Splunk, fed by the Microsoft add-on or Event Hub into HEC, with a heartbeat alert |
 
 The full register, with what each stand-in can and cannot show, is in
@@ -199,7 +202,7 @@ lab/iga/                 access catalog, birthright rules, SoD rules (SOD-01 to 
 lab/kql/                 24 detections (the source for Sentinel rules, Log Analytics alerts and the SPL twins)
 lab/splunk/              second SIEM (run on synthetic events, E59 to E61): compose, replay ingest, 24 SPL detections
 lab/monitoring/          Sentinel playbooks (ARM): notify, approval-gated containment; the KQL emulator harness (ran 22/22)
-lab/pam/                 Vault · Guacamole · Conjur · midPoint (Docker, loopback-only), dynamic DB credentials,
+lab/pam/                 Vault · Guacamole · midPoint (Docker, loopback-only), dynamic DB credentials,
                          HA/DR, and the harnesses with one runner (test/run-all.sh)
 lab/k8s/                 kind cluster + audit policy, workload manifests, the one pipeline script, e2e tests
 lab/pipelines/           how the pipeline is wired and what a human must configure
@@ -285,7 +288,7 @@ Written down on purpose. A reviewer will find these in ten minutes; better they 
 | **Break-glass credentials sit on the same Mac.** The operator created one software passkey per break-glass account, kept in the operator Mac's Keychain (E11d, a recorded lab deviation; ADR 0003 asks for two hardware keys in separate safes). The seeded break-glass passwords were never rotated (PR #226). | Trial tenant, no hardware keys bought. | Two hardware keys per account in separate safes, the password rotated or removed, and an alert on any method added to a break-glass account (PR #233). |
 | **The evidence store's immutability policy is Unlocked.** An Owner can shorten or remove it. | A locked policy cannot be undone, and this is a trial subscription. | Lock the policy, keep the store in a subscription the identity team has no Owner on, and add a delete lock (PR #223). |
 | **Logs are kept 30 days.** | Cost. | 90 days interactive, 1-2 years in a low-cost tier, and audit logs exported to immutable storage for 6 years (ADR 0035, PR #236). |
-| **Several products are stand-ins** (HR system, CyberArk, SailPoint, Workday). | No free trials exist; each stand-in is named with what it replaces (`lab/docs/STAND-INS.md`). | Swap each stand-in for the real product behind the same interface; the code paths and runbooks do not change. |
+| **Several products are stand-ins** (HR system, SailPoint, Workday; PAM moved to Microsoft products in ADR 0036). | No free trials exist; each stand-in is named with what it replaces (`lab/docs/STAND-INS.md`). | Swap each stand-in for the real product behind the same interface; the code paths and runbooks do not change. |
 | **Eight robot accounts have no accountable owner** (E70). | The inventory (`06-NHI-Inventory.ps1`) found them; assigning owners needs the business to name people. | Owners assigned in the access-package model, enforced by the nightly drift check. |
 
 ## How this lab was built

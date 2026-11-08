@@ -5,8 +5,8 @@
 # bootstrap credential, the dev-mode Vault root token, is accounted for in
 # lab/k8s/README.md section 6.)
 #
-# How the credential arrives (Vault is the labelled stand-in for CyberArk
-# Secrets Manager / Conjur authn-k8s, see lab/docs/STAND-INS.md):
+# How the credential arrives (Vault is the labelled stand-in for Azure Key
+# Vault through Entra Workload ID, see lab/docs/STAND-INS.md):
 #   1. The kubelet writes a short-lived service-account token for
 #      clinical-apps/nightly-report into the projected volume "vault-token":
 #      audience "vault", 10 minute lifetime, rotated by the kubelet. It is NOT
