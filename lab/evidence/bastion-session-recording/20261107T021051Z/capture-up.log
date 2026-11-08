@@ -1,0 +1,16 @@
+[01:57:42Z +   2s] DC01 already running: 'down' will leave it running
+[01:58:18Z +  38s] Subnet 10.42.250.0/26 and public IP ready (36 s)
+[01:58:59Z +  79s] Storage stbstreca9b511bc/recordings and identity id-bastion-recording ready (41 s)
+[01:59:00Z +  80s] Creating bastion-capture (Premium, session recording on); Learn says about 10 minutes
+[02:10:13Z + 753s] Bastion bastion-capture Succeeded, bst-a932af89-0b57-4a3f-9898-9961f341d392.bastion.azure.com (674 s); billing at $0.45/h starts now
+{
+  "container": "https://stbstreca9b511bc.blob.core.windows.net/recordings",
+  "recording": true,
+  "sku": "Premium",
+  "tunneling": false
+}
+[02:10:15Z + 755s] CORS: GET from https://bst-a932af89-0b57-4a3f-9898-9961f341d392.bastion.azure.com only
+[02:10:22Z + 762s] PIM: adm-ava.lin@contosohealthlab.onmicrosoft.com eligible for Reader on rg-identity-lab (4 h): Provisioned
+[02:10:29Z + 769s] Reviewer: adm-mei.tanaka@contosohealthlab.onmicrosoft.com active Storage Blob Data Reader on the container (4 h): Provisioned
+[02:10:35Z + 775s] Reviewer: adm-mei.tanaka@contosohealthlab.onmicrosoft.com active Reader on bastion-capture (4 h): Provisioned
+[02:10:35Z + 775s] UP. Next: node lab/bastion/prove.mjs; then capture.sh down

@@ -593,3 +593,29 @@ run "no_lock_on_the_log_workspace" {
 
   expect_failures = [var.cannot_delete_lock_resource_ids]
 }
+
+run "plan_can_export_lab_deployment_templates_only" {
+  command = plan
+
+  variables {
+    plan_can_export_deployment_templates = true
+  }
+
+  assert {
+    condition     = azurerm_role_definition.plan_deployment_template_reader[0].permissions[0].actions == tolist(["Microsoft.Resources/deployments/exportTemplate/action"]) && length(coalesce(azurerm_role_definition.plan_deployment_template_reader[0].permissions[0].data_actions, [])) == 0
+    error_message = "the PLAN identity's extra role holds exactly one read action and no data action"
+  }
+  assert {
+    condition     = azurerm_role_assignment.plan_deployment_template_reader[0].scope == "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab" && azurerm_role_definition.plan_deployment_template_reader[0].assignable_scopes == tolist(["/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab"])
+    error_message = "the exportTemplate role is assignable and assigned on rg-identity-lab only"
+  }
+}
+
+run "plan_export_role_off_by_default_for_a_first_bootstrap" {
+  command = plan
+
+  assert {
+    condition     = length(azurerm_role_definition.plan_deployment_template_reader) == 0 && length(azurerm_role_assignment.plan_deployment_template_reader) == 0
+    error_message = "off = no extra role for PLAN"
+  }
+}

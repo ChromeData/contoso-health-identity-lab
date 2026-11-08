@@ -168,6 +168,42 @@ resource "azurerm_role_assignment" "plan_reader" {
   principal_type       = "ServicePrincipal"
 }
 
+# PLAN identity, one extra READ action (round 3, 2026-11-08): every PR plan
+# failed with 403 AuthorizationFailed after envs/dev created the leaver
+# extension's ARM template deployment (modules/leaver-extension,
+# azurerm_resource_group_template_deployment "lcw-leaver-extension"). To
+# refresh that resource the azurerm provider calls the deployment's
+# exportTemplate, a POST action that Reader does not include:
+# Microsoft.Resources/deployments/exportTemplate/action (learn.microsoft.com/
+# azure/role-based-access-control/permissions/management-and-governance,
+# Microsoft.Resources; checked 2026-11-08). It returns the deployed template
+# only, which is the repo's own lab/terraform/modules/leaver-extension code.
+# Narrow: a custom role with that ONE action, assignable only on, and
+# assigned only on, the lab resource group (var.apply_resource_group_name).
+# No write, no other data.
+resource "azurerm_role_definition" "plan_deployment_template_reader" {
+  count       = var.plan_can_export_deployment_templates ? 1 : 0
+  name        = "Contoso Lab Plan Deployment Template Reader"
+  scope       = data.azurerm_subscription.current.id
+  description = "PLAN identity only: export the template of ARM deployments in the lab resource group, so terraform plan can refresh azurerm_resource_group_template_deployment. Read-only."
+
+  permissions {
+    actions     = ["Microsoft.Resources/deployments/exportTemplate/action"]
+    not_actions = []
+  }
+
+  assignable_scopes = [local.apply_rg_id]
+}
+
+resource "azurerm_role_assignment" "plan_deployment_template_reader" {
+  count              = var.plan_can_export_deployment_templates ? 1 : 0
+  scope              = local.apply_rg_id
+  role_definition_id = azurerm_role_definition.plan_deployment_template_reader[0].role_definition_resource_id
+  principal_id       = local.plan_sp
+  principal_type     = "ServicePrincipal"
+  description        = "PLAN: exportTemplate on rg-identity-lab deployments only (terraform plan refresh of the leaver extension)."
+}
+
 # -----------------------------------------------------------------------------
 # APPLY identity (environment:prod): create/modify lab resources, and assign
 # ONLY the three delegable roles above - the two Key Vault data-plane roles and

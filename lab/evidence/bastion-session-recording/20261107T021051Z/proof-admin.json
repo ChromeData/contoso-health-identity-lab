@@ -1,0 +1,83 @@
+{
+ "started": "2026-11-07T02:10:51.746Z",
+ "steps": [
+  {
+   "step": "signin",
+   "what": "adm-ava.lin signed in to the Azure portal (passkey)",
+   "utc": "2026-11-07T02:11:01.779Z",
+   "t_s": 10
+  },
+  {
+   "step": "before",
+   "what": "DC01 Bastion page: \"You don't have access\" (403) before PIM",
+   "utc": "2026-11-07T02:11:03.923Z",
+   "t_s": 12,
+   "ok": true,
+   "shot": "01-before-pim-no-access.png"
+  },
+  {
+   "step": "activate",
+   "what": "PIM My roles > Azure resources: eligible Reader on rg-identity-lab",
+   "utc": "2026-11-07T02:11:10.179Z",
+   "t_s": 18,
+   "shot": "02-pim-eligible.png"
+  },
+  {
+   "step": "activate",
+   "what": "activation request: 1 hour, reason given",
+   "utc": "2026-11-07T02:11:26.649Z",
+   "t_s": 35,
+   "shot": "03-pim-request.png"
+  },
+  {
+   "step": "activate",
+   "what": "PIM: Reader on rg-identity-lab ACTIVE (Active assignments row, Deactivate)",
+   "utc": "2026-11-07T02:12:57.285Z",
+   "t_s": 126,
+   "activation_s": 91,
+   "shot": "04-pim-active.png"
+  },
+  {
+   "step": "connect",
+   "what": "DC01 Bastion page opens after activation",
+   "utc": "2026-11-07T02:13:09.589Z",
+   "t_s": 138,
+   "rbac_wait_s": 12,
+   "shot": "05-bastion-form.png"
+  },
+  {
+   "step": "connect",
+   "what": "session open on DC01 through Bastion (browser, recorded)",
+   "utc": "2026-11-07T02:13:56.571Z",
+   "t_s": 185,
+   "host": "bst-a932af89-0b57-4a3f-9898-9961f341d392.bastion.azure.com",
+   "connect_s": 46,
+   "shot": "06-session-desktop.png"
+  },
+  {
+   "step": "connect",
+   "what": "whoami & hostname typed in the session",
+   "utc": "2026-11-07T02:14:11.374Z",
+   "t_s": 200,
+   "shot": "07-session-whoami.png"
+  },
+  {
+   "step": "connect",
+   "what": "session tab closed: the session ends and Bastion uploads the recording",
+   "utc": "2026-11-07T02:14:24.117Z",
+   "t_s": 212,
+   "session_s": 73
+  },
+  {
+   "step": "playback",
+   "what": "NO recording listed",
+   "utc": "2026-11-07T02:22:23.358Z",
+   "t_s": 692,
+   "ok": false,
+   "list_wait_s": 452,
+   "shot": "08-recordings-list.png"
+  }
+ ],
+ "ok": false,
+ "error": "no recording listed"
+}
