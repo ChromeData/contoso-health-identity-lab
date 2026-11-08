@@ -66,11 +66,17 @@ resource "azurerm_network_security_group" "dc" {
   # RDP (operator + Guacamole recorded sessions) and LDAPS (Vault password
   # rotation) - from the operator's IP(s) only. Empty list = no inbound rules
   # at all; everything else is denied by the NSG defaults.
+  # HTTPS (443) only while adfs_https_enabled: the TEMPORARY lab AD FS on
+  # DC01 (lab/adfs), so the operator's test browser can sign in to it. Same
+  # /32 allowlist; switch it off again when AD FS is decommissioned.
   dynamic "security_rule" {
-    for_each = length(var.allowed_ip_ranges) > 0 ? {
-      rdp   = { priority = 100, port = "3389" }
-      ldaps = { priority = 110, port = "636" }
-    } : {}
+    for_each = length(var.allowed_ip_ranges) > 0 ? merge(
+      {
+        rdp   = { priority = 100, port = "3389" }
+        ldaps = { priority = 110, port = "636" }
+      },
+      var.adfs_https_enabled ? { adfs-https = { priority = 120, port = "443" } } : {},
+    ) : {}
     content {
       name                       = "allow-${security_rule.key}-operator"
       priority                   = security_rule.value.priority

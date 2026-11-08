@@ -45,6 +45,18 @@ run "defaults_are_worm_and_entra_only" {
     condition     = azurerm_storage_account.evidence.blob_properties[0].versioning_enabled == true
     error_message = "version-level WORM requires versioning; an overwrite must become a new retained version"
   }
+  # Storage-level deny-delete, beside WORM (finding E1): blob + container
+  # soft delete and the change feed stay on, so a delete after retention
+  # (or of the container) is recoverable and recorded. Fails if anyone
+  # drops them to "simplify" the account.
+  assert {
+    condition     = azurerm_storage_account.evidence.blob_properties[0].delete_retention_policy[0].days == 30 && azurerm_storage_account.evidence.blob_properties[0].container_delete_retention_policy[0].days == 30
+    error_message = "Blob and container soft delete must stay on (30 days by default)"
+  }
+  assert {
+    condition     = azurerm_storage_account.evidence.blob_properties[0].change_feed_enabled == true
+    error_message = "The change feed (ordered record of every create/modify/delete) must stay on"
+  }
   assert {
     condition     = azurerm_storage_account.evidence.blob_properties[0].last_access_time_enabled == false
     error_message = "last access time tracking is incompatible with immutable storage"

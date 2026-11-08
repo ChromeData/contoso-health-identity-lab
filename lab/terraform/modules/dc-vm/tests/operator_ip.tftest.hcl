@@ -203,3 +203,52 @@ run "malformed_address_is_rejected" {
 
   expect_failures = [var.allowed_ip_ranges]
 }
+
+# ---- AD FS exercise: 443 only with the flag, only from the allowlist ------------
+
+run "https_closed_by_default" {
+  command = apply
+
+  variables {
+    allowed_ip_ranges = ["203.0.113.7/32"]
+  }
+
+  assert {
+    condition     = length([for r in azurerm_network_security_group.dc.security_rule : r if r.destination_port_range == "443"]) == 0
+    error_message = "Port 443 must stay closed unless adfs_https_enabled = true."
+  }
+}
+
+run "https_open_only_with_flag_and_only_from_allowlist" {
+  command = apply
+
+  variables {
+    allowed_ip_ranges  = ["203.0.113.7/32"]
+    adfs_https_enabled = true
+  }
+
+  assert {
+    condition = length([
+      for r in azurerm_network_security_group.dc.security_rule : r
+      if r.destination_port_range == "443" && r.access == "Allow" && toset(r.source_address_prefixes) == toset(["203.0.113.7/32"]) && r.destination_address_prefix == "10.42.2.4"
+    ]) == 1
+    error_message = "adfs_https_enabled must add exactly one 443 allow rule, from the /32 allowlist, to the DC's private IP only."
+  }
+}
+
+run "https_flag_with_empty_allowlist_opens_nothing" {
+  command = apply
+  # Own state: security_rule is Optional+Computed in azurerm, so a run that
+  # follows one with rules would keep them in the shared test state.
+  state_key = "https_empty_allowlist"
+
+  variables {
+    allowed_ip_ranges  = []
+    adfs_https_enabled = true
+  }
+
+  assert {
+    condition     = length(azurerm_network_security_group.dc.security_rule) == 0
+    error_message = "With no allowlist there must be no inbound rule at all, flag or not."
+  }
+}

@@ -177,6 +177,17 @@ variable "evidence_container_name" {
   default     = "evidence"
 }
 
+variable "enable_evidence_delete_lock" {
+  type        = bool
+  description = <<-EOT
+    Put a CanNotDelete management lock on the WORM evidence storage account
+    (main.tf, "Delete lock on the WORM evidence account"). CI's Contributor
+    cannot remove it; an Owner can. Needs evidence_storage_account_name.
+    Off by default.
+  EOT
+  default     = false
+}
+
 variable "hr_provisioning_owner_object_ids" {
   type        = list(string)
   description = "Entra USER object ids added as owners of the HR provisioning app's registration (modules/pipeline-identity; ADR 0018: two people, never the access governance lead - SOD-08). The CI identities themselves never get an Entra owner. Who and why: lab/iga/nhi-owners.json. Not sensitive: this root is applied locally and never planned in a pull request."
