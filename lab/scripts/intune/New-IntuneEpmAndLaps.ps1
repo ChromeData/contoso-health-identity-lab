@@ -60,8 +60,11 @@
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [Parameter(Mandatory)][ValidatePattern('^[0-9a-fA-F-]{36}$')][string]$UserGroupId,
-    [Parameter(Mandatory)][ValidatePattern('^[0-9a-fA-F-]{36}$')][string]$DeviceGroupId,
+    # A group object id, or 'AllDevices' (the lab has ONE Intune device,
+    # CH-WIN11-01, so All devices targets exactly that PC; used for the EPM
+    # proof's LOCAL standard account, which is in no Entra group).
+    [Parameter(Mandatory)][ValidatePattern('^([0-9a-fA-F-]{36}|AllDevices)$')][string]$UserGroupId,
+    [Parameter(Mandatory)][ValidatePattern('^([0-9a-fA-F-]{36}|AllDevices)$')][string]$DeviceGroupId,
     [Parameter(Mandatory)][ValidatePattern('^[0-9a-fA-F]{64}$')][string]$FileHash,
     [string]$FileName = 'procexp64.exe'
 )
@@ -102,12 +105,24 @@ function Find-Policy([string]$name) {
 # True when an assignment targets exactly this group. Targets such as
 # allDevicesAssignmentTarget have no groupId key; under StrictMode a bare
 # .groupId read on them could throw, so read the key only if it is there.
+function Get-TargetValue($target, [string]$key) {
+    if ($null -eq $target) { return $null }
+    if ($target -is [System.Collections.IDictionary]) { if ($target.Contains($key)) { return $target[$key] } else { return $null } }
+    $prop = $target.PSObject.Properties[$key]
+    if ($null -ne $prop) { return $prop.Value } else { return $null }
+}
+# True when an assignment INCLUDES exactly this target: a group (by id) or
+# all devices (groupId 'AllDevices'). An EXCLUSION of the same group is not
+# an assignment; Set-Policy stops on it instead of reporting "assigned".
 function Test-TargetsGroup($assignment, [string]$groupId) {
     $t = $assignment['target']
-    if ($null -eq $t) { return $false }
-    if ($t -is [System.Collections.IDictionary]) { return $t.Contains('groupId') -and $t['groupId'] -eq $groupId }
-    $prop = $t.PSObject.Properties['groupId']
-    return ($null -ne $prop) -and ($prop.Value -eq $groupId)
+    $type = [string](Get-TargetValue $t '@odata.type')
+    if ($groupId -eq 'AllDevices') { return $type -eq '#microsoft.graph.allDevicesAssignmentTarget' }
+    return ($type -eq '#microsoft.graph.groupAssignmentTarget') -and ((Get-TargetValue $t 'groupId') -eq $groupId)
+}
+function Test-ExcludesGroup($assignment, [string]$groupId) {
+    $t = $assignment['target']
+    return ([string](Get-TargetValue $t '@odata.type') -eq '#microsoft.graph.exclusionGroupAssignmentTarget') -and ((Get-TargetValue $t 'groupId') -eq $groupId)
 }
 
 function Set-Policy([string]$name, [hashtable]$body, [string]$groupId) {
@@ -124,11 +139,15 @@ function Set-Policy([string]$name, [hashtable]$body, [string]$groupId) {
         Write-Host "Created: $name ($id)"
     }
     $current = @((Invoke-MgGraphRequest -Method GET -Uri "$base('$id')/assignments").value)
+    if (@($current | Where-Object { Test-ExcludesGroup $_ $groupId }).Count -gt 0) {
+        throw "$name ($id) EXCLUDES group $groupId. Remove that exclusion first; this script will not assign over it."
+    }
     $assigned = @($current | Where-Object { Test-TargetsGroup $_ $groupId }).Count -gt 0
     if (-not $assigned) {
         if (-not $PSCmdlet.ShouldProcess($name, "Assign to group $groupId")) { return $id }
         # /assign replaces the whole list: keep any assignments already there.
-        $targets = @($current | ForEach-Object { @{ target = $_['target'] } }) + @(@{ target = @{ '@odata.type' = '#microsoft.graph.groupAssignmentTarget'; groupId = $groupId } })
+        $newTarget = if ($groupId -eq 'AllDevices') { @{ '@odata.type' = '#microsoft.graph.allDevicesAssignmentTarget' } } else { @{ '@odata.type' = '#microsoft.graph.groupAssignmentTarget'; groupId = $groupId } }
+        $targets = @($current | ForEach-Object { @{ target = $_['target'] } }) + @(@{ target = $newTarget })
         Invoke-MgGraphRequest -Method POST -Uri "$base('$id')/assign" -Body (@{ assignments = $targets } | ConvertTo-Json -Depth 10) -ContentType 'application/json' | Out-Null
         $check = @((Invoke-MgGraphRequest -Method GET -Uri "$base('$id')/assignments").value | Where-Object { Test-TargetsGroup $_ $groupId })
         if ($check.Count -eq 0) { throw "$name ($id): assignment to $groupId did not stick" }

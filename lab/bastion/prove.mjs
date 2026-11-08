@@ -148,7 +148,9 @@ try {
     // The existing eligibility, through the shared helper (PIM for Groups):
     // it sets and reads back the duration, and records the end time.
     const tReq = Date.now();
-    await activatePim(ADMIN, ADMIN_GROUP, 1, REASON, { context: ava });
+    // Pass the page: activatePim otherwise opens its own, and the screenshot
+    // below would show the earlier denied DC01 page (Greptile).
+    await activatePim(ADMIN, ADMIN_GROUP, 1, REASON, { context: ava, page });
     mark('activate', `PIM: ${ADMIN_GROUP} ACTIVE for ${ADMIN}, 1 hour (Reader on the subscription)`, { activation_s: Math.round((Date.now() - tReq) / 1000), shot: await snap(page, '04-pim-active') });
   }
 
