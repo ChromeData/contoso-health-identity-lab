@@ -100,9 +100,15 @@ non-interactive, triggers an alert. The threshold is 1.
   break-glass, the CA exclusion, alerting and the Global Administrator
   activation policy all check out first. It has never run; until it does,
   `01-Verify-Baseline.ps1` flags the account.
-- **Risk: the detection matches the naming pattern** (`bg-admin-NN@`), so
-  renaming an account blinds it. The production fix is matching on object
-  IDs from a Sentinel watchlist.
+- **The detection matches the accounts' object IDs** (since 2026-11-07,
+  BUILT; live after the merge's apply). `break-glass-signin.kql` matches
+  `UserId` against the break-glass users' immutable object IDs, which
+  Terraform renders from `modules/groups`. Renaming an account no longer
+  blinds it (harness case `renamed-account-by-object-id`). The `bg-admin-NN@`
+  name pattern stays as a second match, for a new account before its ID is
+  applied. One sign-in now gives one incident, one Teams card and one
+  ServiceNow ticket per account per day: later alerts become work notes on
+  that ticket.
 - **Drills.** The design calls for one sign-in drill per key every 90
   days (`lab/docs/runbooks/break-glass-drill.md`). `Invoke-BreakGlassDrill.ps1`
   automates the checks around it: a read-only preflight, then reading the

@@ -109,13 +109,13 @@ locals {
       tactics      = ["InitialAccess", "PrivilegeEscalation"]
       techniques   = ["T1078"]
       entities = [
-        { type = "Account", fields = [{ identifier = "FullName", column = "UserPrincipalName" }] },
+        { type = "Account", fields = [{ identifier = "FullName", column = "UserPrincipalName" }, { identifier = "AadUserId", column = "UserId" }] },
         { type = "IP", fields = [{ identifier = "Address", column = "IPAddress" }] },
       ]
       severity_column  = null
-      custom_details   = {}
+      custom_details   = { MatchedBy = "MatchedBy" }
       alert_per_result = false
-      group_by         = null
+      group_by         = ["Account"]
       la_severity      = 0
       la_mute          = null
     }
@@ -216,15 +216,17 @@ locals {
     IAC_PRINCIPAL_IDS     = var.iac_principal_ids
     PRIVILEGED_GROUP_IDS  = var.privileged_group_ids
     BREAK_GLASS_GROUP_IDS = var.break_glass_group_ids
+    BREAK_GLASS_USER_IDS  = var.break_glass_user_ids
     PRIVILEGED_USER_IDS   = var.privileged_user_ids
     AZURE_PIM_GROUP_IDS   = var.azure_pim_group_ids
   }
   rule_queries = {
-    for k, r in local.rules : k => replace(replace(replace(replace(replace(
+    for k, r in local.rules : k => replace(replace(replace(replace(replace(replace(
       file("${local.kql_dir}/${r.file}"),
       format(local.kql_placeholder, "IAC_PRINCIPAL_IDS"), "dynamic(${jsonencode(local.kql_lists.IAC_PRINCIPAL_IDS)}); // @@IAC_PRINCIPAL_IDS@@"),
       format(local.kql_placeholder, "PRIVILEGED_GROUP_IDS"), "dynamic(${jsonencode(local.kql_lists.PRIVILEGED_GROUP_IDS)}); // @@PRIVILEGED_GROUP_IDS@@"),
       format(local.kql_placeholder, "BREAK_GLASS_GROUP_IDS"), "dynamic(${jsonencode(local.kql_lists.BREAK_GLASS_GROUP_IDS)}); // @@BREAK_GLASS_GROUP_IDS@@"),
+      format(local.kql_placeholder, "BREAK_GLASS_USER_IDS"), "dynamic(${jsonencode(local.kql_lists.BREAK_GLASS_USER_IDS)}); // @@BREAK_GLASS_USER_IDS@@"),
       format(local.kql_placeholder, "PRIVILEGED_USER_IDS"), "dynamic(${jsonencode(local.kql_lists.PRIVILEGED_USER_IDS)}); // @@PRIVILEGED_USER_IDS@@"),
     format(local.kql_placeholder, "AZURE_PIM_GROUP_IDS"), "dynamic(${jsonencode(local.kql_lists.AZURE_PIM_GROUP_IDS)}); // @@AZURE_PIM_GROUP_IDS@@")
   }
@@ -368,11 +370,15 @@ resource "azurerm_sentinel_alert_rule_nrt" "this" {
   custom_details             = length(each.value.custom_details) > 0 ? each.value.custom_details : null
   enabled                    = true
 
-  # One alert per run (the rows ingested in that minute); the provider
-  # requires the block for NRT rules. "AlertPerResult" would cap at 30 single
-  # alerts per run (Learn, NRT considerations) and buys nothing here.
+  # One alert per result ROW, and the query returns one row per account
+  # (break-glass-signin.kql summarizes by UserId): two break-glass accounts
+  # seen in the same minute become two alerts, each grouped into its own
+  # account's incident (review of #230; with SingleAlert one alert named
+  # both accounts and grouping could not split it). Learn, NRT
+  # considerations: "an alert for each event for up to 30 events" - far
+  # above the two break-glass accounts.
   event_grouping {
-    aggregation_method = "SingleAlert"
+    aggregation_method = "AlertPerResult"
   }
 
   dynamic "entity_mapping" {
@@ -389,16 +395,29 @@ resource "azurerm_sentinel_alert_rule_nrt" "this" {
     }
   }
 
-  # Same grouping as the core scheduled rules: a sign-in's alerts inside an
-  # hour join one incident (same account and IP); the automation rule
-  # notify_on_alert_added below still posts a card for each alert that joins.
+  # DEDUP (2026-11-07, review finding D2): group by the ACCOUNT entity only,
+  # over 24 hours. One break-glass sign-in writes rows that are ingested over
+  # up to ~30 minutes (interactive + non-interactive legs, MFA steps), and
+  # each NRT run that sees new rows raises an alert. With the old grouping
+  # (all entities, 1 h) a late row from a new IP, or a row after the hour,
+  # opened a NEW incident with its own card and ticket (E49a, E49c). Now
+  # every alert for the same break-glass account in a day joins one
+  # incident; the notify playbook adds a work note to that incident's
+  # ServiceNow ticket for each joined alert instead of opening another
+  # (playbook-notify.json, Find_open_ticket). Learn, "Work with near-real-time
+  # (NRT) detection analytics rules" (read 2026-11-07): "You can choose how
+  # to group alerts into incidents", and entity mapping and custom details
+  # work as for scheduled rules.
+  # reopen_closed_incidents stays false: a sign-in AFTER the incident was
+  # closed is a new event and gets a new incident.
   incident {
     create_incident_enabled = true
     grouping {
       enabled                 = true
-      lookback_duration       = "PT1H"
+      lookback_duration       = var.break_glass_grouping_lookback
       reopen_closed_incidents = false
-      entity_matching_method  = "AllEntities"
+      entity_matching_method  = "Selected"
+      by_entities             = each.value.group_by
     }
   }
 }
@@ -441,16 +460,20 @@ resource "azurerm_sentinel_automation_rule" "notify" {
   }
 }
 
-# Notify AGAIN when an alert is added to an open incident, for the rules in
-# notify_on_alert_added_rule_keys (default: break-glass sign-in). Incident
-# grouping (1 h, all entities) puts a second break-glass sign-in into the
-# open incident, and the rule above only fires on creation: that sign-in
-# posted no card and opened no ticket (found 2026-11-05). Microsoft Learn's
+# Run the notify playbook AGAIN when an alert is added to an open incident,
+# for the rules in notify_on_alert_added_rule_keys (default: break-glass
+# sign-in). Incident grouping (24 h, by account) puts a second break-glass
+# sign-in into the open incident, and the rule above only fires on creation:
+# without this rule that sign-in would leave no trace in ServiceNow (found
+# 2026-11-05). Since 2026-11-07 (review finding D2) the playbook UPDATES the
+# incident's open ticket (a work note, found by correlation_id) and posts no
+# second Teams card, so a joined alert no longer means a new ticket. Microsoft Learn's
 # incident update trigger lists "Alerts are added to an incident" as an
 # update event; the condition below is the ARM shape for it
 # (PropertyArrayChanged, arrayType Alerts, changeType Added - the same shape
-# as itdr.tf's contain_on_alert_added). Each added alert = one more card and
-# one more ServiceNow ticket (same correlation_id: the incident).
+# as itdr.tf's contain_on_alert_added). Each added alert = one work note on
+# the incident's existing ServiceNow ticket (same correlation_id: the
+# incident); no new card, no new ticket.
 resource "azurerm_sentinel_automation_rule" "notify_on_alert_added" {
   count = length(azurerm_sentinel_automation_rule.notify) == 1 && length(local.notify_on_alert_added_rule_ids) > 0 ? 1 : 0
 
@@ -483,6 +506,52 @@ resource "azurerm_sentinel_automation_rule" "notify_on_alert_added" {
   action_playbook {
     logic_app_id = var.playbook_logic_app_id
     order        = 1
+  }
+}
+
+# Label drill incidents "drill" the moment they are created (review finding
+# D2, 2026-11-07: drills had left 50 incidents and 32 tickets open,
+# recheck-summary item 2). Condition: an Account entity whose name starts
+# with a drill account prefix (default itdr-drill-, the throwaway accounts
+# containment-drill.sh creates), on an incident from ANY analytics rule.
+# There is no rule-id condition: containment-drill.sh raises its incidents
+# from a temporary rule with a fresh id that is not one of this module's
+# rules, so a rule-id filter would leave drill incidents unlabelled (review
+# of PR #230). A drill-account prefix is specific enough on its own.
+# The label only MARKS the incident: the drill still runs its containment
+# path (closing at creation would skip it). After the drill,
+# lab/scripts/demo/close-build-noise.sh closes every open incident labelled
+# "drill" and resolves its ServiceNow ticket (an incident that also names a
+# real person is still held for the lead). Property names, operators and the
+# ModifyProperties labels shape are from the REST reference "Automation
+# Rules - Create Or Update" (api-version 2024-09-01, read 2026-11-07):
+# AccountName, StartsWith, labels[].labelName.
+resource "azurerm_sentinel_automation_rule" "label_drill" {
+  count = var.enable_sentinel && length(var.drill_account_prefixes) > 0 ? 1 : 0
+
+  name                       = uuidv5("url", "https://contoso-health-identity-lab/automation/label-drill")
+  log_analytics_workspace_id = azurerm_sentinel_log_analytics_workspace_onboarding.this[0].workspace_id
+  display_name               = "Contoso - label drill incidents (drill accounts)"
+  # After notify (1) and containment (2, itdr.tf): a label changes nothing
+  # they do.
+  order         = 3
+  triggers_on   = "Incidents"
+  triggers_when = "Created"
+
+  condition_json = jsonencode([
+    {
+      conditionType = "Property"
+      conditionProperties = {
+        propertyName   = "AccountName"
+        operator       = "StartsWith"
+        propertyValues = var.drill_account_prefixes
+      }
+    },
+  ])
+
+  action_incident {
+    order  = 1
+    labels = ["drill"]
   }
 }
 
