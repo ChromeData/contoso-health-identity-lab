@@ -22,6 +22,11 @@ output "sentinel_only_rule_keys" {
   value       = [for k in keys(local.rules) : k if contains(local.sentinel_only_rule_keys, k)]
 }
 
+output "operator_ips_watchlist_entry_count" {
+  description = "How many operator_ips watchlist rows this plan manages (a count only; the rows are sensitive and never output). 0 when the watchlist is off or operator_ip_ranges reaches the module empty."
+  value       = length(azurerm_sentinel_watchlist_item.operator_ips)
+}
+
 output "operator_ips_watchlist_id" {
   description = "Sentinel watchlist operator_ips (alias read by dc-logon-outside-operator-allowlist.kql); null unless enable_sentinel + enable_itdr_detections_v2. Its rows are sensitive and not output."
   value       = one(azurerm_sentinel_watchlist.operator_ips[*].id)

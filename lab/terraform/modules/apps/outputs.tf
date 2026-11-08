@@ -342,3 +342,14 @@ output "claims_viewer_role_assignments" {
   description = "Group object id -> app role value on the Claims Viewer (the converted AD FS rules 3a/3b)."
   value       = { for k, a in azuread_app_role_assignment.claims_viewer : a.principal_object_id => local.claims_viewer_roles[k].value }
 }
+
+output "servicenow_fulfilment" {
+  description = "The ServiceNow fulfilment app (null when enable_servicenow_fulfilment = false). client_id goes into ServiceNow property contoso.entra.fulfilment.client_id (lab/servicenow/apply.py looks it up by display name)."
+  value = var.enable_servicenow_fulfilment ? {
+    client_id                   = azuread_application.servicenow_fulfilment[0].client_id
+    service_principal_object_id = azuread_service_principal.servicenow_fulfilment[0].object_id
+    catalog_role                = "Access package assignment manager (${local.access_package_assignment_manager_role_id})"
+    catalog_id                  = var.servicenow_fulfilment_catalog_id
+    graph_api_permissions       = "none"
+  } : null
+}

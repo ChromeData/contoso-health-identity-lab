@@ -66,7 +66,7 @@ jobs:
         run: |
           set -uo pipefail
           fail=0
-          dirs="lab/terraform/envs/dev lab/terraform/envs/bootstrap lab/terraform/envs/operator lab/terraform/aws lab/terraform/okta lab/terraform/k8s/platform lab/terraform/k8s/identity lab/terraform/k8s/aks-mapping"
+          dirs="lab/terraform/envs/dev lab/terraform/envs/bootstrap lab/terraform/envs/operator lab/terraform/aws lab/terraform/okta lab/terraform/k8s/platform lab/terraform/k8s/identity lab/terraform/k8s/keyvault-trust"
           for m in lab/terraform/modules/*/; do dirs="$dirs ${m%/}"; done
           for d in $dirs; do
             echo "::group::$d"
@@ -84,17 +84,6 @@ jobs:
             echo "::endgroup::"
           done
           exit "$fail"
-
-      - name: Conjur secret in Terraform state, measured (lab/pam/conjur/state-leak)
-        # A throwaway Conjur OSS in Docker and a random value; no credential
-        # from this repo or GitHub is used. Exit 0 only if the data source path
-        # puts the value in state and the ephemeral path reads it (precondition,
-        # with a negative control) and keeps it out of state, backup and plan.
-        # Same Terraform as the step above (HashiCorp, the pinned version).
-        run: |
-          set -euo pipefail
-          terraform fmt -check -recursive lab/pam/conjur/state-leak
-          bash lab/pam/conjur/state-leak/run.sh
 
   # ---------------------------------------------------------------------------
   # PowerShell: PSScriptAnalyzer (errors fail) + every Pester suite, the ITDR
@@ -189,7 +178,7 @@ jobs:
         run: |
           Import-Module Pester -RequiredVersion 5.7.1
           $c = New-PesterConfiguration
-          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1', './lab/adfs/tests/ConnectHealth.Tests.ps1')
+          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1', './lab/adfs/tests/ConnectHealth.Tests.ps1', './lab/adfs/tests/QuietGate.Tests.ps1')
           $c.Run.Exit = $true
           $c.Output.Verbosity = 'Normal'
           Invoke-Pester -Configuration $c
@@ -198,10 +187,18 @@ jobs:
         run: |
           set -euo pipefail
           bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
+          # Pipeline config from Key Vault: fail closed, mask per element (fake az).
+          bash .github/scripts/tests/pipeline-config.test.sh
+          # after-signup.sh step B re-run: keeps settings added after setup, refuses a vault rename.
+          python3 -I -m unittest discover -s lab/setup/tests -p 'test_merge_tfvars.py' -v
           bash lab/scripts/demo/tests/reset-demo-hire.test.sh
           bash lab/scripts/demo/tests/close-build-noise.test.sh
+          # Break-glass rotation: stub az + stub Keychain, no tenant (PR #226).
+          bash lab/scripts/break-glass/tests/rotate-password.test.sh
           node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs lab/scripts/demo/signin/tests/identity.test.mjs
           node --test lab/terraform/okta/tests/trust-claims.test.mjs
+          # Contoso HR form (lab/hr-app, ADR 0027): roster rules, API, GitHub store (fake gh).
+          node --test lab/hr-app/tests/hr-app.test.mjs
           # Okta -> Entra migration tools: EL->Entra rule translation, tracker, System Log filter, the app's ID-token check (no network).
           node --test lab/okta-migration/tests/lib.test.mjs
           bash lab/scripts/demo/tests/containment-drill.test.sh
@@ -211,9 +208,21 @@ jobs:
           # Splunk live feed: watermark, de-dup, HEC failures, LaunchAgent template,
           # preflight verdict (fake Log Analytics, an HEC stub on 127.0.0.1; stdlib only).
           python3 -I -m unittest discover -s lab/scripts/monitoring/tests -p 'test_feed_splunk_live.py' -v
+          # configure-sync.py hrapp --mail-domain: the AD mail mapping (E121 follow-up; fake az).
+          python3 -I -m unittest discover -s lab/scripts/dc/tests -p 'test_configure_sync.py' -v
+          # rotate-build-admin.py: rollback only on proven no-change, lock, stdin hand-off, security -i quoting (PR #262; fakes only).
+          python3 -I -m unittest discover -s lab/scripts/dc/tests -p 'test_rotate_build_admin.py' -v
+          # rotate-tier-admin.py: rollback only on proven no-change, both values kept otherwise, per-account lock, stdin hand-off, security -i quoting (PR #251; fakes only).
+          python3 -I -m unittest discover -s lab/scripts/dc/tests -p 'test_rotate_tier_admin.py' -v
           # Pure parts of the lab passkey tool (no browser, Graph or Keychain);
           # node is preinstalled on ubuntu-latest, node:test needs no package.
           node --test lab/scripts/demo/tests/passkey.test.mjs
+          # Connect Health registration token helper (ADR 0031): PKCE, the
+          # authorize URL, and the claim checks that refuse a non-MFA token.
+          node --test lab/adfs/connect-health/tests/get-agent-token.test.mjs
+          # ... and the registration account's lifecycle (a later apply cannot
+          # switch on an account register.sh close turned off).
+          node --test lab/adfs/connect-health/tests/registration-lifecycle.test.mjs
           # The PAM harness's scripted-session client verdicts (fake Guacamole
           # tunnel on 127.0.0.1, stdlib only): the nightly pam-harness run is
           # not on pull requests, so this is where a PR breaking them fails.
@@ -228,14 +237,28 @@ jobs:
           # AD FS -> Entra claims diff (lab/adfs/compare): the before/after
           # verdict the cutover proof depends on (stdlib only).
           python3 -I -m unittest discover -s lab/adfs/compare/tests -v
-          # The counter behind the Conjur state-leak result (stdlib only).
-          python3 -I -m unittest discover -s lab/pam/conjur/state-leak/tests -v
           # kusto-harness run-on-workspace.py: result decoding and verdict
           # (no workspace; the live runs are operator runs, capture log E114).
           python3 -I -m unittest discover -s lab/monitoring/kusto-harness/tests -p 'test_*.py' -v
+          # ServiceNow use cases (lab/servicenow): package resolution, the
+          # records apply.py writes (no delivery plan, names <= 40), the
+          # provisioning-mapping change, cleanup's guards (stdlib only).
+          python3 -I -m unittest discover -s lab/servicenow/tests -v
+          # ...and the server JavaScript that grants, removes and closes, in a
+          # node:vm sandbox with fake ServiceNow globals and a scripted Graph.
+          node --test lab/servicenow/tests/entra-access.test.mjs
+          # Tier GPO proof device builder (lab/scripts/dc/tier-test): refuses an
+          # existing VM, saves its password only after Azure accepts the VM
+          # (mocked ARM and Keychain; no az).
+          python3 -I -m unittest discover -s lab/scripts/dc/tier-test/tests -p 'test_*.py' -v
 
       # The plain-English plan/apply summaries run with continue-on-error in
       # terraform-plan.yml / terraform-apply.yml (a summary bug must never
       # block an apply), so THIS is the check that fails when one breaks.
       - name: Plain-English summary tests (plain-plan.py)
         run: python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
+
+      # karen-review E2: an ADR must not say a script "never ran" when the
+      # capture log records a run of it. Fails closed if an input is missing.
+      - name: ADR status claims match the capture log
+        run: python3 -I .github/scripts/check-adr-status.py

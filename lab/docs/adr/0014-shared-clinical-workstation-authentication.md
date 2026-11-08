@@ -126,11 +126,33 @@ fleet.
   CA060 exists as code only, which means it has never matched a real
   station.
 
+## The EHR on these stations (added 2026-11-07)
+
+- **The EHR is the real target of every switch.** A typical hospital runs
+  Epic Hyperspace (or Cerner/Oracle Health) published through Citrix
+  Virtual Apps. The clinician signs in to Windows, then to Citrix, then to
+  the EHR. The switch time that matters is badge-to-chart, not
+  badge-to-desktop.
+- **FIDO2 inside Citrix needs WebAuthn redirection** (Option 1 above). Without
+  it, the key works for Windows but the EHR session still asks for a
+  password. verify: the Citrix Workspace app and VDA versions on target.
+- **Why classic badge-tap was rejected.** Most tap-and-go products read a
+  proximity badge ID (cloneable), then type a stored password into
+  Windows, Citrix and the EHR for the user. That keeps passwords alive for
+  every clinician, and the product becomes one more system that can sign
+  in as anyone.
+- **The realistic target.** A badge that is itself a credential: a FIDO2
+  badge, or a smart-card (certificate) badge, used with a clinical SSO
+  product (for example Imprivata OneSign with a FIDO2 or PIV badge). Tap to
+  lock, tap to sign in, and the EHR's own idle timeout. The decision above
+  stays until the 20-second trigger below fires.
+
 ## Revisit trigger
 
-- The pilot's median switch time exceeds 20 seconds, or clinicians share
-  sessions to avoid signing in. Then evaluate a badge vendor whose badge is
-  itself a FIDO2 or certificate credential.
+- The pilot's median badge-to-chart switch time exceeds 20 seconds, or
+  clinicians share sessions to avoid signing in, or keys are left taped to
+  carts. Then evaluate a badge vendor whose badge is itself a FIDO2 or
+  certificate credential (see "The EHR on these stations").
 - Microsoft changes its guidance for shared Windows frontline devices.
 - A CA060 failure delays care.
 

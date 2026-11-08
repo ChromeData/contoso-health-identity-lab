@@ -123,6 +123,21 @@ Describe 'Get-HrFeedChange.ps1: the change in HR words' {
         { & $script:Change -CsvPath $cur -EmployeeId 499999 } | Should -Throw '*499999*'
     }
 
+    It 'a push that only corrects the upn column is a change and is sent (review of PR #229)' {
+        $h = $script:Header + ',upn'
+        $prev = Join-Path $TestDrive 'upn-prev.csv'; $cur = Join-Path $TestDrive 'upn-cur.csv'
+        Set-Content -LiteralPath $prev -Value @($h, '100310,Marcus,Bello,Nursing,Registered Nurse,200015,active,2022-01-10,,marcus.bello@contosohealthlab.com')
+        Set-Content -LiteralPath $cur -Value @($h, '100310,Marcus,Bello,Nursing,Registered Nurse,200015,active,2022-01-10,,marcus.bello2@contosohealthlab.com')
+        $state = Join-Path $TestDrive 'upn-baseline.json'
+        $c = @(& $script:Change -CsvPath $cur -PreviousCsvPath $prev -BaselineStatePath $state)
+        $c.Count | Should -Be 1
+        $c[0].kind | Should -Be 'updated'
+        $c[0].send | Should -BeTrue
+        $c[0].changedFields | Should -Be @('upn')
+        # The previous file's issued upn goes into the baseline (reserved for that worker).
+        (Get-Content -LiteralPath $state -Raw | ConvertFrom-Json -AsHashtable)['100310']['upn'] | Should -Be 'marcus.bello@contosohealthlab.com'
+    }
+
     It 'writes the previous version as the access-change baseline Invoke-InboundProvisioning reads (-StatePath)' {
         # 11 moves in one push: the guard must see them against the PREVIOUS file.
         $rows = 0..10 | ForEach-Object { "92{0:d4},Nurse,P$_,Nursing,Registered Nurse,200015,active,2020-01-01," -f $_ }
@@ -286,6 +301,38 @@ Describe 'Write-HrFeedSummary.ps1: the plain-English story' {
         Remove-Item -LiteralPath $script:Md
         & $script:Summary -ChangesPath $changes -SummaryPath $script:Md -WaitSeconds 0 -SignInOutcome failure
         (Get-Content -LiteralPath $script:Md -Raw) | Should -Match '## HR change not sent: GitHub could not sign in to Microsoft'
+    }
+
+    It 'rows held back while the rest were sent: the summary says how many, the real limit used, and the ticket path (review C2)' {
+        $f = Join-Path $TestDrive 'held.json'
+        [ordered]@{ schema = 'hr-feed-send/1'; outcome = 'dry-run'; refusal = @{ kind = 'mass-disable'; count = 25; threshold = 20 }; jobId = $script:Job; servicePrincipalId = $script:Sp
+            selected = @(@{ employeeId = '400104'; status = 'joiner' }); sentAtUtc = $null
+            batches = @([ordered]@{ index = 1; records = 1; employeeIds = @('400104'); httpStatus = 0; accepted = $false })
+            quarantined = @(1..25 | ForEach-Object { @{ employeeId = "6000$_"; status = 'leaver'; kind = 'mass-disable' } }) } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $f
+        & $script:Summary -ChangesPath (New-ChangesFile @($script:Sam)) -ResultPath $f -SummaryPath $script:Md -WaitSeconds 0
+        $md = Get-Content -LiteralPath $script:Md -Raw
+        $md | Should -Match 'Held back by the safety check: 25 row'
+        $md | Should -Match 'limit for this push is 20'
+        $md | Should -Match 'BulkChangeTicket'
+        Remove-Item -LiteralPath $script:Md
+    }
+
+    It 'a REAL send with some rows held back: the held workers read "held back, NOT sent", never "sent" (review of PR #229)' {
+        $gone = [ordered]@{} + $script:Sam; $gone['employeeId'] = '600001'; $gone['kind'] = 'left'; $gone['status'] = 'leaver'; $gone['givenName'] = 'Ana'; $gone['surname'] = 'Gone'
+        Mock Invoke-MgGraphRequest { @{ value = @((New-LogEntry -Id '400104' -Action 'create')) } } -ParameterFilter { $Uri -like '*auditLogs/provisioning*' }
+        $f = Join-Path $TestDrive 'held-sent.json'
+        [ordered]@{ schema = 'hr-feed-send/1'; outcome = 'sent'; refusal = @{ kind = 'mass-disable'; count = 11; threshold = 10 }; jobId = $script:Job; servicePrincipalId = $script:Sp
+            selected = @(@{ employeeId = '400104'; status = 'joiner' }); sentAtUtc = '2026-11-09T15:00:00Z'
+            batches = @([ordered]@{ index = 1; records = 1; employeeIds = @('400104'); httpStatus = 202; accepted = $true })
+            quarantined = @(@{ employeeId = '600001'; status = 'leaver'; kind = 'mass-disable' }) } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $f
+        & $script:Summary -ChangesPath (New-ChangesFile @($script:Sam, $gone)) -ResultPath $f -SummaryPath $script:Md -WaitSeconds 0 -SignInOutcome success
+        $md = Get-Content -LiteralPath $script:Md -Raw
+        $md | Should -Match ([regex]::Escape("- **Left:** Ana Gone, Cloud Engineer (Information Technology) $($script:D) held back by the safety check: NOT sent"))
+        $md | Should -Not -Match 'Ana Gone[^\n]*Microsoft has not logged it yet'
+        $md | Should -Match ([regex]::Escape("- **Hired:** Sam Rivera, Cloud Engineer (Information Technology) $($script:D) account created in Active Directory"))
+        $md | Should -Match '\*\*Safety check:\*\* 0 to switch off'
+        Should -Invoke Invoke-MgGraphRequest -Times 0 -ParameterFilter { [uri]::UnescapeDataString($Uri) -like "*sourceIdentity/id eq '600001'*" }
+        Remove-Item -LiteralPath $script:Md
     }
 
     It 'a change step that stopped (no changes file) says nothing was sent and points at its log' {

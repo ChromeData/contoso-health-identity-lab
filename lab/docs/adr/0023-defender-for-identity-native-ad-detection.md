@@ -24,8 +24,8 @@ those rules watch the native on-prem AD-attack plane, read from DC01
 Microsoft Defender for Identity (MDI) is purpose-built for exactly this plane.
 Its sensor runs on the domain controller, reads the same events plus network
 traffic and the directory, and ships detections for Kerberoasting, DCSync,
-lateral movement and reconnaissance that Microsoft writes and maintains. One
-senior posting named it directly (`lab/docs/job-alignment.md`, gap 5).
+lateral movement and reconnaissance that Microsoft writes and maintains. Hospital
+IAM job postings name it directly.
 
 The question is not "MDI or the KQL rules". It is which one is the *primary*
 detector for the native AD signatures, and what the KQL rules are *for* once
@@ -88,8 +88,8 @@ the tenant until a human runs the runbook.
 - **Layering, stated once.** Entra ID Protection = cloud identity risk (live);
   Defender for Identity = native AD attacks (staged); custom detection-as-code
   on Sentinel with Splunk twins = portable, plus the two correlations MDI
-  cannot make. `STAND-INS.md`, the README capability table and
-  `job-alignment.md` all say this.
+  cannot make. `STAND-INS.md` and the README capability table
+  both say this.
 - **The twins are not dead weight.** They keep the Splunk migration path and
   the offline tests working, and they are the post-trial fallback when the MDI
   licence lapses. The lab can run the AD-attack detections with or without a
@@ -106,7 +106,7 @@ the tenant until a human runs the runbook.
   (`mdi.tf` header).
 - **Residual risk:** the sensor and licence are the human steps the runbook
   carries; a staged flag that is never applied leaves the native layer unproven
-  in a tenant. Recorded in `job-alignment.md` gap 5 until the runbook runs.
+  in a tenant. It stays an open gap until the runbook runs.
 
 ## How it is measured
 

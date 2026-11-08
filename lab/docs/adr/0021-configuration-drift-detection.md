@@ -1,6 +1,6 @@
 # ADR 0021: Configuration drift detection (nightly reconcile of tenant state against the code)
 
-- **Status:** Accepted (lab). BUILT: `Export-IdentityConfig.ps1`, `Compare-IdentityConfig.ps1`, their Pester suites and `.github/workflows/config-drift.yml`, all tested offline against mocked Graph. Not run: no export has been taken from a tenant and the committed baseline is a placeholder (`lab/config-baseline/`). **RAN · tenant:** nothing.
+- **Status:** Accepted (lab). BUILT: `Export-IdentityConfig.ps1`, `Compare-IdentityConfig.ps1`, their Pester suites and `.github/workflows/config-drift.yml`, all tested offline against mocked Graph. **RAN · tenant:** the baseline is a tenant export from 2026-10-29, reviewed in #98. The scheduled workflow failed at its Azure sign-in step from 2026-10-27 to 2026-11-04, so no nightly compare ran in that time. Its first tenant compare ran on 2026-11-05 (run 41954235659). That run caught a real Microsoft schema change (#112), and PR #113 refreshed the baseline. The nightly run has passed since then (runs 42025648827 and 42214773519).
 - **Date:** 2026-10-26
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
@@ -101,8 +101,8 @@ Results: fill after running. Nothing has been measured.
 
 - `lab/scripts/powershell/Export-IdentityConfig.ps1`, `Compare-IdentityConfig.ps1`
 - `lab/scripts/powershell/tests/Export-IdentityConfig.Tests.ps1`, `Compare-IdentityConfig.Tests.ps1`
-- `.github/workflows/config-drift.yml` (no run yet)
-- `lab/config-baseline/` (placeholder until E59)
+- `.github/workflows/config-drift.yml` (tenant runs: see the Status line)
+- `lab/config-baseline/` (tenant baseline from #98, refreshed by #113)
 - Real-time twins: `lab/kql/ca-policy-changed.kql`, `role-assigned-outside-pim.kql`, `pim-activation-without-auth-context.kql`
 
 ## Sources

@@ -1,17 +1,12 @@
 # Stage 1 (platform) guard rails, checked offline against mocked providers:
-# PSA labels per namespace, the Vault Helm values that the rest of the segment
-# depends on (dev mode, digest-pinned images, NodePort 30820, fail-closed injector
-# webhook scoped to clinical-apps), and the input validation that keeps a weak
-# root token or a non-kind context out.
+# PSA labels per namespace, the CSI driver + Azure provider Helm values the
+# rest of the segment depends on (digest-pinned images, rotation on, no
+# Secret sync, exactly one token audience), and the guard that keeps a
+# non-kind context out.
 # Run offline: terraform init -backend=false && terraform test
 
 mock_provider "kubernetes" {}
 mock_provider "helm" {}
-
-variables {
-  # Format-valid placeholder for the mocked plan; not a credential.
-  vault_dev_root_token = "tftest-placeholder-token-0000000000000000"
-}
 
 run "namespaces_carry_the_pod_security_levels" {
   command = plan
@@ -27,107 +22,70 @@ run "namespaces_carry_the_pod_security_levels" {
     ])
     error_message = "clinical-apps must also warn and audit at restricted"
   }
+  # The driver namespace is the one privileged exception; it must keep
+  # warning and auditing at baseline so the exception stays visible.
   assert {
-    condition     = kubernetes_namespace_v1.vault.metadata[0].labels["pod-security.kubernetes.io/enforce"] == "baseline"
-    error_message = "the vault namespace must enforce baseline"
+    condition = (
+      kubernetes_namespace_v1.secrets_store.metadata[0].labels["pod-security.kubernetes.io/enforce"] == "privileged" &&
+      kubernetes_namespace_v1.secrets_store.metadata[0].labels["pod-security.kubernetes.io/warn"] == "baseline" &&
+      kubernetes_namespace_v1.secrets_store.metadata[0].labels["pod-security.kubernetes.io/audit"] == "baseline"
+    )
+    error_message = "secrets-store enforces privileged (CSI node plugin) but must warn + audit at baseline"
   }
 }
 
-run "vault_release_is_pinned_and_wired_for_the_lab" {
+run "csi_release_is_pinned_and_wired_for_the_lab" {
   command = plan
 
   assert {
-    condition     = helm_release.vault.version == "0.34.1" && helm_release.vault.chart == "vault"
-    error_message = "the Vault chart must be pinned to hashicorp/vault 0.34.1"
-  }
-  assert {
-    condition     = yamldecode(helm_release.vault.values[0]).server.dev.enabled == true
-    error_message = "Vault must run in dev mode (in-memory, ephemeral cluster)"
-  }
-  assert {
     condition = (
-      startswith(yamldecode(helm_release.vault.values[0]).server.image.tag, "2.1.1@") &&
-      yamldecode(helm_release.vault.values[0]).injector.agentImage.tag == yamldecode(helm_release.vault.values[0]).server.image.tag
+      helm_release.csi_secrets_store_provider_azure.chart == "csi-secrets-store-provider-azure" &&
+      helm_release.csi_secrets_store_provider_azure.version == "1.8.2"
     )
-    error_message = "server and injected agent must both run hashicorp/vault:2.1.1 (same digest)"
+    error_message = "the chart must be pinned to csi-secrets-store-provider-azure 1.8.2"
   }
-  # Every image the chart runs is pinned by digest. The chart renders
-  # "<repository>:<tag>", so the digest rides in the tag. The agent pin is
-  # load-bearing: ../identity's admission policy rejects any container in
-  # clinical-apps (the injected agent included) without "@sha256:".
+  # Every image pinned by digest: the provider and CRD job through the tag
+  # (their templates render repository:tag), the driver containers through
+  # the sub-chart's digest field.
   assert {
     condition = alltrue([
       for tag in [
-        yamldecode(helm_release.vault.values[0]).server.image.tag,
-        yamldecode(helm_release.vault.values[0]).injector.agentImage.tag,
-        yamldecode(helm_release.vault.values[0]).injector.image.tag,
-      ] : can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+@sha256:[0-9a-f]{64}$", tag))
+        yamldecode(helm_release.csi_secrets_store_provider_azure.values[0]).linux.image.tag,
+        yamldecode(helm_release.csi_secrets_store_provider_azure.values[0])["secrets-store-csi-driver"].linux.crds.image.tag,
+      ] : can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+@sha256:[0-9a-f]{64}$", tag))
     ])
-    error_message = "server, agent and injector images must be <version>@sha256:<64 hex> (digest-pinned)"
+    error_message = "provider and CRD job images must be <version>@sha256:<64 hex>"
   }
   assert {
-    condition     = output.vault_agent_image == "hashicorp/vault:${yamldecode(helm_release.vault.values[0]).injector.agentImage.tag}"
-    error_message = "output vault_agent_image must be exactly the agent image the injector writes into pods"
+    condition = alltrue([
+      for k in ["image", "registrarImage", "livenessProbeImage"] :
+      can(regex("^sha256:[0-9a-f]{64}$", yamldecode(helm_release.csi_secrets_store_provider_azure.values[0])["secrets-store-csi-driver"].linux[k].digest))
+    ])
+    error_message = "driver, registrar and liveness-probe images must carry a sha256 digest"
+  }
+  assert {
+    condition     = yamldecode(helm_release.csi_secrets_store_provider_azure.values[0])["secrets-store-csi-driver"].tokenRequests == [{ audience = "api://AzureADTokenExchange", expirationSeconds = 600 }]
+    error_message = "the driver must request tokens for exactly one audience: api://AzureADTokenExchange"
+  }
+  assert {
+    condition     = yamldecode(helm_release.csi_secrets_store_provider_azure.values[0])["secrets-store-csi-driver"].syncSecret.enabled == false
+    error_message = "Secret sync must stay off (a Key Vault value must never be copied into a Kubernetes Secret)"
   }
   assert {
     condition = (
-      yamldecode(helm_release.vault.values[0]).server.service.type == "NodePort" &&
-      yamldecode(helm_release.vault.values[0]).server.service.nodePort == 30820
+      yamldecode(helm_release.csi_secrets_store_provider_azure.values[0])["secrets-store-csi-driver"].enableSecretRotation == true &&
+      yamldecode(helm_release.csi_secrets_store_provider_azure.values[0])["secrets-store-csi-driver"].rotationPollInterval == "10s"
     )
-    error_message = "the Vault service must be NodePort 30820 (kind maps it to 127.0.0.1:18200)"
+    error_message = "rotation must be on, every 10s (pipeline stage 9 waits for it)"
   }
   assert {
-    condition     = !can(yamldecode(helm_release.vault.values[0]).server.dev.devRootToken)
-    error_message = "the root token must never be in the plain values (it goes through set_wo only)"
+    condition     = helm_release.csi_secrets_store_provider_azure.wait == true && helm_release.csi_secrets_store_provider_azure.timeout == 600
+    error_message = "the release must wait (up to 600s) for the driver, the provider and the CRDs"
   }
   assert {
-    condition     = helm_release.vault.set_wo_revision >= 1
-    error_message = "set_wo_revision must be >= 1 or the provider ignores set_wo"
+    condition     = helm_release.csi_secrets_store_provider_azure.namespace == "secrets-store"
+    error_message = "the driver runs in its own namespace, never in clinical-apps"
   }
-  assert {
-    condition     = helm_release.vault.wait == true && helm_release.vault.timeout == 600
-    error_message = "the release must wait (up to 600s) for Vault and the injector to be Ready"
-  }
-}
-
-run "injector_webhook_fails_closed_and_only_where_opted_in" {
-  command = plan
-
-  assert {
-    condition     = yamldecode(helm_release.vault.values[0]).injector.webhook.failurePolicy == "Fail"
-    error_message = "the injector webhook must fail closed (no silently un-injected pods)"
-  }
-  # An empty selector would match EVERY namespace (kube-system included), so
-  # "non-empty" is asserted separately: the alltrue() below is vacuously true
-  # on an empty map.
-  assert {
-    condition     = length(yamldecode(helm_release.vault.values[0]).injector.webhook.namespaceSelector.matchLabels) > 0
-    error_message = "the webhook namespaceSelector must not be empty (that would select every namespace)"
-  }
-  assert {
-    condition = alltrue([
-      for k, v in yamldecode(helm_release.vault.values[0]).injector.webhook.namespaceSelector.matchLabels :
-      lookup(kubernetes_namespace_v1.clinical_apps.metadata[0].labels, k, null) == v
-    ])
-    error_message = "clinical-apps must carry every label the webhook namespaceSelector matches on"
-  }
-  assert {
-    condition = alltrue([
-      for k, v in yamldecode(helm_release.vault.values[0]).injector.webhook.namespaceSelector.matchLabels :
-      lookup(kubernetes_namespace_v1.vault.metadata[0].labels, k, null) != v
-    ])
-    error_message = "the vault namespace must NOT be opted in to injection"
-  }
-}
-
-run "weak_root_token_is_rejected" {
-  command = plan
-
-  variables {
-    vault_dev_root_token = "root"
-  }
-
-  expect_failures = [var.vault_dev_root_token]
 }
 
 run "non_kind_context_is_rejected" {

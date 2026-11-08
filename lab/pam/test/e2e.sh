@@ -2,7 +2,7 @@
 # =============================================================================
 # test/e2e.sh - rehearse the AD-dependent PAM flow WITHOUT Azure, against a
 # real Samba Active Directory DC, using the real scripts (vault-onboard-ad.sh,
-# psm-session.sh, conjur-demo.sh, discover.sh, onboard.sh, rotate.sh,
+# psm-session.sh, discover.sh, onboard.sh, rotate.sh,
 # reconcile.sh, psm-ssh.sh, vault-ha.sh, dr-drill.sh - only the `az` CLI is
 # stubbed), not copies.
 #
@@ -51,7 +51,7 @@
 #      (test/guac_recording.py: plays back) and is the same file the web
 #      app's History serves to its player; check-in rotates the password and
 #      the KDC refuses the old one
-#   h. ./conjur-demo.sh succeeds (allowed + 403)
+#   h. (removed: the Conjur check; ADR 0036 dropped Conjur)
 #   i. midPoint REST login (and a wrong password is refused) + connector
 #      inventory (is MS Graph bundled?)
 #   j. ./discover.sh: every planted finding classified (nested membership,
@@ -335,8 +335,6 @@ set_guac_attr() { # set_guac_attr USER KEY VALUE: keeps the user's current (lab)
 }
 oidc_ensure() { ( PAM_OIDC=1 ensure_guac_operator "$1" ); }                 # the tenant-time path
 lab_ensure()  { ( PAM_OIDC=0; OIDC_CLIENT_ID=""; ensure_guac_operator "$1" ); }
-
-conjur_ok() { grep -qE 'fetched secret \([1-9][0-9]* chars' <<<"$1" && grep -q 'denied (403' <<<"$1"; }
 
 open_accounts() { [[ -s "$STATE" ]] && jq -r 'if has("account") then .account else keys[] end' "$STATE" || true; }
 
@@ -1038,16 +1036,6 @@ jq -n --slurpfile r "$REC/rdp-recording-check.json" --arg c "$RCONN" --arg a "$R
                     "Guacamole History API served the same bytes (sha256) to its player"],
    not_done: "no video encode: guacenc is not in the guacamole/guacd:1.6.0 image and Debian trixie does not package it"}' \
   > "$REC/rdp-recording.json" 2>/dev/null || rm -f "$REC/rdp-recording.json"
-
-# --- (h) Conjur ---------------------------------------------------------------------
-step "(h) ./conjur-demo.sh"
-if LAST_OUT=$(./conjur-demo.sh 2>&1); then
-  printf '%s\n' "$LAST_OUT" | indent
-  check "conjur-demo.sh: nightly-report fetched, unapproved-job denied (403)" conjur_ok "$LAST_OUT"
-else
-  printf '%s\n' "$LAST_OUT" | indent
-  fail "conjur-demo.sh exited non-zero"
-fi
 
 # --- (i) midPoint -------------------------------------------------------------------
 step "(i) midPoint REST (administrator / MIDPOINT_ADMIN_PASSWORD)"

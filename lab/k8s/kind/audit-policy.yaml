@@ -5,8 +5,8 @@
 # FORBIDDEN read of a Secret; the out-of-band RoleBinding edit of the drift
 # drill (pipeline stage 10) and Terraform's revert of it; the write of the
 # ValidatingAdmissionPolicy; and proof that no Secret or token body was
-# logged. Pipeline stage 12 then counts the KV value and the Vault root token
-# in this log (0 expected).
+# logged. Pipeline stage 12 then counts every version of the Key Vault
+# secret in this log (0 expected).
 #
 # Metadata records who (user, groups, and impersonatedUser when someone uses
 # --as / --as-group), what (verb, resource, namespace, name), when, from where
@@ -18,9 +18,9 @@
 #   Metadata          SECRET-BEARING resources, pinned FIRST so no later rule
 #                     can raise them: Secrets; serviceaccounts/token (the
 #                     TokenRequest RESPONSE is a live, audience-bound JWT, the
-#                     very token Vault accepts); TokenReviews (the REQUEST
-#                     carries the bearer token under review: Vault sends the
-#                     pod's JWT there). At Request or RequestResponse level the
+#                     very token Entra exchanges for a Key Vault token; the
+#                     CSI driver makes these for rotation); TokenReviews (the
+#                     REQUEST carries the bearer token under review). At Request or RequestResponse level the
 #                     audit log would become a second secret store, readable
 #                     by whoever reads logs (on AKS: everyone with read on the
 #                     Log Analytics workspace).
@@ -98,7 +98,7 @@ rules:
       - group: ""
         resources: ["pods/exec", "pods/attach", "pods/portforward", "pods/ephemeralcontainers"]
   # Admission guardrail changes: the ValidatingAdmissionPolicy + binding and
-  # the webhook configurations (the Vault injector's included).
+  # the webhook configurations.
   - level: RequestResponse
     verbs: ["create", "update", "patch", "delete", "deletecollection"]
     resources:

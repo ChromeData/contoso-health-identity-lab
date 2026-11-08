@@ -4,7 +4,8 @@
 # Child module: declares the provider it consumes, never its configuration
 # (that is inherited from envs/dev, like every other module here).
 #
-# Only azuread. Nothing in this module needs random/time/tls: app role and
+# azuread, plus hashicorp/time for ONE time_sleep (servicenow_fulfilment.tf).
+# Nothing else needs random/time/tls: app role and
 # scope ids are fixed GUIDs (they must never change once tokens carry them),
 # and the SAML signing certificate is minted by Entra itself
 # (addTokenSigningCertificate), so no private key ever exists in Terraform.
@@ -17,6 +18,13 @@ terraform {
     azuread = {
       source  = "hashicorp/azuread"
       version = "~> 3.10"
+    }
+    # time_sleep only: the ServiceNow fulfilment SP must replicate to
+    # entitlement management before its catalog role is assigned
+    # (servicenow_fulfilment.tf).
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.13"
     }
   }
 }

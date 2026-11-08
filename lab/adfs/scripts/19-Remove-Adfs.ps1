@@ -11,9 +11,16 @@
     token-issuance audits (Security log, event 1200, source "AD FS Auditing")
     that name the relying party in the last -QuietHours hours. If there are
     any, it stops, unless -Force yes. It also stops when it cannot prove the
-    quiet period: no AD FS audit has ever been written (auditing is broken),
-    or the Security log does not reach back -QuietHours. Before you decommission, the cutover is
-    done and nothing still uses AD FS.
+    quiet period: the newest AD FS audit (event 1200 or 1202, any relying
+    party) is missing or older than -AuditFreshHours (auditing may have
+    stopped, so "no sign-ins" proves nothing), or the Security log does not
+    reach back -QuietHours. Before you decommission, the cutover is done and
+    nothing still uses AD FS.
+
+    Fresh audit: if the app has moved to Entra, AD FS writes no new audits by
+    itself. Make one sign-in that does NOT name the app (the IdP-initiated
+    sign-on page, "Sign in to this site") less than -AuditFreshHours before
+    the run. A sign-in to the app counts as app use and stops the gate.
 
     What -Apply yes removes, in this order:
       1. The relying party trust (disabled first, then removed).
@@ -25,6 +32,9 @@
          old signing key cannot be recovered from AD (the Golden SAML key is
          destroyed, not just unused).
       5. The gMSA gmsa-adfs, the DNS A record and the TLS certificate.
+         Revoke the gMSA's "Generate security audits" right FIRST
+         (10b-Set-AdfsAuditRight.ps1 -Mode Revoke, README step 10): it
+         finds the SID through the gMSA, which this step deletes.
       6. The "Application Generated" audit subcategory goes back to off (the
          Windows default on a DC).
 
@@ -42,6 +52,9 @@ param(
     [string]$RpIdentifier = 'urn:contoso:claims-viewer',
     [string]$GmsaName = 'gmsa-adfs',
     [ValidateRange(1, 720)][int]$QuietHours = 24,
+    # Bounded on purpose: an audit older than this does not prove auditing
+    # still works (Greptile, PR #237 follow-up). At most 24 h.
+    [ValidateRange(1, 24)][int]$AuditFreshHours = 2,
     [string]$Apply = 'no',
     [string]$Force = 'no',
     [string]$RemoveTestObjects = 'no'
@@ -82,19 +95,56 @@ try {
     if ($_.FullyQualifiedErrorId -notmatch 'NoMatchingEventsFound') { throw }
 }
 
-# An empty result is proof only if auditing WORKS and the log REACHES BACK far
-# enough. Otherwise "no events" may just mean "nothing was written" (the
-# gMSA lacks SeAuditPrivilege, 10-Install-Adfs.ps1 step 8) or "the log
-# rolled over". So: at least one AD FS token-issuance audit must exist at
-# all, and the oldest Security event must be older than the quiet window.
-$anyAudit = $null
+# An empty result is proof only if auditing WORKS NOW and the log REACHES
+# BACK far enough. Otherwise "no events" may just mean "nothing was written"
+# (the gMSA lost SeAuditPrivilege, 10-Install-Adfs.ps1 step 8) or "the log
+# rolled over". An old audit is not enough: auditing can break after it. So
+# the NEWEST AD FS audit must be inside the bounded window -AuditFreshHours
+# (and not in the future), and the oldest Security event must be older than
+# the quiet window. Test-AdfsAuditProof decides; it is a pure function so
+# lab/adfs/tests/QuietGate.Tests.ps1 can test it off DC01.
+function Test-AdfsAuditProof {
+    param(
+        [AllowNull()][object]$NewestAuditUtc,
+        [Parameter(Mandatory)][datetime]$SecurityLogFromUtc,
+        [Parameter(Mandatory)][datetime]$WindowStartUtc,
+        [Parameter(Mandatory)][datetime]$NowUtc,
+        [Parameter(Mandatory)][int]$FreshHours
+    )
+    $reasons = [System.Collections.Generic.List[string]]::new()
+    if ($FreshHours -lt 1 -or $FreshHours -gt 24) {
+        $reasons.Add("freshness window $FreshHours h is outside 1-24 h")
+    }
+    if ($null -eq $NewestAuditUtc) {
+        $reasons.Add('no AD FS audit (1200/1202) found at all')
+    } else {
+        $newest = [datetime]$NewestAuditUtc
+        $skew = [timespan]::FromMinutes(5)
+        if ($newest -gt $NowUtc + $skew) {
+            $reasons.Add("newest AD FS audit $($newest.ToString('o')) is in the future (clock problem)")
+        } elseif ($newest -lt $NowUtc.AddHours(-$FreshHours)) {
+            $reasons.Add("newest AD FS audit $($newest.ToString('o')) is older than $FreshHours h")
+        }
+    }
+    if ($SecurityLogFromUtc -gt $WindowStartUtc) {
+        $reasons.Add("Security log starts $($SecurityLogFromUtc.ToString('o')), after the quiet window start $($WindowStartUtc.ToString('o'))")
+    }
+    [pscustomobject]@{ Proven = ($reasons.Count -eq 0); Reasons = @($reasons) }
+}
+
+$newestAudit = $null
 try {
-    $anyAudit = Get-WinEvent -FilterHashtable @{ LogName = 'Security'; ProviderName = 'AD FS Auditing'; Id = 1200 } -MaxEvents 1 -ErrorAction Stop
+    # Get-WinEvent returns newest first, so -MaxEvents 1 is the newest audit.
+    $newestAudit = Get-WinEvent -FilterHashtable @{ LogName = 'Security'; ProviderName = 'AD FS Auditing'; Id = 1200, 1202 } -MaxEvents 1 -ErrorAction Stop
 } catch [System.Exception] {
     if ($_.FullyQualifiedErrorId -notmatch 'NoMatchingEventsFound') { throw }
 }
 $oldest = (Get-WinEvent -LogName Security -Oldest -MaxEvents 1).TimeCreated
-$auditsProven = [bool]$anyAudit -and ($oldest -le $since)
+$nowUtc = (Get-Date).ToUniversalTime()
+$newestAuditUtc = $(if ($newestAudit) { $newestAudit.TimeCreated.ToUniversalTime() } else { $null })
+$proof = Test-AdfsAuditProof -NewestAuditUtc $newestAuditUtc -SecurityLogFromUtc $oldest.ToUniversalTime() `
+    -WindowStartUtc $since.ToUniversalTime() -NowUtc $nowUtc -FreshHours $AuditFreshHours
+$auditsProven = $proof.Proven
 
 $inventory = [ordered]@{
     adfsService       = $adfs
@@ -103,7 +153,10 @@ $inventory = [ordered]@{
     dkmContainer      = [bool](Get-ADObject -Filter "DistinguishedName -eq '$dkm'" -ErrorAction SilentlyContinue)
     gmsa              = [bool](Get-ADServiceAccount -Filter "Name -eq '$GmsaName'")
     tokenIssuances    = $recent.Count
-    auditsWork        = [bool]$anyAudit
+    newestAudit       = $(if ($newestAuditUtc) { $newestAuditUtc.ToString('o') } else { $null })
+    auditFreshHours   = $AuditFreshHours
+    auditsProven      = $auditsProven
+    proofProblems     = $proof.Reasons
     securityLogFrom   = $oldest.ToUniversalTime().ToString('o')
     quietWindowHours  = $QuietHours
 }
@@ -111,7 +164,7 @@ Write-Step ("inventory: " + ($inventory | ConvertTo-Json -Compress))
 
 if (-not $doIt) { Write-Step 'report only (pass -Apply yes to decommission)'; return }
 if (-not $auditsProven -and $Force -ne 'yes') {
-    throw "Cannot prove the quiet period: AD FS audits found = $([bool]$anyAudit), Security log starts $oldest (window starts $since). Fix auditing (README step 3b) or wait, then re-run (or -Force yes)."
+    throw "Cannot prove the quiet period: $($proof.Reasons -join '; '). Fix auditing (README step 3b), make one fresh sign-in that does not name the app, or wait, then re-run (or -Force yes)."
 }
 if ($recent.Count -gt 0 -and $Force -ne 'yes') {
     throw "AD FS issued $($recent.Count) token(s) for $RpIdentifier in the last $QuietHours h. The app still uses AD FS: finish the cutover first (or -Force yes)."

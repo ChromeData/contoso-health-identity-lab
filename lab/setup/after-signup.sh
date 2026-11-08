@@ -149,8 +149,16 @@ fi
 APP_ROLES="${ENABLE_APP_MANAGEMENT_ROLES:-$(prev_knob enable_app_management_roles)}"; APP_ROLES="${APP_ROLES:-false}"
 IDP_LOGS="${ENABLE_IDENTITY_PROTECTION_LOGS:-$(prev_knob enable_identity_protection_logs)}"; IDP_LOGS="${IDP_LOGS:-false}"
 note "workspace for the Entra log export: ${LAW_ID:-<none yet: first run, envs/dev not applied>}; app-management roles: $APP_ROLES; Identity Protection logs: $IDP_LOGS"
-note "writing $BOOT/terraform.tfvars (gitignored)"
-if [ "$YES" = 1 ]; then cat > "$BOOT/terraform.tfvars" <<EOF
+# The pipeline config vault's name: env var, then the existing file, then the
+# default. A different name than the live one would make the next apply
+# REPLACE the vault (purge protection keeps the old name taken), so the merge
+# below refuses a change (--refuse-change) instead of writing it.
+PREV_VAULT="$(prev_knob pipeline_config_vault_name)"
+CFG_VAULT_NAME="${PIPELINE_CONFIG_VAULT:-${PREV_VAULT:-kv-idlab-cicd-${STATE_SA: -4}}}"
+note "writing $BOOT/terraform.tfvars (gitignored); settings added after setup are kept (lab/setup/merge_tfvars.py)"
+if [ "$YES" = 1 ]; then
+GEN="$(mktemp)"; trap 'rm -f "$GEN"' EXIT
+cat > "$GEN" <<EOF
 subscription_id              = "$AZURE_SUBSCRIPTION_ID"
 tenant_id                    = "$TENANT_ID"
 github_owner                 = "$GITHUB_OWNER"
@@ -165,7 +173,20 @@ azure_openai_resource_id     = "${AZURE_OPENAI_RESOURCE_ID:-}"
 log_analytics_workspace_id   = "$LAW_ID"
 enable_app_management_roles     = $APP_ROLES
 enable_identity_protection_logs = $IDP_LOGS
+enable_pipeline_config_vault    = true
+pipeline_config_vault_name      = "$CFG_VAULT_NAME"
+pipeline_config_writer_object_ids = ["$ADMIN_OBJECT_ID"]
 EOF
+# Every key the old file has and this script does not write is copied over
+# (apply_azure_scope, enable_lab_vm_operator, cannot_delete_lock_resource_ids,
+# EVIDENCE / HR-SYNC / PIM-Demo-Readers switches...). The writer list keeps
+# its old value: a re-run by another admin must not swap the writer. A file
+# the merge cannot parse safely (indented line, /* */ block, heredoc) stops
+# here (exit 4) BEFORE the -auto-approve apply below.
+python3 -I "$ROOT/lab/setup/merge_tfvars.py" "$BOOT/terraform.tfvars" "$GEN" \
+  --keep-old pipeline_config_writer_object_ids \
+  --refuse-change pipeline_config_vault_name > "$GEN.merged" || { rm -f "$GEN.merged"; exit 1; }
+mv "$GEN.merged" "$BOOT/terraform.tfvars"; chmod 600 "$BOOT/terraform.tfvars"
 fi
 # The lock blocks the role assignments bootstrap creates: lift it around the apply.
 run az lock delete -n lock-tfstate-readonly -g "$STATE_RG" --resource "$STATE_SA" --resource-type Microsoft.Storage/storageAccounts -o none || true
@@ -186,10 +207,28 @@ fi
 
 # =============================================================================
 if step_on C; then
-say "C. GitHub: variables, privacy secrets, the prod environment"
+say "C. GitHub: variables, the prod environment; privacy values to Key Vault"
 R="$GITHUB_OWNER/$GITHUB_REPO"
 setvar() { run gh variable set "$1" --repo "$R" --body "$2"; }
-setsec() { run gh secret set "$1" --repo "$R" --body "$2"; run gh secret set "$1" --repo "$R" --app dependabot --body "$2"; }
+# The five privacy values go to the pipeline config vault (envs/bootstrap
+# pipeline-config.tf), not to GitHub secrets: the workflows read them over
+# OIDC (.github/scripts/pipeline-config.sh). The value travels on stdin to
+# `az --file`, never in argv; a dry run prints the name only.
+CFG_VAULT="$("$TF" -chdir="$ROOT/lab/terraform/envs/bootstrap" output -raw pipeline_config_vault_name 2>/dev/null || echo "<pipeline_config_vault_name>")"
+setcfg() {
+  if [ "$YES" = 1 ]; then
+    # The Secrets Officer grant bootstrap made for you can take a few
+    # minutes to reach Key Vault: retry (up to ~5 min), then stop.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      if printf '%s' "$2" | az keyvault secret set --vault-name "$CFG_VAULT" --name "$1" --file /dev/stdin -o none 2>/dev/null; then
+        printf '   $ (Key Vault %s) %s = <value>\n' "$CFG_VAULT" "$1"; return 0
+      fi
+      sleep 30
+    done
+    echo "could not write $1 to $CFG_VAULT (role not effective yet, or no Secrets Officer grant): re-run step C" >&2; return 1
+  else printf '   (dry) Key Vault %s: %s = <value>\n' "$CFG_VAULT" "$1"; fi
+}
+setvar TF_PIPELINE_CONFIG_VAULT "$CFG_VAULT"
 setvar AZURE_TENANT_ID "$TENANT_ID"
 setvar AZURE_SUBSCRIPTION_ID "$AZURE_SUBSCRIPTION_ID"
 setvar TFSTATE_RG "$STATE_RG"; setvar TFSTATE_STORAGE_ACCOUNT "$STATE_SA"
@@ -208,11 +247,11 @@ if [ -n "${AZURE_OPENAI_ENDPOINT:-}" ]; then
   setvar AZURE_OPENAI_ENDPOINT "$AZURE_OPENAI_ENDPOINT"; setvar AZURE_OPENAI_DEPLOYMENT "${AZURE_OPENAI_DEPLOYMENT:-gpt-5-mini}"
   setvar AZURE_OPENAI_MAX_COMPLETION_TOKENS "${AZURE_OPENAI_MAX_COMPLETION_TOKENS:-12000}"; setvar AZURE_OPENAI_REASONING_EFFORT "${AZURE_OPENAI_REASONING_EFFORT:-low}"
 fi
-setsec TF_OPERATOR_IP_RANGES "[\"${OPERATOR_IP}/32\"]"
-setsec TF_ALERT_EMAIL "$ALERT_EMAIL"
-setsec TF_SAML_CERT_NOTIFICATION_EMAILS "[\"$ALERT_EMAIL\"]"
-setsec TF_PIM_ALERT_MAILBOX "${PIM_ALERT_MAILBOX:-security@$ONMICROSOFT_DOMAIN}"   # an alias on the admin mailbox (Exchange admin > mailbox > Manage email address types)
-setsec TF_APP_OWNER_OBJECT_IDS "[\"$ADMIN_OBJECT_ID\"]"
+setcfg tf-operator-ip-ranges "[\"${OPERATOR_IP}/32\"]"
+setcfg tf-alert-email "$ALERT_EMAIL"
+setcfg tf-saml-cert-notification-emails "[\"$ALERT_EMAIL\"]"
+setcfg tf-pim-alert-mailbox "${PIM_ALERT_MAILBOX:-security@$ONMICROSOFT_DOMAIN}"   # an alias on the admin mailbox (Exchange admin > mailbox > Manage email address types)
+setcfg tf-app-owner-object-ids "[\"$ADMIN_OBJECT_ID\"]"
 note "prod environment: you as required reviewer, main as the only deployment branch"
 if [ "$YES" = 1 ]; then
   ME_ID="$(gh api user --jq .id)"

@@ -1,0 +1,204 @@
+{
+  "rule": "break-glass-auth-method-added",
+  "about": "Any security info registered or changed on a break-glass account, by anyone (review finding B2, 2026-11-07). The first case is the shape the audit log really wrote when the lab operator minted the break-glass passkeys (E11d, read back 2026-11-07): 'User registered security info' with an APPLICATION as the actor.",
+  "cases": [
+    {
+      "id": "app-mints-a-passkey",
+      "kind": "positive",
+      "label": "The operator app registers a FIDO2 key on bg-admin-01 (logged as 'User registered security info'): High",
+      "lets": {
+        "BreakGlassUserIds": [
+          "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "UserManagement",
+            "Result": "success",
+            "OperationName": "User registered security info",
+            "ActivityDisplayName": "User registered security info",
+            "ResultReason": "User registered Fido2 Authentication Method",
+            "InitiatedBy": {
+              "app": {
+                "displayName": "Contoso Lab Operator (local Mac, certificate)",
+                "servicePrincipalId": "88888888-8888-8888-8888-888888888888",
+                "appId": "99999999-9999-9999-9999-999999999999"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                "displayName": "bg-admin-01",
+                "type": "User",
+                "userPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "ActorKind": "application",
+          "TargetObjectId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        }
+      ],
+      "expectRows": 1
+    },
+    {
+      "id": "renamed-account-by-id",
+      "kind": "positive",
+      "label": "A renamed break-glass account is still matched by object id",
+      "lets": {
+        "BreakGlassUserIds": [
+          "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "UserManagement",
+            "Result": "success",
+            "OperationName": "Admin registered security info",
+            "ActivityDisplayName": "Admin registered security info",
+            "ResultReason": "Admin registered temporary access pass method for user",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                "displayName": "bg-admin-01",
+                "type": "User",
+                "userPrincipalName": "emergency-ops@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "ActorKind": "an admin"
+        }
+      ]
+    },
+    {
+      "id": "failed-attempt-medium",
+      "kind": "positive",
+      "label": "A failed registration attempt: Medium",
+      "lets": {
+        "BreakGlassUserIds": [
+          "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "UserManagement",
+            "Result": "clientError",
+            "OperationName": "User registered security info",
+            "ActivityDisplayName": "User registered security info",
+            "ResultReason": "User failed to register Fido2 Authentication Method",
+            "InitiatedBy": {
+              "app": {
+                "displayName": "Contoso Lab Operator (local Mac, certificate)",
+                "servicePrincipalId": "88888888-8888-8888-8888-888888888888",
+                "appId": "99999999-9999-9999-9999-999999999999"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                "displayName": "bg-admin-01",
+                "type": "User",
+                "userPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "Medium"
+        }
+      ]
+    },
+    {
+      "id": "ordinary-user",
+      "kind": "negative",
+      "label": "A passkey registered on an ordinary user",
+      "lets": {
+        "BreakGlassUserIds": [
+          "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "UserManagement",
+            "Result": "success",
+            "OperationName": "User registered security info",
+            "ActivityDisplayName": "User registered security info",
+            "ResultReason": "User registered Fido2 Authentication Method",
+            "InitiatedBy": {
+              "app": {
+                "displayName": "Contoso Lab Operator (local Mac, certificate)",
+                "servicePrincipalId": "88888888-8888-8888-8888-888888888888",
+                "appId": "99999999-9999-9999-9999-999999999999"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "displayName": "bg-admin-01",
+                "type": "User",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "other-category",
+      "kind": "negative",
+      "label": "A group change on bg-admin-01 is not security info",
+      "lets": {
+        "BreakGlassUserIds": [
+          "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "GroupManagement",
+            "Result": "success",
+            "OperationName": "Add member to group",
+            "ActivityDisplayName": "Add member to group",
+            "ResultReason": "",
+            "InitiatedBy": {
+              "app": {
+                "displayName": "Contoso Lab Operator (local Mac, certificate)",
+                "servicePrincipalId": "88888888-8888-8888-8888-888888888888",
+                "appId": "99999999-9999-9999-9999-999999999999"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                "displayName": "bg-admin-01",
+                "type": "User",
+                "userPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
