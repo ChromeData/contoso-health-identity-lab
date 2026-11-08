@@ -1,0 +1,59 @@
+run command lab-41622b06: /private/tmp/claude-501/-Users-michaelwilliams-GotchaBitch/7a6912bb-5f53-40c9-b93a-2f1b37472e5b/scratchpad/dc/inspect-reg.ps1 on vm-dc01
+D Connect Health Agent\Modules                                     
+C:\Program Files\Microsoft Azure AD Connect Health Agent\Products                                    
+C:\Program Files\Microsoft Azure AD Connect Health Agent\Modules\AdHealthConfiguration               
+C:\Program Files\Microsoft Azure AD Connect Health Agent\Modules\AgentPowerShellCmdlets              
+C:\Program Files\Microsoft Azure AD Connect Health Agent\Modules\AppProxyPSModule                    
+C:\Program Files\Microsoft Azure AD Connect Health Agent\Products\AdFederationService                
+C:\Program Files\Microsoft Azure AD Connect Health Agent\Products\AdFederationService\AdfsDiagnostics
+
+
+
+AdHealthConfiguration
+AgentPowerShellCmdlets
+AppProxyPSModule
+MODULE: AdHealthConfiguration 1.0 C:\Program Files\Microsoft Azure AD Connect Health Agent\Modules\AdHealthConfiguration\AdHealthConfiguration.psd1
+
+Register-MicrosoftEntraConnectHealthAgent [-AttributeFiltering <bool>] [-StagingMode <bool>] [-AdalAuthority <string>] [-UserPrincipalName <string>] [-LogFilePath <string>] [-Prompt] [<CommonParameters>]
+
+Register-MicrosoftEntraConnectHealthAgent [-AttributeFiltering <bool>] [-StagingMode <bool>] [-AdalAuthority <string>] [-UserPrincipalName <string>] [-AadToken <securestring>] [-LogFilePath <string>] [<CommonParameters>]
+
+Register-MicrosoftEntraConnectHealthAgent [-AttributeFiltering <bool>] [-StagingMode <bool>] [-AdalAuthority <string>] [-UserPrincipalName <string>] [-EncryptedToken <string>] [-LogFilePath <string>] [<CommonParameters>]
+
+Register-MicrosoftEntraConnectHealthAgent [-AttributeFiltering <bool>] [-StagingMode <bool>] [-AdalAuthority <string>] [-UserPrincipalName <string>] [-Credential <pscredential>] [-LogFilePath <string>] [<CommonParameters>]
+
+AttributeFiltering, StagingMode, AdalAuthority, UserPrincipalName, AadToken, EncryptedToken, Credential, LogFilePath, Prompt, Verbose, Debug, ErrorAction, WarningAction, InformationAction, ErrorVariable, WarningVariable, InformationVariable, OutVariable, OutBuffer, PipelineVariable
+TYPE: Microsoft.Identity.Health.AgentV1.ConfigurationPowerShell.RegisterMicrosoftEntraConnectHealthAgent, Microsoft.Identity.Health.AgentV1.ConfigurationPowerShell, Version=4.5.2487.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35
+Register-AzureAdConnectHealthAgent
+Test-MicrosoftEntraConnectHealthConnectivity
+Test-MicrosoftEntraConnectHealthConnectivityAsSystem
+Test-AzureADConnectHealthConnectivityAsSystem
+Register-AzureADConnectHealthADDSAgent
+Register-AzureADConnectHealthADFSAgent
+Register-AzureADConnectHealthSyncAgent
+Register-MicrosoftEntraConnectHealthAgent
+Register-MIMHybridReportingAgent
+Test-AzureADConnectHealthConnectivity
+Microsoft.Identity.Health.Agent.Common.DataModels.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Common.Interfaces.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Common.Logging.dll 
+Microsoft.Identity.Health.Agent.Common.Logging.Microsoft-AzureADConnectHealth-MonitorDataManagement.etwManifest.dll 
+Microsoft.Identity.Health.Agent.Common.Utilities.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Manager.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Monitors.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Partners.AadConnectSync.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Partners.Adds.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Partners.Adfs.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Partners.Mim.dll 4.5.2487.0
+Microsoft.Identity.Health.AgentV1.Common.dll 4.5.2487.0
+Microsoft.Identity.Health.AgentV15.BootstrapClientAddOn.dll 4.5.2487.0
+Microsoft.Identity.Client.dll 4.36.0.0
+Microsoft.Identity.Health.Agent.Common.DataModels.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Common.Interfaces.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Common.Logging.dll 
+Microsoft.Identity.Health.Agent.Common.Utilities.dll 4.5.2487.0
+Microsoft.Identity.Health.AgentV1.Common.dll 4.5.2487.0
+Microsoft.Identity.Health.AgentV1.ConfigurationPowerShell.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Common.PowerShellCmdlets.dll 4.5.2487.0
+Microsoft.Identity.Health.Agent.Common.Utilities.dll 4.5.2487.0
+state: Succeeded, exit code: 0

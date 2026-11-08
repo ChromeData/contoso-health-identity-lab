@@ -1,0 +1,22 @@
+6aa85b7 Setup map: add stop 5, the watchers and the vault; name the PAM tools as themselves (#208)
+Lab preflight Fri Nov  6 20:25 EST
+  ✓ Operator signed in (no password, certificate)
+  … starting DC01 (about 3 minutes)
+  ✓ DC01 (the on-site directory server) is running
+  ✓ Sync agent on DC01 is connected
+  ✓ Cloud Sync (Active Directory → Entra) is running (Active)
+  ✓ HR front door (HR → Active Directory) is on
+  ✓ AWS sync (Entra → AWS) is on, last cycle Succeeded
+  ✓ No leftover demo hire (Sam Rivera) in Entra
+  ✓ HR file is clean (no Sam Rivera yet)
+  ✓ Evidence runner on this Mac is online
+  ✓ No change is waiting for approval
+  ✓ Splunk is running (http://127.0.0.1:8000, set time to All time)
+  ✓ Splunk live feed: last poll 3 min ago, newest tenant event received 3 min ago (11710 tenant events received in 24 h)
+  ✓ Sign-ins: All 11 identities sign in with no human (1 skipped)
+  ✓ Microsoft trials end 2026-11-26 (18 days left)
+  ! DC01 shuts down at 7 pm New York time: less than 2 hours left
+
+READY
+
+[exited with code 0]
