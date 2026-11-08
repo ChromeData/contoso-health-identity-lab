@@ -1,6 +1,6 @@
 # ADR 0013: Tier-0 domain controller exposure (lab public IP vs. production)
 
-- **Status:** Accepted, as a time-boxed risk acceptance for the lab. Not acceptable for production. RAN · tenant: `enable_dc = true` in `lab.tfvars`; DC01 runs in `rg-identity-lab`, its NSG limited to the operator's IP, and its security events reach Sentinel (E15b, E52).
+- **Status:** **Amended 2026-11-08: option 1 (no public IP) is now the lab design.** BUILT in `modules/dc-vm` (PR for karen-review round 2, R5); live only after the owner approves that apply. Until then DC01 still has `pip-vm-dc01` and RDP/LDAPS from one /32 (read live 2026-11-08). The original risk acceptance below is kept for the record. Not acceptable for production either way.
 - **Date:** 2026-10-20
 - **Risk owner:** PAM Lead (in the lab, the repository maintainer)
 - **Next review:** 2027-01-20, or earlier on any revisit trigger
@@ -34,9 +34,11 @@ When `enable_dc = true`, `modules/dc-vm` builds the following:
   uses Trusted Launch. The forest is built through `az vm run-command`; RDP
   is used by hand only to rotate the admin password and install the
   provisioning agent. Its managed identity can read and write only its own
-  two Key Vault secrets (`dc01-dsrm-password`, `svc-vault-rotator`; ABAC).
-  A third, `svc-pam-discovery`, was retired on 2026-11-07 with the Vault
-  stand-in (ADR 0036).
+  Key Vault secrets (`dc01-dsrm-password`, `svc-vault-rotator`; ABAC). The
+  condition still names a third, `svc-pam-discovery`, whose account and
+  secret were retired on 2026-11-07 with the Vault stand-in (ADR 0036):
+  narrowing it replaces the assignment, which the vault's delete lock refuses
+  until the owner lifts it in a write session.
 
 **Why the public IP exists.** The PAM stand-in runs in Docker on the
 operator's laptop. Guacamole brokers recorded RDP sessions to DC01, and
@@ -48,6 +50,45 @@ access for the Entra provisioning agent.
 services answer on it to anyone sending from an allowlisted IP. The admin
 path starts on a laptop that also hosts the PAM vault, and that laptop is
 not a privileged access workstation (PAW).
+
+## Amendment 2026-11-08: no public IP, no RDP or LDAPS from the internet
+
+**Why now.** The two reasons for the public IP are gone. Vault (LDAPS) and
+Guacamole (RDP) on the laptop were retired for Azure Key Vault and Azure
+Bastion (ADR 0036). Nothing that runs today needs a connection from the
+internet to DC01. Read live on 2026-11-08: the NSG held exactly two allow
+rules (3389 and 636, from one /32), and no script in the repo opens RDP or
+LDAPS to DC01 from outside the VNet.
+
+**What each inbound path was for, and what replaces it:**
+
+| Was open | Used by | Now |
+|---|---|---|
+| RDP 3389 from the operator /32 | A person, by hand (first password change, agent installs) | **Azure Bastion**, created on demand from inside the VNet (`lab/bastion`, PR #247), deleted after. Bastion Premium also records the session |
+| LDAPS 636 from the operator /32 | Vault on the laptop (retired, ADR 0036) | Nothing. LDAPS still answers inside the VNet |
+| Public IP on the NIC | Explicit outbound for the provisioning agent, Windows Update, activation | **NAT gateway** on `snet-identity` (outbound only; it admits no unsolicited inbound connection) |
+| HTTPS 443 while `adfs_https_enabled` | The operator's browser in the AD FS exercise (`lab/adfs`) | **Kept as the only exception**: off by default, one /32, its own public IP that exists only while the flag is on |
+
+**How scripts reach DC01.** `az vm run-command` (`run-on-dc.py`) through the
+Azure control plane. It needs no network path, and it runs as SYSTEM on a
+domain controller, so it is a Tier-0 action. Each call writes an
+activity-log event, and `modules/dc-vm` now raises an activity log alert on
+both Run Command operations (`azurerm_monitor_activity_log_alert.dc_run_command`).
+Run Command is **not** recorded like a Bastion session: what it ran is in
+the capture log row and the script in git, not in a video.
+
+**Cost.** The NAT gateway costs about $1.10 a day whether DC01 runs or not
+(plus $3.65 a month for its IP). The DC's own static IP ($3.65 a month) goes
+away. `nat_gateway_enabled = false` removes it; DC01 then falls back to
+Azure's implicit default outbound access, which Microsoft is retiring.
+
+**What stays true from the original decision:** the /32 validation (now for
+443 only), the nightly deallocation, and `dc-logon-outside-operator-allowlist.kql`
+(a public source should now be impossible, so a hit means NSG or NIC drift; a Bastion session arrives as an RDP logon from the AzureBastionSubnet private range and alerts by design, so every person's DC01 session is seen).
+
+**Not done by this amendment:** the session still signs in to Windows with an
+AD account typed by a person (round 2, R5: use a named Tier-0 account, not
+`contosoadmin`); Bastion is not standing (it is created per capture).
 
 ## Options considered
 
@@ -150,8 +191,8 @@ whether it runs on premises or in Azure IaaS.
   `transforms.conf` `[contoso_operator_ips]`: the SPL twin and its lookup
 - `lab/terraform/envs/dev/lab.tfvars`: `enable_dc = false`
 - `lab/scripts/dc/README.md`: build by run-command; RDP by hand, off camera
-- `lab/pam/README.md`: prerequisites, RDP 3389 and LDAPS 636 from the
-  operator's IP
+- `lab/pam/README.md`: (retired) prerequisites, RDP 3389 and LDAPS 636 from
+  the operator's IP, before the 2026-11-08 amendment
 - `lab/kql/tier0-logon-without-checkout.kql`,
   `lab/kql/dc-logon-outside-operator-allowlist.kql`
 

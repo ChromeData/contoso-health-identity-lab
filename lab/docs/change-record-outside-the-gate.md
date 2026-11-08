@@ -60,14 +60,14 @@ Then `terraform plan` must say **No changes**. If it does not, stop.
 
 | Row | When (UTC) | What | From | PR now | Reconciled |
 |---|---|---|---|---|---|
-| E116-E118 | 2026-11-07 | AD tiering on DC01: admin tiers, Protected Users for new admins, Windows LAPS | `harden/ad-tiering` | **#225 OPEN** | **Not reconciled.** Live on DC01; the code is not on `main`. The capture-log rows are in #225 only |
+| E116-E118 | 2026-11-07 | AD tiering on DC01: admin tiers, Protected Users for new admins, Windows LAPS | `harden/ad-tiering` | #225 merged 2026-11-08 20:39 (`a339139`) | Code and rows E116-E118 on `main` now. Host state not re-read after the merge |
 | E140 | 2026-11-07 01:31 | AD FS steps 1-6 on DC01 (role, farm, gMSA, claim rules) | `adfs/dc01-run-and-connect-health` | #237 merged 2026-11-08 17:24 (`5c77d1f`) | Code on `main` now. Host state not re-read after the merge |
 | E156 | 2026-11-07 | `t0-adm-01` password rotated after the #239 Tier 2 test exposed it | `ops/rotate-t0-adm-01` | **#251 OPEN** | **Not reconciled.** Rotation done; the tool is not on `main` |
 | E157 | 2026-11-07 03:55 | `svc-pam-discovery` deleted on DC01 and in Key Vault (the first "dry run" acted: R28) | branch of #253 | #253 merged 2026-11-08 19:09 (`ecf7f2c`) | Code on `main`. The DC identity's Key Vault grant is replaced by that PR's apply (pending) |
 | E178 | 2026-11-08 18:09 | `contosoadmin` rotated after the #239 exposure | `ops/rotate-contosoadmin` | #262 merged 2026-11-08 20:10 (`e7441e4`) | Code on `main` |
 | E132 | 2026-11-07 01:48 | Key Vault state-leak proof in a throwaway resource group (deleted) | `feat/keyvault-state-leak` | #235 merged 2026-11-08 20:23 (`2d479fa`) | Throwaway objects deleted at the time |
 | E133 | 2026-11-07 | Bastion Premium, its public IP, a PIM-eligible Reader and a reviewer grant, made by script (`lab/bastion/capture.sh`) | `feat/bastion-session-recording` | **#247 OPEN** | Live read 2026-11-08: no Bastion, no Bastion PIM eligibility, no Storage Account Key Operator grant. **Left over:** the recordings account `stbstreca9b511bc` (shared key now off) |
-| - | 2026-11-08 | Cloud Sync mappings, the leave-date Lifecycle Workflow schedule, joiner v2 | `feat/leaver-lcw-leavedate` (stacked) | **#257 OPEN** | **Not reconciled.** Live in the tenant; not on `main` |
+| - | 2026-11-08 | Cloud Sync mappings, the leave-date Lifecycle Workflow schedule, joiner v2 | `feat/leaver-lcw-leavedate` (stacked) | #257 merged 2026-11-08 21:25 (`f605fc7`) | Code on `main` now (rows E179-E181). Tenant config not re-read after the merge |
 
 ## What this means for the spoken lines
 

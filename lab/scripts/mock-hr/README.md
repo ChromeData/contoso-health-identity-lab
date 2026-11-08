@@ -213,15 +213,16 @@ Connect-MgGraph -Scopes 'SynchronizationData-User.Upload'   # signed-in user mus
 
 Then continue the lifecycle with `../powershell/02-Joiner.ps1` (day-1 access).
 
-## How HR makes a change: the Contoso HR form
+## How HR makes a change: OrangeHRM
 
-HR does not edit `hr_feed.csv`. HR uses the **Contoso HR** form in
-[`lab/hr-app/`](../../hr-app/README.md) (ADR 0027): hire, change job or
-department, or make a worker a leaver. The form issues the employee number
-and writes the roster on the `hr-feed` branch as one commit per save. The
-workflow below then sends that change. The CSV stays the HR app's data store
-and the format the sender reads; editing it by hand still works for tests
-and retakes, but it is not the HR path any more.
+HR does not edit `hr_feed.csv`. HR works in **OrangeHRM**, a real HR system
+([`lab/hris/`](../../hris/README.md), ADR 0028): Add Employee, the Job tab,
+Report-to, Terminate Employment. A connector reads OrangeHRM every minute
+and writes each change to `hr_feed.csv` on the `hr-feed` branch as one
+commit. The workflow below then sends that change. The CSV is now the
+connector's outbox and the format the sender reads. Editing it by hand
+still works for tests and retakes, but it is not the HR path any more (and
+OrangeHRM would not know about a hand-made row).
 
 ## HR changes through GitHub Actions
 
@@ -231,7 +232,7 @@ system. Edit `hr_feed.csv` on that branch, commit, push, and GitHub Actions
 sends **only the rows that commit changed** to the provisioning job, signed in
 as **HR-SYNC** over GitHub OIDC (no password or secret anywhere).
 
-**Hire someone** (by hand, for tests; HR uses the form): on `hr-feed`, add a row and push. The form issues the next number in the range itself:
+**Hire someone** (by hand, for tests; HR uses OrangeHRM): on `hr-feed`, add a row and push. In OrangeHRM, HR types the next number in the range:
 
 ```
 400104,Sam,Rivera,Information Technology,Cloud Engineer,400100,joiner,2026-11-09,

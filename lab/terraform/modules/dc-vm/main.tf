@@ -7,26 +7,34 @@
 #
 #   * Subnet snet-identity in the lab VNet (same VNet as the Key Vault private
 #     endpoint, so the DC reaches the vault privately)
-#   * NSG: RDP + LDAPS from the operator's IP(s) ONLY - each a single IPv4
-#     /32 (variables.tf rejects anything wider; ADR 0013); nothing else inbound
-#   * Standard static public IP: operator access, and the DC's EXPLICIT
-#     outbound method (the Entra provisioning agent, Windows Update and
-#     activation need egress). Why explicit: for the Microsoft.Network API
-#     version released after 2026-03-31, subnets in NEW virtual networks
-#     default to defaultOutboundAccess = false (private subnets), so VMs in
-#     them get no default outbound IP. Existing VNets, and deployments that
-#     use an earlier API version, keep the old default. A public IP on the
-#     NIC is an explicit method either way, so the DC never relies on
-#     default outbound access (learn.microsoft.com/azure/virtual-network/
-#     ip-services/default-outbound-access, checked 2026-10-20). This module
-#     does not set default_outbound_access_enabled on snet-identity, so the
-#     azurerm provider's own default applies: the r/subnet docs say
-#     "Defaults to `true`" (checked 2026-10-20), i.e. snet-identity is sent as
-#     a NON-private subnet and Azure's new private-by-default never applies
-#     here. The public IP is the explicit egress either way; making the
-#     subnet private (= false) is a separate design call (ADR 0013).
-#     Production has no public IP: NAT gateway or Azure Firewall for egress,
-#     Bastion + PAM broker for admin (ADR 0013)
+#   * NSG: NO inbound allow rule from the internet (karen-review round 2,
+#     R5; ADR 0013 amended 2026-11-08). RDP 3389 and LDAPS 636 from the
+#     operator IP are gone: the laptop Vault (LDAPS) and Guacamole (RDP) they
+#     served were retired for Key Vault and Azure Bastion (ADR 0036). Traffic
+#     from inside the VNet still reaches the DC (NSG default AllowVnetInBound):
+#     that is how Azure Bastion and the Tier 2 member server reach it.
+#     The ONE exception is HTTPS 443, only while adfs_https_enabled (the
+#     temporary AD FS exercise, lab/adfs), only from allowed_ip_ranges (/32).
+#   * No public IP on the DC's NIC, except that same AD FS window
+#     (azurerm_public_ip.adfs_https, count 0 by default).
+#   * Outbound (Entra provisioning agent, Windows Update, activation,
+#     Defender for Identity) goes through a NAT gateway on snet-identity
+#     (nat_gateway_enabled, default true). A NAT gateway is outbound only:
+#     nothing on the internet can open a connection through it
+#     (learn.microsoft.com/azure/nat-gateway/nat-overview, "NAT Gateway
+#     doesn't allow unsolicited inbound connections"). Why explicit egress:
+#     for the Microsoft.Network API version released after 2026-03-31,
+#     subnets in NEW virtual networks default to private (no default outbound
+#     IP); a NAT gateway is an explicit method either way
+#     (learn.microsoft.com/azure/virtual-network/ip-services/
+#     default-outbound-access). snet-identity's
+#     default_outbound_access_enabled stays unset (pinned in the test): the
+#     NAT gateway takes precedence over default outbound access.
+#   * How people and scripts reach the DC now (lab/scripts/dc/README.md,
+#     "Ways in"): scripts use `az vm run-command` through the Azure control
+#     plane (runs as SYSTEM, so it is a Tier-0 action and an activity-log
+#     alert fires on it below); a person uses Azure Bastion, created on
+#     demand (lab/bastion), from inside the VNet.
 #   * Windows Server 2022 Azure Edition, smalldisk image, Standard HDD,
 #     Trusted Launch (Secure Boot + vTPM)
 #   * Separate data disk, host caching NONE, for NTDS/SYSVOL (Microsoft's
@@ -44,7 +52,11 @@
 # a reboot between phases, which Terraform extensions handle badly.
 #
 # COST (eastus2, approximate): ~$0.05-0.10/hr running (B2s + Windows),
-# deallocated ~ $2 disks + $3.65 static IP per month.
+# deallocated ~ $2 disks per month. The NAT gateway bills whether the DC runs
+# or not: ~$0.045/hr (~$33/month, ~$1.10/day) plus its Standard public IP
+# ($3.65/month) plus $0.045/GB processed (azure.microsoft.com/pricing/details/
+# azure-nat-gateway). Under the program's $5/day line; it goes away with
+# enable_dc = false.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -63,32 +75,44 @@ resource "azurerm_network_security_group" "dc" {
   resource_group_name = var.resource_group_name
   tags                = var.tags
 
-  # RDP (operator + Guacamole recorded sessions) and LDAPS (Vault password
-  # rotation) - from the operator's IP(s) only. Empty list = no inbound rules
-  # at all; everything else is denied by the NSG defaults.
+  # No inbound allow rule from the internet (R5). Everything not listed is
+  # denied by the NSG defaults, except traffic from inside the VNet
+  # (AllowVnetInBound), which is how Azure Bastion reaches the DC.
   # HTTPS (443) only while adfs_https_enabled: the TEMPORARY lab AD FS on
   # DC01 (lab/adfs), so the operator's test browser can sign in to it. Same
-  # /32 allowlist; switch it off again when AD FS is decommissioned.
-  dynamic "security_rule" {
-    for_each = length(var.allowed_ip_ranges) > 0 ? merge(
-      {
-        rdp   = { priority = 100, port = "3389" }
-        ldaps = { priority = 110, port = "636" }
-      },
-      var.adfs_https_enabled ? { adfs-https = { priority = 120, port = "443" } } : {},
-    ) : {}
-    content {
-      name                       = "allow-${security_rule.key}-operator"
-      priority                   = security_rule.value.priority
-      direction                  = "Inbound"
-      access                     = "Allow"
-      protocol                   = "Tcp"
-      source_port_range          = "*"
-      destination_port_range     = security_rule.value.port
-      source_address_prefixes    = var.allowed_ip_ranges
-      destination_address_prefix = var.private_ip
-    }
-  }
+  # /32 allowlist; switch it off again when AD FS is decommissioned. RDP and
+  # LDAPS are never opened to the internet any more, whatever the flags.
+  # ATTRIBUTE syntax, not a dynamic block (Greptile on #272, P1):
+  # security_rule is Optional + Computed in azurerm, so ZERO dynamic blocks
+  # means "keep whatever rules exist" and the live RDP/LDAPS rules would
+  # stay. An explicit list, empty when the window is closed, makes Terraform
+  # remove them (azurerm r/network_security_group docs: "security_rule = []"
+  # removes all inline rules). Attribute syntax needs every field of the
+  # object, hence the empty lists and the description.
+  security_rule = local.adfs_window ? [{
+    name                                       = "allow-adfs-https-operator"
+    description                                = "AD FS exercise only (adfs_https_enabled): HTTPS 443 from the operator /32 (ADR 0013 amendment 2026-11-08)."
+    priority                                   = 120
+    direction                                  = "Inbound"
+    access                                     = "Allow"
+    protocol                                   = "Tcp"
+    source_port_range                          = "*"
+    source_port_ranges                         = []
+    destination_port_range                     = "443"
+    destination_port_ranges                    = []
+    source_address_prefix                      = null
+    source_address_prefixes                    = var.allowed_ip_ranges
+    source_application_security_group_ids      = []
+    destination_address_prefix                 = var.private_ip
+    destination_address_prefixes               = []
+    destination_application_security_group_ids = []
+  }] : []
+}
+
+locals {
+  # The only reason the DC ever gets a public listener: the AD FS exercise,
+  # and only with a /32 to admit. Flag on with an empty list = nothing.
+  adfs_window = var.adfs_https_enabled && length(var.allowed_ip_ranges) > 0
 }
 
 resource "azurerm_subnet_network_security_group_association" "dc" {
@@ -96,8 +120,44 @@ resource "azurerm_subnet_network_security_group_association" "dc" {
   network_security_group_id = azurerm_network_security_group.dc.id
 }
 
-resource "azurerm_public_ip" "dc" {
-  name                = "pip-${var.vm_name}"
+# Outbound only. The DC's own public IP (pip-vm-dc01) is removed (R5).
+resource "azurerm_public_ip" "nat" {
+  count               = var.nat_gateway_enabled ? 1 : 0
+  name                = "pip-natgw-${var.vm_name}"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  tags                = var.tags
+}
+
+resource "azurerm_nat_gateway" "dc" {
+  count                   = var.nat_gateway_enabled ? 1 : 0
+  name                    = "natgw-${var.vm_name}"
+  location                = var.location
+  resource_group_name     = var.resource_group_name
+  sku_name                = "Standard"
+  idle_timeout_in_minutes = 4
+  tags                    = var.tags
+}
+
+resource "azurerm_nat_gateway_public_ip_association" "dc" {
+  count                = var.nat_gateway_enabled ? 1 : 0
+  nat_gateway_id       = azurerm_nat_gateway.dc[0].id
+  public_ip_address_id = azurerm_public_ip.nat[0].id
+}
+
+resource "azurerm_subnet_nat_gateway_association" "dc" {
+  count          = var.nat_gateway_enabled ? 1 : 0
+  subnet_id      = azurerm_subnet.dc.id
+  nat_gateway_id = azurerm_nat_gateway.dc[0].id
+}
+
+# The AD FS window only (see local.adfs_window). Count 0 by default, so the
+# NIC has no public address at all.
+resource "azurerm_public_ip" "adfs_https" {
+  count               = local.adfs_window ? 1 : 0
+  name                = "pip-${var.vm_name}-adfs"
   location            = var.location
   resource_group_name = var.resource_group_name
   allocation_method   = "Static"
@@ -106,7 +166,8 @@ resource "azurerm_public_ip" "dc" {
 }
 
 resource "azurerm_network_interface" "dc" {
-  #checkov:skip=CKV_AZURE_119:The lab DC is reached over RDP from the operator IP only (NSG below); there is no Bastion or VPN in a one-person lab. Public IP is the documented stand-in (lab/docs/STAND-INS.md).
+  #checkov:skip=CKV2_AZURE_39:Public IP only during the time-boxed AD FS exercise (adfs_https_enabled, 443 from one /32); boot diagnostics keep the serial console for a DC with no other console path.
+  #checkov:skip=CKV_AZURE_119:The NIC has a public IP only during the time-boxed AD FS exercise (adfs_https_enabled, 443 from one /32; ADR 0013 amendment 2026-11-08). By default it has none.
   name                = "nic-${var.vm_name}"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -117,7 +178,7 @@ resource "azurerm_network_interface" "dc" {
     subnet_id                     = azurerm_subnet.dc.id
     private_ip_address_allocation = "Static" # a DC's address must never change
     private_ip_address            = var.private_ip
-    public_ip_address_id          = azurerm_public_ip.dc.id
+    public_ip_address_id          = one(azurerm_public_ip.adfs_https[*].id)
   }
 }
 
@@ -235,11 +296,19 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "dc" {
 # verify: Key Vault ABAC is preview (learn.microsoft.com/azure/key-vault/general/rbac-abac).
 # If the condition is rejected, the apply fails - it never silently widens.
 locals {
-  # svc-pam-discovery was the third name until 2026-11-07: the read-only
-  # discovery bind for the Vault stand-in, retired with it (ADR 0036). Its
-  # account and secret were deleted on DC01 by Remove-PamDiscoveryAccount.ps1
-  # BEFORE this change, while the DC still had the right to delete the secret.
-  dc_kv_secret_names = ["dc01-dsrm-password", "svc-vault-rotator"]
+  # svc-pam-discovery STAYS in this list, on purpose (2026-11-08). It was the
+  # read-only discovery bind of the retired Vault stand-in (ADR 0036); its AD
+  # account and its Key Vault secret were deleted on 2026-11-07 (capture log
+  # E157). Dropping the name changes the condition, and azurerm REPLACES the
+  # assignment for that (delete, then create). The vault's CanNotDelete lock
+  # (lock-kv-idlab-cannot-delete, #246) makes the pipeline's delete fail with
+  # 409 ScopeLocked: round-2 apply, run 42519889983. So the condition stays
+  # as it is live. The residual: DC01 may still write, read or delete a secret
+  # named svc-pam-discovery, which does not exist.
+  # TO NARROW IT LATER: the OWNER lifts the lock in a write session, applies,
+  # and puts the lock back (envs/bootstrap). Order matters: same name list
+  # order as live, or the condition string differs and Terraform replaces it.
+  dc_kv_secret_names = ["dc01-dsrm-password", "svc-vault-rotator", "svc-pam-discovery"]
 
   dc_kv_request_name  = join(" OR ", [for n in local.dc_kv_secret_names : "@Request[Microsoft.KeyVault/vaults/secrets:name] StringEquals '${n}'"])
   dc_kv_resource_name = join(" OR ", [for n in local.dc_kv_secret_names : "@Resource[Microsoft.KeyVault/vaults/secrets:name] StringEquals '${n}'"])
@@ -295,6 +364,9 @@ locals {
 # write, read or delete its own build secrets. Nothing on DC01 uses Key Vault
 # continuously: only 02-Configure-Domain.ps1 and the run-command scripts do,
 # by hand. Apply while none of them runs (DC01 is deallocated most of the time).
+# AND the vault's CanNotDelete lock (#246) refuses the delete (409
+# ScopeLocked, seen 2026-11-08): any change to this condition needs the owner
+# to lift the lock first, in a write session (see dc_kv_secret_names).
 resource "azurerm_role_assignment" "dc_kv_secrets_officer" {
   scope                = var.key_vault_id
   role_definition_name = "Key Vault Secrets Officer"
@@ -302,4 +374,40 @@ resource "azurerm_role_assignment" "dc_kv_secrets_officer" {
   principal_type       = "ServicePrincipal"
   condition_version    = "2.0"
   condition            = local.dc_kv_condition
+}
+
+# -----------------------------------------------------------------------------
+# Run Command on the DC is a Tier-0 action (karen-review round 2, R5): it runs
+# as SYSTEM on a domain controller, outside Bastion and its recording. Azure
+# writes every call to the subscription activity log; this alert fires on each
+# one (classic run-command action and managed runCommands writes). Free: an
+# activity log alert has no per-rule charge. With no action group it shows in
+# Azure Monitor > Alerts only; pass run_command_alert_action_group_ids to mail.
+# Operation names: learn.microsoft.com/azure/role-based-access-control/
+# permissions/compute (checked 2026-11-08).
+# -----------------------------------------------------------------------------
+resource "azurerm_monitor_activity_log_alert" "dc_run_command" {
+  for_each = var.run_command_alert_enabled ? {
+    invoke  = "Microsoft.Compute/virtualMachines/runCommand/action"
+    managed = "Microsoft.Compute/virtualMachines/runCommands/write"
+  } : {}
+
+  name                = "ala-${var.vm_name}-runcommand-${each.key}"
+  resource_group_name = var.resource_group_name
+  location            = "global"
+  scopes              = [azurerm_windows_virtual_machine.dc.id]
+  description         = "Tier-0 action: Run Command (${each.value}) on domain controller ${var.vm_name}. Runs as SYSTEM outside Bastion. Check it matches a capture-log row."
+  tags                = var.tags
+
+  criteria {
+    category       = "Administrative"
+    operation_name = each.value
+  }
+
+  dynamic "action" {
+    for_each = toset(var.run_command_alert_action_group_ids)
+    content {
+      action_group_id = action.value
+    }
+  }
 }

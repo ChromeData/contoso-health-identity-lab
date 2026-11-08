@@ -1,0 +1,62 @@
+# =============================================================================
+# compose.yaml - OrangeHRM, the lab's HR system (HRIS), on this Mac.
+# -----------------------------------------------------------------------------
+# WHY OrangeHRM: ADR 0028. It is a real open-source HRIS (GPLv3) with the HR
+# screens a hospital's HR team uses: PIM (the employee list), Add Employee,
+# Job (title, sub unit, joined date), Report-to (the manager) and
+# Terminate Employment. $0: it runs in Colima on this Mac.
+#
+# Both ports listen on 127.0.0.1 ONLY: nothing on the network can reach the
+# HRIS or its database. The MariaDB image and the PHP base image are
+# pinned by digest; the OrangeHRM zip by MD5 and SHA-256 (supply chain).
+#
+# SECRETS: none in this file and none in `docker inspect`. hris.sh makes the
+# passwords, keeps them in the macOS Keychain, and hands them to the
+# containers as compose secrets (files under /run/secrets), never as
+# environment values.
+#
+# Start, install, seed and stop it with ./hris.sh (README.md).
+# =============================================================================
+name: contoso-hris
+
+services:
+  db:
+    image: mariadb:11.4@sha256:d1891ede5a559f1086f55053bb8cc1569b0298338c4d72d71725a7f74f6ba620
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root
+    secrets: [db_root]
+    volumes:
+      - db:/var/lib/mysql
+    ports:
+      # The connector reads its one view here (ADR 0028, "least data").
+      - "127.0.0.1:3307:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  hris:
+    # Built here by `./hris.sh up` from ./Dockerfile (native arm64; the
+    # official orangehrm/orangehrm image is amd64-only and crashed under
+    # emulation). Same PHP, extensions and release zip as the official 5.9.
+    image: contoso-hris-orangehrm:5.9
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # OrangeHRM writes its database settings here at install time.
+      - conf:/var/www/html/lib/confs
+    ports:
+      - "127.0.0.1:8585:80"
+
+secrets:
+  db_root:
+    environment: HRIS_DB_ROOT
+
+volumes:
+  db:
+  conf:

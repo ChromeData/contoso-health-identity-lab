@@ -1,0 +1,18 @@
+run command lab-9e1e65f1: lab/scripts/dc/hardening/Set-AdTiering.ps1 on vm-dc01
+Set-AdTiering APPLY at 2026-11-07 00:58:39Z
+OUs
+Groups
+Accounts
+  = t0-adm-01 exists (password left as it is)
+  = t1-adm-01 exists (password left as it is)
+  = t2-adm-01 exists (password left as it is)
+Protected Users
+  members (new accounts only): t0-adm-01, t1-adm-01, t2-adm-01
+  left out on purpose (NTLM remote-session path): tier0-admin-01, tier0-admin-02, contosoadmin
+GPO: Tier0 - Deny logon to Tier1 and Tier2
+  + linked to OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + linked to OU=Devices,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+  GPO c26926db-9439-420c-af4a-a9bd2c77a6d4 version 1, deny SIDs: S-1-5-21-1067174854-3188284702-1788255269-512, S-1-5-21-1067174854-3188284702-1788255269-519, S-1-5-21-1067174854-3188284702-1788255269-518, S-1-5-21-1067174854-3188284702-1788255269-3602
+Computers in Tier 1 / Tier 2 OUs today: 0 (the deny GPO applies to these only)
+Set-AdTiering done.
+state: Succeeded, exit code: 0

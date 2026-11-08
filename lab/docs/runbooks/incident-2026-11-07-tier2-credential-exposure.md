@@ -56,7 +56,7 @@ changes (4723), Kerberos pre-auth failures (4771) and NTLM validation
    (E178, PR #262, merged).
 3. The test is to use a delegated join account and a no-rights test
    account (PR #239 follow-up). Owner task.
-4. Since PR #273 (when applied), the operator can no longer read the Domain
+4. Since PR #273 (merged; live once the owner applies envs/operator), the operator can no longer read the Domain
    Admin password from Key Vault outside a write session.
 
 ## The ready answer
