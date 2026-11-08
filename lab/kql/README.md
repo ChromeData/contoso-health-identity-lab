@@ -18,16 +18,18 @@ that day ran on the Azure Data Explorer Kusto emulator on 2026-10-21 (below).
 The two added on 2026-11-06 (third set, below) have not run on the emulator:
 their cases ran on the Log Analytics query engine instead (RAN · harness,
 on the workspace's engine, E114). In the tenant, the Sentinel analytics
-rules list read on 2026-11-06 showed 16 of the first 22 as enabled
+rules list read on 2026-11-07 UTC (table below) showed 16 of the first 22 as enabled
 scheduled rules (plus Microsoft's Fusion rule); the five in
 `itdr_exclude_rules`, the break-glass rule (being moved to a near-real-time
 rule, `main.tf`) and the two third-set rules were not in it. (This paragraph
 said until 2026-11-06 that no workspace existed; that was out of date.) The live state is in the table below.
 
-### Running in Sentinel, and what has fired (live read, 2026-11-06)
+### Running in Sentinel, and what has fired (live read, 2026-11-07 UTC)
 
-Read as the lab operator: the workspace's analytics rules list, and
-`SecurityAlert` counted by rule name over 30 days. "Fired" means alerts on
+Read as the lab operator on 2026-11-07, before 02:35 UTC (the evening of
+2026-11-06 in US Eastern time): the workspace's analytics rules list, and
+`SecurityAlert` counted by rule name over the 30 days before that read. All
+dates in this table are UTC, so the two 2026-11-07 rows fall inside the window. "Fired" means alerts on
 real tenant events. Most of them came from the lab's own build and admin work
 (true events, benign cause); no rule's alerts have been triaged one by one,
 so the false-positive column records only what is known.
