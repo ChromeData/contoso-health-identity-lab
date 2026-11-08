@@ -598,7 +598,7 @@ run "plan_can_export_lab_deployment_templates_only" {
   command = plan
 
   variables {
-    apply_azure_scope = "resource_group"
+    plan_can_export_deployment_templates = true
   }
 
   assert {
@@ -611,12 +611,8 @@ run "plan_can_export_lab_deployment_templates_only" {
   }
 }
 
-run "plan_export_role_can_be_switched_off" {
+run "plan_export_role_off_by_default_for_a_first_bootstrap" {
   command = plan
-
-  variables {
-    plan_can_export_deployment_templates = false
-  }
 
   assert {
     condition     = length(azurerm_role_definition.plan_deployment_template_reader) == 0 && length(azurerm_role_assignment.plan_deployment_template_reader) == 0

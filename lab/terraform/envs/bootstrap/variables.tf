@@ -392,6 +392,6 @@ variable "cannot_delete_lock_resource_ids" {
 
 variable "plan_can_export_deployment_templates" {
   type        = bool
-  description = "Give the PLAN identity Microsoft.Resources/deployments/exportTemplate/action on the lab resource group only (custom role, main.tf). Needed since envs/dev manages an ARM template deployment (leaver extension); without it every PR plan fails with 403."
-  default     = true
+  description = "Give the PLAN identity Microsoft.Resources/deployments/exportTemplate/action on the lab resource group only (custom role, main.tf). Needed since envs/dev manages an ARM template deployment (leaver extension); without it every PR plan fails with 403. Off by default: a FIRST bootstrap runs before envs/dev creates rg-identity-lab, and an assignment on a missing resource group fails. Set true once rg-identity-lab exists (the lab: yes)."
+  default     = false
 }
