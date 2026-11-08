@@ -626,11 +626,15 @@ module "monitoring" {
   # workspace; the sensor on DC01 and the licence are human steps (runbook).
   enable_defender_for_identity = var.enable_defender_for_identity
 
-  # operator_ips watchlist (Sentinel + v2): the hosts DC01's NSG admits, so
-  # only while enable_dc - otherwise the list (which may then hold a /24 for
-  # the vault firewall) means nothing for DC01. Sensitive end to end; rows
-  # expire on ADR 0013's review date.
-  operator_ip_ranges      = var.enable_dc ? var.operator_ip_ranges : []
+  # operator_ips watchlist (Sentinel + v2 or v4): the hosts DC01's NSG admits
+  # (v2's DC01 logon rule) and the operator's allowed sign-in IPs (v4's
+  # operator-signin-outside-allowlist, which needs them with or without the
+  # DC: an empty list makes every operator sign-in alert High). So passed
+  # while enable_dc OR enable_itdr_detections_v4; the root then admits /32
+  # only (validation on operator_ip_ranges). Without either, the list (which
+  # may then hold a /24 for the vault firewall) stays out. Sensitive end to
+  # end; rows expire on ADR 0013's review date.
+  operator_ip_ranges      = var.enable_dc || var.enable_itdr_detections_v4 ? var.operator_ip_ranges : []
   operator_ips_expires_on = var.operator_ips_expires_on
 
   # Identities the ITDR rules judge by IMMUTABLE id (rendered into the KQL):

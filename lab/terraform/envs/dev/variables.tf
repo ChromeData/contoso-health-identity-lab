@@ -176,15 +176,16 @@ variable "operator_ip_ranges" {
     error_message = "Each operator_ip_ranges entry must be an IPv4 CIDR no wider than /24 (use a single host, e.g. 203.0.113.7/32)."
   }
 
-  # DC01 is Tier 0: with enable_dc the root refuses anything but single
+  # DC01 is Tier 0 and the v4 operator rule reads the same watchlist: with
+  # enable_dc or enable_itdr_detections_v4 the root refuses anything but single
   # hosts, the same rule modules/dc-vm and the monitoring watchlist enforce,
   # so the plan fails HERE with this message rather than deep in a module.
   # Cross-variable validation needs Terraform >= 1.9 (versions.tf).
   validation {
-    condition = !var.enable_dc || alltrue([
+    condition = !(var.enable_dc || var.enable_itdr_detections_v4) || alltrue([
       for c in var.operator_ip_ranges : try(endswith(c, "/32") && cidrnetmask(c) == "255.255.255.255", false)
     ])
-    error_message = "enable_dc = true: every operator_ip_ranges entry must be a single IPv4 host as /32 (DC01 RDP/LDAPS and the operator_ips watchlist admit single hosts only - ADR 0013)."
+    error_message = "enable_dc or enable_itdr_detections_v4 = true: every operator_ip_ranges entry must be a single IPv4 host as /32 (DC01 RDP/LDAPS and the operator_ips watchlist admit single hosts only - ADR 0013)."
   }
 }
 

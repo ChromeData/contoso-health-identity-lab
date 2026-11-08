@@ -813,6 +813,49 @@ run "no_dc_keeps_slash24_out_of_the_watchlist" {
     condition     = length(output.itdr_rule_keys) == 17
     error_message = "the v2 rules must deploy without the DC (the DC01 rule simply sees no DC01 data)"
   }
+
+  assert {
+    condition     = module.monitoring.operator_ips_watchlist_entry_count == 0
+    error_message = "without the DC and without v4, a /24 must stay out of the /32-only watchlist"
+  }
+}
+
+# The v4 operator sign-in rule reads the same watchlist and needs it filled
+# with or without the DC (PR #233 review): with v4 on and no DC the ranges
+# reach the watchlist, and the root then refuses anything wider than /32.
+run "no_dc_v4_fills_the_operator_watchlist" {
+  command = plan
+  variables {
+    enable_dc                 = false
+    enable_sentinel           = true
+    enable_itdr_detections    = true
+    enable_itdr_detections_v4 = true
+    itdr_exclude_rules        = []
+    operator_principal_ids    = ["0a0a0a0a-0000-4000-8000-00000000000a"]
+    operator_ip_ranges        = ["203.0.113.7/32", "198.51.100.4/32"]
+    operator_ips_expires_on   = "2099-12-31"
+  }
+
+  assert {
+    condition     = module.monitoring.operator_ips_watchlist_entry_count == 2
+    error_message = "with v4 on and no DC, both operator /32 entries must reach the operator_ips watchlist (an empty list makes every operator sign-in alert High)"
+  }
+}
+
+run "no_dc_v4_refuses_wider_than_single_host" {
+  command = plan
+  variables {
+    enable_dc                 = false
+    enable_sentinel           = true
+    enable_itdr_detections    = true
+    enable_itdr_detections_v4 = true
+    itdr_exclude_rules        = []
+    operator_principal_ids    = ["0a0a0a0a-0000-4000-8000-00000000000a"]
+    operator_ip_ranges        = ["203.0.113.0/24"]
+    operator_ips_expires_on   = "2099-12-31"
+  }
+
+  expect_failures = [var.operator_ip_ranges]
 }
 
 # Connect Health registration window (ADR 0031). Off in lab.tfvars: no

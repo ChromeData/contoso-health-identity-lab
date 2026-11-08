@@ -274,7 +274,7 @@ output "itdr_sentinel_only_rule_keys" {
 }
 
 output "operator_ips_watchlist_id" {
-  description = "Sentinel watchlist operator_ips (read by dc-logon-outside-operator-allowlist.kql); null unless enable_sentinel + enable_itdr_detections_v2. It holds rows (operator_ip_ranges) only while enable_dc; they are sensitive and never output."
+  description = "Sentinel watchlist operator_ips (read by dc-logon-outside-operator-allowlist.kql and operator-signin-outside-allowlist.kql); null unless enable_sentinel + enable_itdr_detections_v2 or _v4. It holds rows (operator_ip_ranges) only while enable_dc or enable_itdr_detections_v4; they are sensitive and never output."
   value       = module.monitoring.operator_ips_watchlist_id
 }
 
