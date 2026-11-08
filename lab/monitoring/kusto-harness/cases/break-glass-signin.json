@@ -108,6 +108,19 @@
       "label": "With the id list filled, an ordinary user (another object id, an ordinary name) still does not match",
       "lets": {"BreakGlassUserIds": ["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]},
       "tables": {"SigninLogs": [{"UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "UserId": "cccccccc-cccc-cccc-cccc-cccccccccccc"}]}
+    },
+    {
+      "id": "two-ips-one-row-keeps-both",
+      "kind": "positive",
+      "label": "bg-admin-01: an older SUCCESS from one IP and a newer FAILURE from another IP in the same window give ONE row (one alert per account). The row still carries both IPs, both results and both correlation ids (review of #230)",
+      "tables": {"SigninLogs": [
+        {"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "TimeGenerated": "ago:3m", "IPAddress": "198.51.100.20", "ResultType": "0", "CorrelationId": "33333333-3333-3333-3333-333333333333"},
+        {"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "TimeGenerated": "ago:1m", "IPAddress": "203.0.113.50", "ResultType": "50126", "CorrelationId": "44444444-4444-4444-4444-444444444444"}
+      ]},
+      "expect": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "IPAddress": "203.0.113.50", "ResultType": "50126", "SignIns": 2,
+                  "IPAddresses": ["198.51.100.20", "203.0.113.50"], "ResultTypes": ["0", "50126"],
+                  "CorrelationIds": ["33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"]}],
+      "expectRows": 1
     }
   ]
 }
