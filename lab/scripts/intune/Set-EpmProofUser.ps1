@@ -33,7 +33,11 @@
 [CmdletBinding()]
 param(
     [Parameter()][string]$Password = '',
-    [Parameter()][string]$Remove = 'no'
+    [Parameter()][string]$Remove = 'no',
+    # 'yes' downloads procexp64.exe again even if it is there. A new build has
+    # a new hash, so the EPM rule must then be updated too (its hash is the
+    # approval); by default the approved file is kept.
+    [Parameter()][string]$RefreshApp = 'no'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -78,7 +82,11 @@ Write-Output "CHECKED: $name is in Remote Desktop Users"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $exe = Join-Path $dir 'procexp64.exe'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-Invoke-WebRequest -UseBasicParsing -Uri 'https://live.sysinternals.com/procexp64.exe' -OutFile $exe
+if ((Test-Path $exe) -and $RefreshApp -cne 'yes') {
+    Write-Output "KEPT: $exe (the approved file; -RefreshApp yes replaces it, and the rule's hash must then change too)"
+} else {
+    Invoke-WebRequest -UseBasicParsing -Uri 'https://live.sysinternals.com/procexp64.exe' -OutFile $exe
+}
 $sig = Get-AuthenticodeSignature -FilePath $exe
 if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Microsoft Corporation') { throw "procexp64.exe signature is $($sig.Status) / $($sig.SignerCertificate.Subject): not using it" }
 $hash = (Get-FileHash -Algorithm SHA256 -Path $exe).Hash
