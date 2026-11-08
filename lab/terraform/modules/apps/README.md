@@ -23,6 +23,7 @@ not yet proven is marked *verify:*.
 | 5 | **ServiceNow, SAML** ([`servicenow.tf`](servicenow.tf)). Non-gallery SAML app with the settings Microsoft's ServiceNow tutorial documents, assignment required, an Entra-minted signing certificate, NameID = UPN, and **one** assignment: `App-ServiceNow-Users`. Accounts come from row 7 ([below](#servicenow-pdi-saml)) | `azuread_application_from_template` (non-gallery template), `azuread_service_principal` (`use_existing`), `azuread_application_identifier_uri`, `azuread_application_redirect_uris`, `azuread_service_principal_token_signing_certificate`, `azuread_claims_mapping_policy` + assignment, `azuread_app_role_assignment` | envs/dev `enable_servicenow_sso` (needs `enable_sso_apps` and `servicenow_instance_url`) |
 | 6 | **okta-clinic-idp, OIDC: Entra as the identity provider for the acquired clinic's Okta org** ([`okta.tf`](okta.tf)). Single tenant, implicit grants off, **one** redirect URI (the Okta authorize callback on `okta_org_domain`, https by construction), the Graph scopes Okta asks for declared, assignment required, **one** assignment: `App-Okta-Federation-Users`. The client secret is NOT created: a human mints it post-apply, bounded to 180 days ([below](#okta-coexistence-entra-side)). The Okta half is the human-applied root [`../../okta`](../../okta/README.md) | `azuread_application`, `azuread_service_principal`, `azuread_app_role_assignment` (default access role) | envs/dev `enable_okta_federation` (needs `enable_sso_apps` and `okta_org_domain`); ADR 0022 |
 | 7 | **ServiceNow provisioning** ([`servicenow_provisioning.tf`](servicenow_provisioning.tf)). A second app from the ServiceNow **gallery** template, provisioning only, hidden from My Apps, assignment required, **one** assignment: the SSO app's `App-ServiceNow-Users`. Its `ServiceNowOutDelta` job is created **stopped**; its credential (the ServiceNow integration user) comes from Key Vault and is written once by a local seeding apply ([below](#servicenow-provisioning)) | `azuread_application_from_template` (gallery template), `azuread_service_principal` (`use_existing`), `azuread_application_owner`, `azuread_application_redirect_uris`, `azuread_app_role_assignment`, `azuread_synchronization_job`, `azuread_synchronization_secret` | envs/dev `enable_servicenow_provisioning` (needs `enable_sso_apps`, `servicenow_instance_url`); the job starts only when `servicenow_provisioning_job_enabled` is set |
+| 8 | **Contoso Claims Viewer, SAML: the app migrated off AD FS** ([`claims_viewer.tf`](claims_viewer.tf), [`../../../adfs`](../../../adfs/README.md)). Same identifier (`urn:contoso:claims-viewer`) and reply URL as the AD FS relying party. The AD FS claim rules converted: a claims-mapping policy (basic claim set off; rule 4's regex = `ExtractMailPrefix`) and two app roles assigned to the same AD groups (rules 3a/3b). Assignment required. BUILT, not applied | `azuread_application_from_template`, `azuread_application_app_role`, `azuread_service_principal` (`use_existing`), `azuread_application_identifier_uri`, `azuread_application_redirect_uris`, `azuread_service_principal_token_signing_certificate`, `azuread_claims_mapping_policy` + assignment, `azuread_app_role_assignment` x2 | envs/dev `enable_claims_viewer_app` (needs `enable_sso_apps` and the two group ids); ADR 0009 |
 
 Provider: **azuread `~> 3.10`** (checked against 3.10.0 source and schema).
 No other provider is used. App-role and scope ids are fixed GUIDs, and Entra
@@ -395,6 +396,34 @@ pipeline only manages the Entra side.
 
 ---
 
+## ServiceNow access fulfilment
+
+**BUILT** (`enable_servicenow_fulfilment`, [`servicenow_fulfilment.tf`](servicenow_fulfilment.tf),
+3 mocked runs in `tests/servicenow_fulfilment.tftest.hcl`). The same design
+**RAN · tenant** on 2026-11-07 with a throwaway twin of this app, deleted
+after the proof (capture-log E170-E172; [`lab/servicenow`](../../../servicenow/README.md)).
+
+ServiceNow asks Entra ID Governance to add or remove a person on a Clinical
+access package after the manager approved in ServiceNow. The app:
+
+| Property | Value | Why |
+|---|---|---|
+| Graph API permissions | **none** | the Graph reference lets an app-only caller hold an entitlement-management role *instead of* `EntitlementManagement.ReadWrite.All` |
+| Role | *Access package assignment manager* (`e2182095-...`) on the Clinical catalog only | add / remove people on existing packages; cannot edit packages, policies or groups |
+| Credential | certificate, public half in [`files/servicenow-fulfilment.pem`](files/servicenow-fulfilment.pem) | no client secret anywhere; the private key exists only in the instance's key store |
+| Sign-in | assignment required, hidden | an app-only client: no user gets a token for it |
+
+**Replication wait.** The catalog role assignment waits 90 s after the
+service principal is created (`time_sleep`, keyed to the SP's object id):
+entitlement management refused it with *SubjectNotFound* when it came right
+after the SP (catch-up apply run 42512070374, 2026-11-08).
+
+Residual risk: the role spans the whole Clinical catalog (Pharmacy included).
+Entra still enforces incompatible packages (seen live: an ICU nurse was
+refused Pharmacy), every request carries the ServiceNow ticket number, and
+requestable packages expire. Rotation: `lab/servicenow/fulfilment-cert.py`
+then a PR.
+
 ## Validation status (offline only)
 
 | Check | Result |
@@ -530,3 +559,23 @@ Staged order (tenant time, after `enable_sso_apps`):
 | O3 | operator | Cross-check: `terraform output -raw okta_idp_redirect_uri` here equals `terraform -chdir=../../okta output -raw okta_callback_uri` | The two strings side by side |
 | O4 | operator | Runbook Phase 1 *Validate*: a member of `App-Okta-Federation-Users` with a clinic login signs in to Okta and is sent to Entra; a non-member is refused at Entra | Entra sign-in log row for `okta-clinic-idp` with the CA result; Okta System Log IdP event |
 | O5 | operator | Runbook Phase 1 *Rollback* rehearsal: `routing_rule_active = false` in the Okta root, timed, then back | The timed rollback in the evidence log |
+
+## Clinic Lab Results (Okta -> Entra, wave 1)
+
+`clinic_results.tf`, flag `enable_clinic_results_app` (envs/dev, same name).
+The first app the acquired clinic moves **off Okta** (runbook Phase 2; the
+tracker and the cut-over tools are in [`lab/okta-migration/`](../../../okta-migration/README.md)).
+
+| Object | Value | Why |
+|---|---|---|
+| App registration | `Clinic Lab Results`, single tenant, **public client**, one loopback redirect `http://localhost:8471/callback`, no fallback public-client flows | The app is a workstation viewer: auth code + PKCE, no secret, the same shape it had in Okta (a native app) |
+| Delegated Graph | `openid`, `profile`, `email` | Sign-in only; the app calls no API |
+| Enterprise app | assignment required | No assignment, no token (AADSTS50105) |
+| Group | `App-ClinicResults-Users`, **assigned**, member drift ignored | Not a copy of Okta's `Clinic-Staff`: its rule (login domain) means every hospital user after the acquisition |
+| Assignment | the group, default access role, the only one | One principal per app, as everywhere in this module |
+| Conditional Access | CA061 (modules/conditional-access `clinical.tf`): MFA strength + sign-in every 8 h, the group only, break-glass excluded; **enforced** (lab.tfvars) | The Okta policy it replaces was "two factors, re-authenticate after 8 hours", already enforced |
+
+Post-apply, as the operator (`lab/okta-migration/cutover.mjs prestage` does
+both and reads them back): admin consent on the three delegated scopes
+(`oauth2PermissionGrants`, AllPrincipals), and the pilot user(s) added to
+`App-ClinicResults-Users`.

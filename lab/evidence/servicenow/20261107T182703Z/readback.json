@@ -1,0 +1,58 @@
+{
+ "cleanup": [
+  "deleted sc_req_item RITM0010006",
+  "deleted sc_request REQ0010006",
+  "adminRemove ICU float for Sofia (89be61c4-ca99-478b-bbe0-9a8f0b2b377e)"
+ ],
+ "instance": "https://dev459905.service-now.com",
+ "run": "20261107T182703Z",
+ "steps": {
+  "uc1": {
+   "after_submit": {
+    "approval": "requested",
+    "approvals": 1,
+    "stage": "waiting_for_approval"
+   },
+   "approved": "2026-11-07T18:29:28Z",
+   "approver": "grace.mwangi@contosohealthlab.com",
+   "closed": "2026-11-07T18:30:51Z",
+   "entra_request": {
+    "completedDateTime": "2026-11-07T18:30:20.74Z",
+    "createdDateTime": "2026-11-07T18:29:34.777Z",
+    "id": "eb079731-61ab-4bf5-82db-48c679c5e68a",
+    "justification": "RITM0010006 (ServiceNow): approved by Grace Mwangi. Reason: Covering ICU night shifts from the float pool while two ICU nurses are on leave.",
+    "requestType": "adminAdd",
+    "requestor": "TEST - ServiceNow Access Fulfilment (throwaway 2026-11-07, delete after proof)",
+    "schedule": {
+     "expiration": {
+      "duration": null,
+      "endDateTime": "2026-11-22T07:59:59Z",
+      "type": "afterDateTime"
+     },
+     "recurrence": null,
+     "startDateTime": "2026-11-07T18:29:31Z"
+    },
+    "state": "delivered",
+    "status": "Fulfilled"
+   },
+   "final": {
+    "approval": "approved",
+    "calendar_duration": "1970-01-01 00:02:27",
+    "closed_at": "2026-11-07 18:30:40",
+    "correlation_display": "Entra ID Governance - delivered",
+    "opened_at": "2026-11-07 18:28:13",
+    "state": "3"
+   },
+   "member_of_App-ICU-CriticalCare-Users": true,
+   "request": "REQ0010006",
+   "ritm": "RITM0010006",
+   "submitted": "2026-11-07T18:27:03Z",
+   "work_notes": [
+    "Approved by Grace Mwangi (manager). Sending to Microsoft Entra ID Governance.",
+    "Sent to Microsoft Entra ID Governance: add Sofia Reyes to access package \"ICU - Float Access\" from 2026-11-07T18:29:31Z to 2026-11-22T07:59:59Z.\nEntra request id: eb079731-61ab-4bf5-82db-48c679c5e68a (state: submitted). The ticket number is in the Entra justification.",
+    "Microsoft Entra ID Governance reports Delivered (request eb079731-61ab-4bf5-82db-48c679c5e68a). Closed automatically."
+   ]
+  },
+  "uc1b": {}
+ }
+}

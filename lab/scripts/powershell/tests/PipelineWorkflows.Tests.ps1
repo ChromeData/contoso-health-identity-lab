@@ -6,6 +6,9 @@
 #   * terraform-apply.yml: the automatic access rule step runs only after a
 #     successful apply, after a fresh APPLY sign-in, app-only, and is NOT
 #     continue-on-error; the Apply summary reads its lines.
+#   * terraform-apply.yml: the APPLY (write) identity is reachable only from
+#     the job in Environment prod (the reviewer gate); the review plan job
+#     has no environment and signs in as the read-only PLAN app.
 #   * config-drift.yml: a night the check could not run (no comparison)
 #     opens or updates an issue instead of only going red.
 # The YAML is parsed by python3 + PyYAML (lab-tests.yml installs python3-yaml
@@ -111,6 +114,53 @@ Describe 'terraform-apply.yml - automatic access rules after the apply' -Skip:(-
         $s['env']['AUTOASSIGN_OUTCOME'] | Should -Be '${{ steps.autoassign.outcome }}'
         $s['run'] | Should -Match 'plain-autoassign\.md'
         $s['run'] | Should -Match 'tech-autoassign\.md'
+    }
+}
+
+Describe 'terraform-apply.yml - the write identity stays behind the prod reviewer' -Skip:(-not $script:CanParse) {
+    # Greptile, PR #241: a pre-approval plan job in `prod` with the reviewer
+    # moved to another Environment let any workflow on main sign in as
+    # APPLY (Contributor) without an approval. Pin the split instead.
+    BeforeAll {
+        $script:T = Read-Workflow 'terraform-apply.yml'
+        $script:Jobs = $script:T['jobs']
+        function Get-EnvName($Job) {
+            $e = $Job['environment']
+            if ($null -eq $e) { return $null }
+            if ($e -is [string]) { return $e }
+            return [string]$e['name']
+        }
+    }
+
+    It 'has exactly two jobs: plan, then terraform-apply (needs plan)' {
+        @($script:Jobs.Keys | Sort-Object) | Should -Be @('plan', 'terraform-apply')
+        @($script:Jobs['terraform-apply']['needs']) | Should -Be @('plan')
+    }
+
+    It 'only terraform-apply declares an environment, and it is prod' {
+        Get-EnvName $script:Jobs['terraform-apply'] | Should -Be 'prod'
+        Get-EnvName $script:Jobs['plan'] | Should -BeNullOrEmpty
+    }
+
+    It 'the plan job signs in and plans as PLAN, never APPLY' {
+        $j = $script:Jobs['plan']
+        $j['env']['ARM_CLIENT_ID'] | Should -Be '${{ vars.AZURE_PLAN_CLIENT_ID }}'
+        $logins = @($j['steps'] | Where-Object { [string]$_['uses'] -like 'azure/login@*' })
+        $logins.Count | Should -BeGreaterThan 0
+        foreach ($l in $logins) { $l['with']['client-id'] | Should -Be '${{ vars.AZURE_PLAN_CLIENT_ID }}' }
+        ($j | ConvertTo-Json -Depth 50) | Should -Not -Match 'AZURE_APPLY_CLIENT_ID'
+    }
+
+    It 'every APPLY sign-in is in the prod job' {
+        foreach ($name in $script:Jobs.Keys) {
+            $applyLogins = @($script:Jobs[$name]['steps'] | Where-Object {
+                [string]$_['uses'] -like 'azure/login@*' -and [string]$_['with']['client-id'] -match 'AZURE_APPLY_CLIENT_ID' })
+            if ($applyLogins.Count -gt 0) { Get-EnvName $script:Jobs[$name] | Should -Be 'prod' }
+        }
+    }
+
+    It 'the bot recovery trigger is repository_dispatch apply-main (Contents: write, no Actions: write)' {
+        @($script:T['on']['repository_dispatch']['types']) | Should -Be @('apply-main')
     }
 }
 

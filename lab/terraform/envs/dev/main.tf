@@ -66,6 +66,9 @@
 #                                          for post-apply/Set-DirectoryRolePimPolicies.ps1.
 #   enable_pim_azure_resources          -> Azure PIM: eligible Contributor on the
 #                                          RG (premium; HUMAN Owner applies).
+#   enable_pim_keyvault_officers        -> Azure PIM: eligible Key Vault Secrets
+#                                          Officer on kv-idlab (premium; HUMAN
+#                                          Owner applies; ADR 0036).
 #   enable_pim_demo_readers             -> PIM-Demo-Readers: read-only presenter
 #                                          access (Global Reader + Security
 #                                          Reader), eligible-only, no approval;
@@ -192,6 +195,20 @@ check "pam_oidc_app_requires_sso_apps" {
   }
 }
 
+check "claims_viewer_requires_sso_apps" {
+  assert {
+    condition     = !var.enable_claims_viewer_app || (var.enable_premium && var.enable_sso_apps)
+    error_message = "enable_claims_viewer_app = true has no effect unless enable_premium and enable_sso_apps are both true (the Claims Viewer app lives in modules/apps)."
+  }
+}
+
+check "adfs_https_requires_dc" {
+  assert {
+    condition     = !var.enable_adfs_https || var.enable_dc
+    error_message = "enable_adfs_https = true has no effect unless enable_dc is true (the 443 rule is on DC01's NSG)."
+  }
+}
+
 check "servicenow_sso_requires_sso_apps" {
   assert {
     condition     = !var.enable_servicenow_sso || (var.enable_premium && var.enable_sso_apps)
@@ -203,6 +220,13 @@ check "servicenow_provisioning_requires_sso_apps" {
   assert {
     condition     = !var.enable_servicenow_provisioning || (var.enable_premium && var.enable_sso_apps)
     error_message = "enable_servicenow_provisioning = true has no effect unless enable_premium and enable_sso_apps are both true (the ServiceNow provisioning app lives in modules/apps)."
+  }
+}
+
+check "clinic_results_requires_sso_apps" {
+  assert {
+    condition     = !var.enable_clinic_results_app || (var.enable_premium && var.enable_sso_apps)
+    error_message = "enable_clinic_results_app = true has no effect unless enable_premium and enable_sso_apps are both true (Clinic Lab Results lives in modules/apps, CA061 in modules/conditional-access)."
   }
 }
 
@@ -230,8 +254,8 @@ check "pim_aws_admin_requires_sso_apps" {
 
 check "pim_extensions_require_premium" {
   assert {
-    condition     = !(var.enable_pim_tiers || var.enable_pim_azure_resources || var.enable_helpdesk_au_scoping || var.enable_global_admin_pim_policy || var.enable_pim_demo_readers) || var.enable_premium
-    error_message = "enable_pim_tiers / enable_pim_azure_resources / enable_helpdesk_au_scoping / enable_global_admin_pim_policy / enable_pim_demo_readers have no effect unless enable_premium = true (modules/pim is premium-tier)."
+    condition     = !(var.enable_pim_tiers || var.enable_pim_azure_resources || var.enable_pim_keyvault_officers || var.enable_helpdesk_au_scoping || var.enable_global_admin_pim_policy || var.enable_pim_demo_readers) || var.enable_premium
+    error_message = "enable_pim_tiers / enable_pim_azure_resources / enable_pim_keyvault_officers / enable_helpdesk_au_scoping / enable_global_admin_pim_policy / enable_pim_demo_readers have no effect unless enable_premium = true (modules/pim is premium-tier)."
   }
 }
 
@@ -239,6 +263,13 @@ check "nhi_governance_requires_premium" {
   assert {
     condition     = !var.enable_nhi_governance || var.enable_premium
     error_message = "enable_nhi_governance = true has no effect unless enable_premium = true (App-Consent-Reviewers lives in the premium-tier modules/groups)."
+  }
+}
+
+check "lcw_leaver_trigger_requires_premium" {
+  assert {
+    condition     = !var.enable_lcw_leaver_trigger || var.enable_premium
+    error_message = "enable_lcw_leaver_trigger = true has no effect unless enable_premium = true (the All-Workforce trigger group lives in the premium-tier modules/groups; dynamic groups are P1). New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver will then refuse to run because the group does not exist."
   }
 }
 
@@ -325,8 +356,8 @@ module "groups" {
   break_glass_domain = var.onmicrosoft_domain
 
   # Optional groups, each behind the flag of the feature that consumes it.
-  enable_nhi_governance  = var.enable_nhi_governance               # App-Consent-Reviewers
-  enable_workforce_group = var.enable_phishing_resistant_all_users # All-Workforce (passkey rollout)
+  enable_nhi_governance  = var.enable_nhi_governance                                                # App-Consent-Reviewers
+  enable_workforce_group = var.enable_phishing_resistant_all_users || var.enable_lcw_leaver_trigger # All-Workforce (passkey rollout; scheduled leaver trigger)
 }
 
 # -----------------------------------------------------------------------------
@@ -409,6 +440,12 @@ module "conditional_access" {
   # strength (enable_phishing_resistant_all_users). Never All users.
   enable_shared_clinical_ca       = var.enable_shared_clinical_ca
   ca060_clinical_group_object_ids = [module.groups[0].all_nurses_group_object_id, module.groups[0].all_icu_group_object_id]
+
+  # CA061 Clinic Lab Results (Okta -> Entra wave 1): the same flag as the app
+  # itself - no app, no CA061. One app, its one group.
+  enable_clinic_results_ca = var.enable_clinic_results_app && var.enable_sso_apps
+  ca061_app_ids            = var.enable_clinic_results_app && var.enable_sso_apps ? [module.apps[0].clinic_results_client_id] : []
+  ca061_group_object_ids   = var.enable_clinic_results_app && var.enable_sso_apps ? [module.apps[0].clinic_results_users_group_object_id] : []
 }
 
 # -----------------------------------------------------------------------------
@@ -452,6 +489,15 @@ module "pim" {
   # PIM for Azure resources: group eligible for Contributor on the lab RG.
   enable_pim_azure_resources = var.enable_pim_azure_resources
   azure_pim_scope_id         = azurerm_resource_group.idlab.id
+
+  # Just-in-time Key Vault Secrets Officer on the lab vault (ADR 0036,
+  # modules/pim keyvault.tf). Like PIM-Azure-RG-Contributors, its members
+  # are STANDING (the group is eligible), so they join CA002 / CA020 scope
+  # through privileged_review_targets: each must be an adm- account with a
+  # passkey. key_vault_secrets_officer_ids still grants the role ACTIVELY;
+  # empty that list only after an activation has been seen to work.
+  enable_pim_keyvault_officers = var.enable_pim_keyvault_officers
+  keyvault_pim_scope_id        = module.keyvault.key_vault_id
 
   # AWS admin as a PIM-for-Groups activation (ADR 0025). The group is
   # assigned to the AWS app in module.apps below; it stays out of the CA002 /
@@ -522,7 +568,9 @@ module "dc_vm" {
   key_vault_id        = module.keyvault.key_vault_id
   allowed_ip_ranges   = var.operator_ip_ranges
   vm_size             = var.dc_vm_size
-  tags                = var.tags
+  # 443 to DC01 only for the temporary AD FS exercise (lab/adfs).
+  adfs_https_enabled = var.enable_adfs_https
+  tags               = var.tags
 }
 
 # -----------------------------------------------------------------------------
@@ -582,6 +630,7 @@ module "monitoring" {
   # own flag).
   enable_itdr_detections_v2 = var.enable_itdr_detections_v2
   enable_itdr_detections_v3 = var.enable_itdr_detections_v3
+  enable_itdr_detections_v4 = var.enable_itdr_detections_v4
   vault_feed_v2_columns     = var.vault_feed_v2_columns
 
   # Defender for Identity (ADR 0023): the native AD-attack detector. The flag
@@ -589,11 +638,15 @@ module "monitoring" {
   # workspace; the sensor on DC01 and the licence are human steps (runbook).
   enable_defender_for_identity = var.enable_defender_for_identity
 
-  # operator_ips watchlist (Sentinel + v2): the hosts DC01's NSG admits, so
-  # only while enable_dc - otherwise the list (which may then hold a /24 for
-  # the vault firewall) means nothing for DC01. Sensitive end to end; rows
-  # expire on ADR 0013's review date.
-  operator_ip_ranges      = var.enable_dc ? var.operator_ip_ranges : []
+  # operator_ips watchlist (Sentinel + v2 or v4): the hosts DC01's NSG admits
+  # (v2's DC01 logon rule) and the operator's allowed sign-in IPs (v4's
+  # operator-signin-outside-allowlist, which needs them with or without the
+  # DC: an empty list makes every operator sign-in alert High). So passed
+  # while enable_dc OR enable_itdr_detections_v4; the root then admits /32
+  # only (validation on operator_ip_ranges). Without either, the list (which
+  # may then hold a /24 for the vault firewall) stays out. Sensitive end to
+  # end; rows expire on ADR 0013's review date.
+  operator_ip_ranges      = var.enable_dc || var.enable_itdr_detections_v4 ? var.operator_ip_ranges : []
   operator_ips_expires_on = var.operator_ips_expires_on
 
   # Identities the ITDR rules judge by IMMUTABLE id (rendered into the KQL):
@@ -603,9 +656,22 @@ module "monitoring" {
   iac_principal_ids     = var.iac_principal_ids
   privileged_group_ids  = local.itdr_privileged_group_ids
   break_glass_group_ids = var.enable_premium ? [module.groups[0].break_glass_group_object_id] : []
-  # PIM-Azure-RG-Contributors: standing members are its intended path (the
-  # group is eligible for the Azure role) - reported on its own, Medium path.
-  azure_pim_group_ids = var.enable_premium ? [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null] : []
+  # The break-glass USERS by object id: break-glass-signin.kql matches on
+  # them, so renaming an account does not blind it (review finding D3).
+  break_glass_user_ids = var.enable_premium ? module.groups[0].break_glass_user_object_ids : []
+  # Tier-0 PIM groups by object id: pim-activation.kql's HighValue (review
+  # finding B6; the old name list matched none of them).
+  tier0_group_ids = local.itdr_tier0_group_ids
+  # The lab operator's ids (ADR 0024) for the fourth ITDR set; the hospital's
+  # egress ranges and ASNs (none in the lab).
+  operator_principal_ids = var.operator_principal_ids
+  trusted_egress_ranges  = var.trusted_egress_ranges
+  trusted_asns           = var.trusted_asns
+  # PIM-Azure-RG-Contributors and PIM-KeyVault-Secrets-Officers: standing
+  # members are their intended path (the GROUP is eligible for the Azure
+  # role) - reported on their own, Medium path. A new member of either can
+  # request Tier-0 access (the DC's RG; the lab vault's secrets).
+  azure_pim_group_ids = var.enable_premium ? [for g in [module.pim[0].azure_pim_group_object_id, module.pim[0].keyvault_pim_group_object_id] : g if g != null] : []
   privileged_user_ids = distinct(concat(
     var.enable_premium ? module.groups[0].break_glass_user_object_ids : [],
     var.privileged_user_object_ids,
@@ -625,6 +691,11 @@ locals {
     [module.groups[0].break_glass_group_object_id, module.groups[0].priv_iam_admins_group_object_id],
     values(module.pim[0].tier_group_object_ids),
     [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null],
+    # PIM-KeyVault-Secrets-Officers (enable_pim_keyvault_officers): eligible
+    # for Key Vault Secrets Officer on the lab vault, so a member added is
+    # one activation away from writing Tier-0 secrets. Watched like
+    # PIM-Azure-RG-Contributors (null, so skipped, while the flag is off).
+    [for g in [module.pim[0].keyvault_pim_group_object_id] : g if g != null],
     # PIM-AWS-Lab-Admins (ADR 0025): members arrive only by PIM activation
     # (written by MS-PIM), so a direct add is a way around the 2-hour,
     # MFA + reason activation into AWS admin. Watched here, but deliberately
@@ -635,6 +706,16 @@ locals {
     # included) without the MFA + reason activation. Watched, not in CA scope.
     var.enable_pim_demo_readers ? [module.pim[0].demo_readers_group_object_id] : [],
     values(module.pim[0].approver_group_object_ids),
+  ) : []
+
+  # The Tier-0 subset of the PIM groups (pim-activation.kql HighValue):
+  # every PIM-Tier0-* group, AWS admin (ADR 0025), the Azure PIM group
+  # (Contributor on the RG that holds DC01) and Privileged-IAM-Admins.
+  itdr_tier0_group_ids = var.enable_premium ? concat(
+    [module.groups[0].priv_iam_admins_group_object_id],
+    [for name, id in module.pim[0].tier_group_object_ids : id if startswith(name, "PIM-Tier0-")],
+    [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null],
+    var.enable_pim_aws_admin ? [module.pim[0].aws_admin_group_object_id] : [],
   ) : []
 
   # ---- Access reviews (ADR 0012) -------------------------------------------
@@ -715,6 +796,13 @@ module "apps" {
   servicenow_provisioning_job_enabled = var.servicenow_provisioning_job_enabled
   servicenow_provisioning_credentials = var.servicenow_provisioning_credentials
 
+  # ServiceNow access fulfilment (default false): the app ServiceNow uses to
+  # add/remove people on Clinical access packages after a manager approves in
+  # ServiceNow. No Graph permission; one catalog role on the Clinical catalog.
+  # Without governance there is no catalog, so the flag needs both.
+  enable_servicenow_fulfilment     = var.enable_servicenow_fulfilment && var.enable_governance
+  servicenow_fulfilment_catalog_id = var.enable_servicenow_fulfilment && var.enable_governance ? module.entitlement[0].catalog_id : ""
+
   # okta-clinic-idp (default false): Entra as the OIDC identity provider for
   # the acquired clinic's Okta org (runbook Phase 1, ADR 0022). The ONE
   # principal on it is App-Okta-Federation-Users; the client secret is a
@@ -722,6 +810,19 @@ module "apps" {
   enable_okta_federation                = var.enable_okta_federation
   okta_org_domain                       = var.okta_org_domain
   okta_federation_users_group_object_id = module.groups[0].app_access_group_object_ids["okta"]
+
+  # Clinic Lab Results (default false): the first app moved off the clinic's
+  # Okta (lab/okta-migration wave 1). Its group lives in this module, like
+  # PAM-Operators; CA061 above targets it.
+  enable_clinic_results_app = var.enable_clinic_results_app
+
+  # Contoso Claims Viewer (default false): the app migrated off AD FS
+  # (lab/adfs, ADR 0009 phase 3). Its two groups come from AD through Cloud
+  # Sync, so their ids are inputs, not module.groups outputs.
+  enable_claims_viewer_app                 = var.enable_claims_viewer_app
+  claims_viewer_clinicians_group_object_id = var.claims_viewer_clinicians_group_object_id
+  claims_viewer_admins_group_object_id     = var.claims_viewer_admins_group_object_id
+  claims_viewer_saml_signing_cert_end_date = var.claims_viewer_saml_signing_cert_end_date
 }
 
 # -----------------------------------------------------------------------------

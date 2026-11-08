@@ -1,6 +1,6 @@
 # ADR 0020: PIM activation design (approvers, expiry, step-up, Global Administrator, help-desk scope)
 
-- **Status:** Accepted (lab). BUILT: Terraform where the provider allows it, post-apply Graph scripts where it doesn't, all tested offline only. Not run: no activation has happened against a tenant. **Partly supersedes ADR 0002** (approvers, eligibility expiry, more roles); 0002's pattern stands (a group actively holds the role, and membership is eligible-only).
+- **Status:** Accepted (lab). BUILT: Terraform where the provider allows it, post-apply Graph scripts where it doesn't, all tested offline only. RAN · tenant: real activations raised a Sentinel incident and a ServiceNow ticket (E40b), AWS admin was activated and given back (E99), and a help-desk admin activated PIM-Tier1-Helpdesk with a passkey (E104). **Partly supersedes ADR 0002** (approvers, eligibility expiry, more roles); 0002's pattern stands (a group actively holds the role, and membership is eligible-only).
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 

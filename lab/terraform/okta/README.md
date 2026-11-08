@@ -179,10 +179,35 @@ its own second factor again).
 | **Rollback** | disable the routing rule | `routing_rule_active = false` → `terraform apply`: the rule goes INACTIVE, the IdP stays, clinic users fall back to Okta passwords at the next sign-in. A `check` warns on every plan while it is false, so a rollback is never forgotten. Rehearse it, timed, during validation (ADR 0022 measures ≤ 5 minutes); then set it back to `true` |
 | **Evidence** | screenshot of the routing rule + an Entra sign-in log row | `terraform output` (`routing_rule_id`, `routing_rule_status`, `routed_login_domain`, `entra_idp_id`) plus the two log rows; the timed rollback in the drill log |
 
-Phases 2 to 4 (moving the legacy app, users and MFA, decommission) stay
-runbook steps. Moving *Clinic Scheduling (legacy)* is its own PR: an Entra
-app in `modules/apps`, then `hide_web = true` here for one sign-in cycle, then
-`status = "INACTIVE"`, then removal.
+## Phase 2: the clinic's other apps (`clinic-apps.tf`)
+
+**Status: RAN · tenant** (2026-11-07, capture-log E115): applied to the lab
+Okta org with a **targeted** apply (the objects below only). Targeted on
+purpose: a full plan needs `TF_VAR_entra_client_secret` for the IdP, and the
+app work must never touch the IdP. A re-plan of these objects shows **No
+changes**.
+
+| Object | Terraform | Value |
+|---|---|---|
+| OIDC app (wave 1) | `okta_app_oauth.clinic_results` | *Clinic Lab Results*: public client (SPA type, PKCE, auth method none), redirect `http://localhost:8471/callback`, dashboard tile starts the app's sign-in; assigned to Clinic-Staff |
+| SAML app (wave 2) | `okta_app_saml.clinic_billing` | *Clinic Billing*: signed response + assertion, SHA-256, `department` attribute; hidden (no SP exists); assigned to Clinic-Billing |
+| Group + rule | `okta_group.clinic_billing`, `okta_group_rule.clinic_billing` | `user.department == "Clinic Billing"` (0 users today: clinic users carry no department yet) |
+| Authentication policy | `okta_app_signon_policy.clinical_apps` + `_rule.clinical_staff` | *Clinic clinical apps*: Clinic-Staff and Clinic-Billing, two factors, re-authenticate after 8 h; catch-all **DENY** |
+| Admin Console rule (flag, off) | `okta_app_signon_policy_rule.admin_console_phishing_resistant` | first rule: phishing-resistant, device-bound, every sign-in; needs `okta_admin_console_app_id` |
+
+The wave switches (`cutover`, `retired`) are read from
+[`lab/okta-migration/waves.json`](../../okta-migration/waves.json), not from
+tfvars: a cut-over is a reviewed change to the file the tracker reads.
+`waves_override` exists for the tests and for an incident rollback applied
+before its PR. The tools, the tracker and the cut-over steps:
+[`lab/okta-migration/README.md`](../../okta-migration/README.md).
+
+**State.** The Phase 2 apply ran from the `feat/okta-depth` worktree, so the
+current local state is there until that PR merges. Then copy it back to the
+main checkout before the next apply from main (a backup of the earlier state
+is in `~/.contoso-operator/okta-state-backup/`).
+
+Phases 3 and 4 (users and MFA, decommission) stay runbook steps.
 
 ---
 
@@ -247,6 +272,33 @@ would rewrite it with `registry.opentofu.org` entries, so validate with tofu
 in a scratch copy and never commit a tofu-written one.
 
 ---
+
+## Why the Entra client secret stays (checked 2026-11-07)
+
+`okta-clinic-idp` holds the lab's **last Entra client secret** (one, ends
+2027-04-26). It cannot be swapped for a certificate today:
+
+- Okta's generic OIDC identity provider can sign in with `private_key_jwt`,
+  but Microsoft Entra ID needs the `x5t#S256` header in that client
+  assertion, and Okta does not send it. Entra refuses the token (AADSTS700027).
+  Okta's own article says the integration is not supported and the fix is a
+  client secret ("Error invalid social token and Azure error 700027 when using
+  private key JWT with Okta OIDC identity provider and Microsoft Entra ID",
+  support.okta.com, last updated 2026-08-04).
+- There is no federated credential path either: Okta is not a workload that
+  holds a token Entra can trust.
+
+**The way to zero (DESIGNED, not built):** switch the federation from OIDC to
+**SAML 2.0**. Entra signs the SAML response with a certificate it holds; Okta
+needs only the public signing certificate. Steps: a non-gallery SAML app in
+`modules/apps` (same one assigned group), `okta_idp_saml` + `okta_idp_saml_key`
+here, the routing rule moved to the new IdP, one clinic sign-in proved, then
+`okta-clinic-idp` and its secret deleted. It changes the live clinic sign-in,
+so it waits until after the recording.
+
+Until then the secret is bounded (180 days at most), entered once into
+Okta, never in this repo, and listed with its owner and end date in
+`lab/iga/nhi-secrets-register.json`.
 
 ## Production option (described, not built)
 

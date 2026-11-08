@@ -140,7 +140,7 @@ non-human identities and risk signals.
 | Containment widened: decide which High rules may contain without a human approval | Approval-gated playbook BUILT (`lab/monitoring/playbook-contain.json`) |
 | Just-in-time credentials for clinical reporting databases | RAN · harness (`lab/pam/dynamic-db/`); in production through the product the PAM POC picks |
 | Okta Phase 4 decommission | DESIGNED: `lab/docs/okta-migration-runbook.md` |
-| Workload identity on AKS via Entra Workload ID | BUILT, never applied: `lab/terraform/k8s/aks-mapping`; the kind version RAN · harness (64/64) |
+| Workload identity on AKS via Entra Workload ID | RAN · tenant on kind (lab/evidence/k8s-keyvault/20261107T013045Z/, 66/66): Entra Workload ID + Key Vault CSI, `lab/terraform/k8s/keyvault-trust`; on AKS only the issuer URL changes |
 
 **Dependencies:** governance licensing for every user in scope of reviews;
 app owners named for every enterprise app; SOC approval for any containment

@@ -19,7 +19,10 @@
 #     entities - it has Account entities and EVERY one is a lab test or lab
 #                admin account (test-user-*, itdr-drill-*, adm-*, bg-admin-NN,
 #                svc-* in the lab's two domains);
-#     window   - it was created inside --since / --until (UTC, ISO 8601).
+#     window   - it was created inside --since / --until (UTC, ISO 8601);
+#     label    - it carries the incident label "drill" (modules/monitoring's
+#                automation rule label_drill adds it at creation to every
+#                incident that names a drill account; review finding D2).
 #   It is held as NEEDS LEAD, and never closed unless its number is in
 #   --lead-ok, when any Account entity is the OWNER's account or an account
 #   that is not a lab test/admin account (a real person): the lead looks at
@@ -183,9 +186,10 @@ incs="$(rest_all "$SI/incidents?$API&\$filter=properties/status ne 'Closed'&\$or
 rows="$(printf '%s' "$incs" | py '
 for i in d.get("value",[]):
     p=i["properties"]
-    print(i["name"], p["incidentNumber"], p["createdTimeUtc"], p["severity"], p["title"].replace(" ","_"))')"
+    drill="drill" if any((l or {}).get("labelName")=="drill" for l in (p.get("labels") or [])) else "-"
+    print(i["name"], p["incidentNumber"], p["createdTimeUtc"], p["severity"], drill, p["title"].replace(" ","_"))')"
 PLAN=()
-while read -r name num created sev title; do
+while read -r name num created sev drill title; do
   [ -z "$name" ] && continue
   if [ -n "$NUMBERS" ] && ! in_list "$num" "$NUMBERS"; then continue; fi
   ents="$(rest POST "$SI/incidents/$name/entities?$API")" || die "could not read the entities of incident #$num"
@@ -224,6 +228,7 @@ for e in (d or {}).get("entities",[]):
   why=""
   if [ $lab -eq 1 ]; then why="entities are lab test/admin accounts ($accts)"; fi
   if [ $inwin -eq 1 ]; then why="${why:+$why; }created inside the build window"; fi
+  if [ "$drill" = drill ]; then why="${why:+$why; }labelled drill"; fi
   if [ -n "$lead" ]; then
     if [ -n "$LEAD_OK" ] && in_list "$num" "$LEAD_OK"; then
       decision="CLOSE"; why="lead confirmed (names $lead)${why:+; $why}"

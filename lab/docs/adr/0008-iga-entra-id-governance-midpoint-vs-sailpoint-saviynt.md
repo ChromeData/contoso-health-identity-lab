@@ -1,6 +1,6 @@
 # ADR 0008: IGA with Entra ID Governance (+ midPoint stand-in) vs. SailPoint / Saviynt
 
-- **Status:** Accepted (lab and scenario recommendation). The Entra ID Governance side is code, validated offline, never applied. The midPoint certification campaign ran locally on 2026-10-20, on mock-HR persona users, not Entra data. `test/e2e-midpoint.sh` passed 91/91 in every `lab/pam/test/run-all.sh` run that day; the latest count is in the newest `lab/evidence/offline-tests/` record (counts and the runner's console output), and the latest campaign record is hashed in `lab/evidence/midpoint/20261020T162116Z/`.
+- **Status:** Accepted (lab and scenario recommendation). The Entra ID Governance side is RAN · tenant: the catalog, 4 access packages and the SoD links (E19), privileged reviews (E53), a refused request (E39c) and the SoD report (E71). The midPoint certification campaign ran locally on 2026-10-20, on mock-HR persona users, not Entra data. `test/e2e-midpoint.sh` passed 91/91 in every `lab/pam/test/run-all.sh` run that day; the latest count is in the newest `lab/evidence/offline-tests/` record (counts and the runner's console output), and the latest campaign record is hashed in `lab/evidence/midpoint/20261020T162116Z/`.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
@@ -43,27 +43,34 @@ and neither has an individual trial.
   source, and running a certification campaign. It is not part of the
   production design.
 
-What the lab defines as code on Entra ID Governance (not yet applied to a tenant):
+What the lab defines as code on Entra ID Governance, with the status of each part:
 
 - **Catalog and access packages:** a catalog and four access packages, each
   with an ADR 0012 tier and an assignment model: "Nurse - Clinical Apps" and
   "ICU - Critical Care Apps" (birthright, automatic), "ICU - Float Access"
-  and "Pharmacy - Controlled Substances Apps" (requested). A separate guest catalog for affiliated physicians sits behind
-  `enable_b2b_governance`.
-- **Expiry:** a 180-day assignment duration on request policies.
+  and "Pharmacy - Controlled Substances Apps" (requested). RAN · tenant
+  (E19). A separate guest catalog for affiliated physicians sits behind
+  `enable_b2b_governance`. BUILT; the flag is off in `lab.tfvars`.
+- **Expiry:** a 180-day assignment duration on request policies. RAN ·
+  tenant: a requested assignment expires on 2027-05-04 (E92).
 - **Birthright:** automatic assignment policies built from HR attributes
   (`Set-AutoAssignmentPolicies.ps1`, `lab/iga/birthright-rules.json`; ADR
-  0012 T3).
+  0012 T3). BUILT. The capture log has no run row of its own for this
+  script.
 - **SoD:** nine rules in `lab/iga/sod-rules.json`. Preventive: incompatible
   packages and groups (`Set-IncompatibleAccessPackages.ps1`), never placed on
   a birthright package, so a clinical grant can't be blocked by them.
   Detective: `09-SoD-Report.ps1` over existing access, PIM eligibility
   included. `Set-IncompatibleAccessPackages.ps1` is written to replace the
   original both-ways Nurse and Pharmacy pair (`Set-AccessPackageSoD.ps1`).
+  RAN · tenant: preventive links (E19), a refused request (E39c), the
+  detective report (E71).
 - **Lifecycle Workflows:** a joiner (day 1, Nursing scope, TAP to the
-  manager, access package request) and a real-time leaver.
-- **Reviews:** risk-tiered per ADR 0012, one flag per tier, all off by
-  default.
+  manager, access package request) and a real-time leaver. RAN · tenant:
+  joiner (E91), leaver on demand (E111).
+- **Reviews:** risk-tiered per ADR 0012, one flag per tier, each off by
+  default in code. RAN · tenant: `lab.tfvars` turns on the privileged,
+  requestable and inactive tiers (E53, E110).
 
 ## Consequences
 
@@ -85,9 +92,14 @@ What the lab defines as code on Entra ID Governance (not yet applied to a tenant
 | `enable_access_reviews = false` does not remove reviews that already exist (provider diff suppression). | Documented in `envs/dev/README.md`. Turn reviews off in the portal. |
 | The midPoint campaign is a stand-in run, not a tenant result. It ran headless over REST against midPoint 4.10.4 (7 items: 4 accepted, 2 revoked, 1 left unanswered and removed; remediation applied; hashed evidence in `lab/evidence/midpoint/`). The users are object files built from the mock-HR personas. midPoint 4.10's REST API has no decision endpoint, so `record-decisions.groovy` records each decision through midPoint's own decision service, running in the assigned reviewer's security context: midPoint checks that reviewer's authorizations and records them as the decider, but no reviewer signs in. | Labelled as a stand-in (`STAND-INS.md`, `lab/pam/midpoint/README.md`). midPoint's own authorization refuses a user without the Reviewer role and a reviewer who isn't the assignee (two probes in the evidence). Still open: aggregating Entra users through the Graph connector (1.2.0.0, unverified on 4.10). Fill in after running: imported user count. |
 
-**Not proven yet:** no Governance-tier apply has run. Fill in after running:
-an access package assignment with its expiry date, a rejected incompatible
-request, and a Lifecycle Workflow run history.
+**Proven in the tenant:** the Governance-tier apply ran (E19). An access
+package assignment has its expiry date (E92, expires 2027-05-04). An
+incompatible request was refused (E39c). Lifecycle Workflows have run
+history (joiner E91, leaver E111).
+
+**Not proven yet:** birthright automatic assignment
+(`Set-AutoAssignmentPolicies.ps1`) has no run row of its own in the
+capture log. The guest catalog is off.
 
 ## Revisit trigger (when Contoso buys SailPoint or Saviynt)
 

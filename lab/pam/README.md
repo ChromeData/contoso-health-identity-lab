@@ -1,7 +1,16 @@
 # PAM / IGA stand-ins — local Docker stack
 
-CyberArk, SailPoint and Saviynt are enterprise-licensed, and the author holds
-no licence. This folder runs the closest **real, open-source or community**
+> **Superseded for PAM by [ADR 0036](../docs/adr/0036-microsoft-native-pam.md)
+> (2026-11-06).** The lab's privileged-access path is now Microsoft-native:
+> Azure Key Vault for secrets, Azure Bastion session recording (Premium SKU)
+> for recorded admin sessions, Windows LAPS for password rotation, Intune
+> Endpoint Privilege Management for local admin rights, and PIM for
+> just-in-time access. CyberArk and Conjur are not part of the lab. The Vault
+> and Guacamole harness below stays as an earlier, local-only build until a
+> later PR retires it.
+
+SailPoint and Saviynt are enterprise-licensed, and the author holds no
+licence. This folder runs the closest **real, open-source or community**
 equivalents on your laptop for $0. It is built to run against DC01, the lab's
 AD domain controller in Azure; today it runs against a Samba AD DC harness
 (status below). Every stand-in is named on camera. The exact lines are in
@@ -9,15 +18,14 @@ AD domain controller in Azure; today it runs against a Samba AD DC harness
 
 | Container | Real product | Stands in for | What the demo proves |
 |---|---|---|---|
-| `vault` | HashiCorp Vault Community 2.1 | CyberArk **Digital Vault + CPM** | AD account discovery → bulk onboarding → dependency-gated rotation → reconciliation; exclusive check-out, rotate-on-check-in, audit log |
-| `guacd` + `guacamole` | Apache Guacamole 1.6 | CyberArk **PSM** (+ PSM for SSH) | Brokered SSH to a Linux host and brokered RDP to a Linux xrdp stand-in (both RAN · harness), RDP to DC01 itself (BUILT, needs DC01); each session belongs to one named operator who never sees the credential, recorded, and the recording checked for playback |
+| `vault` | HashiCorp Vault Community 2.1 | **Azure Key Vault** (secrets) + **Windows LAPS** (rotation), ADR 0036 | AD account discovery → bulk onboarding → dependency-gated rotation → reconciliation; exclusive check-out, rotate-on-check-in, audit log |
+| `guacd` + `guacamole` | Apache Guacamole 1.6 | **Azure Bastion session recording** (Premium SKU), ADR 0036 | Brokered SSH to a Linux host and brokered RDP to a Linux xrdp stand-in (both RAN · harness), RDP to DC01 itself (BUILT, needs DC01); each session belongs to one named operator who never sees the credential, recorded, and the recording checked for playback |
 | `itsm-mock` | ServiceNow Table API v2 mock (`tools/mock_servicenow.py`), incl. the `sysapproval_approver` table | **ServiceNow** change tickets + approvals (a ServiceNow PDI at tenant time) | Check-out only with an approved, current change assigned to the person asking, under **dual control** for Tier 0: two distinct approvers, neither of them the requester (Tier 1: one) |
 | `ssh-target` (profile `ssh`) | OpenSSH on Debian, trusting only Vault's SSH CA | A Tier-1 **Linux server** behind PSMP | Ephemeral 10-minute certificates; the target's own log names the operator |
 | `rdp-target` (profile `rdp`, harness only) | xrdp 0.10 + xorgxrdp on Debian, AD logon by Kerberos (`rdp-target/`) | **A Linux STAND-IN for an RDP session to DC01**. It is not Windows: Samba AD has no RDP, so this gives the brokered RDP path something real to connect to | A Tier-0 AD account checked out of Vault logs on over RDP through Guacamole with the injected password; the session is recorded and the recording plays back; after check-in the password no longer works ([RDP without DC01](#rdp-recording-without-dc01-linux-xrdp-stand-in)) |
-| `vault-1/2/3` + `vault-unsealer` (`docker-compose.ha.yml`) | Vault integrated storage (Raft) + transit auto-unseal | CyberArk **Vault HA / DR Vault**; Azure Key Vault auto-unseal | Leader failover, a timed snapshot-restore DR drill (RTO/RPO), a rolling upgrade |
-| `conjur` + `conjur-cli` | CyberArk Conjur OSS 1.27 | Conjur Enterprise / **Secrets Manager** | Workload secrets by policy-as-code: one host allowed, one denied. Separately, [`conjur/state-leak/`](conjur/state-leak/README.md) (its own Conjur) measures that the `conjur_secret` data source writes the secret into Terraform state and the ephemeral resource does not (RAN · harness) |
+| `vault-1/2/3` + `vault-unsealer` (`docker-compose.ha.yml`) | Vault integrated storage (Raft) + transit auto-unseal | Vault's own HA and DR (Azure Key Vault is a managed service with built-in replication, so ADR 0036 retires this) | Leader failover, a timed snapshot-restore DR drill (RTO/RPO), a rolling upgrade |
 | `midpoint` | Evolveum midPoint 4.10 | **SailPoint / Saviynt** | A risk-tiered certification campaign run headless over REST, with detective SoD and automated remediation ([`midpoint/README.md`](midpoint/README.md)); Entra users aggregated through the Graph connector at tenant time |
-| `contoso-dyndb` project (`docker-compose.dynamic-db.yml`): its own Vault + PostgreSQL `clinical-db` | Vault database secrets engine | CyberArk **zero-standing-privilege database access** / dynamic secrets | A new Postgres login per request, 1-hour lease, dropped (and its sessions ended) on revoke; nobody holds a standing password ([`dynamic-db/README.md`](dynamic-db/README.md)) |
+| `contoso-dyndb` project (`docker-compose.dynamic-db.yml`): its own Vault + PostgreSQL `clinical-db` | Vault database secrets engine | zero-standing-privilege database access / dynamic secrets (Microsoft's way: Entra authentication to the database, no password) | A new Postgres login per request, 1-hour lease, dropped (and its sessions ended) on revoke; nobody holds a standing password ([`dynamic-db/README.md`](dynamic-db/README.md)) |
 | `samba-dc` (harness only, `test/docker-compose.samba.yml`) | Samba 4.22 AD DC on Debian | **DC01**, the lab's Windows Server domain controller in Azure | The real scripts run against a real AD (LDAPS, `pwdLastSet`, nested groups, SPNs) without a tenant |
 | `contoso-vaultanom` project (harness only) | Vault 2.1.1 + its own Samba DC | The Vault audit feed into **Sentinel** (`VaultCheckout_CL`) | Real Vault audit events become the rows the PAM anomaly detection reads; the KQL itself does not run here |
 
@@ -36,6 +44,10 @@ AD domain controller in Azure; today it runs against a Samba AD DC harness
 > itself has never run on a Windows host). The optional scale suite
 > (`--scale`, 500 synthetic accounts) is not part of a default run; its last
 > run is the hashed record `20261020T193913Z` (79/79, GAP 0).
+>
+> These counts are from 2026-10-20. The PAM flow's 284 included one Conjur
+> check (allowed and denied workload). ADR 0036 removed Conjur and that check,
+> so the next run has one check fewer.
 >
 > Where each number is held: the `--publish` run `20261020T220031Z` wrote the
 > hashed flow and DR records below and re-verified them (8/8 record checks).
@@ -75,8 +87,8 @@ AD domain controller in Azure; today it runs against a Samba AD DC harness
   the VM, 6 GiB or more if `lab/splunk` runs at the same time, 8 GiB for the
   whole harness including the HA cluster. The stack idles at about 2.5 GiB and
   midPoint's heap can grow to 2 GiB, so Colima's default VM (2 CPU / 2 GiB)
-  is too small. **Apple Silicon:** Conjur ships amd64 images only. Start
-  Colima with `colima start --vm-type vz --vz-rosetta --cpu 4 --memory 8`. If
+  is too small. Start Colima with
+  `colima start --vm-type vz --vz-rosetta --cpu 4 --memory 8`. If
   Colima is already running, `colima stop` first: a running VM keeps its old
   size. On Docker Desktop, turn Rosetta on and set Resources > Memory to match.
 - `jq`, `openssl`, `curl`, `perl` (timings), `ssh-keygen`, `python3` (the
@@ -96,7 +108,11 @@ cd lab/pam
 ./vault-onboard-ad.sh -k <key-vault> -d corp.<domain>   # LDAP engine, svc-backup static role, tier0 library
 
 # PAM operations pack (section below): discovery -> onboarding -> reconciliation
-az keyvault secret show --vault-name <key-vault> -n svc-pam-discovery --query value -o tsv | ./discover.sh
+# DC01 discovery and onboarding are RETIRED (2026-11-07, ADR 0036):
+# svc-pam-discovery and its Key Vault secret were deleted. Not available in a
+# live run. The Samba harness (test/e2e.sh) is a SEPARATE, offline exercise:
+# never run it against a stack pointed at a real DC (its --force bypass deletes
+# Vault's ldap/ mount).
 ./onboard.sh --dry-run && ./onboard.sh
 ./reconcile.sh --verify
 
@@ -109,8 +125,6 @@ az keyvault secret show --vault-name <key-vault> -n svc-pam-discovery --query va
 ./psm-session.sh checkin                      # Vault rotates the password; recording is in Settings -> History (as guacadmin)
 
 ./psm-ssh.sh setup                            # Vault SSH CA + Linux target + recorded SSH connection
-./conjur-demo.sh                              # allowed vs denied workload
-bash conjur/state-leak/run.sh                 # Conjur secret in Terraform state: data source vs ephemeral (own Conjur; conjur/state-leak/README.md)
 ./vault-ha.sh up && ./dr-drill.sh             # HA cluster + timed DR drill (separate compose project)
 ./midpoint/run-campaign.sh                    # certification campaign over REST -> lab/evidence/midpoint/ (midpoint/README.md)
 ./dynamic-db/setup.sh && ./dynamic-db/demo.sh # 1-hour database logins (own compose project; dynamic-db/README.md)
@@ -124,7 +138,7 @@ shared broker token (`.secrets/broker-token`, revoked) if they are still
 there.
 
 Every session now belongs to **one named person** from
-[`operators.json`](operators.json) (CyberArk: Safe members). `psm-session.sh
+[`operators.json`](operators.json) (who may check out what). `psm-session.sh
 checkout --operator NAME` creates that person's Guacamole user on first use,
 with no system permissions, and grants READ on the checked-out account's
 connection to **that user only**, so they can connect but cannot read the
@@ -187,28 +201,29 @@ psm-session.sh / psm-ssh.sh: operator + ticket gate -> per-person, recorded sess
 vault-ha.sh / dr-drill.sh:   3-node Raft, failover, timed snapshot-restore drill
 ```
 
-### CyberArk vocabulary map
+### Vocabulary map
 
-What each piece is called in a CyberArk shop (BeyondTrust Password Safe and
-Delinea Secret Server names in brackets where they differ).
+The general PAM name of each piece, and the Microsoft product that does the
+job in the lab's target design (ADR 0036). Delinea Secret Server names are in
+brackets where they differ.
 
-| CyberArk | Here | Notes |
+| PAM term (Microsoft product in ADR 0036) | Here | Notes |
 |---|---|---|
-| Digital Vault (+ Vault HA cluster, DR Vault) | Vault Community; 3-node Raft cluster in `docker-compose.ha.yml` | Raft replicates every write; DR = snapshots, drilled by `dr-drill.sh` |
+| Password vault, HA and DR (Azure Key Vault) | Vault Community; 3-node Raft cluster in `docker-compose.ha.yml` | Raft replicates every write; DR = snapshots, drilled by `dr-drill.sh` |
 | Master Policy | `pam-policy.json` top level: `stale_days`, `exclusions`, `require_ticket` per tier | Exclusions are documented exceptions, each with a reason |
-| Platform (rotation interval, check-out rules) [BeyondTrust: Functional Account / Platform; Delinea: Secret Template + Password Changer] | a **tier** in `pam-policy.json` (`tier0`, `tier1`, `svc`) | `rotation_period`, `checkout_ttl`, `max_password_age_days`, `dependency_check` |
-| Safe [Delinea: Folder] | a library set (humans) or a static-role prefix (`svc/*`) **plus** its Vault policy (`<tier>-checkout`, `<tier>-static-read`) | Created by `onboard.sh` |
-| Safe members | `operators.json` (`libraries`, `ssh_roles`) | Checked before every check-out |
+| Platform (rotation interval, check-out rules) [Delinea: Secret Template + Password Changer] (Windows LAPS policy) | a **tier** in `pam-policy.json` (`tier0`, `tier1`, `svc`) | `rotation_period`, `checkout_ttl`, `max_password_age_days`, `dependency_check` |
+| Safe [Delinea: Folder] (Key Vault + Azure RBAC role assignment) | a library set (humans) or a static-role prefix (`svc/*`) **plus** its Vault policy (`<tier>-checkout`, `<tier>-static-read`) | Created by `onboard.sh` |
+| Safe members (PIM-eligible Azure RBAC role) | `operators.json` (`libraries`, `ssh_roles`) | Checked before every check-out |
 | Accounts Discovery / Pending Accounts | `discover.sh` → `out/discovery-*.csv` | Nested + primary-group membership, SPNs, `adminCount`, stale |
-| Account usages (CPM updates them) | `accounts-dependencies.json` + `dependency-scan/Get-AccountDependencies.ps1` | Vault cannot update a Windows service, so rotation is **refused** until each usage reads from Vault |
-| CPM: Change / Verify / Reconcile | `rotate.sh` (change), `reconcile.sh --verify` (verify), `rotate.sh` after a failed verify (reconcile) | The reconcile account is `svc-vault-rotator` (`ldap/rotate-root`) |
-| PSM (RDP) | Guacamole RDP connection per account, injected credential | Recording + History playback. In the harness the RDP session runs against `rdp-target`, a Linux xrdp stand-in for DC01 (`psm-session.sh --target rdp-target`) |
-| PSM for SSH / PSMP, SSH Key Manager | Guacamole SSH connection + **Vault SSH CA** (`psm-ssh.sh`) | Ephemeral cert, never a standing key |
+| Account usages | `accounts-dependencies.json` + `dependency-scan/Get-AccountDependencies.ps1` | Vault cannot update a Windows service, so rotation is **refused** until each usage reads from Vault |
+| Change / Verify / Reconcile (Windows LAPS) | `rotate.sh` (change), `reconcile.sh --verify` (verify), `rotate.sh` after a failed verify (reconcile) | The reconcile account is `svc-vault-rotator` (`ldap/rotate-root`) |
+| Recorded RDP session (Azure Bastion session recording) | Guacamole RDP connection per account, injected credential | Recording + History playback. In the harness the RDP session runs against `rdp-target`, a Linux xrdp stand-in for DC01 (`psm-session.sh --target rdp-target`) |
+| Recorded SSH session, SSH key manager (Azure Bastion) | Guacamole SSH connection + **Vault SSH CA** (`psm-ssh.sh`) | Ephemeral cert, never a standing key |
 | Ticketing integration (ServiceNow) | `itsm_validate` in `lib.sh` → Table API v2 | Approved, Implement, in window, assigned to the requester, enough approvals |
-| Central Credential Provider (CCP) / Credential Provider | `<tier>-static-read` policies (applications read `ldap/static-cred/<prefix>/*`) | What makes a static role safe to rotate |
-| Exclusive access | Vault library exclusive check-out | One person per account at a time; a third Tier-0 check-out is refused |
-| Dual control (access approval by N confirmers) | `itsm_validate` counts ServiceNow approval records (`sysapproval_approver`); `pam-policy.json` `approvals_required` (tier0 2, tier1 1); approvers in `operators.json` `approves` | Two distinct approvers for Tier 0, neither the operator nor the change's requester, each allowed to approve for the Safe; any rejection stops it ([section 5](#5-ticket-validation-servicenow--dual-control)). verify: the exact CyberArk Master Policy / Safe setting names for your PVWA version |
-| PTA (Privileged Threat Analytics) | Not here: the ITDR detections in `lab/kql` correlate DC logons with Vault check-outs | |
+| Application credential provider (Key Vault + managed identity) | `<tier>-static-read` policies (applications read `ldap/static-cred/<prefix>/*`) | What makes a static role safe to rotate |
+| Exclusive access (no Microsoft equivalent; PIM gives time-bound access instead) | Vault library exclusive check-out | One person per account at a time; a third Tier-0 check-out is refused |
+| Dual control (PIM activation approval) | `itsm_validate` counts ServiceNow approval records (`sysapproval_approver`); `pam-policy.json` `approvals_required` (tier0 2, tier1 1); approvers in `operators.json` `approves` | Two distinct approvers for Tier 0, neither the operator nor the change's requester, each allowed to approve for the Safe; any rejection stops it ([section 5](#5-ticket-validation-servicenow--dual-control)). |
+| Privileged threat analytics (Defender for Identity, Sentinel) | Not here: the ITDR detections in `lab/kql` correlate DC logons with Vault check-outs | |
 
 ### 1. Discovery — `discover.sh`
 
@@ -244,10 +259,14 @@ Output (gitignored): `out/discovery-<UTC>.{json,csv}` and
 `out/discovery-latest.*`. "Stale" uses `lastLogonTimestamp`, which replicates
 (about every 14 days), not the per-DC `lastLogon`.
 
-**Tenant time (DC01):** `lab/scripts/dc/02-Configure-Domain.ps1` creates
-`svc-pam-discovery` as a plain user in `OU=ServiceAccounts` and stores its
-password in Key Vault as `svc-pam-discovery` (never on a command line); it is
-already in the policy exclusions here, so Vault never onboards or rotates it.
+**Tenant time (DC01): retired.** Until 2026-11-07,
+`lab/scripts/dc/02-Configure-Domain.ps1` created `svc-pam-discovery` on DC01
+and stored its password in Key Vault. With the Vault stand-in retired
+(ADR 0036), `lab/scripts/dc/Remove-PamDiscoveryAccount.ps1` deleted the
+account and the secret (capture log E157), and the domain build no longer
+creates it. DC01 discovery is therefore not available. The Samba
+harness (`test/e2e.sh`) seeds its own copy and stays as a separate, offline
+exercise (never against a real DC); the policy exclusion here stays for it.
 
 ### 2. Bulk onboarding — `onboard.sh`
 
@@ -298,7 +317,7 @@ Refusals and overrides are audited.
 
 Vault rotates static roles on its own schedule without asking anyone. That is
 why the gate sits where a person starts a rotation: onboarding (creating the
-role rotates) and `rotate.sh`. CyberArk's CPM can update a usage as part of the
+role rotates) and `rotate.sh`. Some PAM products can update a usage as part of the
 change; Vault can't, so the operating rule is "no static role until every
 consumer reads from Vault".
 
@@ -369,14 +388,13 @@ GET {ITSM_URL}/api/now/v2/table/sysapproval_approver?sysparm_query=sysapproval.n
     &sysparm_fields=approver.user_name,state&sysparm_limit=100&...
 ```
 
-**Dual control (the CyberArk dual-control equivalent).** The change's
+**Dual control.** The change's
 `approval` field alone is not enough. The broker reads ServiceNow's own
 approval records (`sysapproval_approver`, one row per approver) and counts an
 approval only if it is in state `approved`, comes from someone who is **not
 the requester** (neither the operator asking for the account nor the change's
 `requested_by`), and comes from someone allowed to approve for that Safe
-(`approves` in [`operators.json`](operators.json); CyberArk: the Safe
-permission to authorise account requests). Each person counts once.
+(`approves` in [`operators.json`](operators.json)). Each person counts once.
 `pam-policy.json` sets how many distinct approvals a tier needs:
 
 | Tier | `approvals_required` | Safe checked | Example that passes | Refused |
@@ -392,8 +410,8 @@ and the check-out state. `./itsm-ticket.sh add ... --approver NAME[:state]`
 raises a change with its approvals in the mock; `./itsm-ticket.sh approve
 CHG####### --by NAME [--state rejected]` acts as one approver afterwards.
 Lab personas: ops-dana is an approver only (she never checks anything out, so
-she never gets a Guacamole user). Not built: CyberArk's approval *workflow*
-(request, notify, approve in PVWA); here the approvals are made in the ITSM
+she never gets a Guacamole user). Not built: an approval *workflow*
+(request, notify, approve in the PAM product; PIM does this in ADR 0036); here the approvals are made in the ITSM
 and the broker only enforces them.
 
 **Pinned to Table API v2**: v2 answers a query with no match with 200 and an
@@ -882,7 +900,7 @@ What it proves:
 - **HA/DR:** 3 voters; leader crash → new writable leader; the DR drill's
   marker/policy are restored, the post-snapshot write is lost, RTO within
   target; a rolling upgrade leaves the cluster healthy.
-- **Conjur** allow/deny, **midPoint** REST login (a wrong password gets a
+- **midPoint** REST login (a wrong password gets a
   401) and the connector inventory.
 
 "Rejected" always means the DC answered `invalidCredentials` (LDAP 49). An
@@ -932,7 +950,7 @@ onboarding would skip its first rotation.
 - [x] `./pam-up.sh` ends with the endpoint list and no `ERROR` (2026-10-20, upgraded in place from the 2026-10-19 stack)
 - [x] Vault HA: failover, DR drill (RTO/RPO report, latest `../evidence/pam-dr/20261020T220031Z/`: RTO 42.1 s, target 300 s), rolling-upgrade rehearsal (2026-10-20, in the harness, on the separate rehearsal cluster; restoring the credential vault and reconciling drift after a restore is not drilled)
 - [x] Recorded SSH session through Guacamole with a Vault SSH certificate; its recording passes the same format check (2026-10-20, in the harness)
-- [ ] **Tenant time:** `svc-pam-discovery` created on DC01 + Key Vault secret; `./discover.sh` against DC01; `./onboard.sh` and `./reconcile.sh --verify --strict` pass
+- [x] ~~**Tenant time:** `svc-pam-discovery` created on DC01 + Key Vault secret; `./discover.sh` against DC01;~~ **retired 2026-11-07** (ADR 0036; account and secret deleted, capture log E157). Remaining: `./onboard.sh` and `./reconcile.sh --verify --strict` pass
 - [ ] **Tenant time:** `Get-AccountDependencies.ps1` run on DC01 through `az vm run-command`; findings merged into `accounts-dependencies.json`
 - [ ] Vault UI: `ldap/` engine, static roles `svc-backup` + `svc/*`, libraries `tier0-admins`, `tier1-admins`
 - [ ] Audit log records each check-out (with `token-psm-<operator>` and the ticket), check-in and rotation. Vault's UI has no audit view, so read the file device `pam-up.sh` enables (values are HMAC'd):
@@ -943,7 +961,6 @@ onboarding would skip its first rotation.
 - [ ] After `checkin`, the account's `PasswordLastSet` has changed (rotate-on-check-in)
 - [ ] **Tenant time:** Guacamole sign-in through Entra OIDC with phishing-resistant MFA; History shows the UPN
 - [ ] **Tenant time:** check-out validated against a change in the ServiceNow PDI (`ITSM_URL` pointed at it), approved there by two people other than the requester (dual control on real `sysapproval_approver` records)
-- [ ] `./conjur-demo.sh` prints *fetched* for nightly-report and *denied (403)* for unapproved-job
 - [x] midPoint: a closed certification campaign with accept, revoke and no-response decisions, remediation applied, hashed evidence (`midpoint/run-campaign.sh`, 2026-10-20, mock-HR persona users)
 - [ ] **Tenant time:** midPoint aggregates the Entra users through the Graph connector (section above)
 
@@ -972,7 +989,7 @@ onboarding would skip its first rotation.
   test-only: the Samba harness gives `samba-tool provision` a throwaway
   Administrator password, which is replaced immediately.
 - `svc-vault-rotator` is effectively **Tier 0** (it can reset Domain Admin
-  passwords via AdminSDHolder). That's the same position as a CyberArk CPM
+  passwords via AdminSDHolder). That's the same position as any PAM product's
   reconcile account, and it's why its credential is vaulted and rotated.
   Discovery deliberately uses a separate, read-only account.
 - Each check-out uses its **own short-lived Vault token** (policy
