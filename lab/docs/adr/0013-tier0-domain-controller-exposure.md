@@ -1,6 +1,6 @@
 # ADR 0013: Tier-0 domain controller exposure (lab public IP vs. production)
 
-- **Status:** Accepted, as a time-boxed risk acceptance for the lab. Not acceptable for production. Code validated offline. `enable_dc = false` in `lab.tfvars`, so no DC has been deployed.
+- **Status:** Accepted, as a time-boxed risk acceptance for the lab. Not acceptable for production. RAN · tenant: `enable_dc = true` in `lab.tfvars`; DC01 runs in `rg-identity-lab`, its NSG limited to the operator's IP, and its security events reach Sentinel (E15b, E52).
 - **Date:** 2026-10-20
 - **Risk owner:** PAM Lead (in the lab, the repository maintainer)
 - **Next review:** 2027-01-20, or earlier on any revisit trigger

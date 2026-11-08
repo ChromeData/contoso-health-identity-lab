@@ -19,7 +19,10 @@ Every layer sits behind a staging flag that is `false` in `lab.tfvars`
 CI identities live in a separate, human-applied `envs/bootstrap` root, and the
 AWS IAM Identity Center permission set in an equally separate, human-applied
 `aws/` root, and the Okta side of the acquired clinic's coexistence (ADR 0022) in
-a third human-applied root, `okta/`. Workforce users (Dana Okafor and colleagues) are **not**
+a third human-applied root, `okta/`. ("Human-applied" means applied
+outside CI, from the operator workstation. The owner starts or approves
+each such apply. Before 2026-11-07 AI helpers running as the lab operator
+also ran some of them, for example the `okta/` apply in PR #222.) Workforce users (Dana Okafor and colleagues) are **not**
 Terraform's: HR provisioning owns them.
 
 > **Status: BUILT.** Every directory validates and every mocked test passes
@@ -199,7 +202,7 @@ combinations that cannot work.
 | `enable_dc` | `false` | DC01 domain controller VM (dc-vm) | nothing: free tier, Azure compute cost |
 | `enable_intune_vm` | `false` | Windows 11 VM, Entra joined + Intune enrolled, the CA005 compliant device (intune-vm) | `enable_premium` + the human steps in `lab/scripts/intune/README.md` |
 | `enable_sentinel` | `false` | Sentinel onboarding + the core rules (monitoring). **Starts the 31-day trial** | Entra logs flowing for a few hours; not with `enable_la_alerts` |
-| `enable_la_alerts` | `false` | The same rules as Log Analytics alerts, the post-trial path (monitoring) | not with `enable_sentinel` |
+| `enable_la_alerts` | `false` | The same rules as Log Analytics alerts, the post-trial path (monitoring), except `sentinel_only_rule_keys` (14-day look-back; no Log Analytics equivalent) | not with `enable_sentinel` |
 | `enable_access_reviews` | `false` | Shorthand for the three tier flags below (deprecated alias) | `enable_governance` + a fallback reviewer group |
 | `enable_access_reviews_privileged` | `false` | ADR 0012 T1: quarterly default-deny reviews of every PIM-governed group and of Global Administrator eligibility (rendered bodies) | `enable_governance` |
 | `enable_access_reviews_requestable` | `false` | ADR 0012 T2: half-yearly `removeAccess` review, only on requestable packages that outlive 180 days or allow extension | `enable_governance` |
