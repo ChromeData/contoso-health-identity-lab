@@ -1,0 +1,9 @@
+Cloud Sync jobs on servicePrincipal 4c0d0455-9356-4954-b8ef-48edc1713efe, as the lab operator (Graph read)
+2026-11-08T18:12Z (after the rotation, before the fix):
+  AD2AADProvisioning  Active      last run Succeeded 2026-11-08T18:06:16Z
+  AD2AADPasswordHash  Quarantine  HybridIdentityServiceNoActiveAgents (NoActiveConnector), series began 2026-11-08T06:02:16Z
+    -> this pause began while DC01 was deallocated, 12 hours BEFORE the rotation (18:09:40Z); preflight.sh clears only the provisioning job's pause
+fix: POST .../jobs/AD2AADPasswordHash.../restart {"criteria":{"resetScope":"QuarantineState"}} (the same call preflight.sh makes for the provisioning job)
+2026-11-08T18:20Z:
+  AD2AADPasswordHash  Active      last run Succeeded 2026-11-08T18:17:36Z, again 18:20:00Z
+  AD2AADProvisioning  Active      (preflight --check: "Cloud Sync (Active Directory -> Entra) is running (Active)")
