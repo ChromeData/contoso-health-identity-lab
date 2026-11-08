@@ -201,8 +201,10 @@ variable "operator_azure_roles" {
     STANDING Azure built-in roles for the operator at SUBSCRIPTION scope.
       Reader                        read every lab resource (drift, evidence
                                     checks, KPI). Replaces Owner (ADR 0030).
-      Storage Blob Data Contributor Terraform state (Entra auth, Shared Key is
-                                    off) and evidence read-back. Subscription
+      Storage Blob Data Contributor Terraform state READ (Entra auth, Shared
+                                    Key is off) and evidence read-back. An
+                                    ABAC condition refuses blob writes to the
+                                    terraform_state_containers (R4). Subscription
                                     scope because the state account's ReadOnly
                                     lock blocks account- and container-scoped
                                     role assignments. In the evidence container,
@@ -210,7 +212,9 @@ variable "operator_azure_roles" {
                                     deletes and overwrites inside the retention
                                     period, whatever data role the caller holds.
       Key Vault Secrets User        READ lab secrets for deploy and seeding
-                                    steps. Writing a secret needs a session
+                                    steps, EXCEPT tier0_secret_names (ABAC
+                                    condition, R4). Writing a secret, or
+                                    reading a Tier-0 one, needs a session
                                     (Key Vault Secrets Officer, below).
     Owner is gone. Without Owner, the operator holds no
     Microsoft.Authorization/*/write or */delete at all: it cannot create a
@@ -298,5 +302,42 @@ variable "intune_write_expires_utc" {
   validation {
     condition     = can(timecmp(var.intune_write_expires_utc, "2026-01-01T00:00:00Z"))
     error_message = "intune_write_expires_utc must be an RFC 3339 time."
+  }
+}
+
+variable "tier0_secret_names" {
+  description = <<-EOT
+    Key Vault secret names the operator can NOT read outside a write session
+    (ABAC condition on its standing Key Vault Secrets User; karen-review
+    round 2, R4). The built-in Domain Admin and the DSRM password: reading
+    either one is Tier 0. Add any new Tier-0 secret here in the same PR that
+    creates it.
+  EOT
+  type        = list(string)
+  default     = ["dc01-admin-password", "dc01-dsrm-password"]
+
+  validation {
+    condition     = contains(var.tier0_secret_names, "dc01-admin-password") && contains(var.tier0_secret_names, "dc01-dsrm-password")
+    error_message = "tier0_secret_names must keep dc01-admin-password and dc01-dsrm-password (R4)."
+  }
+  validation {
+    condition     = alltrue([for n in var.tier0_secret_names : can(regex("^[0-9A-Za-z-]{1,127}$", n))])
+    error_message = "Key Vault secret names are 1-127 letters, digits and dashes."
+  }
+}
+
+variable "terraform_state_containers" {
+  description = <<-EOT
+    Blob containers holding Terraform state that the operator can NOT write
+    outside a write session (ABAC condition on its standing Storage Blob Data
+    Contributor; R4). tfstate = envs/dev (APPLY's pipeline); tfstate-bootstrap
+    = envs/bootstrap and this root (backend.tf of each).
+  EOT
+  type        = list(string)
+  default     = ["tfstate", "tfstate-bootstrap"]
+
+  validation {
+    condition     = contains(var.terraform_state_containers, "tfstate") && contains(var.terraform_state_containers, "tfstate-bootstrap")
+    error_message = "terraform_state_containers must keep tfstate and tfstate-bootstrap (R4)."
   }
 }
