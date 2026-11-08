@@ -1,0 +1,25 @@
+k8s Key Vault pipeline, live rerun after the PR #232 review fixes (2026-11-07), as the lab operator.
+command: DOCKER_CONTEXT=colima lab/scripts/operator/op lab/k8s/ci/pipeline.sh (API port forwarded with the README section 5 ssh workaround)
+
+Lock: a second run started during this one was refused:
+  ERROR: another pipeline run (pid 22249) holds lab/k8s/ci/.state/run.lock: wait for it to finish
+  (its teardown touched nothing; the first run's lock and run.env were left intact)
+
+      live: CSIDriver tokenRequests expirationSeconds=[600]
+PASS  the CSI driver itself requests 600 s tokens (live CSIDriver spec.tokenRequests)
+[03:58:19Z] read back: resource group exists=false; app registrations=0; vault kv-k8s-03e92ca9: gone
+
+  [1/12] preflight                            10  PASS   
+  [2/12] terraform fmt / validate / test       6  PASS   3 roots, 17 tftest runs passed
+  [3/12] checkov                              13  PASS   11 terraform + 88 k8s passed, 0 failed
+  [4/12] azure: vault, issuer, trust         114  PASS   run 03e92ca9: vault + issuer site + app 7b3e82c4...
+  [5/12] kind cluster + public issuer         54  PASS   issuer published: discovery doc + JWKS
+  [6/12] terraform apply platform             19  PASS   CSI driver + Azure provider Ready; 1 token audience
+  [7/12] terraform apply identity              2  PASS   9 added; live VAP: [Deny], 4 rules
+  [8/12] deploy workload                      28  PASS   pod Ready after 28s (mount = Entra + Key Vault yes)
+  [9/12] rotate secret (no restart)           13  PASS   new value live in ~11s, same pod
+  [10/12] drift: detect + heal                 5  PASS   DRIFT DETECTED (plan 2) -> healed (0)
+  [11/12] e2e tests                           38  PASS   67/67 assertions passed
+  [12/12] secrets out of state                 8  PASS   0 secret hits: 3 states + audit log
+  teardown                                   238  PASS   
+  total                                      548  PASS   

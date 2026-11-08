@@ -1,0 +1,15 @@
+{
+"read_utc": "2026-11-07T02:35:53Z",
+"note": "names and metadata only; no value was read or printed",
+"github_actions_secrets": [{"name":"TF_ALERT_EMAIL","updatedAt":"2026-10-27T03:45:08Z"},{"name":"TF_APP_OWNER_OBJECT_IDS","updatedAt":"2026-11-05T14:22:42Z"},{"name":"TF_OPERATOR_IP_RANGES","updatedAt":"2026-10-27T03:45:07Z"},{"name":"TF_PIM_ALERT_MAILBOX","updatedAt":"2026-10-27T03:45:10Z"},{"name":"TF_SAML_CERT_NOTIFICATION_EMAILS","updatedAt":"2026-10-27T03:45:09Z"}],
+"github_dependabot_secrets": [{"name":"TF_ALERT_EMAIL","updatedAt":"2026-10-27T03:45:08Z"},{"name":"TF_APP_OWNER_OBJECT_IDS","updatedAt":"2026-10-27T03:45:12Z"},{"name":"TF_OPERATOR_IP_RANGES","updatedAt":"2026-10-27T03:45:07Z"},{"name":"TF_PIM_ALERT_MAILBOX","updatedAt":"2026-10-27T03:45:11Z"},{"name":"TF_SAML_CERT_NOTIFICATION_EMAILS","updatedAt":"2026-10-27T03:45:09Z"}],
+"github_env_prod_secrets": [],
+"key_vault": "kv-idlab-cicd-20f1",
+"key_vault_secrets": [ { "contentType": "pipeline-config/string", "name": "tf-alert-email", "updated": "2026-11-07T02:27:40+00:00" }, { "contentType": "pipeline-config/list", "name": "tf-app-owner-object-ids", "updated": "2026-11-07T02:27:42+00:00" }, { "contentType": "pipeline-config/list", "name": "tf-operator-ip-ranges", "updated": "2026-11-07T02:27:38+00:00" }, { "contentType": "pipeline-config/string", "name": "tf-pim-alert-mailbox", "updated": "2026-11-07T02:27:46+00:00" }, { "contentType": "pipeline-config/list", "name": "tf-saml-cert-notification-emails", "updated": "2026-11-07T02:27:44+00:00" }],
+"key_vault_role_assignments": [ { "principalId": "3c793a4b-53a0-47a8-83a2-2a659d81cb42", "role": "Key Vault Secrets User" }, { "principalId": "b0d888a6-69f3-44db-a3cc-a124ce5a8218", "role": "Key Vault Secrets User" }],
+"key_vault_network": { "defaultAction": null, "publicNetworkAccess": "Enabled", "purgeProtection": true, "rbac": true},
+"entra_app_client_secrets": [{"app":"okta-clinic-idp","appId":"3d533f47-ed37-4b7a-8db1-02c6de4e9057","count":1,"endDateTime":"2027-04-26","kept_because":"Okta generic OIDC IdP cannot send x5t#S256 for private_key_jwt (Okta KB, 2026-08-04)"}],
+"entra_sp_password_credentials": [{"sp":"AWS IAM Identity Center","displayName":"CN=Contoso Health - AWS IAM Identity Center SAML signing","endDateTime":"2027-04-20"},{"sp":"ServiceNow","displayName":"CN=Contoso Health - ServiceNow SAML signing","endDateTime":"2027-04-20"}],
+"entra_sp_password_credentials_note": "protect the SAML token-signing private keys created with each signing certificate; not sign-in credentials",
+"apps_read": 13, "service_principals_read": 379
+}

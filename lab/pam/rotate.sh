@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # rotate.sh - on-demand rotation of a vaulted service account, GATED on its
-# dependencies (CyberArk: "Change" on an account whose usages are known).
+# dependencies (a password change on an account whose usages are known).
 #
 # Refuses when accounts-dependencies.json lists an unresolved consumer of the
 # password (a Windows service, scheduled task, app pool, connection string

@@ -1,6 +1,6 @@
 # ADR 0001: Entra Cloud Sync vs. Entra Connect Sync
 
-- **Status:** Accepted (lab). Designed and documented; not yet run against a tenant.
+- **Status:** Accepted (lab). RAN · tenant: Cloud Sync carries AD changes to Entra ID since 2026-10-28 (capture log E52: a mover and a timed leaver through DC01 and the provisioning agent).
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 

@@ -1,0 +1,32 @@
+# adm-labops, Contoso Lab VM Operator through PIM for Azure resources (az CLI sign-in: password + authenticator code)
+02:48:23Z eligible: Contoso Lab VM Operator on rg-identity-lab; standing: no ARM permission on the RG (permissions/read AuthorizationFailed)
+02:49:02Z SelfActivate PT1H, justification given -> Provisioned 02:49:04Z
+02:49:37Z first log query refused (InsufficientAccessError): role lacked workspaces/query/read; added, bootstrap in-place update 02:51Z-02:55Z
+2026-11-07T02:55:16Z | list VMs | OK vm list
+2026-11-07T02:55:17Z | DC01 power state (instanceView) | ['PowerState/deallocated']
+2026-11-07T02:55:18Z | deallocate vm-win11-01 (already deallocated: no-op) | OK accepted (empty 202 body)
+2026-11-07T02:55:19Z | create NSG in rg-identity-lab (must be refused) | REFUSED AuthorizationFailed: The client 'adm-labops@ContosoHealthLab.onmicrosoft.com' with object id <id> does not have authorization to perform 
+2026-11-07T02:55:19Z | run a command on DC01 (must be refused) | REFUSED AuthorizationFailed: The client 'adm-labops@ContosoHealthLab.onmicrosoft.com' with object id <id> does not have authorization to perform 
+2026-11-07T02:55:20Z | delete a VM extension on DC01 (must be refused) | REFUSED AuthorizationFailed: The client 'adm-labops@ContosoHealthLab.onmicrosoft.com' with object id <id> does not have authorization to perform 
+2026-11-07T02:55:21Z | query loga-idlab (Heartbeat) | REFUSED BadArgumentError
+2026-11-07T02:55:51Z | query loga-idlab SigninLogs last 1 d count | OK [[850]]
+2026-11-07T02:55:52Z | query loga-idlab AzureActivity deallocate events last 1 d | OK [[0]]
+
+2026-11-07T02:56:04Z | SelfDeactivate | Revoked None
+2026-11-07T02:56:24Z | list VMs after deactivation | OK
+2026-11-07T02:56:40Z | list VMs after deactivation | OK
+2026-11-07T02:56:56Z | list VMs after deactivation | OK
+2026-11-07T02:57:12Z | list VMs after deactivation | OK
+2026-11-07T02:57:28Z | list VMs after deactivation | OK
+2026-11-07T02:57:44Z | list VMs after deactivation | OK
+2026-11-07T02:58:01Z | list VMs after deactivation | OK
+2026-11-07T02:58:17Z | list VMs after deactivation | REFUSED AuthorizationFailed
+
+# after deactivation
+2026-11-07T02:58:22Z | list VMs | REFUSED AuthorizationFailed: The client 'adm-labops@ContosoHealthLab.onmicrosoft.com' with object id <id> does not have authorization to perform 
+2026-11-07T02:58:23Z | DC01 power state (instanceView) | AuthorizationFailed
+2026-11-07T02:58:24Z | deallocate vm-win11-01 (already deallocated: no-op) | REFUSED AuthorizationFailed: The client 'adm-labops@ContosoHealthLab.onmicrosoft.com' with object id <id> does not have authorization to perform 
+2026-11-07T02:58:24Z | create NSG in rg-identity-lab (must be refused) | REFUSED AuthorizationFailed: The client 'adm-labops@ContosoHealthLab.onmicrosoft.com' with object id <id> does not have authorization to perform 
+2026-11-07T02:58:25Z | run a command on DC01 (must be refused) | REFUSED AuthorizationFailed: The client 'adm-labops@ContosoHealthLab.onmicrosoft.com' with object id <id> does not have authorization to perform 
+2026-11-07T02:58:26Z | delete a VM extension on DC01 (must be refused) | REFUSED AuthorizationFailed: The client 'adm-labops@ContosoHealthLab.onmicrosoft.com' with object id <id> does not have authorization to perform 
+2026-11-07T02:58:27Z | query loga-idlab (SigninLogs count, 1 d) | REFUSED AuthorizationFailed

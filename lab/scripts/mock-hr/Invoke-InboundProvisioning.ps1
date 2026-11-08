@@ -110,9 +110,59 @@
         automatically, so a bad export that moves a ward to 'Billing' would
         strip their clinical access on the next evaluation just as surely as
         a mass disable.
-    Default 10 each. Over either threshold the run stops before anything is
-    sent, unless -Force (a reviewed bulk event, e.g. a reorganisation or a
-    site closure, with its change ticket).
+    This is the FLOOR of the threshold (default 10). The threshold used is the
+    LARGEST of: this floor, -MaxChangePercent of the population, and (when a
+    -ChangeHistoryPath file has at least 7 days) the mean + 3 standard
+    deviations of the last 30 days. WHY: a fixed count does not scale. A
+    20,000-person hospital has about 15 leavers on a normal day, so a fixed 10
+    trips every Monday and people learn to override it (review finding C2).
+    Over the threshold, the rows of that kind are QUARANTINED: they are held
+    back and written to -QuarantinePath, every other row is still sent, and
+    the run ends with an error so the pipeline step fails visibly. WHY hold
+    back all of them and not "the first N": in a bad export nobody knows which
+    N are real, and disabling N wrong people mid-shift is the harm the guard
+    exists to stop. This matches what Entra's own provisioning "accidental
+    deletions" threshold does: it holds the deletions and lets the other
+    changes through.
+
+.PARAMETER MaxChangePercent
+    Percentage of the population (joiner + active rows in the WHOLE validated
+    feed, before -EmployeeId or -StatusFilter) that one run may disable or
+    move. Default 1 (1 percent: 200 people at 20,000, 50 at 5,000). 0 turns
+    the percentage part off.
+
+.PARAMETER ChangeHistoryPath
+    Optional JSON history of earlier successful runs: an array of
+    { "date": "YYYY-MM-DD", "disabling": n, "accessChanges": n }, one entry
+    per date. With at least 7 distinct earlier dates inside the last 30 days,
+    the threshold may rise to mean + 3 sigma of that kind (one sample per
+    day: the day's total), so a hospital's normal Monday does not trip it.
+    Several sends on one day add to that day's one entry; they never count as
+    more days. A real send with no failed batch adds its counts to today's
+    entry, and dates older than 30 days are dropped. The GitHub pipeline runs on a fresh
+    runner and passes no history (only the floor and the percentage apply);
+    a scheduled HR extract host keeps one. Unreadable = stop, never "no history".
+
+.PARAMETER BulkChangeTicket
+    A reviewed bulk event (a reorganisation, a site closing) by its change
+    ticket, for example CHG0040021. The ticket must be listed in
+    -ApprovedBulkChangesPath (a file that only changes through a reviewed pull
+    request) with its kind, a maximum count and an expiry date. If it is, that
+    kind's guard allows up to the listed count. If it is not listed, expired or
+    too small, the guard acts as if no ticket was given (quarantine), and says
+    why. This replaces "-Force on trust" for planned bulk events.
+
+.PARAMETER ApprovedBulkChangesPath
+    The reviewed allow-list for -BulkChangeTicket. Default
+    approved-bulk-changes.json next to this script. Schema
+    approved-bulk-changes/1: { "changes": [ { "ticket", "kind"
+    (disable | access-change), "maxCount", "expires" (YYYY-MM-DD, inclusive),
+    "reason" } ] }.
+
+.PARAMETER QuarantinePath
+    Where held-back rows are written (employeeId, status and the guard kind
+    only: no names). Default .state/quarantine-<UTC time>.json next to this
+    script (gitignored).
 
 .PARAMETER StatePath
     The last roster pushed WITHOUT a failed batch (employeeId -> dept,
@@ -122,9 +172,22 @@
     batch - never under -WhatIf. Missing = first run: nothing to compare, so
     the access-changing count is 0 (stated in the output).
 
+.PARAMETER IssuedFromGitHistory
+    Rebuild the record of issued UPNs from the git history of -CsvPath before
+    the UPNs are resolved (Get-IssuedUpnFromGitHistory). Every committed
+    version of the feed, oldest first, goes through Resolve-UserName with the
+    UPNs issued by the versions before it. A UPN once derived for a worker
+    stays with that worker and stays reserved, after a name change, and after
+    the row is gone. The pipeline (hr-feed.yml) passes it, because a runner
+    keeps no -StatePath between runs. It stops (nothing sent) when the
+    checkout is shallow or the feed is not committed: the record would be
+    incomplete. Accounts made outside the HR feed are not in this record.
+
 .PARAMETER Force
-    Push even when the mass-change guard trips. Use only for a reviewed bulk
-    change; the run still prints how many accounts it will disable.
+    Push even when the mass-change guard trips (nothing is quarantined). The
+    manual emergency override for an administrator at a console; a planned
+    bulk event uses -BulkChangeTicket instead, so the approval is on record.
+    The run still prints how many accounts it will disable.
 
 .PARAMETER EmployeeId
     Send only these workers (employeeId). The whole feed is still loaded and
@@ -244,6 +307,23 @@ param(
     [int]$MaxChanges = 10,
 
     [Parameter()]
+    [ValidateRange(0, 100)]
+    [double]$MaxChangePercent = 1,
+
+    [Parameter()]
+    [string]$ChangeHistoryPath = '',
+
+    [Parameter()]
+    [ValidatePattern('^(CHG\d{7})?$', ErrorMessage = 'BulkChangeTicket is a change ticket number such as CHG0040021.')]
+    [string]$BulkChangeTicket = '',
+
+    [Parameter()]
+    [string]$ApprovedBulkChangesPath = (Join-Path $PSScriptRoot 'approved-bulk-changes.json'),
+
+    [Parameter()]
+    [string]$QuarantinePath = (Join-Path $PSScriptRoot '.state' ('quarantine-' + [datetime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '.json')),
+
+    [Parameter()]
     [switch]$Force,
 
     [Parameter()]
@@ -265,7 +345,13 @@ param(
 
     # One line per batch instead of the SCIM JSON (pipeline logs).
     [Parameter()]
-    [switch]$HidePayload
+    [switch]$HidePayload,
+
+    # Rebuild the record of issued UPNs from every committed version of
+    # -CsvPath (git history), not only from -StatePath. The pipeline passes
+    # it: a runner keeps no -StatePath between runs (Greptile, PR #229).
+    [Parameter()]
+    [switch]$IssuedFromGitHistory
 )
 
 # --- Fail fast, surface every error, no silent $null property access. --------
@@ -292,6 +378,9 @@ Write-Verbose "Target endpoint: $BulkUploadUri"
 # that can stop the run, so every outcome is recorded.
 $script:SentAtUtc = $null
 $script:BatchResults = [System.Collections.Generic.List[object]]::new()
+# Rows held back by the mass-change guard (employeeId, status, kind only).
+$script:Quarantined = [System.Collections.Generic.List[object]]::new()
+$script:GuardRefusals = [System.Collections.Generic.List[object]]::new()
 
 # =============================================================================
 # PURE HELPERS (tests/Invoke-InboundProvisioning.Tests.ps1)
@@ -317,12 +406,16 @@ function Save-RunResult {
     $doc = [ordered]@{
         schema             = 'hr-feed-send/1'
         outcome            = $Outcome          # invalid | dry-run | nothing | refused | sent | partial | failed
-        refusal            = $Refusal
+        # A guard hold-back is recorded even when the other rows were sent.
+        refusal            = $(if ($Refusal) { $Refusal } elseif ($script:GuardRefusals.Count) { $script:GuardRefusals[0] } else { $null })
         jobId              = $JobId
         servicePrincipalId = $ServicePrincipalId
         selected           = $sel
         sentAtUtc          = $script:SentAtUtc
         batches            = @($script:BatchResults)
+        # Held back by the mass-change guard (ids + status only, no names).
+        quarantined        = @($script:Quarantined)
+        guard              = @($script:GuardRefusals)
     }
     # -WhatIf:$false: the result is the dry run's own report, not a change
     # to anything (under -WhatIf, Set-Content would otherwise skip it).
@@ -382,6 +475,256 @@ function Get-AccessChange {
         })
 }
 
+
+function Get-ChangeThreshold {
+    # The mass-change threshold for one kind: the largest of the floor
+    # (-MaxChanges), a percentage of the population, and mean + 3 sigma of the
+    # recent history (>= 7 days inside the last 30). Returns the number and a
+    # plain-English "why" for the log and the summary.
+    param(
+        [int]$Floor,
+        [double]$Percent,
+        [int]$Population,
+        [double[]]$History = @()
+    )
+    $parts = [ordered]@{ floor = $Floor }
+    $t = $Floor
+    if ($Percent -gt 0 -and $Population -gt 0) {
+        $p = [int][Math]::Ceiling($Population * $Percent / 100.0)
+        $parts['percent'] = $p
+        if ($p -gt $t) { $t = $p }
+    }
+    if (@($History).Count -ge 7) {
+        $h = @($History)
+        $mean = ($h | Measure-Object -Average).Average
+        $var = ($h | ForEach-Object { ($_ - $mean) * ($_ - $mean) } | Measure-Object -Sum).Sum / $h.Count
+        $sig = [int][Math]::Ceiling($mean + 3 * [Math]::Sqrt($var))
+        $parts['threeSigma'] = $sig
+        if ($sig -gt $t) { $t = $sig }
+    }
+    return [pscustomobject]@{ Threshold = $t; Parts = $parts }
+}
+
+function Read-ChangeHistory {
+    # ONE sample per calendar day (UTC) inside the last 30 days, per kind:
+    # that day's total. Several sends on one day add up to one day; they do
+    # not count as several days (else seven sends in one afternoon would
+    # meet the "7 days" minimum, review of PR #229). Today is left out: it
+    # is not finished, and this run is being judged against it.
+    # An unreadable file stops the run: "couldn't read" is never "no history".
+    param([string]$Path, [datetime]$Today = [datetime]::UtcNow.Date)
+    $out = @{ disabling = @(); accessChanges = @() }
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $out }
+    try { $rows = @(Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable) }
+    catch { throw "ChangeHistoryPath '$Path' is unreadable ($($_.Exception.Message)). Fix it, or pass no -ChangeHistoryPath." }
+    $days = [ordered]@{}
+    foreach ($r in $rows) {
+        $d = [datetime]::MinValue
+        if (-not $r -or -not [datetime]::TryParseExact([string]$r['date'], 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$d)) { continue }
+        if ($d -ge $Today -or $d -le $Today.AddDays(-31)) { continue }
+        $k = $d.ToString('yyyy-MM-dd')
+        if (-not $days.Contains($k)) { $days[$k] = @{ disabling = 0.0; accessChanges = 0.0 } }
+        $days[$k].disabling += [double]$r['disabling']
+        $days[$k].accessChanges += [double]$r['accessChanges']
+    }
+    $out.disabling = @($days.Values | ForEach-Object { $_.disabling })
+    $out.accessChanges = @($days.Values | ForEach-Object { $_.accessChanges })
+    return $out
+}
+
+function Add-ChangeHistoryDay {
+    # Adds this send's counts to TODAY's one entry (creating it), and keeps
+    # only the dates inside the 30-day window. Returns the new list.
+    param([object[]]$Rows = @(), [int]$Disabling, [int]$AccessChanges, [datetime]$Today = [datetime]::UtcNow.Date)
+    $key = $Today.ToString('yyyy-MM-dd')
+    $byDate = [ordered]@{}
+    foreach ($r in @($Rows | Where-Object { $_ })) {
+        $d = [datetime]::MinValue
+        if (-not [datetime]::TryParseExact([string]$r['date'], 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$d)) { continue }
+        if ($d -gt $Today -or $d -le $Today.AddDays(-31)) { continue }
+        $k = $d.ToString('yyyy-MM-dd')
+        if (-not $byDate.Contains($k)) { $byDate[$k] = [ordered]@{ date = $k; disabling = 0; accessChanges = 0 } }
+        $byDate[$k].disabling += [int]$r['disabling']; $byDate[$k].accessChanges += [int]$r['accessChanges']
+    }
+    if (-not $byDate.Contains($key)) { $byDate[$key] = [ordered]@{ date = $key; disabling = 0; accessChanges = 0 } }
+    $byDate[$key].disabling += $Disabling; $byDate[$key].accessChanges += $AccessChanges
+    return @($byDate.Values | Sort-Object { $_.date })
+}
+
+function Test-ApprovedBulkChange {
+    # Is -BulkChangeTicket a reviewed, unexpired bulk event of this kind that
+    # covers $Count rows? Returns @{ Approved; Why }. Fails closed: a missing
+    # or unreadable list approves nothing.
+    param([string]$Ticket, [string]$Kind, [int]$Count, [string]$Path, [datetime]$Today = [datetime]::UtcNow.Date)
+    if (-not $Ticket) { return [pscustomobject]@{ Approved = $false; Why = 'no change ticket given' } }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return [pscustomobject]@{ Approved = $false; Why = "ticket $Ticket given, but the reviewed list '$Path' does not exist" } }
+    try { $doc = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable }
+    catch { return [pscustomobject]@{ Approved = $false; Why = "ticket $Ticket given, but the reviewed list is unreadable ($($_.Exception.Message))" } }
+    $entry = @(@($doc['changes']) | Where-Object { $_ -and [string]$_['ticket'] -eq $Ticket -and [string]$_['kind'] -eq $Kind }) | Select-Object -First 1
+    if (-not $entry) { return [pscustomobject]@{ Approved = $false; Why = "ticket $Ticket is not in the reviewed list for kind '$Kind'" } }
+    $exp = [datetime]::MinValue
+    if (-not [datetime]::TryParseExact([string]$entry['expires'], 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$exp)) {
+        return [pscustomobject]@{ Approved = $false; Why = "ticket $Ticket has no valid expiry date in the reviewed list" }
+    }
+    if ($Today -gt $exp) { return [pscustomobject]@{ Approved = $false; Why = "ticket $Ticket expired on $($exp.ToString('yyyy-MM-dd'))" } }
+    if ($Count -gt [int]$entry['maxCount']) { return [pscustomobject]@{ Approved = $false; Why = "ticket $Ticket allows $([int]$entry['maxCount']), this run has $Count" } }
+    return [pscustomobject]@{ Approved = $true; Why = "reviewed bulk change $Ticket (up to $([int]$entry['maxCount']), until $($exp.ToString('yyyy-MM-dd')))" }
+}
+
+function ConvertTo-UpnLocalPart {
+    # 'Jose', "O'Brien" -> 'jose', 'obrien': decompose accents (FormD), drop
+    # the combining marks, keep a-z, 0-9 and '-' only, lower case. WHY: an
+    # apostrophe or accent gives an invalid or odd UPN, and AD's
+    # sAMAccountName and SAML NameIDs downstream expect plain ASCII.
+    # Returns '' when nothing usable is left (the caller refuses the row).
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    $d = $Value.Normalize([System.Text.NormalizationForm]::FormD)
+    $sb = [System.Text.StringBuilder]::new()
+    foreach ($ch in $d.ToCharArray()) {
+        if ([System.Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch) -ne [System.Globalization.UnicodeCategory]::NonSpacingMark) { [void]$sb.Append($ch) }
+    }
+    $s = $sb.ToString().ToLowerInvariant()
+    # Letters that do not decompose (o-stroke, sharp s, ae, l-stroke, dotless i).
+    $map = @{ ([char]0x00F8) = 'o'; ([char]0x00DF) = 'ss'; ([char]0x00E6) = 'ae'; ([char]0x0142) = 'l'; ([char]0x0131) = 'i'; ([char]0x0111) = 'd'; ([char]0x00F0) = 'd'; ([char]0x00FE) = 'th'; ([char]0x0153) = 'oe' }
+    foreach ($k in $map.Keys) { $s = $s.Replace([string]$k, $map[$k]) }
+    $s = [regex]::Replace($s, '[^a-z0-9-]', '')
+    return $s.Trim('-')
+}
+
+function Resolve-UserName {
+    # employeeId -> userName (UPN) for every row in the WHOLE feed.
+    # 1. A row's own 'upn' column wins (the HR system issued it at hire and it
+    #    never changes). It is validated, never re-derived.
+    # 2. Then every UPN this script ISSUED before (-Issued: employeeId -> upn,
+    #    kept in -StatePath after each successful send). An issued UPN stays
+    #    with its worker for good, and is reserved even after a name change
+    #    or after the worker left the feed: the account in AD still holds it
+    #    (the UPN mapping is creation-only), so nobody else may get it.
+    # 3. Otherwise the UPN is derived ONCE, deterministically: given.surname,
+    #    ASCII-normalised, and a suffix digit (2, 3, ...) for a collision. The
+    #    worker with the lower employeeId keeps the plain name, so the same
+    #    feed always gives the same answer.
+    # A name change does NOT rename the account: the provisioning app's
+    # userPrincipalName / sAMAccountName mappings are set to "Apply this
+    # mapping: Only during object creation" (lab/scripts/mock-hr/README.md,
+    # "UPNs: issued once"). The engine matches on externalId (employeeId),
+    # never on the name.
+    # -Reserved (upn -> employeeId): more UPNs a worker was issued at some
+    # point (for example an HR upn column value that replaced the first
+    # derived name). Nobody else may get them either.
+    param([Parameter(Mandatory)][object[]]$Rows, [Parameter(Mandatory)][string]$Domain, [System.Collections.IDictionary]$Issued = @{}, [System.Collections.IDictionary]$Reserved = @{})
+    $map = [ordered]@{}
+    # upn -> the employeeId that holds it (column, issued or derived).
+    $owner = [System.Collections.Generic.Dictionary[string, string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $hasUpnColumn = @($Rows[0].PSObject.Properties.Name) -contains 'upn'
+    if ($hasUpnColumn) {
+        foreach ($r in $Rows) {
+            $u = ([string]$r.upn).Trim()
+            if (-not $u) { continue }
+            if ($u -notmatch '^[a-z0-9][a-z0-9.-]*@[a-z0-9.-]+\.[a-z]{2,}$') { throw "Row employeeId '$($r.employeeId)' has an invalid upn '$u' (lower-case ASCII local part @ domain)." }
+            if ($owner.ContainsKey($u)) { throw "Two rows carry the same upn '$u'. A UPN belongs to one worker." }
+            $owner[$u] = [string]$r.employeeId
+            $map[[string]$r.employeeId] = $u.ToLowerInvariant()
+        }
+    }
+    $inFeed = [System.Collections.Generic.HashSet[string]]::new([string[]]@($Rows | ForEach-Object { [string]$_.employeeId }))
+    foreach ($id in @($Issued.Keys | Sort-Object { [long]$_ })) {
+        $u = ([string]$Issued[$id]).Trim().ToLowerInvariant()
+        if (-not $u) { continue }
+        $held = ''
+        if ($owner.TryGetValue($u, [ref]$held)) {
+            if ($held -ne [string]$id) { throw "upn '$u' was issued to worker $id, but row $held now carries it. A UPN belongs to one worker for good." }
+            continue
+        }
+        $owner[$u] = [string]$id
+        if ($inFeed.Contains([string]$id) -and -not $map.Contains([string]$id)) { $map[[string]$id] = $u }
+    }
+    foreach ($ru in @($Reserved.Keys)) {
+        $u = ([string]$ru).Trim().ToLowerInvariant(); $rid = [string]$Reserved[$ru]
+        if (-not $u) { continue }
+        $held = ''
+        if ($owner.TryGetValue($u, [ref]$held)) {
+            if ($held -ne $rid) { throw "upn '$u' was issued to worker $rid, but row $held now carries it. A UPN belongs to one worker for good." }
+            continue
+        }
+        $owner[$u] = $rid
+    }
+    $pending = @($Rows | Where-Object { -not $map.Contains([string]$_.employeeId) } | Sort-Object { [long]$_.employeeId })
+    foreach ($r in $pending) {
+        $g = ConvertTo-UpnLocalPart $r.givenName; $f = ConvertTo-UpnLocalPart $r.surname
+        if (-not $g -or -not $f) { throw "Row employeeId '$($r.employeeId)': the name leaves no usable ASCII for a UPN. Give the row a upn." }
+        $base = "$g.$f"; $cand = "$base@$Domain"; $n = 1
+        while ($owner.ContainsKey($cand)) { $n++; $cand = "$base$n@$Domain" }
+        $owner[$cand] = [string]$r.employeeId
+        $map[[string]$r.employeeId] = $cand
+    }
+    return $map
+}
+
+function Get-IssuedUpnFromGitHistory {
+    # employeeId -> UPN for every UPN this feed has EVER issued, rebuilt from
+    # git. WHY: on the GitHub runner -StatePath starts empty each run, so
+    # Resolve-UserName forgot what earlier runs issued (Greptile, PR #229).
+    # Then John Smith (100400) renamed to Jones freed john.smith for the next
+    # John Smith, who would clash with, or be matched to, the existing
+    # account. The lasting record is the committed history of the feed
+    # itself: the hr-feed ruleset blocks force pushes and deletion, and a
+    # runner only ever derived UPNs from a committed version.
+    # How: every commit that touched the file, oldest first (--topo-order), is
+    # resolved with the UPNs issued before it; a worker keeps the first UPN
+    # issued to them. A version the sender refused (Resolve-UserName throws:
+    # no usable ASCII, a bad or stolen upn column, a missing column) issued
+    # nothing, so it is skipped. A version that was committed but never sent
+    # may reserve a UPN that was never used: that only adds a suffix digit,
+    # it never causes a clash.
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Domain, [System.Collections.IDictionary]$Issued = @{})
+    $full = (Resolve-Path -LiteralPath $Path).Path
+    $dir = Split-Path -Parent $full
+    $leaf = Split-Path -Leaf $full
+    $global:LASTEXITCODE = 0
+    $shallow = & git -C $dir rev-parse --is-shallow-repository 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "'$Path' is not in a git checkout, so the issued UPNs cannot be read from its history." }
+    if ("$shallow".Trim() -eq 'true') { throw 'The checkout is shallow, so the history of issued UPNs is incomplete. Check out with fetch-depth 0.' }
+    $rel = "$(& git -C $dir ls-files --full-name -- $leaf)".Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $rel) { throw "'$Path' is not committed, so it has no history of issued UPNs." }
+    $top = "$(& git -C $dir rev-parse --show-toplevel)".Trim()
+    # Tracked is not enough: the replay reads only committed versions, so a
+    # feed with staged or unstaged edits would send names the record never
+    # sees (Greptile, PR #261). Refuse any difference from HEAD.
+    & git -C $top diff --quiet HEAD -- $rel 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "'$Path' differs from the last commit (staged or unstaged changes). Commit the HR change first: only committed versions are in the record of issued UPNs." }
+    $shas = @(& git -C $top rev-list --topo-order --reverse HEAD -- $rel)
+    if ($LASTEXITCODE -ne 0) { throw "git rev-list failed for '$rel'." }
+    $acc = [ordered]@{}
+    foreach ($k in @($Issued.Keys)) { $acc[[string]$k] = ([string]$Issued[$k]).Trim().ToLowerInvariant() }
+    # Every LATER UPN a worker got (an upn column value that replaced the
+    # first derived name, Greptile on PR #261): upn -> employeeId.
+    $reserved = [ordered]@{}
+    $versions = 0; $skipped = 0
+    $enc = [Console]::OutputEncoding
+    try {
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)   # accents in names
+        foreach ($sha in $shas) {
+            $text = @(& git -C $top show "${sha}:$rel" 2>$null)
+            if ($LASTEXITCODE -ne 0) { continue }   # the commit deleted the file
+            $lines = @($text | Where-Object { $_ -notmatch '^\s*#' -and $_ -ne '' })
+            if ($lines.Count -lt 2) { continue }
+            try { $m = Resolve-UserName -Rows @($lines | ConvertFrom-Csv) -Domain $Domain -Issued $acc -Reserved $reserved }
+            catch { $skipped++; continue }
+            foreach ($id in @($m.Keys)) {
+                $u = [string]$m[$id]
+                if (-not $acc.Contains([string]$id)) { $acc[[string]$id] = $u }
+                elseif ($acc[[string]$id] -ne $u -and -not $reserved.Contains($u)) { $reserved[$u] = [string]$id }
+            }
+            $versions++
+        }
+    }
+    finally { [Console]::OutputEncoding = $enc }
+    $global:LASTEXITCODE = 0
+    [pscustomobject]@{ Issued = $acc; Reserved = $reserved; Versions = $versions; Skipped = $skipped }
+}
+
 # =============================================================================
 # 1. LOAD + VALIDATE THE HR FEED
 # =============================================================================
@@ -420,6 +763,37 @@ foreach ($row in $roster) {
     }
 }
 
+# The last pushed roster (-StatePath): the baseline for the access-change
+# guard (birthright access follows dept / title, so they change access in
+# bulk) and the record of every UPN issued so far.
+$baseline = @{}
+if (Test-Path -LiteralPath $StatePath -PathType Leaf) {
+    try {
+        $prev = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json -AsHashtable
+        foreach ($k in @($prev.Keys)) { $baseline[$k] = $prev[$k] }
+    }
+    catch { throw "StatePath '$StatePath' is unreadable ($($_.Exception.Message)). Fix or delete it (deleting resets the baseline for the access-change guard)." }
+}
+else { Write-Host "Access-change guard: no baseline yet ($StatePath) - first push, nothing to compare." -ForegroundColor DarkGray }
+# UPNs for the WHOLE feed (before any filter), so a collision with a worker
+# who is not in this run is still seen, and the answer never depends on which
+# rows a push happened to change.
+$issuedUpns = @{}
+foreach ($k in @($baseline.Keys)) { $v = $baseline[$k]; if ($v -is [System.Collections.IDictionary] -and $v['upn']) { $issuedUpns[[string]$k] = [string]$v['upn'] } }
+$reservedUpns = @{}
+if ($IssuedFromGitHistory) {
+    try { $hist = Get-IssuedUpnFromGitHistory -Path $CsvPath -Domain $UpnDomain -Issued $issuedUpns }
+    catch { Stop-InvalidFeed 'upn-history' $_.Exception.Message }
+    $issuedUpns = $hist.Issued
+    $reservedUpns = $hist.Reserved
+    # Counts only: never a UPN or an employee id in the log.
+    Write-Host "Issued UPNs: $($issuedUpns.Count) (+$($reservedUpns.Count) later) from $($hist.Versions) committed version(s) of the feed ($($hist.Skipped) refused version(s) skipped)." -ForegroundColor DarkGray
+}
+try { $script:UserNames = Resolve-UserName -Rows $roster -Domain $UpnDomain -Issued $issuedUpns -Reserved $reservedUpns }
+catch { Stop-InvalidFeed 'bad-upn' $_.Exception.Message }
+# Population for the percentage threshold: everyone not leaving, whole feed.
+$population = @($roster | Where-Object { $_.status -ne 'leaver' }).Count
+
 # Only the named workers (the pipeline's changed rows). Checked against the
 # validated feed: an unknown id is a typo or a deleted row, never "nothing".
 if ($EmployeeId.Count -gt 0) {
@@ -442,39 +816,61 @@ $filterText = if ($EmployeeId.Count -gt 0) { "$StatusFilter, $($EmployeeId.Count
 Write-Host "Loaded $($roster.Count) HR record(s) to process (filter: $filterText)." -ForegroundColor Cyan
 
 # Mass-change guard (R10). Checked BEFORE any payload is sent - and under
-# -WhatIf too, so a dry run shows the refusal the real run would hit.
+# -WhatIf too, so a dry run shows the quarantine the real run would do.
+# Over the threshold the rows of that kind are HELD BACK (quarantined) and the
+# rest are sent; the run then ends with an error (see -MaxChanges for why).
+$history = Read-ChangeHistory -Path $ChangeHistoryPath
 $disabling = @($roster | Where-Object { $_.status -eq 'leaver' })
-if ($disabling.Count -gt $MaxChanges) {
-    if (-not $Force) {
-        Save-RunResult -Outcome 'refused' -Refusal ([ordered]@{ kind = 'mass-disable'; count = $disabling.Count; threshold = $MaxChanges })
-        throw ("Mass-change guard: this run would DISABLE $($disabling.Count) account(s) (status=leaver), over -MaxChanges $MaxChanges. " +
-            'Nothing was sent. Check the HR extract (a mapping or export error looks exactly like this); for a reviewed bulk change re-run with -Force.')
-    }
-    Write-Warning "Mass-change guard overridden (-Force): $($disabling.Count) account(s) will be disabled (threshold $MaxChanges)."
-}
-# Second count: department / job title changes against the last pushed roster.
-# Birthright access follows those attributes, so they change access in bulk.
-$baseline = @{}
-if (Test-Path -LiteralPath $StatePath -PathType Leaf) {
-    try {
-        $prev = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json -AsHashtable
-        foreach ($k in @($prev.Keys)) { $baseline[$k] = $prev[$k] }
-    }
-    catch { throw "StatePath '$StatePath' is unreadable ($($_.Exception.Message)). Fix or delete it (deleting resets the baseline for the access-change guard)." }
-}
-else { Write-Host "Access-change guard: no baseline yet ($StatePath) - first push, nothing to compare." -ForegroundColor DarkGray }
+
 $accessChanges = @(Get-AccessChange -Rows $roster -Baseline $baseline)
-if ($accessChanges.Count -gt $MaxChanges) {
-    if (-not $Force) {
-        Save-RunResult -Outcome 'refused' -Refusal ([ordered]@{ kind = 'mass-access-change'; count = $accessChanges.Count; threshold = $MaxChanges })
-        throw ("Mass-change guard: this run would change department or job title for $($accessChanges.Count) worker(s), over -MaxChanges $MaxChanges. " +
-            'Birthright clinical access follows those attributes, so this would move or remove access for all of them at the next evaluation. Nothing was sent. ' +
-            "First change(s): $(@($accessChanges | Select-Object -First 3 | ForEach-Object { "$($_.employeeId): $($_.From) -> $($_.To)" }) -join '; '). " +
-            'For a reviewed reorganisation re-run with -Force.')
+
+$guardMessages = [System.Collections.Generic.List[string]]::new()
+$checks = @(
+    @{ Kind = 'mass-disable'; TicketKind = 'disable'; Ids = @($disabling | ForEach-Object { [string]$_.employeeId }); History = $history.disabling
+        Text = { param($n, $t) "this run would DISABLE $n account(s) (status=leaver), over the threshold $t" } },
+    @{ Kind = 'mass-access-change'; TicketKind = 'access-change'; Ids = @($accessChanges | ForEach-Object { [string]$_.employeeId }); History = $history.accessChanges
+        Text = { param($n, $t) "this run would change department or job title for $n worker(s), over the threshold $t. Birthright clinical access follows those attributes, so this would move or remove access for all of them at the next evaluation. First change(s): $(@($accessChanges | Select-Object -First 3 | ForEach-Object { "$($_.employeeId): $($_.From) -> $($_.To)" }) -join '; ')" } }
+)
+foreach ($c in $checks) {
+    $n = $c.Ids.Count
+    $th = Get-ChangeThreshold -Floor $MaxChanges -Percent $MaxChangePercent -Population $population -History $c.History
+    $why = ($th.Parts.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ', '
+    if ($n -le $th.Threshold) {
+        if ($n) { Write-Host "Mass-change guard ($($c.Kind)): $n, threshold $($th.Threshold) ($why)." -ForegroundColor DarkGray }
+        continue
     }
-    Write-Warning "Mass-change guard overridden (-Force): $($accessChanges.Count) worker(s) change department or job title (threshold $MaxChanges)."
+    if ($Force) {
+        Write-Warning "Mass-change guard overridden (-Force): $n row(s) of kind $($c.Kind) will be sent (threshold $($th.Threshold))."
+        continue
+    }
+    $ok = Test-ApprovedBulkChange -Ticket $BulkChangeTicket -Kind $c.TicketKind -Count $n -Path $ApprovedBulkChangesPath
+    if ($ok.Approved) {
+        Write-Warning "Mass-change guard: $n row(s) of kind $($c.Kind) allowed by $($ok.Why) (threshold $($th.Threshold))."
+        continue
+    }
+    # Hold back every row of this kind (no names in the record).
+    foreach ($id in $c.Ids) {
+        $row = $roster | Where-Object { [string]$_.employeeId -eq $id } | Select-Object -First 1
+        $script:Quarantined.Add([ordered]@{ employeeId = $id; status = [string]$row.status; kind = $c.Kind })
+    }
+    $script:GuardRefusals.Add([ordered]@{ kind = $c.Kind; count = $n; threshold = $th.Threshold; why = $why; ticket = $ok.Why })
+    $guardMessages.Add(("Mass-change guard: " + (& $c.Text $n $th.Threshold) + " ($why). Held back (quarantined): $n row(s); $($ok.Why)."))
 }
-elseif ($accessChanges.Count) { Write-Host "Access-change guard: $($accessChanges.Count) department/title change(s) (threshold $MaxChanges)." -ForegroundColor DarkGray }
+if ($script:Quarantined.Count) {
+    $held = @($script:Quarantined | ForEach-Object { $_.employeeId })
+    $roster = @($roster | Where-Object { [string]$_.employeeId -notin $held })
+    $qDir = Split-Path -Parent $QuarantinePath
+    if ($qDir -and -not (Test-Path -LiteralPath $qDir)) { New-Item -ItemType Directory -Path $qDir -Force -WhatIf:$false | Out-Null }
+    ([ordered]@{ schema = 'hr-feed-quarantine/1'; createdUtc = [datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'); rows = @($script:Quarantined); guard = @($script:GuardRefusals) } | ConvertTo-Json -Depth 5) |
+        Set-Content -LiteralPath $QuarantinePath -Encoding utf8NoBOM -WhatIf:$false
+    foreach ($m in $guardMessages) { Write-Warning $m }
+    $script:GuardError = (($guardMessages -join ' ') + " The held-back rows are in '$QuarantinePath'. Check the HR extract (a mapping or export error looks exactly like this). For a reviewed bulk event re-run with -BulkChangeTicket (listed in approved-bulk-changes.json), or -Force at a console.")
+    if ($roster.Count -eq 0) {
+        Save-RunResult -Outcome 'refused' -Refusal $script:GuardRefusals[0]
+        throw ("Nothing was sent. " + $script:GuardError)
+    }
+}
+else { $script:GuardError = '' }
 
 # =============================================================================
 # 2. MAP ONE HR ROW -> ONE SCIM ENTERPRISE USER OBJECT
@@ -488,10 +884,11 @@ function ConvertTo-ScimUser {
     [CmdletBinding()]
     param([Parameter(Mandatory)][psobject]$Row, [Parameter(Mandatory)][string]$Domain)
 
-    # Derive a deterministic userName/UPN from employeeId-driven name parts.
-    # In production the HR feed usually carries the UPN already; we synthesize
-    # one to the lab domain so the demo is self-contained.
-    $userName = ('{0}.{1}@{2}' -f $Row.givenName, $Row.surname, $Domain).ToLowerInvariant()
+    # The UPN is resolved once for the whole feed (Resolve-UserName): the
+    # row's own HR-issued upn, or a derived, ASCII-normalised, collision-safe
+    # one. Never re-derived here from the (possibly changed) name.
+    $userName = if ($script:UserNames -and $script:UserNames.Contains([string]$Row.employeeId)) { $script:UserNames[[string]$Row.employeeId] }
+    else { throw "No resolved UPN for employeeId '$($Row.employeeId)'." }
 
     # 'leaver' -> active:false (drives disable/deprovision via job mapping).
     $isActive = ($Row.status -ne 'leaver')
@@ -666,6 +1063,7 @@ if (-not $willSend) {
     # -WhatIf or a declined confirm prompt: never claim anything was submitted.
     Write-Host "`nDry run - nothing was sent to $BulkUploadUri." -ForegroundColor DarkYellow
     Save-RunResult -Outcome 'dry-run'
+    if ($script:GuardError) { throw ("Dry run. " + $script:GuardError) }
     return
 }
 
@@ -689,7 +1087,16 @@ if ($failedBatches -gt 0) {
 }
 # Every batch accepted: this roster is the new access-change baseline
 # (merged, so a filtered run only moves the rows it pushed).
-foreach ($r in $roster) { $baseline[[string]$r.employeeId] = @{ dept = [string]$r.dept; jobTitle = [string]$r.jobTitle } }
+# The UPN sent is recorded too: it is issued for good (Resolve-UserName).
+foreach ($r in $roster) { $baseline[[string]$r.employeeId] = @{ dept = [string]$r.dept; jobTitle = [string]$r.jobTitle; upn = [string]$script:UserNames[[string]$r.employeeId] } }
 $stateDir = Split-Path -Parent $StatePath
 if ($stateDir -and -not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
 ($baseline | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $StatePath -Encoding utf8NoBOM
+# Today's counts for the 3-sigma history (only when a history file is kept).
+if ($ChangeHistoryPath -and -not $script:GuardError) {
+    $hist = @()
+    if (Test-Path -LiteralPath $ChangeHistoryPath -PathType Leaf) { $hist = @(Get-Content -LiteralPath $ChangeHistoryPath -Raw | ConvertFrom-Json -AsHashtable) }
+    $hist = Add-ChangeHistoryDay -Rows $hist -Disabling $disabling.Count -AccessChanges $accessChanges.Count
+    (ConvertTo-Json -InputObject @($hist) -Depth 3) | Set-Content -LiteralPath $ChangeHistoryPath -Encoding utf8NoBOM
+}
+if ($script:GuardError) { throw ("The other rows were sent. " + $script:GuardError) }

@@ -119,7 +119,7 @@ These **federated credentials** are created by Terraform in
 | App | Credential subject (`sub`) | Why |
 |---|---|---|
 | PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:pull_request` | same-repo PRs can plan (read-only); fork PRs get no OIDC token |
-| PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | the nightly `config-drift.yml` runs on main (schedule); still read-only. Missing = AADSTS700213 on every scheduled run |
+| PLAN app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | the nightly `config-drift.yml` and the review `plan` job of `terraform-apply.yml` (no environment) run on main; still read-only. Missing = AADSTS700213 |
 | APPLY app | `repo:OWNER@OWNER_ID/REPO@REPO_ID:environment:prod` | only the `prod` deploy can apply |
 | HR-SYNC app (opt-in) | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/hr-feed` | `hr-feed.yml` uploads changed HR rows (SCIM bulkUpload) and reads the provisioning log; nothing else. Protect the branch with a ruleset |
 | EVIDENCE app (opt-in) | `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main` | `evidence-pack.yml` (manual, main only) reads the evidence pack (six read-only Graph roles) and adds it to the WORM evidence container (create-only ABAC grant); nothing else |
@@ -145,9 +145,13 @@ Audience: api://AzureADTokenExchange
 
 The `environment:prod` subject is the keystone: GitHub only puts
 `environment:prod` in the token's `sub` when a job declares
-`environment: prod`, and that job is the one gated by a required reviewer. So
+`environment: prod`, and every such job waits for the required reviewer. So
 the write identity is unreachable without passing the human gate, and `prod`
-accepts deployments from `main` only (§5E).
+accepts deployments from `main` only (§5E). That is why the review plan job
+declares NO environment and signs in as the read-only PLAN app: if it ran in
+`prod`, either it would pause before any plan exists (karen A2) or `prod`
+would need its reviewer removed, and then any workflow on `main` could sign
+in as APPLY without an approval.
 
 ---
 
@@ -156,15 +160,74 @@ accepts deployments from `main` only (§5E).
 The repo is **public on purpose**, and the pipeline depends on it:
 
 - **Environments + required reviewers are free on public repos.** On private
-  repos, protected Environments (the `prod` reviewer gate) need GitHub
-  Team/Enterprise. Public = the reviewer gate costs nothing. **While the repo
-  is private** the gate is the `approval` job in `terraform-apply.yml`
-  (`.github/scripts/apply-approval-gate.sh`): it opens an "Approve: apply
-  <sha> to prod" issue and the apply waits for an approver's `approve` or
-  `deny` comment (repo Variable `APPLY_APPROVERS`, default the owner; 30
-  minutes, then cancel). Difference: removing that job takes a merged PR,
-  while an Environment reviewer cannot be removed by code. Restore required
-  reviewers (5E) and delete the job when the repo goes public.
+  repos they need GitHub Enterprise. The apply gate is the Environment
+  `prod` reviewer (below). The old private-repo gate, an "Approve:
+  apply" issue (`.github/scripts/apply-approval-gate.sh`), remains in that
+  script as a fallback; the workflow runs it only in `GATE_MODE=check`.
+
+  | Role | GitHub login | Notes |
+  |---|---|---|
+  | Owner: reads the plan, clicks Review deployments -> Approve and deploy | `ChromeData` | Required reviewer of `prod` |
+  | AI coding agents: push branches, open PRs, merge | `<slug>[bot]` via `bot-gh` once the owner creates the App; `ChromeData` until then | "Prevent self-review" stops the merger approving its own run |
+  | Apply identity | APPLY app over OIDC (`environment:prod`) | Runs only after the approval |
+
+  **History, 2026-11-07 (UTC).** While the repo was private, GitHub refused
+  the reviewer rule (HTTP 422, billing plan) and rulesets (HTTP 403, account
+  on GitHub Free). The owner made the repo public again at 02:31Z. Since then:
+
+  - **The gate is GitHub's own.** Environment `prod`: required reviewer
+    ChromeData, "Prevent self-review" on, "Allow administrators to bypass"
+    off, deployment branches `main` only. `terraform-apply.yml` runs two
+    jobs: `plan` (no environment, read-only PLAN app: plan for review +
+    checks, summary in the job), then `terraform-apply` (environment `prod`:
+    the run pauses on **Review deployments** before the job starts; after the
+    approval it signs in as APPLY, plans again and refuses unless
+    `plan-fingerprint.py` gives the same fingerprint as the reviewed plan:
+    resources, actions and values; and the review plan is under 60 minutes
+    old). The issue gate is kept only as `GATE_MODE=check` for its checks.
+  - **Only `prod` holds the write identity.** The APPLY OIDC subject is
+    `environment:prod`, so the APPLY app is reachable only after the `prod`
+    reviewer approves. Keep the reviewer on `prod`. An earlier draft of this
+    change moved it to a second Environment `production` and planned in
+    `prod` as APPLY before the approval; that left Contributor reachable
+    without an approval (Greptile, PR #241), so the draft was dropped.
+  - **Ruleset `main-protection`** (active again): PR required (0 approvals:
+    the owner's approval is the deployment, not the PR), the five checks in
+    5F required, no force-push, no deletion, no bypass.
+  - **Who is who.** "Prevent self-review" blocks the account that started the
+    run, which for a push is the merger. AI agents push, open PRs and merge as
+    the lab's GitHub App bot (`lab/scripts/operator/github-bot/`): the owner
+    runs `new-bot-app.sh` once, agents use `bot-gh`, and the owner sets
+    `APPLY_BOT_LOGIN` to `<slug>[bot]` at a PR merge (the plan job then
+    refuses a change the bot did not author and merge). A run that ChromeData
+    started cannot be approved by ChromeData. The recovery depends on the
+    stage:
+    1. **Bot exists, `APPLY_BOT_LOGIN` not set yet** (the transition). The
+       gate does not check author or merger. Start a new run as the bot with
+       a repository dispatch,
+       `bot-gh gh api repos/ChromeData/contoso-health-identity-lab/dispatches -f event_type=apply-main`;
+       ChromeData then approves it.
+    2. **`APPLY_BOT_LOGIN` set.** The plan job refuses any run whose commit
+       came from a PR that the bot did not author AND merge, whoever starts
+       the run. That is on purpose: a dispatch must not launder an
+       owner-merged change past the separation check. So a dispatch does not
+       help here. Recovery: the bot lands the change again through its own PR
+       (`bot-gh` branch, PR and merge, for example a revert and a re-apply
+       PR), and that merge starts a run the owner can approve. Rule: once
+       `APPLY_BOT_LOGIN` is set, the owner never merges.
+    Set `APPLY_BOT_LOGIN` at a merge that the bot itself makes, so the first
+    gated run already passes the check.
+    Why not `gh workflow run`: that needs the App permission Actions: write,
+    and the bot has Actions: read. A repository dispatch needs only Contents:
+    write, which the bot already has (GitHub docs, "Permissions required for
+    GitHub Apps"). Actions: write would also let the bot delete workflow run
+    logs (the apply audit trail) and disable workflows, so it stays read.
+    The dispatched run uses `main`'s copy of the workflow on `main`'s last
+    commit, and waits for the same `prod` approval.
+  - **What stays procedure.** GitHub tells accounts apart, not people. While
+    the owner's own `gh` login is on the machine the agents use, an agent
+    could approve with it. The owner's fix: once `bot-gh` works, sign the
+    agents' machine out of his `gh` login and approve only in his browser.
 - **Branch protection / rulesets** (require PR, require status checks, require
   review) are free on public repos.
 - **Code scanning (SARIF upload)** — the Checkov results under the *Security &
@@ -233,7 +296,7 @@ Dependabot has no pip entry, so bump that pin by hand.
 **Dependabot** is configured in [`../../.github/dependabot.yml`](../../.github/dependabot.yml):
 weekly, grouped `github-actions` bumps (SHA and the `# vX.Y.Z` comment
 together) plus Terraform provider bumps for `envs/dev`, `envs/bootstrap`,
-`aws` and the three `k8s` roots (`platform`, `identity`, `aks-mapping`). Pin
+`aws` and the three `k8s` roots (`platform`, `identity`, `keyvault-trust`). Pin
 bumps arrive as reviewable PRs, without reintroducing floating tags. The image
 digests in the Kubernetes segment (kind node, busybox, Vault Agent) are bumped
 by hand.
@@ -274,6 +337,14 @@ by a human admin**, in a separate state container CI cannot reach:
     role assignments; the condition stops CI granting Owner to anything). The VM
     login role was added later: **re-apply bootstrap** before the pipeline
     applies `enable_intune_vm = true`, or the condition refuses the grant.
+    **Scope** (`apply_azure_scope`, `envs/bootstrap/least-privilege.tf`):
+    `subscription` for a first deployment only; `resource_group` (this lab,
+    after senior gap 8) puts both roles on `rg-identity-lab` alone, where every
+    Azure resource envs/dev manages lives. APPLY cannot remove the
+    `CanNotDelete` locks on the Key Vaults: none of its roles has
+    `Microsoft.Authorization/locks/delete`, and the condition stops it granting
+    itself Owner or User Access Administrator (tested with a mirror identity,
+    capture log E154).
   - APPLY: **Storage Blob Data Contributor** on the `tfstate` container only
     (apply takes the blob lease). PLAN: **Storage Blob Data Reader** on the
     same container (PR plans run with `-lock=false`). State holds the
@@ -387,36 +458,34 @@ privacy-only exceptions follow the list):
       `TF_VAR_require_scim_credentials=true` so a CI apply that would create
       it empty fails instead.
 
-**Repository *secrets* (Settings → Secrets and variables → Actions →
-Secrets).** Not credentials: both workflows read them as `secrets.*` only
-because GitHub masks secrets in run logs but prints variables in every step's
-env header, and the repo is public.
-- [ ] `TF_OPERATOR_IP_RANGES`  JSON list, e.g. `["203.0.113.7/32"]` — Key Vault
-      firewall, the DC and Intune VM NSGs, the evidence store firewall and,
-      with `enable_dc`, the Sentinel `operator_ips` watchlist. Each entry a
-      single IPv4 host as /32: required when `enable_dc = true` (DC01 NSG and
-      the `operator_ips` watchlist), and never wider than /24 otherwise;
-      `0.0.0.0/0` fails validation. Unset = `[]` (no public vault access, no
-      inbound to the VMs). The Terraform variable is also `sensitive`, so the
-      plan comment hides it.
-- [ ] `TF_ALERT_EMAIL`         post-trial alert address (also `sensitive` in
-      Terraform). Unset = no notifications.
-- [ ] `TF_PIM_ALERT_MAILBOX`   one security mailbox for PIM notifications
-      (`pim_alert_mailbox`, `sensitive`). Both workflows map it to
-      `TF_VAR_pim_alert_mailbox`. Unset = no PIM mailbox (tenant default
-      notifications only).
-- [ ] `TF_APP_OWNER_OBJECT_IDS` (JSON list) and
-      `TF_SAML_CERT_NOTIFICATION_EMAILS` (JSON list) for `modules/apps`:
-      secrets only so the public logs mask a person's object id and mailbox.
-- [ ] If you set any of these, also create it as a **Dependabot** secret
-      (Settings → Secrets and variables → Dependabot) with the same name and
-      value. Dependabot-triggered PR runs see only Dependabot secrets, so
-      without them the weekly Dependabot plan falls back to `[]`/'' and shows
-      false Key Vault firewall / NSG / action-group removals.
-      `terraform-plan.yml` flags this with a warning banner in the plan
-      comment. (verify: `id-token: write` and repo Variables are honoured in
-      Dependabot-triggered `pull_request` runs; if not, azure/login fails and
-      the plan check is red on Dependabot PRs.)
+**No repository secrets.** The workflows hold no stored value of any kind.
+The five privacy values below are not credentials; they used to be repo
+secrets (and Dependabot copies) only so GitHub masked them. They now live in
+the **pipeline config vault** (`envs/bootstrap` `pipeline-config.tf`,
+repo Variable `TF_PIPELINE_CONFIG_VAULT`, default `kv-idlab-cicd-20f1`).
+Step *Pipeline config from Key Vault* (`.github/scripts/pipeline-config.sh`)
+reads them after the OIDC sign-in, as PLAN or APPLY (Key Vault Secrets User on
+that vault only), masks each value and each list element, and exports them
+as `TF_VAR_*`. A value it cannot read stops the job: the old secrets fell
+back to `[]`/'' and planned removals. Every read is an `AuditEvent` in
+loga-idlab. Write a value with
+`printf '%s' '<value>' | lab/scripts/operator/set-pipeline-config.sh <vault> <name>`
+(stdin only, shape-checked).
+
+| Key Vault secret | Terraform variable | Shape |
+|---|---|---|
+| `tf-operator-ip-ranges` | `operator_ip_ranges` | JSON list, e.g. `["203.0.113.7/32"]`: Key Vault firewall, the DC and Intune VM NSGs, the evidence store firewall and the Sentinel `operator_ips` watchlist. Each entry one IPv4 /32 with `enable_dc`; never wider than /24; `0.0.0.0/0` fails validation. |
+| `tf-alert-email` | `alert_email` | one address (post-trial alerts) |
+| `tf-app-owner-object-ids` | `app_owner_object_ids` | JSON list of the human app owners' object ids (`modules/apps`) |
+| `tf-saml-cert-notification-emails` | `saml_cert_notification_emails` | JSON list of SAML certificate expiry mailboxes |
+| `tf-pim-alert-mailbox` | `pim_alert_mailbox` | one security mailbox for PIM notifications |
+
+All five are also `sensitive` in Terraform, so the plan comment hides them.
+Dependabot PR runs use the same OIDC sign-in and the same vault, so there is
+no Dependabot secret to keep in step either. (verify: `id-token: write` and
+repo Variables are honoured in Dependabot-triggered `pull_request` runs; if
+not, azure/login fails and the plan check is red on Dependabot PRs, as
+before.)
 
 Policy knobs (staging flags, CA states, blocked countries) are **not**
 variables: they live in the committed `lab/terraform/envs/dev/lab.tfvars`, so
@@ -432,10 +501,13 @@ with no PR and no review, lock the WORM store irreversibly.
 > None of it is a credential, but keep that in mind before adding variables.
 
 ### E. GitHub — the `prod` Environment with a required reviewer
+> **Keep the reviewer on `prod`.** `prod` is the only Environment that gets the APPLY identity, so it is the gate: required reviewer ChromeData, "Prevent self-review" on, "Allow administrators to bypass" off, branch `main` only. The review plan job has no environment (read-only PLAN app). Do not remove the `prod` reviewer and do not move it to another Environment (section 3).
+
 - [ ] Settings → **Environments** → **New environment** → name it **`prod`**
       (the name MUST match `environment: prod` in `terraform-apply.yml`).
 - [ ] Add **Required reviewers** (yourself / a second admin). This is the human
-      gate; the apply run pauses until approved.
+      gate; the apply run pauses until approved. Tick **Prevent self-review**
+      and clear **Allow administrators to bypass configured protection rules**.
 - [ ] **Deployment branches and tags → Selected branches and tags → add
       `main`.** Required. The APPLY subject `environment:prod` carries no
       branch ref, so this setting is the only thing that ties the write
@@ -569,11 +641,9 @@ a user, `mallory`). `terraform plan -detailed-exitcode` must then exit 2
   job for those files; it is left as is. `terraform-apply.yml` excludes
   `lab/terraform/k8s/**`, so merging k8s-only changes does not start a
   reviewer-gated no-op apply.
-- **`aks-mapping` is never applied, by anything.** The third root under
-  `lab/terraform/k8s` holds the Entra Workload ID federated credential that
-  replaces the Vault role on AKS. `pipeline.sh` runs only fmt, validate and
-  the mocked `terraform test` on it, in its Terraform stage. It holds no
-  credential and runs no plan against a tenant. `terraform-apply.yml`'s
-  `!lab/terraform/k8s/**` keeps it out of the Entra apply. It can't be applied
-  here at all: Entra must fetch the cluster's OIDC keys, and kind's issuer
-  isn't public.
+- **`keyvault-trust` is applied only by the operator's local pipeline run.**
+  The third root under `lab/terraform/k8s` holds the Entra Workload ID
+  federated credential and the one-secret Key Vault grant (ADR 0036). No
+  workflow applies it: `k8s-identity.yml` runs the static stages only, and
+  `terraform-apply.yml`'s `!lab/terraform/k8s/**` keeps it out of the Entra
+  apply. CI holds no identity that could create an app registration.

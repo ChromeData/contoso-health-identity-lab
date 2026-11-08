@@ -1,0 +1,50 @@
+index=entra sourcetype="azure:loganalytics:aadprovisioninglogs" earliest=-60m latest=now
+``` ========================================================================== ```
+``` Detection (SPL): Contoso ITDR - HR leaver still enabled in Entra ID after 15 minutes ```
+``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
+``` KQL twin:        lab/kql/hr-leaver-lag.kql ```
+``` -------------------------------------------------------------------------- ```
+``` STAND-IN: Splunk Enterprise 60-day TRIAL. Written 2026-11-07 with the     ```
+``` fourth ITDR set (review findings B1, B2, C5, D1).                         ```
+``` DATA GAP, said plainly: neither the live feed (feed-splunk-live.py) nor ```
+``` the replay (ingest-from-loganalytics.sh) carries this table today, so this ```
+``` search has no rows to read. It runs and returns nothing until a feed sends ```
+``` the table with this sourcetype. ```
+``` Same pairing as the KQL twin: inbound row (ServicePrincipal.Name Contoso HR ```
+``` Inbound Provisioning, accountDisabled True) 15-30 minutes old, joined on the ```
+``` AD objectGUID to the Cloud Sync row (AccountEnabled False). ```
+``` ========================================================================== ```
+``` @stanza Contoso ITDR - HR leaver still enabled in Entra ID after 15 minutes ```
+``` @conf description = HR inbound provisioning disabled the AD account (or failed to) and Cloud Sync has not disabled the Entra user 15 minutes later. KQL twin: lab/kql/hr-leaver-lag.kql ```
+``` @conf disabled = 0 ```
+``` @conf enableSched = 1 ```
+``` @conf cron_schedule = */15 * * * * ```
+``` @conf dispatch.earliest_time = -60m ```
+``` @conf dispatch.latest_time = now ```
+``` @conf counttype = number of events ```
+``` @conf relation = greater than ```
+``` @conf quantity = 0 ```
+``` @conf alert.track = 1 ```
+``` @conf alert.severity = 5 ```
+``` @conf alert.expires = 7d ```
+``` @conf alert.digest_mode = 0 ```
+``` @conf alert.suppress = 1 ```
+``` @conf alert.suppress.fields = AdObjectGuid ```
+``` @conf alert.suppress.period = 1h ```
+``` @conf request.ui_dispatch_app = search ```
+``` @conf request.ui_dispatch_view = search ```
+| spath input=ServicePrincipal path=Name output=SpName
+| eval Kind=case(SpName=="Contoso HR Inbound Provisioning" AND match(ModifiedProperties, "(?i)\x22accountDisabled\x22[^}]*\x22newValue\x22:\s*\x22True\x22"), "inbound", SpName=="corp.contosohealthlab.com" AND match(ModifiedProperties, "(?i)\x22AccountEnabled\x22[^}]*\x22newValue\x22:\s*\x22False\x22"), "cloud", true(), null())
+| spath input=ProvisioningStatusInfo path=Status output=RowStatus
+| eval Kind=if(Kind=="cloud" AND coalesce(lower(RowStatus), "")!="success", null(), Kind)
+| where isnotnull(Kind)
+| spath input=TargetIdentity path=Id output=TgtId
+| spath input=SourceIdentity path=Id output=SrcId
+| eval InboundStatus=if(Kind=="inbound", RowStatus, null())
+| eval AdObjectGuid=if(Kind=="inbound", TgtId, SrcId), EmployeeId=if(Kind=="inbound", SrcId, null()), EntraObjectId=if(Kind=="cloud", TgtId, null())
+| stats min(eval(if(Kind=="inbound", _time, null()))) AS LeaverEpoch, min(eval(if(Kind=="cloud", _time, null()))) AS CloudEpoch, values(EmployeeId) AS EmployeeId, values(EntraObjectId) AS EntraObjectId, values(InboundStatus) AS InboundStatus BY AdObjectGuid
+| where isnotnull(LeaverEpoch) AND LeaverEpoch <= relative_time(now(), "-15m")
+| eval Reason=case(InboundStatus!="success", "inbound write to AD: ".InboundStatus, isnull(CloudEpoch) OR CloudEpoch < LeaverEpoch, "AD disabled, Entra ID still enabled after 15 minutes", true(), null())
+| where isnotnull(Reason)
+| eval Severity="High", TimeGenerated=strftime(LeaverEpoch, "%Y-%m-%dT%H:%M:%S%z"), LeaverTime=TimeGenerated
+| table TimeGenerated, Severity, Reason, EmployeeId, AdObjectGuid, EntraObjectId, InboundStatus, LeaverTime

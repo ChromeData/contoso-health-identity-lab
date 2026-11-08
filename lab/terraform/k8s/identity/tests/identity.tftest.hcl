@@ -2,96 +2,72 @@
 # These are the properties the whole "no static secret" story rests on, so a
 # change that widens any of them fails `terraform test` before a cluster is
 # ever built:
-#   * the Vault role trusts ONE service account in ONE namespace, only for
-#     tokens with audience "vault", and issues tokens of <= 15 minutes
-#   * its policy is read-only on exactly clinical/data/db
-#   * the human Roles never touch secrets, RBAC, SA tokens or exec, the
-#     deployer cannot write pods or ReplicaSets, and every grant is a
-#     namespaced RoleBinding
-#     (no ClusterRoleBinding anywhere)
+#   * the SecretProviderClass serves ONE Key Vault secret through Workload ID
+#     (usePodIdentity false, clientID set), as a file, and never syncs it
+#     into a Kubernetes Secret (no secretObjects)
+#   * only nightly-report carries the workload's client id
+#   * the human Roles never touch secrets, RBAC, SA tokens, exec or
+#     SecretProviderClasses, the deployer cannot write pods or ReplicaSets,
+#     and every grant is a namespaced RoleBinding (no ClusterRoleBinding)
 #   * the ValidatingAdmissionPolicy that binds nightly-report to one reviewed
 #     build and to the pipeline exists, denies, covers pods + Deployments in
 #     clinical-apps only, and its image allowlist is digest-pinned and agrees
-#     with ../platform and lab/k8s/manifests
-#   * a weak token, a non-kind context, plain HTTP off loopback, a tag-only
-#     image and a catch-all launcher group are refused
+#     with lab/k8s/manifests
+#   * a non-kind context, a tag-only image and a catch-all launcher group are
+#     refused
 # Run offline: terraform init -backend=false && terraform test
 
-mock_provider "vault" {}
 mock_provider "kubernetes" {}
 
 variables {
-  # Format-valid placeholder for the mocked plan; not a credential.
-  vault_dev_root_token = "tftest-placeholder-token-0000000000000000"
+  # Placeholders, recognisably fake (one-digit-repeated GUIDs).
+  tenant_id          = "00000000-0000-0000-0000-000000000000"
+  workload_client_id = "33333333-3333-3333-3333-333333333333"
+  key_vault_name     = "kv-k8s-0a1b2c3d"
 }
 
-run "vault_role_trusts_only_nightly_report_in_clinical_apps" {
+run "secret_provider_class_serves_one_secret_through_workload_id" {
   command = plan
 
   assert {
-    condition     = vault_kubernetes_auth_backend_role.nightly_report.bound_service_account_names == toset(["nightly-report"])
-    error_message = "the Vault role must bind exactly one service account: nightly-report"
-  }
-  assert {
-    condition     = vault_kubernetes_auth_backend_role.nightly_report.bound_service_account_namespaces == toset(["clinical-apps"])
-    error_message = "the Vault role must bind exactly one namespace: clinical-apps"
-  }
-  assert {
-    condition     = vault_kubernetes_auth_backend_role.nightly_report.bound_service_account_namespace_selector == null
-    error_message = "no namespace label selector may widen the role beyond clinical-apps"
-  }
-  assert {
-    condition     = vault_kubernetes_auth_backend_role.nightly_report.audience == "vault"
-    error_message = "the role must require audience \"vault\" (default-audience API tokens must be refused)"
+    condition = (
+      kubernetes_manifest.secret_provider_class.manifest.apiVersion == "secrets-store.csi.x-k8s.io/v1" &&
+      kubernetes_manifest.secret_provider_class.manifest.kind == "SecretProviderClass" &&
+      kubernetes_manifest.secret_provider_class.manifest.metadata.name == "nightly-report-db" &&
+      kubernetes_manifest.secret_provider_class.manifest.metadata.namespace == "clinical-apps"
+    )
+    error_message = "expected SecretProviderClass secrets-store.csi.x-k8s.io/v1 clinical-apps/nightly-report-db"
   }
   assert {
     condition = (
-      vault_kubernetes_auth_backend_role.nightly_report.token_ttl <= 900 &&
-      vault_kubernetes_auth_backend_role.nightly_report.token_max_ttl <= 900 &&
-      vault_kubernetes_auth_backend_role.nightly_report.token_max_ttl > 0
+      kubernetes_manifest.secret_provider_class.manifest.spec.provider == "azure" &&
+      kubernetes_manifest.secret_provider_class.manifest.spec.parameters.usePodIdentity == "false" &&
+      kubernetes_manifest.secret_provider_class.manifest.spec.parameters.clientID == var.workload_client_id &&
+      kubernetes_manifest.secret_provider_class.manifest.spec.parameters.tenantId == var.tenant_id &&
+      kubernetes_manifest.secret_provider_class.manifest.spec.parameters.keyvaultName == var.key_vault_name
     )
-    error_message = "Vault tokens from this role must live at most 900s (and have a max TTL set at all)"
+    error_message = "the class must use the Azure provider with Workload ID (usePodIdentity false + clientID) for this tenant and vault"
   }
   assert {
-    condition     = vault_kubernetes_auth_backend_role.nightly_report.token_policies == toset(["nightly-report-read"])
-    error_message = "the role must attach only the nightly-report-read policy"
+    condition = (
+      length(yamldecode(kubernetes_manifest.secret_provider_class.manifest.spec.parameters.objects).array) == 1 &&
+      yamldecode(yamldecode(kubernetes_manifest.secret_provider_class.manifest.spec.parameters.objects).array[0]).objectName == "clinical-db" &&
+      yamldecode(yamldecode(kubernetes_manifest.secret_provider_class.manifest.spec.parameters.objects).array[0]).objectType == "secret" &&
+      yamldecode(yamldecode(kubernetes_manifest.secret_provider_class.manifest.spec.parameters.objects).array[0]).objectAlias == "db"
+    )
+    error_message = "the class must serve exactly one object: secret clinical-db, as the file db"
   }
   assert {
-    condition     = vault_kubernetes_auth_backend_role.nightly_report.alias_name_source == "serviceaccount_uid"
-    error_message = "identity aliases must be keyed on the SA UID, not its (reusable) name"
+    condition     = !can(kubernetes_manifest.secret_provider_class.manifest.spec.secretObjects)
+    error_message = "no secretObjects: a Key Vault value must never be synced into a Kubernetes Secret"
   }
+  # Static: the Deployment mounts this class at the path the probes check.
   assert {
-    condition     = vault_auth_backend.kubernetes.type == "kubernetes" && vault_auth_backend.kubernetes.path == "kubernetes"
-    error_message = "the Kubernetes auth method must be mounted at auth/kubernetes (the injector's authPath)"
-  }
-  assert {
-    condition     = vault_kubernetes_auth_backend_config.in_cluster.kubernetes_host == "https://kubernetes.default.svc:443"
-    error_message = "Vault must review tokens against the in-cluster API server"
-  }
-}
-
-run "policy_is_read_only_on_exactly_one_path" {
-  command = plan
-
-  assert {
-    condition     = vault_policy.nightly_report_read.name == "nightly-report-read"
-    error_message = "policy name drifted from the contract"
-  }
-  assert {
-    condition     = keys(jsondecode(vault_policy.nightly_report_read.policy).path) == ["clinical/data/db"]
-    error_message = "the policy must name exactly one path: clinical/data/db"
-  }
-  assert {
-    condition     = jsondecode(vault_policy.nightly_report_read.policy).path["clinical/data/db"].capabilities == ["read"]
-    error_message = "the only capability on clinical/data/db must be read"
-  }
-  assert {
-    condition     = keys(jsondecode(vault_policy.nightly_report_read.policy)) == ["path"]
-    error_message = "the policy must contain path rules only"
-  }
-  assert {
-    condition     = vault_mount.clinical.path == "clinical" && vault_mount.clinical.type == "kv" && vault_mount.clinical.options["version"] == "2"
-    error_message = "the secret must live on a KV v2 mount at clinical/"
+    condition = (
+      strcontains(file("${path.module}/../../../k8s/manifests/nightly-report.yaml"), "secretProviderClass: nightly-report-db") &&
+      strcontains(file("${path.module}/../../../k8s/manifests/nightly-report.yaml"), "/mnt/secrets-store/db")
+    )
+    error_message = "lab/k8s/manifests/nightly-report.yaml must mount nightly-report-db and read /mnt/secrets-store/db"
   }
 }
 
@@ -109,6 +85,13 @@ run "workload_service_accounts_mount_no_api_token" {
   assert {
     condition     = alltrue([for sa in kubernetes_service_account_v1.workload : sa.metadata[0].namespace == "clinical-apps"])
     error_message = "workload SAs belong in clinical-apps"
+  }
+  assert {
+    condition = (
+      kubernetes_service_account_v1.workload["nightly-report"].metadata[0].annotations["azure.workload.identity/client-id"] == var.workload_client_id &&
+      !contains(keys(kubernetes_service_account_v1.workload["unapproved-job"].metadata[0].annotations), "azure.workload.identity/client-id")
+    )
+    error_message = "only nightly-report carries the workload's client id"
   }
 }
 
@@ -135,11 +118,11 @@ run "human_rbac_has_no_secrets_and_no_cluster_scope" {
           "roles", "rolebindings", "clusterroles", "clusterrolebindings",
           "pods/exec", "pods/attach", "pods/portforward", "pods/proxy",
           "pods/ephemeralcontainers", "nodes", "nodes/proxy",
-          "users", "groups", "userextras/*", "*",
+          "users", "groups", "userextras/*", "secretproviderclasses", "*",
         ]))) == 0
       ]
     ]))
-    error_message = "a human Role grants a forbidden resource (secrets, SA tokens, RBAC, exec/attach/port-forward/proxy/ephemeral containers, nodes, impersonation targets, or *)"
+    error_message = "a human Role grants a forbidden resource (secrets, SA tokens, RBAC, exec/attach/port-forward/proxy/ephemeral containers, nodes, impersonation targets, SecretProviderClasses, or *)"
   }
   assert {
     condition = alltrue(flatten([
@@ -336,7 +319,7 @@ run "admission_policy_binds_nightly_report_to_code_and_pipeline" {
     error_message = "rule 4 must also check the object before the update (variables.wasNightlyReport from oldObject)"
   }
   # The nightly-report allowlist: non-empty, digests only, and exactly the app
-  # build + the Vault Agent.
+  # build (nothing is injected any more).
   assert {
     condition = (
       length(local.nightly_report_approved_digests) > 0 &&
@@ -345,10 +328,8 @@ run "admission_policy_binds_nightly_report_to_code_and_pipeline" {
     error_message = "the nightly-report image allowlist must be non-empty and contain only sha256 digests"
   }
   assert {
-    condition = toset(local.nightly_report_approved_digests) == toset([
-      split("@", var.nightly_report_app_image)[1], split("@", var.vault_agent_image)[1],
-    ])
-    error_message = "the allowlist must be exactly the approved app digest and the Vault Agent digest"
+    condition     = toset(local.nightly_report_approved_digests) == toset([split("@", var.nightly_report_app_image)[1]])
+    error_message = "the allowlist must be exactly the approved app digest"
   }
   assert {
     condition = alltrue([
@@ -359,10 +340,6 @@ run "admission_policy_binds_nightly_report_to_code_and_pipeline" {
   }
   # Cross-root and cross-file agreement, checked offline so a version bump in
   # one place fails here instead of at deploy time in the pipeline.
-  assert {
-    condition     = strcontains(file("${path.module}/../platform/main.tf"), split("@", var.vault_agent_image)[1])
-    error_message = "var.vault_agent_image's digest must be the one ../platform pins for the injector's agentImage"
-  }
   assert {
     condition     = strcontains(file("${path.module}/../../../k8s/manifests/nightly-report.yaml"), var.nightly_report_app_image)
     error_message = "var.nightly_report_app_image must be the image lab/k8s/manifests/nightly-report.yaml runs"
@@ -394,16 +371,6 @@ run "catch_all_launcher_group_is_rejected" {
   expect_failures = [var.nightly_report_launcher_groups]
 }
 
-run "weak_root_token_is_rejected" {
-  command = plan
-
-  variables {
-    vault_dev_root_token = "root"
-  }
-
-  expect_failures = [var.vault_dev_root_token]
-}
-
 run "non_kind_context_is_rejected" {
   command = plan
 
@@ -412,14 +379,4 @@ run "non_kind_context_is_rejected" {
   }
 
   expect_failures = [var.kube_context]
-}
-
-run "plain_http_off_loopback_is_rejected" {
-  command = plan
-
-  variables {
-    vault_addr = "http://vault.example.internal:8200"
-  }
-
-  expect_failures = [var.vault_addr]
 }

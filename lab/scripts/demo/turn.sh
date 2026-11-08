@@ -7,8 +7,9 @@
 #   turn.sh where              which stage the lab is at right now
 #   turn.sh pr <stage>         preview, then open the PR that moves the lab to
 #                              <stage>; the PR opens in your browser
-#   turn.sh approve [go]       the apply waits for you: open the approval
-#                              issue (or approve from here with 'go')
+#   turn.sh approve            the apply waits for you: open the approval
+#                              issue. You read the saved plan and type
+#                              'approve <code>' there yourself, by hand.
 #   turn.sh deny [go]          the same, to cancel the apply
 #   turn.sh watch              follow the apply run on main until it finishes
 #   turn.sh outputs            save the Terraform outputs the post-apply step
@@ -146,17 +147,23 @@ PY
     # The apply waits on an "Approve: apply <sha> to prod" issue
     # (.github/scripts/apply-approval-gate.sh).
     mode="${1:-}"
+    # No scripted approval (karen-review A1): the owner reads the saved plan
+    # in the issue and types `approve <code>` by hand. Only `deny go` is
+    # scripted, because cancelling can never change the tenant.
+    if [ "$cmd" = "approve" ] && [ "$mode" = "go" ]; then
+      die "approve is typed by hand in the issue (approve <code>), not from this script"
+    fi
     n=$(gh issue list -R "$REPO_SLUG" --state open --search 'in:title "Approve: apply"' --json number -q '.[0].number')
     [ -n "$n" ] || die "no apply is waiting for a decision (has the merge's apply run started? try 'turn watch')"
     title=$(gh issue view "$n" -R "$REPO_SLUG" --json title -q .title)
     if [ "$mode" = "go" ]; then
       say "Commenting '$cmd' on: $title"
       gh issue comment "$n" -R "$REPO_SLUG" --body "$cmd" >/dev/null || die "could not comment"
-      if [ "$cmd" = "approve" ]; then echo "  approved: the apply starts within 15 seconds ('turn.sh watch' to follow it)"
-      else echo "  denied: the apply is cancelled within 15 seconds"; fi
+      echo "  denied: the apply is cancelled within 15 seconds"
     else
       say "Opening the waiting approval: $title"
-      echo "  Read it, then comment '$cmd' (or run 'turn.sh $cmd go')."
+      if [ "$cmd" = "approve" ]; then echo "  Read the saved plan in it, then type 'approve <code>' (the code is in the issue)."
+      else echo "  Read it, then comment 'deny' (or run 'turn.sh deny go')."; fi
       open "https://github.com/$REPO_SLUG/issues/$n"
     fi ;;
 

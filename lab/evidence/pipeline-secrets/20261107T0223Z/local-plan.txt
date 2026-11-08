@@ -1,0 +1,22 @@
+envs/dev plan as the lab operator, 2026-11-07T02:34:48Z and again 02:35:39Z
+(stand-in for the PR plan job: GitHub Actions started no job, account billing)
+
+Inputs: the same TF_VAR_ set terraform-plan.yml builds from repo Variables,
+plus the five privacy values read by .github/scripts/pipeline-config.sh from
+Key Vault kv-idlab-cicd-20f1 (az signed in as the operator; in CI it is the
+PLAN app). -var-file=lab.tfvars, -lock=false.
+
+read tf-operator-ip-ranges -> TF_VAR_operator_ip_ranges
+read tf-alert-email -> TF_VAR_alert_email
+read tf-app-owner-object-ids -> TF_VAR_app_owner_object_ids
+read tf-saml-cert-notification-emails -> TF_VAR_saml_cert_notification_emails
+read tf-pim-alert-mailbox -> TF_VAR_pim_alert_mailbox
+No changes. Your infrastructure matches the configuration.
+Warning: Check block assertion failed
+  on ../../modules/pim/approvers.tf line 82, in check "approver_groups_have_two_members"
+  (pre-existing warning, not from this change)
+
+Bootstrap (this branch, as the operator):
+02:23:29Z plan: 5 to add, 0 to change, 0 to destroy (nothing else drifted)
+02:26:0xZ Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
+02:27:38Z-02:27:46Z five secrets written by lab/scripts/operator/set-pipeline-config.sh (stdin)

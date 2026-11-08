@@ -1,0 +1,236 @@
+{
+  "rule": "operator-permissions-changed",
+  "about": "Any change to the lab operator's app roles, grants, credentials, owners or app/SP, by anyone (review finding B1, 2026-11-07). App role assignments name the RESOURCE (Microsoft Graph) as the target and the client in ServicePrincipal.ObjectID.",
+  "cases": [
+    {
+      "id": "app-role-granted-to-operator",
+      "kind": "positive",
+      "label": "Directory.ReadWrite.All granted to the operator: the client id is only in ServicePrincipal.ObjectID",
+      "lets": {
+        "OperatorPrincipalIds": [
+          "88888888-8888-8888-8888-888888888888"
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "ApplicationManagement",
+            "Result": "success",
+            "OperationName": "Add app role assignment to service principal",
+            "ActivityDisplayName": "Add app role assignment to service principal",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                "displayName": "Microsoft Graph",
+                "type": "ServicePrincipal",
+                "modifiedProperties": [
+                  {
+                    "displayName": "AppRole.Value",
+                    "oldValue": null,
+                    "newValue": "\"Directory.ReadWrite.All\""
+                  },
+                  {
+                    "displayName": "ServicePrincipal.ObjectID",
+                    "oldValue": null,
+                    "newValue": "\"88888888-8888-8888-8888-888888888888\""
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "OperationName": "Add app role assignment to service principal",
+          "ActorIsOperator": false
+        }
+      ],
+      "expectRows": 1
+    },
+    {
+      "id": "operator-adds-its-own-credential",
+      "kind": "positive",
+      "label": "The operator adds a certificate to itself: High, ActorIsOperator true",
+      "lets": {
+        "OperatorPrincipalIds": [
+          "88888888-8888-8888-8888-888888888888"
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "ApplicationManagement",
+            "Result": "success",
+            "OperationName": "Add service principal credentials",
+            "ActivityDisplayName": "Add service principal credentials",
+            "InitiatedBy": {
+              "app": {
+                "displayName": "Contoso Lab Operator (local Mac, certificate)",
+                "servicePrincipalId": "88888888-8888-8888-8888-888888888888",
+                "appId": "99999999-9999-9999-9999-999999999999"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "88888888-8888-8888-8888-888888888888",
+                "displayName": "Contoso Lab Operator (local Mac, certificate)",
+                "type": "ServicePrincipal",
+                "modifiedProperties": [
+                  {
+                    "displayName": "KeyDescription",
+                    "oldValue": "[]",
+                    "newValue": "[\"[KeyIdentifier=x,KeyType=AsymmetricX509Cert,KeyUsage=Verify,DisplayName=CN=op]\"]"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "ActorIsOperator": true
+        }
+      ]
+    },
+    {
+      "id": "app-role-removed-medium",
+      "kind": "positive",
+      "label": "An app role taken away from the operator shrinks reach: Medium",
+      "lets": {
+        "OperatorPrincipalIds": [
+          "88888888-8888-8888-8888-888888888888"
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "ApplicationManagement",
+            "Result": "success",
+            "OperationName": "Remove app role assignment from service principal",
+            "ActivityDisplayName": "Remove app role assignment from service principal",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                "displayName": "Microsoft Graph",
+                "type": "ServicePrincipal",
+                "modifiedProperties": [
+                  {
+                    "displayName": "AppRole.Value",
+                    "oldValue": null,
+                    "newValue": "\"Directory.ReadWrite.All\""
+                  },
+                  {
+                    "displayName": "ServicePrincipal.ObjectID",
+                    "oldValue": null,
+                    "newValue": "\"88888888-8888-8888-8888-888888888888\""
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "Medium"
+        }
+      ]
+    },
+    {
+      "id": "grant-to-another-app",
+      "kind": "negative",
+      "label": "An app role granted to another app",
+      "lets": {
+        "OperatorPrincipalIds": [
+          "88888888-8888-8888-8888-888888888888"
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "ApplicationManagement",
+            "Result": "success",
+            "OperationName": "Add app role assignment to service principal",
+            "ActivityDisplayName": "Add app role assignment to service principal",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                "displayName": "Microsoft Graph",
+                "type": "ServicePrincipal",
+                "modifiedProperties": [
+                  {
+                    "displayName": "ServicePrincipal.ObjectID",
+                    "oldValue": null,
+                    "newValue": "\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\""
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "failed-change",
+      "kind": "negative",
+      "label": "A failed attempt changes nothing (Result failure)",
+      "lets": {
+        "OperatorPrincipalIds": [
+          "88888888-8888-8888-8888-888888888888"
+        ]
+      },
+      "tables": {
+        "AuditLogs": [
+          {
+            "Category": "ApplicationManagement",
+            "Result": "failure",
+            "OperationName": "Add service principal credentials",
+            "ActivityDisplayName": "Add service principal credentials",
+            "InitiatedBy": {
+              "user": {
+                "id": "22222222-2222-2222-2222-222222222222",
+                "userPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com"
+              }
+            },
+            "TargetResources": [
+              {
+                "id": "88888888-8888-8888-8888-888888888888",
+                "displayName": "Contoso Lab Operator (local Mac, certificate)",
+                "type": "ServicePrincipal",
+                "modifiedProperties": [
+                  {
+                    "displayName": "KeyDescription",
+                    "oldValue": "[]",
+                    "newValue": "[\"[KeyIdentifier=x,KeyType=AsymmetricX509Cert,KeyUsage=Verify,DisplayName=CN=op]\"]"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

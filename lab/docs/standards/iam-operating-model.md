@@ -40,6 +40,7 @@ and added here.
 | Forum | Cadence | Chair | Inputs | Outputs |
 |---|---|---|---|---|
 | Identity change review | Weekly, and per PR for Tier-0 changes | IAM Eng lead | Open PRs, report-only evidence, drift findings | Approve, hold or graduate; the CA checklist signed |
+| Dependency triage (Dependabot) | Weekly | IAM Eng lead | Open Dependabot PRs for actions, providers and images | Merge, or close with a written reason, within 14 days; a major version gets its own plan review. SHA pins are only safe if they are updated (karen-review J1: PRs from 2026-10-21 to 10-28 were still open on 2026-11-06) |
 | Privileged access review | Quarterly (ADR 0012 T1) | CISO | PIM eligibility, standing admins (`08-Measure-KPIs.ps1`), break-glass drill result | Removals; the drill record |
 | Access certification | Half-yearly (T2 requestable), quarterly (T1) | App Owners, run by IAM Eng | Review campaigns, SoD report (`09-SoD-Report.ps1`) | Decisions applied; KPIs (`10-Review-KPIs.ps1`) |
 | Identity risk and metrics | Monthly | CISO | KPI snapshot, risk register deltas, incident summary, exception register | The one-page KPI view (`New-KpiOnePager.ps1`); risk acceptances renewed or closed |

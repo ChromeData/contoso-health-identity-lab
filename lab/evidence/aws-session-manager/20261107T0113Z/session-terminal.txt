@@ -1,0 +1,17 @@
+Starting session with SessionId: adm-labops@ContosoHealthLab.onmicrosoft.com-ttr5sqzu2sfois2fyvasx6anau
+sh-5.2$ whoami
+ssm-user
+sh-5.2$ hostname
+ip-10-42-0-23.ec2.internal
+sh-5.2$ uptime
+ 01:13:44 up 4 min,  0 users,  load average: 0.01, 0.04, 0.01
+sh-5.2$ curl -s -m 3 https://example.com >/dev/null && echo internet-yes || echo internet-no
+sudo -n true && echo can-sudo || echo no-sudo
+internet-no
+sh-5.2$ sudo -n true && echo can-sudo || echo no-sudo
+can-sudo
+sh-5.2$ exit
+exit
+
+
+Exiting session with sessionId: adm-labops@ContosoHealthLab.onmicrosoft.com-ttr5sqzu2sfois2fyvasx6anau.

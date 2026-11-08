@@ -122,11 +122,15 @@ run "plan_lab_tfvars" {
     error_message = "Day 1 + apps: CA001-CA010 and CA020 exist (enable_premium + the CA flags); enable_sso_apps plans the AWS IAM Identity Center and Clinical Portal apps; the PAM app (enable_pam_oidc_app) is still off"
   }
   assert {
+    condition     = nonsensitive(output.apps_nhi_inventory).clinic_lab_results != null && output.ca_policy_display_names["CA061"] == "CA061 - Require MFA and sign-in every 8h for Clinic Lab Results"
+    error_message = "lab.tfvars: enable_clinic_results_app reaches BOTH modules - modules/apps plans Clinic Lab Results (its NHI row is set) and modules/conditional-access plans CA061 for it (Okta -> Entra wave 1)"
+  }
+  assert {
     condition     = nonsensitive(output.apps_nhi_inventory).servicenow_provisioning != null && output.servicenow_provisioning_job_enabled == true
     error_message = "lab.tfvars: enable_servicenow_provisioning plans the ServiceNow provisioning app and servicenow_provisioning_job_enabled starts its cycle (started after Test Connection + on-demand + sign-in, capture-log E82/E83)"
   }
   assert {
-    condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003", "CA004", "CA020", "CA010", "CA001", "CA009", "CA006", "CA007", "CA005"], k) ? "enabled" : "enabledForReportingButNotEnforced")])
+    condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003", "CA004", "CA020", "CA010", "CA001", "CA009", "CA006", "CA007", "CA005", "CA061"], k) ? "enabled" : "enabledForReportingButNotEnforced")])
     error_message = "every CA policy in lab.tfvars is report-only except the graduated list; one graduation per PR, with its checklist"
   }
   # Day 2 (E16/E16c/E17c): PIM tiers, the Global Administrator policy, the
@@ -216,18 +220,18 @@ run "plan_lab_itdr_hold_back" {
 
   assert {
     condition = alltrue([for k in [
-      "tier0_logon_without_checkout", "ad_privileged_group_change", "kerberoast_rc4_service_ticket",
+      "ad_privileged_group_change", "kerberoast_rc4_service_ticket",
       "dcsync_replication_request",
-    ] : !contains(var.itdr_exclude_rules, k) && contains(output.itdr_rule_keys, k)]) && contains(var.itdr_exclude_rules, "dc_logon_outside_operator_allowlist") && !contains(output.itdr_rule_keys, "dc_logon_outside_operator_allowlist")
-    error_message = "ITDR release v1: DC01 SecurityEvent rows exist, so the four core SecurityEvent rules deploy; dc_logon_outside_operator_allowlist (v2, operator watchlist) stays held back until enable_itdr_detections_v2"
+    ] : !contains(var.itdr_exclude_rules, k) && contains(output.itdr_rule_keys, k)]) && alltrue([for k in ["dc_logon_outside_operator_allowlist", "tier0_logon_without_checkout"] : contains(var.itdr_exclude_rules, k) && !contains(output.itdr_rule_keys, k)])
+    error_message = "ITDR release v1: DC01 SecurityEvent rows exist, so the three core SecurityEvent rules deploy; dc_logon_outside_operator_allowlist (v2, operator watchlist) stays held back until enable_itdr_detections_v2, and tier0_logon_without_checkout is retired from Sentinel (its source is Vault check-outs; ADR 0036)"
   }
   assert {
     condition     = !contains(output.itdr_rule_keys, "pim_activation_without_auth_context") && !contains(output.itdr_rule_keys, "vault_privileged_access_anomaly") && !contains(output.itdr_rule_keys, "identity_risk")
     error_message = "the PREVIEW rule, the vault anomaly rule (extended feed) and identity_risk (risk tables) must be held back by lab.tfvars"
   }
   assert {
-    condition     = length(output.itdr_rule_keys) == 17 - length(var.itdr_exclude_rules) && length(var.itdr_exclude_rules) == 5
-    error_message = "lab.tfvars holds back exactly five of the seventeen ITDR rules (risk tables, v2 watchlist, extended vault feed, PREVIEW, the sod_violation_granted body); the other twelve deploy"
+    condition     = length(output.itdr_rule_keys) == 17 - length(var.itdr_exclude_rules) && length(var.itdr_exclude_rules) == 6
+    error_message = "lab.tfvars holds back exactly six of the seventeen ITDR rules (risk tables, v2 watchlist, extended vault feed, PREVIEW, the sod_violation_granted body, the Vault-check-out DC logon rule retired by ADR 0036); the other eleven deploy"
   }
 }
 
@@ -245,7 +249,7 @@ run "plan_lab_itdr_hold_back_la_alerts" {
   }
 
   assert {
-    condition     = length(output.itdr_rule_keys) == 12 && contains(output.itdr_rule_keys, "tier0_logon_without_checkout") && !contains(output.itdr_rule_keys, "dc_logon_outside_operator_allowlist")
+    condition     = length(output.itdr_rule_keys) == 11 && !contains(output.itdr_rule_keys, "tier0_logon_without_checkout") && !contains(output.itdr_rule_keys, "dc_logon_outside_operator_allowlist")
     error_message = "the lab.tfvars hold-back list applies on the Log Analytics path too"
   }
 }
@@ -289,6 +293,7 @@ run "plan_legacy_flags_on_new_flags_off" {
     enable_servicenow_sso                   = false
     enable_servicenow_provisioning          = false
     enable_okta_federation                  = false
+    enable_clinic_results_app               = false
     enable_device_code_block                = false
     enable_admin_session_controls           = false
     enable_pim_auth_context                 = false
@@ -325,6 +330,10 @@ run "plan_legacy_flags_on_new_flags_off" {
     }
   }
 
+  assert {
+    condition     = nonsensitive(output.apps_nhi_inventory).clinic_lab_results == null && output.ca_policy_display_names["CA061"] == null
+    error_message = "enable_clinic_results_app = false: neither Clinic Lab Results nor CA061 may be planned"
+  }
   assert {
     condition     = alltrue([for k in ["CA009", "CA010", "CA020", "CA021", "CA060"] : output.ca_policy_display_names[k] == null])
     error_message = "CA009, CA010, CA020, CA021 and CA060 must not be planned while their flags are off"
@@ -405,6 +414,7 @@ run "plan_all_flags_on_sentinel" {
     enable_servicenow_sso               = true
     enable_servicenow_provisioning      = true
     enable_okta_federation              = true
+    enable_clinic_results_app           = true
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
     enable_pim_tiers                    = true
@@ -439,6 +449,7 @@ run "plan_all_flags_on_sentinel" {
       CA022 = "enabledForReportingButNotEnforced"
       CA023 = "enabledForReportingButNotEnforced"
       CA060 = "enabledForReportingButNotEnforced"
+      CA061 = "enabledForReportingButNotEnforced"
     }
     # The workforce passkey rollout needs the admin key-model allow-list.
     admin_fido2_allowed_aaguids = ["cb69481e-8ff7-4039-93ec-0a2729a154a8"]
@@ -552,6 +563,7 @@ run "plan_all_flags_on_la_alerts" {
     enable_servicenow_sso               = true
     enable_servicenow_provisioning      = true
     enable_okta_federation              = true
+    enable_clinic_results_app           = true
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
     enable_pim_tiers                    = true
@@ -584,6 +596,7 @@ run "plan_all_flags_on_la_alerts" {
       CA022 = "enabledForReportingButNotEnforced"
       CA023 = "enabledForReportingButNotEnforced"
       CA060 = "enabledForReportingButNotEnforced"
+      CA061 = "enabledForReportingButNotEnforced"
     }
     # The workforce passkey rollout needs the admin key-model allow-list.
     admin_fido2_allowed_aaguids = ["cb69481e-8ff7-4039-93ec-0a2729a154a8"]
@@ -640,6 +653,7 @@ run "pim_auth_context_refused_while_ca021_report_only" {
     enable_premium = true
     # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
     enable_identity_protection_ca           = false
+    enable_clinic_results_app               = false
     enable_registration_ca                  = false
     enable_device_code_block                = false
     enable_admin_session_controls           = false
@@ -676,6 +690,7 @@ run "pim_auth_context_refused_in_the_same_change_as_ca021_enabled" {
     enable_premium = true
     # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
     enable_identity_protection_ca           = false
+    enable_clinic_results_app               = false
     enable_registration_ca                  = false
     enable_device_code_block                = false
     enable_admin_session_controls           = false
@@ -707,6 +722,7 @@ run "attestation_without_ca021_enabled_is_refused" {
   variables {
     # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
     enable_identity_protection_ca        = false
+    enable_clinic_results_app            = false
     enable_registration_ca               = false
     enable_device_code_block             = false
     enable_admin_session_controls        = false
@@ -733,6 +749,7 @@ run "pim_auth_context_allowed_once_ca021_enforced" {
   variables {
     # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
     enable_identity_protection_ca        = false
+    enable_clinic_results_app            = false
     enable_registration_ca               = false
     enable_device_code_block             = false
     enable_admin_session_controls        = false
@@ -796,6 +813,105 @@ run "no_dc_keeps_slash24_out_of_the_watchlist" {
     condition     = length(output.itdr_rule_keys) == 17
     error_message = "the v2 rules must deploy without the DC (the DC01 rule simply sees no DC01 data)"
   }
+
+  assert {
+    condition     = module.monitoring.operator_ips_watchlist_entry_count == 0
+    error_message = "without the DC and without v4, a /24 must stay out of the /32-only watchlist"
+  }
+}
+
+# The v4 operator sign-in rule reads the same watchlist and needs it filled
+# with or without the DC (PR #233 review): with v4 on and no DC the ranges
+# reach the watchlist, and the root then refuses anything wider than /32.
+run "no_dc_v4_fills_the_operator_watchlist" {
+  command = plan
+  variables {
+    enable_dc                 = false
+    enable_sentinel           = true
+    enable_itdr_detections    = true
+    enable_itdr_detections_v4 = true
+    itdr_exclude_rules        = []
+    operator_principal_ids    = ["0a0a0a0a-0000-4000-8000-00000000000a"]
+    operator_ip_ranges        = ["203.0.113.7/32", "198.51.100.4/32"]
+    operator_ips_expires_on   = "2099-12-31"
+  }
+
+  assert {
+    condition     = module.monitoring.operator_ips_watchlist_entry_count == 2
+    error_message = "with v4 on and no DC, both operator /32 entries must reach the operator_ips watchlist (an empty list makes every operator sign-in alert High)"
+  }
+}
+
+run "no_dc_v4_refuses_wider_than_single_host" {
+  command = plan
+  variables {
+    enable_dc                 = false
+    enable_sentinel           = true
+    enable_itdr_detections    = true
+    enable_itdr_detections_v4 = true
+    itdr_exclude_rules        = []
+    operator_principal_ids    = ["0a0a0a0a-0000-4000-8000-00000000000a"]
+    operator_ip_ranges        = ["203.0.113.0/24"]
+    operator_ips_expires_on   = "2099-12-31"
+  }
+
+  expect_failures = [var.operator_ip_ranges]
+}
+
+# Connect Health registration window (ADR 0031). Off in lab.tfvars: no
+# account, no role, no output. On with a future end time: exactly one cloud
+# account on the onmicrosoft domain with Hybrid Identity Administrator (the
+# window touches no Conditional Access code at all: modules/conditional-access
+# is unchanged in its PR). On with a past or missing end time: the plan FAILS (the time
+# box), so a forgotten window blocks the next apply instead of lingering.
+run "connect_health_registration_off_by_default" {
+  command = plan
+  assert {
+    condition     = length(azuread_user.connect_health_registration) == 0 && length(azuread_directory_role_assignment.connect_health_registration) == 0 && output.connect_health_registration_upn == null
+    error_message = "lab.tfvars keeps the Connect Health registration window OFF: no account, no role."
+  }
+}
+
+run "connect_health_registration_window_open" {
+  command = plan
+  variables {
+    enable_connect_health_registration    = true
+    connect_health_registration_until_utc = "2099-01-01T00:00:00Z"
+  }
+  assert {
+    condition     = length(azuread_user.connect_health_registration) == 1 && azuread_user.connect_health_registration[0].user_principal_name == "adm-connecthealth-reg@${var.onmicrosoft_domain}"
+    error_message = "the window creates exactly adm-connecthealth-reg on the onmicrosoft domain"
+  }
+  assert {
+    # ignore_changes = [account_enabled] (so a later apply cannot undo
+    # register.sh close) must not change the create: the account starts
+    # enabled, or the passkey enrollment cannot sign in. The ignore_changes
+    # line itself is held by lab/adfs/connect-health/tests/
+    # registration-lifecycle.test.mjs (terraform test cannot see lifecycle).
+    condition     = azuread_user.connect_health_registration[0].account_enabled == true
+    error_message = "the window creates adm-connecthealth-reg enabled"
+  }
+  assert {
+    condition     = length(azuread_directory_role_assignment.connect_health_registration) == 1 && azuread_directory_role_assignment.connect_health_registration[0].role_id == "8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2"
+    error_message = "the window grants Hybrid Identity Administrator (8ac3fc64-...) and nothing else"
+  }
+}
+
+run "connect_health_registration_window_over_fails" {
+  command = plan
+  variables {
+    enable_connect_health_registration    = true
+    connect_health_registration_until_utc = "2020-01-01T00:00:00Z"
+  }
+  expect_failures = [azuread_user.connect_health_registration]
+}
+
+run "connect_health_registration_without_end_time_fails" {
+  command = plan
+  variables {
+    enable_connect_health_registration = true
+  }
+  expect_failures = [azuread_user.connect_health_registration]
 }
 
 # A flag switched on without its prerequisite plans NOTHING for that feature
@@ -823,6 +939,7 @@ run "flags_without_premium_warn" {
     enable_servicenow_sso               = true
     enable_servicenow_provisioning      = true
     enable_okta_federation              = true
+    enable_clinic_results_app           = true
     enable_pim_tiers                    = true
     enable_helpdesk_au_scoping          = true
     enable_global_admin_pim_policy      = true
@@ -830,6 +947,7 @@ run "flags_without_premium_warn" {
     enable_pim_demo_readers             = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
+    enable_lcw_leaver_trigger           = true
     enable_access_reviews_privileged    = true
     vault_feed_v2_columns               = true
   }
@@ -844,10 +962,12 @@ run "flags_without_premium_warn" {
     check.servicenow_sso_requires_sso_apps,
     check.servicenow_provisioning_requires_sso_apps,
     check.okta_federation_requires_sso_apps,
+    check.clinic_results_requires_sso_apps,
     check.pim_extensions_require_premium,
     check.pim_aws_admin_requires_sso_apps,
     check.b2b_requires_governance,
     check.nhi_governance_requires_premium,
+    check.lcw_leaver_trigger_requires_premium,
     check.access_reviews_require_governance,
     check.vault_feed_v2_requires_itdr,
   ]
@@ -863,3 +983,50 @@ run "flags_without_premium_warn" {
 # a root test cannot expect a failure inside a child module's variable).
 # The same holds for enable_itdr_detections_v2 without enable_itdr_detections
 # (modules/monitoring/tests/itdr_v2.tftest.hcl).
+
+# The scheduled leaver's trigger group (E122 follow-up): enable_lcw_leaver_trigger
+# alone creates All-Workforce, without CA008's flag; off, nothing is planned.
+run "lcw_leaver_trigger_creates_all_workforce_without_ca008" {
+  command = plan
+
+  variables {
+    enable_premium                      = true
+    enable_phishing_resistant_all_users = false
+    enable_lcw_leaver_trigger           = true
+  }
+
+  # Mock ids stay unknown at plan (see the header); give the group a known id
+  # so the output can be compared.
+  override_resource {
+    target          = module.groups[0].azuread_group.all_workforce
+    override_during = plan
+    values = {
+      object_id = "00000000-0000-0000-0000-00000000a11f"
+    }
+  }
+
+  assert {
+    condition     = output.all_workforce_group_object_id == "00000000-0000-0000-0000-00000000a11f"
+    error_message = "enable_lcw_leaver_trigger alone must create All-Workforce (the scheduled leaver's trigger group), without enable_phishing_resistant_all_users"
+  }
+
+  assert {
+    condition     = output.staff_passkey_rollout_enabled == false
+    error_message = "the leaver trigger alone must not switch on the staff passkey rollout (Invoke-PostApply.ps1 reads staff_passkey_rollout_enabled, not the shared group)"
+  }
+}
+
+run "lcw_leaver_trigger_off_plans_no_all_workforce" {
+  command = plan
+
+  variables {
+    enable_premium                      = true
+    enable_phishing_resistant_all_users = false
+    enable_lcw_leaver_trigger           = false
+  }
+
+  assert {
+    condition     = output.all_workforce_group_object_id == null
+    error_message = "with both flags off, All-Workforce must not be planned"
+  }
+}
