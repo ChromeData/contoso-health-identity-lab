@@ -30,7 +30,8 @@
 //
 // SEVERITY (the Severity column)
 //   High   : a user in the set ALSO signed in successfully from the same ASN
-//            in the hour (the spray may have worked).
+//            AFTER their first sprayed failure (the spray may have worked).
+//            A success earlier in the hour does not count.
 //   Medium : failures only.
 //
 // AUTOMATED RESPONSE
@@ -51,14 +52,19 @@ let SignIns = union
 // Per ASN and user first, so the success check is exact: the lists are
 // capped for display only AFTER each user is judged (review of #233).
 let PerUser = SignIns
-| summarize Tries = countif(ResultType in (CredentialFailureCodes)), Oks = countif(ResultType == "0"),
+| summarize Tries = countif(ResultType in (CredentialFailureCodes)),
+            FirstFail = minif(TimeGenerated, ResultType in (CredentialFailureCodes)),
+            LastOk = maxif(TimeGenerated, ResultType == "0"),
             Ips = make_set_if(IPAddress, ResultType in (CredentialFailureCodes), 20)
-    by Asn, UserPrincipalName;
+    by Asn, UserPrincipalName
+// A hit is a success AFTER the user's first sprayed failure: a normal
+// sign-in earlier in the hour is not a compromise (review of #233).
+| extend Hit = isnotnull(FirstFail) and isnotnull(LastOk) and LastOk > FirstFail;
 PerUser
 | where Tries between (1 .. MaxTriesPerUser)
 | summarize DistinctUsers = dcount(UserPrincipalName), Users = make_set(UserPrincipalName, 50),
-            FailedCount = sum(Tries), CompromisedCount = countif(Oks > 0),
-            Compromised = make_set_if(UserPrincipalName, Oks > 0, 50), Ips = make_set(Ips, 50)
+            FailedCount = sum(Tries), CompromisedCount = countif(Hit),
+            Compromised = make_set_if(UserPrincipalName, Hit, 50), Ips = make_set(Ips, 50)
     by Asn
 | where DistinctUsers >= MinDistinctUsers
 | extend Severity = iff(CompromisedCount > 0, "High", "Medium")

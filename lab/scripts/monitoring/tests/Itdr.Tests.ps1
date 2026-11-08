@@ -757,3 +757,32 @@ Describe 'KQL break-glass-signin: one row per account keeps every sign-in IP, re
         $c.expect[0].ResultTypes | Should -Contain '0'
     }
 }
+
+Describe 'Spray by ASN: a hit is a success AFTER the first sprayed failure (PR #233 review)' {
+    BeforeAll {
+        $spKql = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'kql' 'failed-signin-spray-by-asn.kql')
+        $spSpl = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'splunk' 'detections' 'failed-signin-spray-by-asn.spl')
+        $spCases = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'monitoring' 'kusto-harness' 'cases' 'failed-signin-spray-by-asn.json') | ConvertFrom-Json
+    }
+
+    It 'KQL keeps FirstFail and LastOk per user and counts a hit only when LastOk > FirstFail' {
+        $spKql | Should -Match ([regex]::Escape('FirstFail = minif(TimeGenerated, ResultType in (CredentialFailureCodes))'))
+        $spKql | Should -Match ([regex]::Escape('LastOk = maxif(TimeGenerated, ResultType == "0")'))
+        $spKql | Should -Match ([regex]::Escape('Hit = isnotnull(FirstFail) and isnotnull(LastOk) and LastOk > FirstFail'))
+        $spKql | Should -Match ([regex]::Escape('CompromisedCount = countif(Hit)'))
+        $spKql | Should -Not -Match 'Oks'
+    }
+
+    It 'SPL twin applies the same order check' {
+        $spSpl | Should -Match ([regex]::Escape('min(eval(if(Fail==1, _time, null()))) AS FirstFail'))
+        $spSpl | Should -Match ([regex]::Escape('max(eval(if(Ok==1, _time, null()))) AS LastOk'))
+        $spSpl | Should -Match ([regex]::Escape('LastOk>FirstFail'))
+        $spSpl | Should -Not -Match 'Oks'
+    }
+
+    It 'has an engine case where a success BEFORE the spray stays Medium' {
+        $c = @($spCases.cases | Where-Object id -EQ 'success-before-the-spray')
+        $c.Count | Should -Be 1
+        $c[0].expect[0].Severity | Should -Be 'Medium'
+    }
+}

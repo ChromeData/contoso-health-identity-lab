@@ -43,7 +43,7 @@
           },
           {
             "_repeat": 1,
-            "TimeGenerated": "ago:20m",
+            "TimeGenerated": "ago:10m",
             "UserPrincipalName": "user1@contosohealthlab.onmicrosoft.com",
             "IPAddress": "198.51.100.200",
             "ResultType": "0",
@@ -173,7 +173,7 @@
           },
           {
             "_repeat": 1,
-            "TimeGenerated": "ago:20m",
+            "TimeGenerated": "ago:10m",
             "UserPrincipalName": "user5@contosohealthlab.onmicrosoft.com",
             "IPAddress": "198.51.100.5",
             "ResultType": "0",
@@ -189,6 +189,7 @@
         }
       ],
       "expectRows": 1
-    }
+    },
+    {"id": "success-before-the-spray", "kind": "positive", "label": "user1 signs in normally 40 minutes ago, then the 12-user spray 20 minutes ago: no success AFTER a failure, so no hit and the alert stays Medium (review of #233)", "tables": {"SigninLogs": [{"_repeat": 12, "TimeGenerated": "ago:20m", "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com", "IPAddress": "198.51.100.{i}", "ResultType": "50126", "AutonomousSystemNumber": "64511"}, {"_repeat": 1, "TimeGenerated": "ago:40m", "UserPrincipalName": "user1@contosohealthlab.onmicrosoft.com", "IPAddress": "198.51.100.200", "ResultType": "0", "AutonomousSystemNumber": "64511"}]}, "expect": [{"Severity": "Medium", "CompromisedCount": 0, "DistinctUsers": 12}], "expectNone": [{"Severity": "High"}], "expectRows": 1}
   ]
 }

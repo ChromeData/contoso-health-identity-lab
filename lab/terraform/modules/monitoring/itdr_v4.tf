@@ -121,7 +121,7 @@ locals {
     failed_signin_spray_by_asn = {
       file             = "failed-signin-spray-by-asn.kql"
       display_name     = "Contoso ITDR - Password spray across one network (distinct users per ASN)"
-      description      = "Credential failures against 10+ distinct users, 3 or fewer tries each, from one ASN in 1 h, in either sign-in table (T1110.003). High when one of those users also signed in successfully from that ASN."
+      description      = "Credential failures against 10+ distinct users, 3 or fewer tries each, from one ASN in 1 h, in either sign-in table (T1110.003). High when one of those users also signed in successfully from that ASN after their first failure."
       severity         = "Medium"
       frequency        = "PT15M"
       period           = "PT1H"
