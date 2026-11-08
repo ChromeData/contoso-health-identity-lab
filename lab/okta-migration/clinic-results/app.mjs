@@ -136,11 +136,13 @@ export function checkIdpBlock(name, idp) {
   }
 }
 
-export function readConf(file = CONF) {
+// checkActive = false: read the file as it is (a rollback must work even when
+// the saved Entra block is stale or broken - it only needs Okta).
+export function readConf(file = CONF, { checkActive = true } = {}) {
   if (!fs.existsSync(file)) throw new Error(`no IdP config at ${file}: run node lab/okta-migration/cutover.mjs prestage`);
   const c = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (!c[c.active]) throw new Error(`config names "${c.active}" active but has no such IdP`);
-  checkIdpBlock(c.active, c[c.active]);
+  if (checkActive) checkIdpBlock(c.active, c[c.active]);
   return c;
 }
 

@@ -235,5 +235,8 @@ test('an Entra config written before the API fix is refused, so CA061 cannot be 
   assert.throws(() => readConf(f), /no API scope/);
   fs.writeFileSync(f, JSON.stringify({ app: 'Clinic Lab Results', active: 'okta', okta: old, entra: old }));
   assert.equal(readConf(f).active, 'okta');
+  // A rollback reads the file raw: a stale Entra block, even ACTIVE, must not block restoring Okta.
+  fs.writeFileSync(f, JSON.stringify({ app: 'Clinic Lab Results', active: 'entra', okta: old, entra: old }));
+  assert.equal(readConf(f, { checkActive: false }).okta.client_id, 'c');
   fs.rmSync(dir, { recursive: true });
 });

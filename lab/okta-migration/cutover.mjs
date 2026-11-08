@@ -240,10 +240,18 @@ async function switchTo(target) {
   // The Okta apply then carries waves_override; make the PR right after.
   const emergency = target === 'okta' && args.includes('--emergency');
   if (p.cutover !== wantCutover && !emergency) throw new Error(`waves.json says cutover = ${p.cutover} for "${appLabel}": set it to ${wantCutover} first (the reviewed change), then run ${cmd} again${target === 'okta' ? ' - or, in an incident, rollback --emergency' : ''}`);
-  const conf = readConf();
+  // Raw read: the destination is what must be valid. A cut-over needs a
+  // complete Entra block (with the API, or CA061 would be skipped); a
+  // rollback needs ONLY the Okta block, so a stale Entra block can never
+  // stand between an incident and restoring Okta.
+  const conf = readConf(CONF, { checkActive: false });
   checkSwitchTarget(appLabel, conf);
-  if (!conf.entra) throw new Error('no Entra block in the config: run prestage after the Entra PR is applied');
-  checkIdpBlock('entra', conf.entra); // before ANY change: an old config would skip CA061
+  if (target === 'entra') {
+    if (!conf.entra) throw new Error('no Entra block in the config: run prestage after the Entra PR is applied');
+    checkIdpBlock('entra', conf.entra); // before ANY change
+  } else if (!conf.okta || !conf.okta.client_id) {
+    throw new Error('no Okta block in the config: cannot roll back to Okta');
+  }
   if (!(await portFree())) throw new Error('port 8471 is in use (app.mjs running?): stop it first - nothing was changed');
   if (conf.active === target) log(`the app already trusts ${target}`);
   // Order matters. Cut-over: app to Entra FIRST, then hide the Okta tile -
