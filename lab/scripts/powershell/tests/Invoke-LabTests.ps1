@@ -54,6 +54,8 @@
       TierTest (lab/scripts/dc/        GPO "applied" from gpresult /x (filtered-out
       tier-test)                       GPOs are not applied), disposable test accounts
                                        only, no build-admin join, failed AD reads stop
+      Clear-LeaverAdGroups (lab/scripts/dc) every group off disabled leavers in
+                                       OU=Disabled, never enabled or protected accounts
       ScriptAnalyzerScope              analyzer suppressions are per function,
                                        justified, never per file
     Passing proves the logic does what the comments say. It does not prove the

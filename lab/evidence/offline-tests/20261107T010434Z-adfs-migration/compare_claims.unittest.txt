@@ -1,0 +1,51 @@
+test_bad_signature_fails (test_compare_claims.CompareTests.test_bad_signature_fails) ... ok
+test_different_value_fails_for_exact_claim (test_compare_claims.CompareTests.test_different_value_fails_for_exact_claim) ... ok
+test_extra_claim_fails (test_compare_claims.CompareTests.test_extra_claim_fails) ... ok
+test_main_exit_codes (test_compare_claims.CompareTests.test_main_exit_codes) ... /Users/michaelwilliams/lab-wt-adfs/lab/adfs/compare/tests/test_compare_claims.py:85: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/t4/n5ldzmj52hvdjwvh9vcp_r200000gn/T/tmpe1l4bytm/b.json' mode='w' encoding='UTF-8'>
+  json.dump(adfs(), open(b, "w"))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/michaelwilliams/lab-wt-adfs/lab/adfs/compare/tests/test_compare_claims.py:86: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/t4/n5ldzmj52hvdjwvh9vcp_r200000gn/T/tmpe1l4bytm/a.json' mode='w' encoding='UTF-8'>
+  json.dump(entra(), open(a, "w"))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/michaelwilliams/lab-wt-adfs/lab/adfs/compare/tests/test_compare_claims.py:87: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/t4/n5ldzmj52hvdjwvh9vcp_r200000gn/T/tmpe1l4bytm/bad.json' mode='w' encoding='UTF-8'>
+  json.dump({"signatureValid": True}, open(bad, "w"))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/michaelwilliams/lab-wt-adfs/lab/adfs/compare/tests/test_compare_claims.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/t4/n5ldzmj52hvdjwvh9vcp_r200000gn/T/tmpe1l4bytm/a.json' mode='w' encoding='UTF-8'>
+  json.dump(changed, open(a, "w"))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+compare_claims: bad input: after: no 'attributes' object
+ok
+test_missing_role_fails (test_compare_claims.CompareTests.test_missing_role_fails) ... ok
+test_nameid_format_must_match_contract (test_compare_claims.CompareTests.test_nameid_format_must_match_contract) ... ok
+test_same_claims_pass_and_platform_claims_are_not_compared (test_compare_claims.CompareTests.test_same_claims_pass_and_platform_claims_are_not_compared) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.009s
+
+OK
+claim                                                                  AD FS (before)                       Entra (after)                        result
+NameID                                                                 adfs-pilot@contosohealthlab.com      adfs-pilot@contosohealthlab.com      same
+http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn              adfs-pilot@contosohealthlab.com      ADFS-Pilot@ContosoHealthLab.com      same
+http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress     adfs-pilot@contosohealthlab.com      adfs-pilot@contosohealthlab.com      same
+http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname        Pilot                                Pilot                                same
+http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname          AdfsTest                             AdfsTest                             same
+urn:contoso:claims:department                                          Nursing                              Nursing                              same
+urn:contoso:claims:employeeid                                          ADFS-PILOT-1                         ADFS-PILOT-1                         same
+http://schemas.microsoft.com/ws/2008/06/identity/claims/role           ClaimsViewer.Clinician               ClaimsViewer.Clinician               same
+urn:contoso:claims:shortname                                           adfs-pilot                           adfs-pilot                           same
+http://schemas.microsoft.com/identity/claims/tenantid                  -                                    86a2e327-4951-4348-a3c4-6f4b79ffd8f  platform (not compared)
+http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationinstant 2026-11-07T00:00:00Z                 -                                    platform (not compared)
+{"same": true, "problems": [], "before": "adfs", "after": "entra"}
+claim                                                                  AD FS (before)                       Entra (after)                        result
+NameID                                                                 adfs-pilot@contosohealthlab.com      adfs-pilot@contosohealthlab.com      same
+http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn              adfs-pilot@contosohealthlab.com      ADFS-Pilot@ContosoHealthLab.com      same
+http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress     adfs-pilot@contosohealthlab.com      adfs-pilot@contosohealthlab.com      same
+http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname        Pilot                                Pilot                                same
+http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname          AdfsTest                             AdfsTest                             same
+urn:contoso:claims:department                                          Nursing                              Nursing                              same
+urn:contoso:claims:employeeid                                          ADFS-PILOT-1                         ADFS-PILOT-1                         same
+http://schemas.microsoft.com/ws/2008/06/identity/claims/role           ClaimsViewer.Clinician               ClaimsViewer.Admin                   DIFFERENT
+urn:contoso:claims:shortname                                           adfs-pilot                           adfs-pilot                           same
+http://schemas.microsoft.com/identity/claims/tenantid                  -                                    86a2e327-4951-4348-a3c4-6f4b79ffd8f  platform (not compared)
+http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationinstant 2026-11-07T00:00:00Z                 -                                    platform (not compared)
+{"same": false, "problems": ["http://schemas.microsoft.com/ws/2008/06/identity/claims/role: ['ClaimsViewer.Clinician'] -> ['ClaimsViewer.Admin']"], "before": "adfs", "after": "entra"}

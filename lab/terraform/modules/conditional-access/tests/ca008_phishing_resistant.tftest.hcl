@@ -334,6 +334,9 @@ run "break_glass_excluded_from_every_policy" {
     enable_protected_actions_ca         = true
     enable_shared_clinical_ca           = true
     ca060_clinical_group_object_ids     = ["66666666-6666-6666-6666-666666666666"]
+    enable_clinic_results_ca            = true
+    ca061_app_ids                       = ["abababab-abab-abab-abab-abababababab"]
+    ca061_group_object_ids              = ["cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcdcd"]
     ca008_scope                         = "pilot"
   }
 
@@ -353,9 +356,10 @@ run "break_glass_excluded_from_every_policy" {
         azuread_conditional_access_policy.admin_session_controls[0],
         azuread_conditional_access_policy.pam_session_admin_strength[0],
         azuread_conditional_access_policy.shared_clinical_workstation[0],
+        azuread_conditional_access_policy.clinic_results[0],
       ] : contains(p.conditions[0].users[0].excluded_groups, "22222222-2222-2222-2222-222222222222")
     ])
-    error_message = "Break-glass must be excluded from every Terraform-managed Conditional Access policy (CA001..CA010, CA020, CA022, CA060)."
+    error_message = "Break-glass must be excluded from every Terraform-managed Conditional Access policy (CA001..CA010, CA020, CA022, CA060, CA061)."
   }
 
   assert {
@@ -367,8 +371,8 @@ run "break_glass_excluded_from_every_policy" {
   }
 
   assert {
-    condition     = length(output.policy_display_names) == 15
-    error_message = "With every flag on, all 15 policy keys (13 Terraform-managed + CA021 and CA023 rendered) must have a name."
+    condition     = length(output.policy_display_names) == 16
+    error_message = "With every flag on, all 16 policy keys (14 Terraform-managed + CA021 and CA023 rendered) must have a name."
   }
 
   assert {

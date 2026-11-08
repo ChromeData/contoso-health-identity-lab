@@ -1,7 +1,11 @@
 # ADR 0009: AD FS → Entra ID retirement path
 
-- **Status:** Accepted as a design record. **The lab has no AD FS.** Nothing
-  here has been built or run.
+- **Status:** Accepted as a design record. Phases 0, 3 and 5 for ONE app are
+  **BUILT** in `lab/adfs` (2026-11-07): AD FS on DC01, the Contoso Claims
+  Viewer relying party with real claim rules, the Entra app as code with the
+  rules converted, a claims diff, a one-command cutover and roll-back, and a
+  gated decommission. **Not run yet:** the lab has no AD FS today. The
+  tenant's domain is never federated (phases 1, 2 and 4 stay design only).
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
@@ -76,7 +80,10 @@ Option 3, in five phases. Each phase has its own rollback.
 
 ## Evidence
 
-The lab has no AD FS. These files show the parts this path depends on:
+The one-app path: `lab/adfs/README.md` (run order, owner decisions, cost),
+`lab/terraform/modules/apps/claims_viewer.tf` (the rule conversion table),
+capture log L10 (local checks only). Before that, the lab had no AD FS. These
+files show the parts this path depends on:
 
 - `lab/scripts/dc/README.md`: Cloud Sync agent and OU scope
 - `lab/docs/okta-migration-runbook.md`: the same per-app migration and
