@@ -42,6 +42,30 @@
               object, and a hospital keeps a terminated identity for audit),
               Teams removal (no Teams in scope; Microsoft 365 groups are
               already covered by task 5).
+      Scheduled leaver  category leaver, ONLY with -IncludeScheduledLeaver
+              (default off). The same six tasks as the leaver above, but it runs
+              BY ITSELF: trigger "Group membership change", action "Removed from
+              group", scope = the dynamic group All-Workforce (mailNickname
+              -LeaverTriggerGroupMailNickname; rule: synced, member, accountEnabled
+              true). When HR's leaver disables the AD account, Cloud Sync turns
+              accountEnabled off, the rule drops the user, and the next scheduled
+              evaluation runs the leaver (every 3 hours by default; the tenant's
+              workflowScheduleIntervalInHours, read 2026-11-07: 3).
+              Why: until this, the package stayed on a leaver until IT ran
+              04-Leaver.ps1 or the on-demand leaver by hand (E122). The automatic
+              assignment policy alone removes the package only after its 3-day
+              grace period (ADR 0012), on purpose.
+              Trade-off, said plainly: ANY disable of a synced account (for
+              example Invoke-AdContainment.ps1 in an incident) also drops the user
+              from All-Workforce, so this workflow strips their packages and
+              groups too. For a compromised account that is the safe side; a
+              restored account requests its packages again.
+              Source: Microsoft Learn, "Lifecycle workflow execution conditions"
+              (Group membership change trigger, Workflow scheduling) and the Graph
+              beta create-workflow example 'leaver ... membershipChangeTrigger
+              changeType remove, scope groupBasedSubjectSet groups [{id}]'.
+              verify: the v1.0 endpoint accepts this shape (the resource types are
+              in v1.0) and a DYNAMIC group as the scope group, on the first create.
       Mover   category mover, ONLY with -IncludeMover (staging switch, default
               off). Trigger: attribute change on department / jobTitle (HR is
               the source: the change arrives through HR -> AD -> Cloud Sync).
@@ -150,8 +174,15 @@
       access package).
     * TAP task: the Temporary Access Pass authentication-method policy is
       enabled and -TapLifetimeMinutes / -TapIsUsableOnce fit inside it; the
-      joiner has a manager (HR feed manager column) who has a MAILBOX (Grace
-      needs an E5 license); and the joiner has no other auth methods, no
+      joiner has a manager (HR feed manager column) whose Entra user has a
+      MAIL attribute (lab, 2026-11-07, E121: Grace Mwangi had none, and the
+      task failed). For synced users mail comes from AD, so the HR job must
+      write AD mail: lab/scripts/dc/configure-sync.py hrapp --mail-domain.
+      Delivery is a separate question: contosohealthlab.com has no mail
+      service in the lab (Graph /domains: supportedServices empty, read
+      2026-11-07), so the email is sent to an address nobody reads. Never say
+      on camera that the manager receives it. Production: the manager's real
+      Exchange Online mailbox; and the joiner has no other auth methods, no
       sign-ins and no role assignments yet - otherwise that task fails (and,
       being continueOnError, the run continues). Microsoft Learn: the TAP
       starts at the user's employeeHireDate (or now, if that is in the past).
@@ -248,6 +279,22 @@
 .PARAMETER MoverToPackage / MoverFromPackage
     Package requested for the new role / removed from the old one. Defaults
     "ICU - Critical Care Apps" / "Nurse - Clinical Apps" (03-Mover.ps1's swap).
+
+.PARAMETER IncludeScheduledLeaver
+    Also create the scheduled leaver (group membership change: removed from
+    -LeaverTriggerGroupMailNickname). Off by default. Needs the All-Workforce
+    group (envs/dev enable_lcw_leaver_trigger = true) and Group.Read.All.
+
+.PARAMETER ScheduledLeaverWorkflowName
+    Display name of the scheduled leaver. Default "Contoso - Leaver (HR disabled, scheduled)".
+
+.PARAMETER LeaverTriggerGroupMailNickname
+    mailNickname of the dynamic trigger group. Default all-workforce. The
+    script refuses a group that is not dynamic, whose processing is not On,
+    whose rule does not require accountEnabled true, or whose rule has any
+    clause other than the All-Workforce ones (dirSyncEnabled true, userType
+    Member, accountEnabled true, joined by -and). A department clause would
+    let a job move start the leaver.
 
 .PARAMETER OfflinePreview
     Build and print both workflow bodies with placeholder ids. No Graph
@@ -360,6 +407,17 @@ param(
     [string]$MoverFromPackage = 'Nurse - Clinical Apps',
 
     [Parameter()]
+    [switch]$IncludeScheduledLeaver,
+
+    [Parameter()]
+    [ValidateNotNullOrEmpty()]
+    [string]$ScheduledLeaverWorkflowName = 'Contoso - Leaver (HR disabled, scheduled)',
+
+    [Parameter()]
+    [ValidatePattern('^[A-Za-z0-9._-]{1,64}$', ErrorMessage = 'A mailNickname: letters, digits, . _ - only.')]
+    [string]$LeaverTriggerGroupMailNickname = 'all-workforce',
+
+    [Parameter()]
     [switch]$OfflinePreview
 )
 
@@ -435,7 +493,7 @@ function ConvertTo-ODataLiteral {
 # 1. CONNECT (skipped for -OfflinePreview)
 # =============================================================================
 $requiredScopes = @('LifecycleWorkflows.ReadWrite.All', 'EntitlementManagement.Read.All')
-if ($JoinerGroupMailNicknames) { $requiredScopes += 'Group.Read.All' }
+if ($JoinerGroupMailNicknames -or $IncludeScheduledLeaver) { $requiredScopes += 'Group.Read.All' }
 if ($RunJoinerFor -or $RunLeaverFor) { $requiredScopes += 'User.Read.All' }
 
 if (-not $OfflinePreview) {
@@ -573,6 +631,49 @@ foreach ($nick in $JoinerGroupMailNicknames) {
     $groupIds[$nick] = [string]$grp['id']
 }
 
+# Returns $null when a dynamic rule is only AND-ed clauses from the
+# All-Workforce set (modules/groups/main.tf all_workforce rule), otherwise a
+# short reason. Comparison ignores case, spaces and parentheses.
+function Get-LeaverTriggerRuleProblem {
+    param([string]$Rule)
+    $allowed = @('user.dirsyncenabled-eqtrue', 'user.usertype-eq"member"', 'user.accountenabled-eqtrue')
+    $flat = ($Rule -replace '[()\s]', '').ToLowerInvariant()
+    if (-not $flat) { return 'is empty' }
+    if ($flat -match '-or|-not') { return 'uses -or or -not' }
+    $extra = @($flat -split '-and' | Where-Object { $_ -notin $allowed })
+    if ($extra) { return "has clauses a job move can change ($($extra -join ', '))" }
+    return $null
+}
+
+# The scheduled leaver's trigger group (-IncludeScheduledLeaver). Fail closed:
+# it must be exactly one DYNAMIC group whose rule requires accountEnabled true
+# and has no clause a job move can change, otherwise "removed from group" would
+# not mean "HR disabled the account".
+$leaverTriggerGroupId = $null
+if ($IncludeScheduledLeaver) {
+    if ($OfflinePreview) { $leaverTriggerGroupId = "<groupId: $LeaverTriggerGroupMailNickname>" }
+    else {
+        $f = [uri]::EscapeDataString("mailNickname eq '$(ConvertTo-ODataLiteral $LeaverTriggerGroupMailNickname)'")
+        $g = @(Get-GraphCollection -Uri "$graph/groups?`$filter=$f&`$select=id,displayName,groupTypes,membershipRule,membershipRuleProcessingState")
+        if ($g.Count -ne 1) { throw "Scheduled leaver: expected exactly one group with mailNickname '$LeaverTriggerGroupMailNickname', found $($g.Count). Apply envs/dev with enable_lcw_leaver_trigger = true (modules/groups All-Workforce)." }
+        $tg = $g[0]
+        if (-not (@($tg['groupTypes']) -contains 'DynamicMembership')) { throw "Scheduled leaver: '$($tg['displayName'])' is not a dynamic group." }
+        if ([string]$tg['membershipRule'] -notmatch 'user\.accountEnabled\s+-eq\s+true') { throw "Scheduled leaver: the rule of '$($tg['displayName'])' does not require accountEnabled true, so leaving it does not mean HR disabled the account: $($tg['membershipRule'])" }
+        # WHY an allow-list of clauses: "requires accountEnabled true" is not
+        # enough. A rule like (accountEnabled true) -and (department Nursing)
+        # also drops a person who moves to ICU, and the leaver workflow would
+        # then strip packages, groups and licenses from an active employee.
+        # Accept only AND-ed clauses that a job move never changes (the
+        # modules/groups All-Workforce rule); refuse -or, -not and any other
+        # attribute.
+        $ruleProblem = Get-LeaverTriggerRuleProblem -Rule ([string]$tg['membershipRule'])
+        if ($ruleProblem) { throw "Scheduled leaver: the rule of '$($tg['displayName'])' $ruleProblem, so leaving the group can mean a job move, not an HR disable: $($tg['membershipRule'])" }
+        if ([string]$tg['membershipRuleProcessingState'] -ne 'On') { throw "Scheduled leaver: dynamic processing of '$($tg['displayName'])' is '$($tg['membershipRuleProcessingState'])', not On." }
+        $leaverTriggerGroupId = [string]$tg['id']
+        Write-Console "Scheduled leaver trigger group '$($tg['displayName'])' ($leaverTriggerGroupId)." -ForegroundColor DarkGray
+    }
+}
+
 # =============================================================================
 # 4. BUILD THE DESIRED WORKFLOW BODIES
 # =============================================================================
@@ -688,6 +789,30 @@ $leaverBody = [ordered]@{
     tasks               = $leaverTasks
 }
 
+# ---- Scheduled leaver (-IncludeScheduledLeaver only) --------------------------
+$scheduledLeaverBody = $null
+if ($IncludeScheduledLeaver) {
+    $scheduledLeaverBody = [ordered]@{
+        category            = 'leaver'
+        displayName         = $ScheduledLeaverWorkflowName
+        description         = "Runs by itself when HR's leaver disables the account (removed from $LeaverTriggerGroupMailNickname). Managed by lab/scripts/powershell/post-apply/New-LifecycleWorkflows.ps1."
+        isEnabled           = $true
+        isSchedulingEnabled = $true
+        executionConditions = [ordered]@{
+            '@odata.type' = '#microsoft.graph.identityGovernance.triggerAndScopeBasedConditions'
+            scope         = [ordered]@{
+                '@odata.type' = '#microsoft.graph.identityGovernance.groupBasedSubjectSet'
+                groups        = @([ordered]@{ id = $leaverTriggerGroupId })
+            }
+            trigger       = [ordered]@{
+                '@odata.type' = '#microsoft.graph.identityGovernance.membershipChangeTrigger'
+                changeType    = 'remove'
+            }
+        }
+        tasks               = $leaverTasks
+    }
+}
+
 # ---- Mover (-IncludeMover only) -----------------------------------------------
 $moverBody = $null
 if ($IncludeMover) {
@@ -752,10 +877,14 @@ function Get-WorkflowFingerprint {
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Workflow)
     $ec = $Workflow['executionConditions']
     $parts = @([string]$Workflow['category'], [string]$ec['@odata.type'])
-    if ($ec.Contains('scope') -and $ec['scope']) { $parts += [string]$ec['scope']['rule'] }
+    if ($ec.Contains('scope') -and $ec['scope']) {
+        $parts += [string]$ec['scope']['rule']
+        if ($ec['scope'].Contains('groups')) { $parts += 'groups:' + ((@(@($ec['scope']['groups']) | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_['id'] }) | Sort-Object) -join ',') }
+    }
     if ($ec.Contains('trigger') -and $ec['trigger']) {
         $tr = $ec['trigger']
         if ($tr.Contains('triggerAttributes')) { $parts += 'change:' + ((@(@($tr['triggerAttributes']) | ForEach-Object { [string]$_['name'] }) | Sort-Object) -join ',') }
+        elseif ($tr.Contains('changeType')) { $parts += "membership:$($tr['changeType'])" }
         else { $parts += "$($tr['timeBasedAttribute'])@$($tr['offsetInDays'])" }
     }
     $tasks = @($Workflow['tasks'])
@@ -773,7 +902,7 @@ $existing = @()
 if (-not $OfflinePreview) { $existing = @(Get-GraphCollection -Uri "$lcw/workflows") }
 
 $workflowIds = @{}
-foreach ($desired in @($joinerBody, $leaverBody, $moverBody | Where-Object { $null -ne $_ })) {
+foreach ($desired in @($joinerBody, $leaverBody, $scheduledLeaverBody, $moverBody | Where-Object { $null -ne $_ })) {
     $name = $desired.displayName
     Write-Console "`n=== $name ===" -ForegroundColor Cyan
     $json = $desired | ConvertTo-Json -Depth 12
@@ -902,6 +1031,18 @@ function Get-OnDemandSubject {
             $rejected++
             continue
         }
+        if ($Kind -eq 'joiner') {
+            # The TAP task mails the pass to the manager. A manager with no
+            # mail attribute makes that task fail (E121: Grace Mwangi). Say so
+            # before the run; it is a warning, the run still goes ahead
+            # (the task is continueOnError and the package request still runs).
+            $mgr = $null
+            try { $mgr = Invoke-Graph -Method GET -Uri "$graph/users/$([uri]::EscapeDataString($upn))/manager?`$select=displayName,mail" }
+            catch { Write-Warning "  ${upn}: could not read the manager ($($_.Exception.Message)). The TAP email task may fail." }
+            if ($mgr -and [string]::IsNullOrWhiteSpace([string]$mgr['mail'])) {
+                Write-Warning "  ${upn}: manager '$($mgr['displayName'])' has no mail attribute, so 'Generate TAP and send email' will FAIL. Fix: lab/scripts/dc/configure-sync.py hrapp --mail-domain (sets AD mail from the HR userName), then re-send that manager's HR row."
+            }
+        }
         if ($Kind -eq 'joiner' -and [string]$u['department'] -ne $JoinerDepartment -and -not $SkipGuards) {
             Write-Warning "  ${upn}: department '$($u['department'])' is outside the joiner scope ('$JoinerDepartment'). Skipped (use -Force to override)."
             $rejected++
@@ -978,7 +1119,8 @@ HOW TO RUN ON DEMAND (on-demand runs ignore the trigger AND the scope rule)
   Leaver : POST $lcw/workflows/$leaverIdText/activate - same body.
 
 BEFORE THE JOINER TAKE
-  * TAP task needs: TAP policy enabled; Dana's manager (Grace) has a mailbox; Dana has
+  * TAP task needs: TAP policy enabled; Dana's manager (Grace) has a mail attribute
+    (configure-sync.py hrapp --mail-domain; E121 failed without it); Dana has
     no auth methods and has never signed in. On a re-take it fails (continueOnError -
     the package request still runs). For a clean TAP shot use a fresh joiner (Sofia Reyes).
   * Scheduled runs are $(if ($EnableJoinerSchedule) { 'ON' } else { 'OFF (until the tenant-time hireDate -> employeeHireDate mappings are confirmed)' }).

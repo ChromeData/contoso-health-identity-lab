@@ -1,0 +1,26 @@
+{
+  "what": "Read-only checks as the lab operator after the first HR-form run (E121, E122). No tenant object was changed.",
+  "read_at_utc": "2026-11-07",
+  "manager_mail": {
+    "user": "Grace Mwangi (employeeId 200015, synced)",
+    "entra_mail": null,
+    "synced_workers_with_mail": 0,
+    "hr_job_mail_mapping": {"target": "mail", "flowType": "ObjectAddOnly", "source": "Join(\"@\", <userName local part>, DefaultDomain())"},
+    "domain_contosohealthlab_com_supportedServices": []
+  },
+  "leaver_package": {
+    "policy": "Nurse - Clinical Apps - birthright (HR attributes)",
+    "automaticRequestSettings": {"requestAccessForAllowedTargets": true, "removeAccessWhenTargetLeavesAllowedTargets": true, "gracePeriodBeforeAccessRemoval": "P3D"},
+    "audit_after_leaver": "2026-11-07T02:00:54Z Create access package assignment system update request (Nurse - Clinical Apps), about 27 min after Entra showed the account disabled; removal waits for the 3-day grace"
+  },
+  "day_one_assignment": {
+    "membershipRule": "(user.accountEnabled -eq true) -and (user.userType -eq \"Member\") -and (user.employeeHireDate -le system.now) -and ((user.department -eq \"Nursing\" -and user.jobTitle -in [\"Nurse Manager\",\"Registered Nurse\"]))",
+    "audit_entitlement_management_00_44_to_01_20Z": [
+      "01:11:01Z Administrator directly assigns user to access package (initiated by Lifecycle Workflows)",
+      "01:15:03Z Auto approve access package assignment request (Lifecycle Workflows)",
+      "01:15:11Z Fulfill access package assignment request (Lifecycle Workflows)"
+    ],
+    "assignments_by_the_automatic_policy_in_window": 0,
+    "lifecycle_workflows_settings": {"workflowScheduleIntervalInHours": 3}
+  }
+}
