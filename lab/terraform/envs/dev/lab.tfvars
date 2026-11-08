@@ -3,9 +3,9 @@
 # -----------------------------------------------------------------------------
 # Everything a reviewer should see change in a PR lives here: staging flags and
 # Conditional Access states. Tenant-specific identifiers (ids, domain) come
-# from terraform.tfvars locally or TF_* GitHub variables in CI; the operator IP
-# and alert email come from the TF_OPERATOR_IP_RANGES / TF_ALERT_EMAIL repo
-# secrets (masked in public logs).
+# from terraform.tfvars locally or TF_* GitHub variables in CI; the operator IP,
+# alert email and the other privacy values come from the pipeline config Key
+# Vault, read over OIDC (lab/pipelines/README.md).
 # Both workflows pass -var-file=lab.tfvars.
 # =============================================================================
 
@@ -241,6 +241,7 @@ itdr_exclude_rules = [
   "dc_logon_outside_operator_allowlist",
   "vault_privileged_access_anomaly",
   "pim_activation_without_auth_context",
+  "tier0_logon_without_checkout", # ADR 0036: built on Vault check-out events; no source once Vault is retired. Replacement (Bastion subnet + PIM activation) is DESIGNED
 ]
 
 # Defender for Identity (ADR 0023): the native AD-attack detector. Off because

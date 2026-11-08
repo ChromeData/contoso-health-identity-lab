@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # vault-onboard-ad.sh - onboard DC01's privileged accounts into Vault
-# (the CyberArk "onboard account to the vault + CPM takes over" moment).
+# (the "onboard the account to the vault, rotation takes over" moment).
 #
 #   * LDAP secrets engine -> ldaps://dc01.corp.<domain>, verified against the
 #     lab root CA (no insecure_tls), bound as svc-vault-rotator whose password

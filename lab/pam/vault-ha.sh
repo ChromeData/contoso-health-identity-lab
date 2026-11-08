@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # vault-ha.sh - Vault HA for the PAM stand-in: a 3-node Raft cluster with
-# transit auto-unseal (CyberArk: Vault HA cluster / Primary + DR Vault).
+# transit auto-unseal (a primary + DR vault pattern).
 # A separate compose project (docker-compose.ha.yml); the single-node lab
 # Vault that the PAM scripts use is not touched.
 #

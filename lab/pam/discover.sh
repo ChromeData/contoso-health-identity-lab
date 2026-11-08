@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # discover.sh - step 1 of the PAM onboarding pipeline: find every privileged
-# account in AD before deciding what to vault (CyberArk "Accounts Discovery").
+# account in AD before deciding what to vault ("accounts discovery").
 #
 #   discover.sh -> onboard.sh -> rotate.sh (dependency-gated) -> reconcile.sh
 #

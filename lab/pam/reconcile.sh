@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # reconcile.sh - step 4: the reconciliation report an auditor asks for
-# (CyberArk: "Accounts Discovery vs Safe contents" + CPM verify).
+# (discovery results vs vault contents, plus a verify bind).
 #
 # Joins three views and says, per account, which of these is true:
 #   VAULTED    in a library set or a static role (+ rotated within policy?

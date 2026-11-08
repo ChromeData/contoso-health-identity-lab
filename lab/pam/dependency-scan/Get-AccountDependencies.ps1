@@ -5,7 +5,7 @@
     entries in the shape of lab/pam/accounts-dependencies.json.
 
 .DESCRIPTION
-    CyberArk's Accounts Discovery finds these "usages" so the CPM can update
+    PAM discovery tools find these "usages" so the rotation can update
     them when it changes the password. Vault cannot push a new password into a
     Windows service, so the lab does the other half: find every consumer
     BEFORE a static role is created, and refuse to rotate (onboard.sh,
