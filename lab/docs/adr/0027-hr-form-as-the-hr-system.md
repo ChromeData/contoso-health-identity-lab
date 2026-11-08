@@ -1,6 +1,6 @@
 # ADR 0027: An HR form stands in for the HR system; it sends through API-driven inbound provisioning to AD
 
-- **Status:** RAN · tenant (2026-11-07, capture log E120-E123): a test worker was hired and made a leaver from the form, then removed with the retake reset. Timings are in "Measured in the tenant" below. Option D is DESIGNED only.
+- **Status:** **Superseded by [ADR 0028](0028-orangehrm-as-the-hris.md)** (decisions 1 and 3): HR now works in OrangeHRM, and the form (`lab/hr-app/`) is retired. Decision 2 (the AD target) and the measurements below stand. Was: RAN · tenant (2026-11-07, capture log E120-E123): a test worker was hired and made a leaver from the form, then removed with the retake reset. Timings are in "Measured in the tenant" below. Option D is DESIGNED only.
 - **Date:** 2026-11-07
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** 2027-02-07, or when the lab gets a hosted HR app or a real HRIS tenant

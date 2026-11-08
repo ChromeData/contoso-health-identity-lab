@@ -9,9 +9,11 @@ in to Azure directly and to AWS through Entra.
 
 ```bash
 lab/scripts/operator/op az ad sp list --display-name gh-oidc -o table
-lab/scripts/operator/op tofu -chdir=lab/terraform/envs/bootstrap plan
+lab/scripts/operator/op tofu -chdir=lab/terraform/envs/bootstrap plan -lock=false
 lab/scripts/operator/op aws sts get-caller-identity
 ```
+
+Plans use `-lock=false`: a state lock is a blob lease, which is a blob write, and since PR #273 the operator cannot write the Terraform state containers outside a write session (ADR 0030, R4 amendment). The operator never applies these roots, so it never needs the lock.
 
 `op` signs in when needed and runs one command as the operator. It never
 touches your own `az login` (the operator has its own az profile in

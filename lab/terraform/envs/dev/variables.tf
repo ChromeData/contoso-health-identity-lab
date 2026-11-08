@@ -674,6 +674,12 @@ variable "enable_pim_demo_readers" {
   default     = false
 }
 
+variable "enable_lcw_leaver_extension" {
+  type        = bool
+  description = "ADR 0029: the Logic App (consumption, system-assigned identity, Access package assignment manager on the Clinical catalog) that the scheduled leave-date leaver calls to adminRemove birthright packages. Needs enable_premium + enable_governance. Then run post-apply/New-LifecycleWorkflows.ps1 -IncludeLeaveDateLeaver -LeaverExtensionLogicAppName <output leaver_extension_logic_app_name> -UpdateExisting."
+  default     = false
+}
+
 variable "enable_b2b_governance" {
   type        = bool
   description = "Create the Affiliated Partners catalog + Affiliated Physicians guest package (connected-org requestors, sponsor approval, 90-day expiry, monthly sponsor review). Needs enable_premium + enable_governance; post-apply/New-B2BConnectedOrganization.ps1 creates the connected organization."

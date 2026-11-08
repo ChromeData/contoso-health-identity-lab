@@ -1,0 +1,9 @@
+{
+  "name": "contoso-hr-connector",
+  "private": true,
+  "description": "OrangeHRM -> Entra API-driven inbound provisioning (through the hr-feed outbox and HR-SYNC). See README.md.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test tests/connector.test.mjs" },
+  "dependencies": { "mysql2": "3.24.5" }
+}

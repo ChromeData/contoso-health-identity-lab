@@ -1,0 +1,13 @@
+run command lab-a0be8f8e: lab/scripts/dc/hardening/Enable-WindowsLaps.ps1 on vm-dc01
+Enable-WindowsLaps APPLY at 2026-11-07 01:01:37Z
+Schema has msLAPS attributes: True
+Self-write on OU=Domain Controllers,DC=corp,DC=contosohealthlab,DC=com and OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com; Tier1-Admins may read on OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+GPO LAPS - DC01 DSRM password to AD 71390f6f-4c37-4b6d-b8a3-95e6f16edc7e -> OU=Domain Controllers,DC=corp,DC=contosohealthlab,DC=com
+GPO LAPS - Tier1 servers local admin to AD 90173ced-c300-468d-bdf4-fad445d4e377 -> OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+DSRM in AD (after first processing): expires 2026-12-07 01:00:13Z, blob abe73061c170
+ROTATION before: expires 2026-12-07 01:00:13Z, blob abe73061c170
+ROTATION after:  expires 2026-12-07 01:02:04Z, blob addec15a335a
+EVENT 10018 2026-11-07 01:02:04Z LAPS successfully updated Active Directory with the new password.
+Member servers in OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com today: 0
+Enable-WindowsLaps done.
+state: Succeeded, exit code: 0

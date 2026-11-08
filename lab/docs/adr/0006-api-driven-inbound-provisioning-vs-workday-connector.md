@@ -1,6 +1,6 @@
 # ADR 0006: API-driven inbound provisioning vs. the Workday connector
 
-- **Status:** Accepted (lab). Production recommendation below. Partly superseded by [ADR 0027](0027-hr-form-as-the-hr-system.md): HR now makes changes in the Contoso HR form, not by editing `hr_feed.csv`.
+- **Status:** Accepted (lab). Production recommendation below. Partly superseded by [ADR 0027](0027-hr-form-as-the-hr-system.md) and then [ADR 0028](0028-orangehrm-as-the-hris.md): HR now makes changes in OrangeHRM, a real HR system, not by editing `hr_feed.csv`.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 

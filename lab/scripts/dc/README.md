@@ -17,9 +17,11 @@ extension.
 | `configure-sync.py` | Steps 5 and 6 by Graph: Cloud Sync (scoped OUs, password hash, hire date) and the HR app's connectivity + mappings. Idempotent |
 | `run-on-dc.py` | Runs any of these scripts on DC01 with secret parameters as a managed run command: secrets come from the Keychain, Terraform state or the caller's stdin (`stdin:<key>`) inside the helper, are scrubbed from output, never on a command line |
 | `04-Install-CloudSyncAgent.ps1` | Installs and registers the Entra provisioning agent (Cloud Sync) unattended: Microsoft-signature gate, gMSA, domain bind. Replaces the manual RDP step |
+| `hardening/` | AD hardening, RAN 2026-11-07: Tier 0/1/2 OUs and admins, Protected Users for the new admins only, a GPO that denies Tier 0 sign-in on Tier 1/2 computers, Windows LAPS for the DSRM password (AD, encrypted), PingCastle before/after. See `hardening/README.md` |
 | `Remove-DemoHire.ps1` | Demo retakes only (`lab/scripts/demo/reset-demo-hire.sh`): deletes the one AD account HR provisioning created for an employeeID, never outside `OU=Workforce` / `OU=Disabled`, never a protected (`adminCount=1`) account. Reports only unless `Apply=yes` |
 | `Clear-LeaverAdGroups.ps1` | Leaver hygiene (review finding C7): removes every on-premises group membership from DISABLED accounts directly in `OU=Disabled`, so a rehire comes back with only the new birthright. Never an enabled account, never a protected (`adminCount=1`) account; prints each removal as the record. Reports only unless `Apply=yes`. BUILT, offline tests; not yet run on DC01 |
 | `rotate-build-admin.py` + `Reset-BuildAdminPassword.ps1` | New random password for the build admin `contosoadmin` (owner decision only). Made on the Mac, written straight into Keychain item `contoso-lab-dc01-admin` over stdin, sent to DC01 as a protected parameter (handed to `run-on-dc.py` on stdin, from memory), then written as a new version of Key Vault secret `dc01-admin-password` (kv-idlab-20f1); never printed, never in argv or a file. DC01 stops if a service or task runs as `contosoadmin`, resets the account, and checks Kerberos: the new password gets a ticket, the old one must get the KDC's bad-password answer (any other error fails the run). One run at a time (lock). The old Keychain value goes back only when DC01 proves AD was not touched; otherwise both values are kept (new in the Keychain, old in Key Vault). Terraform state keeps only the first build password (dead after a rotation). `lab/scripts/operator/op python3 -I lab/scripts/dc/rotate-build-admin.py` |
+| `rotate-tier-admin.py` + `Reset-TierAdminPassword.ps1` | New random password for ONE tier admin (`t0-adm-01`, `t1-adm-01`, `t2-adm-01`; `contosoadmin` is refused, it has `rotate-build-admin.py`). Made on the Mac, written straight into Keychain item `contoso-lab-ad-<account>` over stdin, sent to DC01 as a protected parameter (handed to `run-on-dc.py` on stdin, from memory); never printed, never in argv or a file. The old value waits in `contoso-lab-ad-<account>-previous` until DC01 answers. DC01 resets the account and checks Kerberos: the new password gets a ticket, the old one must get the KDC's bad-password answer. One run per account at a time (lock). The old value goes back only when DC01 proves AD was not touched; otherwise both values are kept, and the next run stops until a person settles them. `lab/scripts/operator/op python3 -I lab/scripts/dc/rotate-tier-admin.py t0-adm-01` |
 
 ## Run it
 
@@ -55,9 +57,9 @@ on AdminSDHolder after `dsacls`. verify: Enterprise CA setup as SYSTEM via
 run-command (it writes to the Configuration partition) may need `-Credential`
 for an Enterprise Admin.
 
-4. **By hand**, off camera: RDP to the DC's public IP
-   (`terraform -chdir=lab/terraform/envs/dev output -raw dc_public_ip`; the NSG
-   only admits `operator_ip_ranges`). Copy the admin password straight to the
+4. **By hand**, off camera, through **Azure Bastion** (DC01 has no public IP
+   and no RDP from the internet since the ADR 0013 amendment of 2026-11-08;
+   see "Ways in to DC01" below). Copy the admin password straight to the
    clipboard so it is never printed:
    `terraform -chdir=lab/terraform/envs/dev output -raw dc_admin_password | pbcopy`
    (macOS; `clip.exe` on Windows, `xclip -selection clipboard` on Linux).
@@ -166,10 +168,11 @@ az vm run-command invoke -g $RG -n $VM --command-id RunPowerShellScript --script
   accounts, so `svc-vault-rotator` is granted on AdminSDHolder. That makes it
   Tier 0, the same position as any PAM reconcile account. Its password
   lives only in Key Vault and should be rotated by Vault (`ldap/rotate-root`).
-- **The DC's identity can write only its two build secrets.** An ABAC
+- **The DC's identity can write only its build secrets.** An ABAC
   condition on its Key Vault Secrets Officer grant
   (`lab/terraform/modules/dc-vm/main.tf`) limits it to `dc01-dsrm-password`
-  and `svc-vault-rotator`; it cannot read or change any other secret's value
+  and `svc-vault-rotator` (plus the retired name `svc-pam-discovery`, which no
+  longer exists; see below); it cannot read or change any other secret's value
   in the vault (secret names stay visible through ARM).
 - **Single-DC lab shortcut.** The DC points DNS at itself and forwards to
   168.63.129.16. Add the DC IP to the VNet's DNS servers once member servers
@@ -183,7 +186,41 @@ stand-in, so the account had no user. Its 30-day password would have expired
 on 2026-11-26. `Remove-PamDiscoveryAccount.ps1` (through `run-on-dc.py`)
 disabled and deleted the account, then deleted its Key Vault secret with the
 DC's own identity. It refuses any account that is not the plain bind at
-`OU=ServiceAccounts`. `02-Configure-Domain.ps1` no longer creates it, and the
-DC's Key Vault grant no longer names it. The local samba test harness
+`OU=ServiceAccounts`. `02-Configure-Domain.ps1` no longer creates it. The
+DC's Key Vault grant **still names it**: changing the condition replaces the
+role assignment, and the vault's CanNotDelete lock (#246) refused the delete
+in round-2 apply (409 ScopeLocked, run 42519889983). Narrowing it needs the
+owner to lift the lock in a write session, apply, and put the lock back. The local samba test harness
 (`lab/pam/test/samba-ad`) still seeds its own `svc-pam-discovery` in a
 throwaway container; that is not DC01.
+
+## Ways in to DC01 (ADR 0013 amendment, 2026-11-08)
+
+DC01 has no public IP. Its NSG has no inbound allow rule from the internet
+(the only exception is 443 while `enable_adfs_https`, for the AD FS exercise).
+
+| Who | Path | Recorded? | Notes |
+|---|---|---|---|
+| Scripts (build, rotation, agent installs) | `az vm run-command` through `run-on-dc.py` | No video. The capture log row and the script in git are the record; Azure writes an activity-log event and the `ala-vm-dc01-runcommand-*` alert fires | Runs as SYSTEM on a DC: a Tier-0 action. Only from an owner-opened operator session |
+| A person | Azure Bastion, from inside the VNet, created for the session and deleted after (steps below; the scripted, recorded path is `lab/bastion/capture.sh` in PR #247, open) | Yes with Bastion Premium (session recording); not with Basic | Sign in with a named Tier-0 account, not the built-in `contosoadmin` |
+| Anything on the internet | none | - | A NAT gateway carries DC01's outbound traffic; it admits no inbound connection |
+
+### A person's session through Bastion (until PR #247 merges)
+
+Off camera, signed in to the Azure portal as yourself (Owner or Contributor
+on `rg-identity-lab`):
+
+1. Open **vm-dc01**. Click **Connect**, then **Connect via Bastion**.
+2. If no Bastion exists, click **Deploy Bastion**. Pick SKU **Basic**
+   (about $0.19/h; Premium adds session recording, about $0.45/h). Azure
+   creates `AzureBastionSubnet` (10.42.250.0/26) in `vnet-identity-lab`.
+   Wait about 10 minutes.
+3. Sign in with a named Tier-0 account. The password comes from the Keychain
+   to the clipboard, never the screen.
+4. When you finish, sign out, then delete the Bastion host **and** its
+   public IP (`az network bastion delete`, `az network public-ip delete`).
+   A Bastion left running costs about $4.50 a day (Basic).
+
+Your RDP logon arrives from the Bastion subnet, so
+`dc-logon-outside-operator-allowlist` alerts on it by design.
+

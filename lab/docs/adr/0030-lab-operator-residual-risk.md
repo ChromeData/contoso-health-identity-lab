@@ -1,6 +1,6 @@
 # ADR 0030: Lab operator residual risk - read-only by default, writes only in an owner-opened session
 
-- **Status:** BUILT (2026-11-06). Not applied. The owner applies `lab/terraform/envs/operator` himself. Until he does, the operator still holds the grants listed in ADR 0024.
+- **Status:** BUILT (2026-11-06; R4 conditions added 2026-11-08). **Not applied.** The owner applies `lab/terraform/envs/operator` himself. Until he does, the operator still holds the grants listed in ADR 0024: standing Owner, Key Vault Secrets Officer and 16 Graph write permissions (read live 2026-11-08, progress.log). Every "after this ADR" line below describes the state after that apply, not today.
 - **Date:** 2026-11-06
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** 2027-02-06, or earlier on any revisit trigger below
@@ -122,12 +122,16 @@ Say this number, not "zero".
 |---|---|---|---|
 | The build account (the owner's admin account) | Human | Standing Global Administrator | Still standing until `Convert-BuildAccountToEligible.ps1` runs (owner task; agents must not change the owner account) |
 | APPLY (`gh-oidc-apply`) | Workload, GitHub OIDC, no stored secret | Writes CA, PIM and roles (ADR 0005) | Unchanged. Runs only after the owner approves a gated apply |
-| The lab operator | Workload, certificate in Keychain | Graph writes + Azure Owner | **Not standing Tier 0 any more.** Tier 0 only inside a session the owner opens, for at most 8 hours |
+| The lab operator | Workload, certificate in Keychain | Graph writes + Azure Owner + standing read of the Domain Admin password in Key Vault + write on Terraform state | **Today (not applied): standing Tier 0.** After the owner applies this root with the 2026-11-08 conditions: no standing Graph write, no standing Owner, no standing read of `dc01-admin-password` or `dc01-dsrm-password`, no standing write on the state containers. Tier 0 only inside a session the owner opens, for at most 8 hours |
 | bg-admin-01, bg-admin-02 | Human (break-glass) | Global Administrator by design | Unchanged (ADR 0003) |
 
-So: **1 standing human admin outside break-glass, 1 standing Tier-0 workload
-identity (APPLY), and 1 Tier-0 workload identity that is Tier 0 only during
-a session.**
+So, **after the apply**: 1 standing human admin outside break-glass, 1
+standing Tier-0 workload identity (APPLY), and 1 Tier-0 workload identity
+that is Tier 0 only during a session. **Today**: the operator is standing
+Tier 0 too, so the honest count is 1 human and 2 workloads. Without the
+2026-11-08 conditions, the operator would have stayed standing Tier 0 even
+after the apply (round 2, R4): a standing secret read on a vault that holds
+the Domain Admin password, and a standing write on APPLY's state.
 
 ## What remains (residual risk, accepted for the lab)
 
@@ -156,7 +160,12 @@ a session.**
 5. **No location limit.** Until CA090 is licensed, the certificate works from
    any network.
 6. **Storage Blob Data Contributor stays standing** at subscription scope
-   (the state account's ReadOnly lock blocks narrower assignments). In the
+   (the state account's ReadOnly lock blocks narrower assignments). Since
+   2026-11-08 an ABAC condition refuses blob writes, adds, deletes and moves
+   in the `tfstate` and `tfstate-bootstrap` containers (R4). The operator
+   can still READ state, and state holds secrets (the break-glass seed
+   password, `dc_admin_password`; round 2, R30). That read is a residual
+   risk until those roots use ephemeral or write-only values. In the
    evidence container the immutability policy refuses deletes and overwrites
    inside the retention period. The policy is Unlocked in the lab, by rule.
    Production locks it.
@@ -223,3 +232,38 @@ time-boxed to the E5 trial (ends 2026-11-26), for the Intune EPM and LAPS
 policies (ADR 0036). A `check` warns on every plan after that date
 (`intune_write_expires_utc`) until a PR removes it; the offline tests pin the
 date, so they never fail because of today's date.
+
+## Amendment (2026-11-08): no standing Tier-0 reach through the two data roles
+
+Source: hostile review round 2, finding R4.
+
+| Standing role (subscription scope) | Reach without a condition | Condition added (Azure ABAC, `condition_version = "2.0"`) | What still works |
+|---|---|---|---|
+| Key Vault Secrets User | Reads every secret in `kv-idlab-20f1`, including `dc01-admin-password` (the built-in Domain Admin `contosoadmin`) and `dc01-dsrm-password` | `getSecret` refused when the secret name is in `tier0_secret_names` | Reads every other lab secret; metadata of all secrets |
+| Storage Blob Data Contributor | Writes the state of envs/dev (APPLY), envs/bootstrap and this root | Blob `write`, `add`, `delete` and `move` refused in `terraform_state_containers` (`tfstate`, `tfstate-bootstrap`) | State read; evidence and other containers |
+
+- **Inside a session** the operator gets Key Vault Secrets Officer with no
+  condition, so it can read the Tier-0 secrets then. That is the intended,
+  time-bound Tier-0 window, opened by the owner.
+- **State write is never in a session by default.** If a state repair is
+  needed, the owner adds `Storage Blob Data Contributor` to
+  `operator_session_azure_roles` for that one session.
+- **Why a condition, not a second vault:** a separate Tier-0 vault is the
+  cleaner production shape (round 2, R4 fix). It needs new private endpoint,
+  DNS and DC identity grants, and it moves secrets that live scripts read.
+  The condition gives the same "no standing read" result on the existing
+  vault in one owner apply. Revisit trigger: a third Tier-0 secret, or any
+  reader of the vault other than the operator, the DC and APPLY.
+- **Operator plans use `-lock=false`.** A state lock is a blob lease, which
+  needs blob write, so a locking plan by the operator fails on the state
+  containers. The documented commands (`lab/scripts/operator/README.md`,
+  `op`) say `-lock=false`, as the PLAN workflow already does.
+- **Apply effect:** azurerm marks `condition` ForceNew, so the plan
+  REPLACES `azurerm_role_assignment.operator["Key Vault Secrets User"]` and
+  `["Storage Blob Data Contributor"]` (destroy + create).
+- **Tests:** `tests/operator.tftest.hcl`, 4 new runs (18 in all).
+- **Live proof (to capture after the owner's apply):** as the operator,
+  `az keyvault secret show --vault-name kv-idlab-20f1 -n dc01-admin-password`
+  returns 403 `ForbiddenByRbac` (do not print the value of anything), and an
+  upload of a 0-byte blob named `r4-probe` to `tfstate` returns 403
+  `AuthorizationPermissionMismatch` (if it ever succeeds, delete it and stop). Record both as one capture-log row.
