@@ -34,9 +34,11 @@ When `enable_dc = true`, `modules/dc-vm` builds the following:
   uses Trusted Launch. The forest is built through `az vm run-command`; RDP
   is used by hand only to rotate the admin password and install the
   provisioning agent. Its managed identity can read and write only its own
-  two Key Vault secrets (`dc01-dsrm-password`, `svc-vault-rotator`; ABAC).
-  A third, `svc-pam-discovery`, was retired on 2026-11-07 with the Vault
-  stand-in (ADR 0036).
+  Key Vault secrets (`dc01-dsrm-password`, `svc-vault-rotator`; ABAC). The
+  condition still names a third, `svc-pam-discovery`, whose account and
+  secret were retired on 2026-11-07 with the Vault stand-in (ADR 0036):
+  narrowing it replaces the assignment, which the vault's delete lock refuses
+  until the owner lifts it in a write session.
 
 **Why the public IP exists.** The PAM stand-in runs in Docker on the
 operator's laptop. Guacamole brokers recorded RDP sessions to DC01, and

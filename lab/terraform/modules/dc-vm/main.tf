@@ -235,11 +235,19 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "dc" {
 # verify: Key Vault ABAC is preview (learn.microsoft.com/azure/key-vault/general/rbac-abac).
 # If the condition is rejected, the apply fails - it never silently widens.
 locals {
-  # svc-pam-discovery was the third name until 2026-11-07: the read-only
-  # discovery bind for the Vault stand-in, retired with it (ADR 0036). Its
-  # account and secret were deleted on DC01 by Remove-PamDiscoveryAccount.ps1
-  # BEFORE this change, while the DC still had the right to delete the secret.
-  dc_kv_secret_names = ["dc01-dsrm-password", "svc-vault-rotator"]
+  # svc-pam-discovery STAYS in this list, on purpose (2026-11-08). It was the
+  # read-only discovery bind of the retired Vault stand-in (ADR 0036); its AD
+  # account and its Key Vault secret were deleted on 2026-11-07 (capture log
+  # E157). Dropping the name changes the condition, and azurerm REPLACES the
+  # assignment for that (delete, then create). The vault's CanNotDelete lock
+  # (lock-kv-idlab-cannot-delete, #246) makes the pipeline's delete fail with
+  # 409 ScopeLocked: round-2 apply, run 42519889983. So the condition stays
+  # as it is live. The residual: DC01 may still write, read or delete a secret
+  # named svc-pam-discovery, which does not exist.
+  # TO NARROW IT LATER: the OWNER lifts the lock in a write session, applies,
+  # and puts the lock back (envs/bootstrap). Order matters: same name list
+  # order as live, or the condition string differs and Terraform replaces it.
+  dc_kv_secret_names = ["dc01-dsrm-password", "svc-vault-rotator", "svc-pam-discovery"]
 
   dc_kv_request_name  = join(" OR ", [for n in local.dc_kv_secret_names : "@Request[Microsoft.KeyVault/vaults/secrets:name] StringEquals '${n}'"])
   dc_kv_resource_name = join(" OR ", [for n in local.dc_kv_secret_names : "@Resource[Microsoft.KeyVault/vaults/secrets:name] StringEquals '${n}'"])
@@ -295,6 +303,9 @@ locals {
 # write, read or delete its own build secrets. Nothing on DC01 uses Key Vault
 # continuously: only 02-Configure-Domain.ps1 and the run-command scripts do,
 # by hand. Apply while none of them runs (DC01 is deallocated most of the time).
+# AND the vault's CanNotDelete lock (#246) refuses the delete (409
+# ScopeLocked, seen 2026-11-08): any change to this condition needs the owner
+# to lift the lock first, in a write session (see dc_kv_secret_names).
 resource "azurerm_role_assignment" "dc_kv_secrets_officer" {
   scope                = var.key_vault_id
   role_definition_name = "Key Vault Secrets Officer"
