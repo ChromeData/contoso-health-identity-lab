@@ -190,3 +190,36 @@ a session.**
 - Live: none yet. The owner's first apply after this merge is the first run.
   Capture it as a new capture-log row: the operator's app role assignments
   before and after, and the Azure role assignments.
+
+## Follow-up (2026-11-08): a sandbox for throwaway test objects, and a time-boxed Intune write
+
+Three proofs create and delete their own Azure objects in one run: the
+Kubernetes Key Vault pipeline (`lab/k8s/ci`), the Key Vault state-leak proof
+(`lab/secrets/state-leak`) and the Bastion recording capture (`lab/bastion`).
+Each needs a storage account or a vault plus role assignments on it. Under
+this ADR the operator cannot do either, even in a session: the session role
+keeps `storageAccounts/write` in NotActions (the evidence store) and has no
+`Microsoft.Authorization` write.
+
+The answer is a scoped path, not Owner (`envs/operator/sandbox.tf`):
+
+- One standing resource group, `rg-lab-sandbox`, that holds only throwaway
+  objects.
+- During a session only, the operator gets at that resource group's scope:
+  **Contributor** as a time-bound active PIM assignment that ends with the
+  session; and **Role Based Access Control Administrator with a condition**:
+  it may assign or remove only Key Vault Secrets Officer, Key Vault Secrets
+  User, Storage Blob Data Contributor and Storage Blob Data Reader. Owner and
+  every management role are refused, so the operator cannot leave itself a
+  lasting Owner on the sandbox.
+- **Trade-off, said plainly:** PIM assignments take no condition, so the
+  constrained grant is an ordinary role assignment that the owner's closing
+  apply removes (as the session's Graph roles are). It does not expire on
+  Azure's side at `expires_utc`. A data-role assignment left behind reaches
+  only sandbox objects, which each run deletes.
+
+`DeviceManagementConfiguration.ReadWrite.All` joins the session Graph roles,
+time-boxed to the E5 trial (ends 2026-11-26), for the Intune EPM and LAPS
+policies (ADR 0036). A `check` warns on every plan after that date
+(`intune_write_expires_utc`) until a PR removes it; the offline tests pin the
+date, so they never fail because of today's date.
