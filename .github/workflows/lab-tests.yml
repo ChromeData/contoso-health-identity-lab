@@ -189,7 +189,7 @@ jobs:
         run: |
           Import-Module Pester -RequiredVersion 5.7.1
           $c = New-PesterConfiguration
-          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1', './lab/adfs/tests/ConnectHealth.Tests.ps1')
+          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1', './lab/adfs/tests/ConnectHealth.Tests.ps1', './lab/adfs/tests/QuietGate.Tests.ps1')
           $c.Run.Exit = $true
           $c.Output.Verbosity = 'Normal'
           Invoke-Pester -Configuration $c
