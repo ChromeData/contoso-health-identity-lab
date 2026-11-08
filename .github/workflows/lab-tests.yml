@@ -189,7 +189,7 @@ jobs:
         run: |
           Import-Module Pester -RequiredVersion 5.7.1
           $c = New-PesterConfiguration
-          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1')
+          $c.Run.Path = @('./lab/scripts/monitoring/tests/Itdr.Tests.ps1', './lab/pam/test/Get-AccountDependencies.Tests.ps1', './lab/adfs/tests/ConnectHealth.Tests.ps1')
           $c.Run.Exit = $true
           $c.Output.Verbosity = 'Normal'
           Invoke-Pester -Configuration $c
@@ -200,6 +200,8 @@ jobs:
           bash lab/scripts/monitoring/tests/ingest-vault-audit.test.sh
           bash lab/scripts/demo/tests/reset-demo-hire.test.sh
           bash lab/scripts/demo/tests/close-build-noise.test.sh
+          # Break-glass rotation: stub az + stub Keychain, no tenant (PR #226).
+          bash lab/scripts/break-glass/tests/rotate-password.test.sh
           node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs lab/scripts/demo/signin/tests/identity.test.mjs
           node --test lab/terraform/okta/tests/trust-claims.test.mjs
           # Contoso HR form (lab/hr-app, ADR 0027): roster rules, API, GitHub store (fake gh).
@@ -227,6 +229,9 @@ jobs:
           # three input shapes (PyYAML from the apt step above; no cluster).
           python3 -I -m unittest discover -s lab/k8s/rbac-lint/tests -v
           bash lab/k8s/rbac-lint/canary.sh
+          # AD FS -> Entra claims diff (lab/adfs/compare): the before/after
+          # verdict the cutover proof depends on (stdlib only).
+          python3 -I -m unittest discover -s lab/adfs/compare/tests -v
           # The counter behind the Conjur state-leak result (stdlib only).
           python3 -I -m unittest discover -s lab/pam/conjur/state-leak/tests -v
           # kusto-harness run-on-workspace.py: result decoding and verdict

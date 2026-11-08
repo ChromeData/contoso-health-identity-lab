@@ -51,6 +51,8 @@
                                        only); both workflows' safety properties
       Remove-DemoHire (lab/scripts/dc) one Workforce/Disabled account by employeeID,
                                        never protected or out-of-scope accounts
+      Clear-LeaverAdGroups (lab/scripts/dc) every group off disabled leavers in
+                                       OU=Disabled, never enabled or protected accounts
       ScriptAnalyzerScope              analyzer suppressions are per function,
                                        justified, never per file
     Passing proves the logic does what the comments say. It does not prove the
