@@ -302,7 +302,11 @@ function Get-PostApplyPlan {
     # 2. Authentication methods (PLAN without -Apply).
     $am = @{}
     if (-not $dry) { $am['Apply'] = $true }
-    if (Test-HasValue (Get-TfValue -Outputs $Outputs -Name 'all_workforce_group_object_id')) { $am['IncludeStaffRollout'] = $true }
+    # The rollout flag, not the group: All-Workforce is also the scheduled
+    # leaver's trigger group (enable_lcw_leaver_trigger), so "the group exists"
+    # does not mean "roll passkeys out to staff". An older state without the
+    # flag output means no rollout (fail closed).
+    if ((Get-TfValue -Outputs $Outputs -Name 'staff_passkey_rollout_enabled') -eq $true -and (Test-HasValue (Get-TfValue -Outputs $Outputs -Name 'all_workforce_group_object_id'))) { $am['IncludeStaffRollout'] = $true }
     $caNames = Get-TfValue -Outputs $Outputs -Name 'ca_policy_display_names'
     if ($caNames -is [System.Collections.IDictionary] -and $caNames.Contains('CA006') -and $null -ne $caNames['CA006']) { $am['EnableReportSuspiciousActivity'] = $true }
     # Same AAGUID list as the admin strength (CA002 / CA021 / CA022; Terraform output) unless overridden.

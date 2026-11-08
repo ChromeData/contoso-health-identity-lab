@@ -3,9 +3,9 @@
 # -----------------------------------------------------------------------------
 # Everything a reviewer should see change in a PR lives here: staging flags and
 # Conditional Access states. Tenant-specific identifiers (ids, domain) come
-# from terraform.tfvars locally or TF_* GitHub variables in CI; the operator IP
-# and alert email come from the TF_OPERATOR_IP_RANGES / TF_ALERT_EMAIL repo
-# secrets (masked in public logs).
+# from terraform.tfvars locally or TF_* GitHub variables in CI; the operator IP,
+# alert email and the other privacy values come from the pipeline config Key
+# Vault, read over OIDC (lab/pipelines/README.md).
 # Both workflows pass -var-file=lab.tfvars.
 # =============================================================================
 
@@ -107,6 +107,11 @@ enable_identity_protection_ca = true
 # (ca008_scope = "pilot"); all-users enforcement needs
 # ca008_allow_all_users_enforcement = true as a separate, reviewed line.
 enable_phishing_resistant_all_users = false
+
+# The scheduled leaver's trigger group (All-Workforce) without CA008. Off:
+# turning it on is its own reviewed PR, then the owner runs
+# post-apply/New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver (E122 gap).
+enable_lcw_leaver_trigger = false
 # The rollout above needs the ADMIN key-model allow-list (AAGUIDs of the
 # issued security keys, not tenant identifiers) so admins cannot satisfy
 # CA002 / CA021 / CA022 with a synced passkey - or this explicit risk acceptance.

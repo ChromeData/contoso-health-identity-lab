@@ -119,7 +119,8 @@ for an Enterprise Admin.
 lab/scripts/dc/configure-sync.py cloudsync --domain corp.$DOMAIN \
   --ou "OU=Workforce,DC=corp,..." --ou "OU=Disabled,DC=corp,..."      # never ServiceAccounts / PrivilegedAccounts
 lab/scripts/dc/configure-sync.py hrapp --domain corp.$DOMAIN --sp <spId> --job <jobId> \
-  --default-ou "OU=Workforce,DC=corp,..." --parent-dn-file <the expression 02 printed>
+  --default-ou "OU=Workforce,DC=corp,..." --parent-dn-file <the expression 02 printed> \
+  --mail-domain $DOMAIN                                                # AD mail on a verified domain (E121)
 ```
 
 `cloudsync` creates the AD2AAD configuration from Microsoft's template, scopes
@@ -129,7 +130,12 @@ HR provisioning app to the agent (domain + default OU), sets the OU expression,
 takes the UPN straight from the HR `userName` (the verified suffix) and formats
 the SCIM `hireDate` into `msDS-cloudExtensionAttribute1`. Without the hire date
 every birthright rule matches nobody, and `Set-AutoAssignmentPolicies.ps1`
-refuses to run. Cloud Sync runs every 20 minutes; the first HR push to a
+refuses to run. `--mail-domain` replaces the template's mail mapping
+(`<local part>@DefaultDomain()`, on create only) with `<local part>@<verified
+domain>` on every update. Without it no synced worker had a mail value in
+Entra, so the joiner workflow's "Generate TAP and send email" task failed for
+the manager (capture log E121, E121b). The address gets no mailbox: in the lab
+`contosohealthlab.com` has no mail service. Cloud Sync runs every 20 minutes; the first HR push to a
 just-promoted DC can fail with LDAP "Busy" (51): re-send the feed, it upserts.
 
 ## Verify

@@ -57,11 +57,13 @@ Supporting choices:
 ## Consequences
 
 - **No credential to store, rotate or leak.** The repo and its settings hold
-  only identifiers (repo Variables). Its four repo secrets
-  (`TF_OPERATOR_IP_RANGES`, `TF_ALERT_EMAIL`, `TF_APP_OWNER_OBJECT_IDS`,
-  `TF_SAML_CERT_NOTIFICATION_EMAILS`) are identifiers too. They are secrets
-  only so GitHub masks the operator's IP, mailboxes and owner object IDs in
-  public logs.
+  only identifiers (repo Variables). There are no repo or Dependabot
+  secrets (since 2026-11-07, senior gap 6). The five privacy values that used
+  to be repo secrets only so GitHub masked them (operator IP ranges, alert
+  email, app owner object ids, SAML certificate emails, PIM alert mailbox)
+  are read at run time from the pipeline config vault
+  (`envs/bootstrap/pipeline-config.tf`) with the same OIDC sign-in, masked
+  per element, and logged per read.
 - **Fork PRs can't plan.** They get no OIDC token, so the required
   `terraform plan` check fails by design until a maintainer re-pushes the
   branch.

@@ -207,6 +207,7 @@ combinations that cannot work.
 | `pim_require_approval` | **`true`** | Approval on Privileged-IAM-Admins activation (pim) | Tier-1 approvers |
 | `enable_identity_protection_ca` | `false` | CA006 user risk High, CA007 sign-in risk High (conditional-access) | `enable_premium`, P2 licences **assigned**; Microsoft's managed risk policy set off by hand first |
 | `enable_phishing_resistant_all_users` | `false` | CA008, the workforce authentication strength, CA008 pilot group, dynamic All-Workforce group | `enable_premium`; `admin_fido2_allowed_aaguids` or `accept_admin_synced_passkey_risk` |
+| `enable_lcw_leaver_trigger` | `false` | dynamic All-Workforce group alone, the scheduled leaver workflow's trigger (a leaver drops out when HR disables the account) | `enable_premium` |
 | `ca008_allow_all_users_enforcement` | `false` | Second key: CA008 enforced on all users | registration report shows full coverage; pilot ran enforced |
 | `accept_admin_synced_passkey_risk` | `false` | Second key: allow the rollout with no admin AAGUID allow-list (record it in the risk register) | a reviewed risk acceptance |
 | `enable_registration_ca` | `false` | CA009: register security info with a one-time TAP or a phishing-resistant method | `enable_premium` |
@@ -544,9 +545,10 @@ performed by a privileged human.
 9. **GitHub side of OIDC.** `envs/bootstrap` creates the Entra trust; copy its
    outputs into repo **Variables** (not secrets), create the `prod`
    environment with a required reviewer, and set the `TF_*` / `TFSTATE_*`
-   variables listed in `lab/pipelines/README.md`. Two of them,
-   `TF_OPERATOR_IP_RANGES` and `TF_ALERT_EMAIL`, are repo **secrets** instead,
-   only so GitHub masks your IP and email in the public run logs.
+   variables listed in `lab/pipelines/README.md`. There are no repo secrets:
+   the five privacy values (your IP, mailboxes, app owner ids) go to the
+   pipeline config vault that `envs/bootstrap` creates
+   (`enable_pipeline_config_vault`), and the workflows read them over OIDC.
 
 10. **Lifecycle Workflows.** There is no azuread resource for them.
     `lab/scripts/powershell/post-apply/New-LifecycleWorkflows.ps1` creates the
