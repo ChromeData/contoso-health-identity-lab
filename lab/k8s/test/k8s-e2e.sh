@@ -389,7 +389,15 @@ kv_denied() { # kv_denied METHOD PATH [BODY_FILE|-] : a WORKING workload token g
 
 write_denied() { printf '{"value":"e2e-overwrite-attempt"}' | kv_denied PUT "secrets/$SECRET_NAME" -; }
 
-exchange_denied() { # exchange_denied JWT CLAIMS_FILTER : Entra answers 400/401 with an AADSTS error and issues no token
+# Entra's refusal codes for a federated credential that does not match
+# (seen in the 2026-11-07 run): the subject (namespace:name) -> 700213, the
+# audience -> 700212. A check accepts ONLY its own code: an expired assertion
+# or a failed issuer lookup is a different AADSTS code and must not pass as
+# proof of the refusal under test.
+AADSTS_SUBJECT=AADSTS700213
+AADSTS_AUDIENCE=AADSTS700212
+
+exchange_denied() { # exchange_denied JWT CLAIMS_FILTER EXPECTED_AADSTS : Entra answers 400/401 with exactly that code and issues no token
   # The token must exist and carry exactly the claims under test (jq filter),
   # so the refusal is about that ONE difference from the positive control.
   local c
@@ -399,7 +407,10 @@ exchange_denied() { # exchange_denied JWT CLAIMS_FILTER : Entra answers 400/401 
   jq -e "$2" <<<"$c" >/dev/null || { info "token claims are not the ones under test"; return 1; }
   entra_exchange "$1"
   info "Entra: HTTP $EX_CODE $(entra_error)"
-  [[ ( "$EX_CODE" == 400 || "$EX_CODE" == 401 ) && ! -s "$T/kv.hdr" ]] && grep -q 'AADSTS' "$T/ex.safe.json"
+  [[ -n "${3:-}" ]] || { info "no expected AADSTS code given"; return 1; }
+  [[ ( "$EX_CODE" == 400 || "$EX_CODE" == 401 ) && ! -s "$T/kv.hdr" ]] || return 1
+  grep -qE "(^|[^0-9A-Za-z])$3([^0-9]|$)" "$T/ex.safe.json" \
+    || { info "refused, but not with $3 (a different failure is not this proof)"; return 1; }
 }
 
 api_endpoint() { # -> API_SERVER (URL) + $T/api-ca.crt, from the kind context (only those two fields are read)
@@ -543,7 +554,9 @@ thief_pod_up() {
 thief_mount_failed() {
   THIEF_EVENT=$(k -n "$APP_NS" get events --field-selector "involvedObject.name=$THIEF_POD,reason=FailedMount" -o json 2>/dev/null \
     | jq -r '[.items[].message | select(test("AADSTS"))] | last // empty | capture("(?<c>AADSTS[0-9]+)[^.]*\\.?").c // empty') || THIEF_EVENT=""
-  [[ -n "$THIEF_EVENT" ]]
+  # Only the subject-mismatch refusal proves "this SA may not borrow the
+  # credential"; any other Entra error keeps waiting (and fails at 120 s).
+  [[ "$THIEF_EVENT" == "$AADSTS_SUBJECT" ]]
 }
 
 spc_borrow_refused() {
@@ -981,12 +994,12 @@ check "it cannot write $SECRET_NAME (403)" write_denied
 check "it cannot list the vault's secrets (403)" kv_denied GET secrets
 rm -f "$T/kv.hdr"
 JWT_OTHER=$(mint_token unapproved-job "$EXCHANGE_AUDIENCE" 2>/dev/null) || JWT_OTHER=""
-check "Entra refuses unapproved-job's token (same audience, no federated credential)" exchange_denied "$JWT_OTHER" \
-  '.aud == ["api://AzureADTokenExchange"] and .sub == "system:serviceaccount:clinical-apps:unapproved-job"'
+check "Entra refuses unapproved-job's token with $AADSTS_SUBJECT (same audience, no federated credential)" exchange_denied "$JWT_OTHER" \
+  '.aud == ["api://AzureADTokenExchange"] and .sub == "system:serviceaccount:clinical-apps:unapproved-job"' "$AADSTS_SUBJECT"
 JWT_OTHER=""
 JWT_DEFAULT=$(mint_token nightly-report 2>/dev/null) || JWT_DEFAULT=""
-check "Entra refuses nightly-report's token WITHOUT the exchange audience" exchange_denied "$JWT_DEFAULT" \
-  '.sub == "system:serviceaccount:clinical-apps:nightly-report" and (.aud | index("api://AzureADTokenExchange")) == null'
+check "Entra refuses nightly-report's token WITHOUT the exchange audience, with $AADSTS_AUDIENCE" exchange_denied "$JWT_DEFAULT" \
+  '.sub == "system:serviceaccount:clinical-apps:nightly-report" and (.aud | index("api://AzureADTokenExchange")) == null' "$AADSTS_AUDIENCE"
 JWT_DEFAULT=""
 check "the Kubernetes API refuses the exchange-audience token (401; a default-audience one: 200)" api_rejects_exchange_audience
 
@@ -994,8 +1007,8 @@ check "the Kubernetes API refuses the exchange-audience token (401; a default-au
 step "(d) identity = namespace + name, not just a name"
 check "fixture: namespace $OTHER_NS with its own service account named nightly-report" fixture_ns_up
 JWT_TWIN=$(mint_token_ns "$OTHER_NS" nightly-report "$EXCHANGE_AUDIENCE" 2>/dev/null) || JWT_TWIN=""
-check "Entra refuses $OTHER_NS/nightly-report (same name, same audience, other namespace)" \
-  exchange_denied "$JWT_TWIN" ".aud == [\"api://AzureADTokenExchange\"] and .sub == \"system:serviceaccount:$OTHER_NS:nightly-report\""
+check "Entra refuses $OTHER_NS/nightly-report with $AADSTS_SUBJECT (same name, same audience, other namespace)" \
+  exchange_denied "$JWT_TWIN" ".aud == [\"api://AzureADTokenExchange\"] and .sub == \"system:serviceaccount:$OTHER_NS:nightly-report\"" "$AADSTS_SUBJECT"
 JWT_TWIN=""
 check "a token dies with its ServiceAccount: SA deleted + recreated (same name) -> old token 401" token_dies_with_sa
 check "fixture namespace $OTHER_NS deleted again" fixture_ns_down
