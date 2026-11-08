@@ -55,9 +55,9 @@ on AdminSDHolder after `dsacls`. verify: Enterprise CA setup as SYSTEM via
 run-command (it writes to the Configuration partition) may need `-Credential`
 for an Enterprise Admin.
 
-4. **By hand**, off camera: RDP to the DC's public IP
-   (`terraform -chdir=lab/terraform/envs/dev output -raw dc_public_ip`; the NSG
-   only admits `operator_ip_ranges`). Copy the admin password straight to the
+4. **By hand**, off camera, through **Azure Bastion** (DC01 has no public IP
+   and no RDP from the internet since the ADR 0013 amendment of 2026-11-08;
+   see "Ways in to DC01" below). Copy the admin password straight to the
    clipboard so it is never printed:
    `terraform -chdir=lab/terraform/envs/dev output -raw dc_admin_password | pbcopy`
    (macOS; `clip.exe` on Windows, `xclip -selection clipboard` on Linux).
@@ -187,3 +187,15 @@ DC's own identity. It refuses any account that is not the plain bind at
 DC's Key Vault grant no longer names it. The local samba test harness
 (`lab/pam/test/samba-ad`) still seeds its own `svc-pam-discovery` in a
 throwaway container; that is not DC01.
+
+## Ways in to DC01 (ADR 0013 amendment, 2026-11-08)
+
+DC01 has no public IP. Its NSG has no inbound allow rule from the internet
+(the only exception is 443 while `enable_adfs_https`, for the AD FS exercise).
+
+| Who | Path | Recorded? | Notes |
+|---|---|---|---|
+| Scripts (build, rotation, agent installs) | `az vm run-command` through `run-on-dc.py` | No video. The capture log row and the script in git are the record; Azure writes an activity-log event and the `ala-vm-dc01-runcommand-*` alert fires | Runs as SYSTEM on a DC: a Tier-0 action. Only from an owner-opened operator session |
+| A person | Azure Bastion, from inside the VNet, created for the session and deleted after (`lab/bastion`, PR #247) | Yes with Bastion Premium (session recording); not with Basic | Sign in with a named Tier-0 account, not the built-in `contosoadmin` |
+| Anything on the internet | none | - | A NAT gateway carries DC01's outbound traffic; it admits no inbound connection |
+

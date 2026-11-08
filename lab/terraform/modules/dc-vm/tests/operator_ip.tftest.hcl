@@ -2,12 +2,15 @@
 #   terraform init -backend=false && terraform test
 # Run with HashiCorp Terraform 1.16.5 (lab/terraform/README.md).
 #
-# Pins ADR 0013's allowlist rule: the DC's NSG admits RDP (3389) and LDAPS
-# (636) only from single IPv4 /32 entries. /24, /31, 0.0.0.0/0, a bare
-# address, IPv6 and garbage fail at plan, before any NSG change. Also pins
-# what the tightening must NOT change: an empty list still means no inbound
-# rule at all, the rules still target only the DC's private IP, and the
-# public IP stays the DC's explicit (Standard, static) outbound method.
+# Pins ADR 0013 as amended 2026-11-08 (karen-review round 2, R5):
+#   * RDP (3389) and LDAPS (636) are NEVER opened to the internet, and the
+#     DC's NIC has NO public IP, whatever allowed_ip_ranges holds.
+#   * Outbound goes through a NAT gateway on snet-identity (outbound only).
+#   * The one exception: 443 while adfs_https_enabled, from /32 entries only,
+#     with a public IP for that window only.
+#   * The allowlist still accepts single IPv4 /32 entries only: /24, /31,
+#     0.0.0.0/0, a bare address, IPv6 and garbage fail at plan.
+#   * Every Run Command on the DC raises an activity log alert.
 
 # Path-form ids where another resource's argument parses them (the provider
 # still validates ids under a mock).
@@ -19,7 +22,10 @@ mock_provider "azurerm" {
     defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Network/networkSecurityGroups/nsg-vm-dc01" }
   }
   mock_resource "azurerm_public_ip" {
-    defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Network/publicIPAddresses/pip-vm-dc01" }
+    defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Network/publicIPAddresses/pip-mock" }
+  }
+  mock_resource "azurerm_nat_gateway" {
+    defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Network/natGateways/natgw-vm-dc01" }
   }
   mock_resource "azurerm_network_interface" {
     defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Network/networkInterfaces/nic-vm-dc01" }
@@ -69,45 +75,52 @@ run "empty_list_means_no_inbound_rules" {
   }
 }
 
-run "single_slash32_is_accepted" {
-  command = apply
+run "slash32_opens_no_rdp_or_ldaps_and_no_public_ip" {
+  command   = apply
+  state_key = "slash32_no_admin_ports"
 
   variables {
     allowed_ip_ranges = ["203.0.113.7/32"]
   }
 
   assert {
-    condition     = length(azurerm_network_security_group.dc.security_rule) == 2
-    error_message = "a /32 must plan exactly the RDP and LDAPS rules"
+    condition     = length(azurerm_network_security_group.dc.security_rule) == 0
+    error_message = "R5: an operator /32 alone must open NOTHING (no RDP, no LDAPS from the internet)"
   }
   assert {
-    condition     = toset([for r in azurerm_network_security_group.dc.security_rule : r.destination_port_range]) == toset(["3389", "636"])
-    error_message = "the only inbound ports must be 3389 (RDP) and 636 (LDAPS)"
+    condition     = length(azurerm_public_ip.adfs_https) == 0 && azurerm_network_interface.dc.ip_configuration[0].public_ip_address_id == null
+    error_message = "R5: the DC's NIC must have no public IP outside the AD FS window"
   }
   assert {
-    condition     = alltrue([for r in azurerm_network_security_group.dc.security_rule : toset(r.source_address_prefixes) == toset(["203.0.113.7/32"])])
-    error_message = "every rule's source must be exactly the operator /32"
-  }
-  assert {
-    condition     = alltrue([for r in azurerm_network_security_group.dc.security_rule : r.destination_address_prefix == "10.42.2.4" && r.access == "Allow" && r.direction == "Inbound" && r.protocol == "Tcp"])
-    error_message = "the rules must allow inbound TCP to the DC's private IP only"
+    condition     = output.public_ip == null
+    error_message = "the public_ip output must be null outside the AD FS window"
   }
 }
 
-run "several_slash32_entries_are_accepted" {
-  command = apply
+run "rdp_and_ldaps_never_open_even_in_adfs_window" {
+  command   = apply
+  state_key = "adfs_window_ports"
 
   variables {
-    allowed_ip_ranges = ["203.0.113.7/32", "198.51.100.23/32"]
+    allowed_ip_ranges  = ["203.0.113.7/32", "198.51.100.23/32"]
+    adfs_https_enabled = true
   }
 
   assert {
+    condition     = toset([for r in azurerm_network_security_group.dc.security_rule : r.destination_port_range]) == toset(["443"])
+    error_message = "R5: during the AD FS window the ONLY inbound port is 443; 3389 and 636 stay closed"
+  }
+  assert {
     condition     = alltrue([for r in azurerm_network_security_group.dc.security_rule : toset(r.source_address_prefixes) == toset(["203.0.113.7/32", "198.51.100.23/32"])])
-    error_message = "each /32 must be passed through to both rules unchanged"
+    error_message = "each /32 must be passed through to the 443 rule unchanged"
+  }
+  assert {
+    condition     = length(azurerm_public_ip.adfs_https) == 1
+    error_message = "the AD FS window gets its own public IP (and only then)"
   }
 }
 
-run "unchanged_outbound_and_dc_disk_shape" {
+run "outbound_is_nat_gateway_and_dc_disk_shape" {
   command = plan
 
   variables {
@@ -115,12 +128,16 @@ run "unchanged_outbound_and_dc_disk_shape" {
   }
 
   assert {
-    condition     = azurerm_public_ip.dc.sku == "Standard" && azurerm_public_ip.dc.allocation_method == "Static"
-    error_message = "the public IP must stay a Standard static IP (the DC's explicit outbound method)"
+    condition     = length(azurerm_nat_gateway.dc) == 1 && azurerm_nat_gateway.dc[0].sku_name == "Standard" && length(azurerm_subnet_nat_gateway_association.dc) == 1 && length(azurerm_nat_gateway_public_ip_association.dc) == 1
+    error_message = "snet-identity must get a Standard NAT gateway (the DC's explicit outbound method) by default"
+  }
+  assert {
+    condition     = azurerm_public_ip.nat[0].sku == "Standard" && azurerm_public_ip.nat[0].allocation_method == "Static"
+    error_message = "the NAT gateway's public IP must be Standard static"
   }
   assert {
     condition     = azurerm_subnet.dc.default_outbound_access_enabled == null
-    error_message = "pins the CONFIG only: default_outbound_access_enabled stays unset in this module (the mock provider applies no SDK default; the real azurerm plan sends its documented default, true). Setting it is a design change - see the main.tf header."
+    error_message = "pins the CONFIG only: default_outbound_access_enabled stays unset in this module (the NAT gateway takes precedence). Setting it is a design change - see the main.tf header."
   }
   assert {
     condition     = azurerm_virtual_machine_data_disk_attachment.ntds.caching == "None"
@@ -129,6 +146,32 @@ run "unchanged_outbound_and_dc_disk_shape" {
   assert {
     condition     = azurerm_managed_disk.ntds.public_network_access_enabled == false && azurerm_managed_disk.ntds.network_access_policy == "DenyAll"
     error_message = "the NTDS data disk must have no public network access and no SAS export path (CKV_AZURE_251)"
+  }
+}
+
+run "nat_gateway_can_be_switched_off" {
+  command = plan
+
+  variables {
+    nat_gateway_enabled = false
+  }
+
+  assert {
+    condition     = length(azurerm_nat_gateway.dc) == 0 && length(azurerm_public_ip.nat) == 0
+    error_message = "nat_gateway_enabled = false must plan no NAT gateway and no NAT IP"
+  }
+}
+
+run "run_command_alerts_on_both_operations" {
+  command = plan
+
+  assert {
+    condition     = toset([for a in azurerm_monitor_activity_log_alert.dc_run_command : a.criteria[0].operation_name]) == toset(["Microsoft.Compute/virtualMachines/runCommand/action", "Microsoft.Compute/virtualMachines/runCommands/write"])
+    error_message = "R5: every Run Command path on the DC (invoke and managed) must raise an activity log alert"
+  }
+  assert {
+    condition     = alltrue([for a in azurerm_monitor_activity_log_alert.dc_run_command : a.criteria[0].category == "Administrative" && a.location == "global"])
+    error_message = "activity log alerts must use the Administrative category, location global"
   }
 }
 
@@ -207,7 +250,8 @@ run "malformed_address_is_rejected" {
 # ---- AD FS exercise: 443 only with the flag, only from the allowlist ------------
 
 run "https_closed_by_default" {
-  command = apply
+  command   = apply
+  state_key = "https_default"
 
   variables {
     allowed_ip_ranges = ["203.0.113.7/32"]
@@ -220,7 +264,8 @@ run "https_closed_by_default" {
 }
 
 run "https_open_only_with_flag_and_only_from_allowlist" {
-  command = apply
+  command   = apply
+  state_key = "https_flag"
 
   variables {
     allowed_ip_ranges  = ["203.0.113.7/32"]

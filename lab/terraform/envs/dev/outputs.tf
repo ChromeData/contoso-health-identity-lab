@@ -245,7 +245,7 @@ output "dc_private_ip" {
 }
 
 output "dc_public_ip" {
-  description = "DC01 public IP (NSG admits operator_ip_ranges only)."
+  description = "DC01 public IP: null except while enable_adfs_https (443 from operator_ip_ranges only). DC01 has no public IP otherwise; RDP and LDAPS are never open to the internet (ADR 0013 amendment 2026-11-08). People reach DC01 through Azure Bastion, scripts through Run Command."
   value       = one(module.dc_vm[*].public_ip)
   sensitive   = true
 }
