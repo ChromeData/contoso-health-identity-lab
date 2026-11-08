@@ -67,13 +67,13 @@ tenant id). It holds no secret: both sides are public clients.
 
 | Step (runbook) | What changes | Undo |
 |---|---|---|
-| 1 Pre-stage | Entra app, group, assignment, CA061 (PR #219) | Remove the flag |
+| 1 Pre-stage | Entra app, its API (the CA061 target: CA cannot target a public client), group, assignments, CA061 | Remove the flag |
 | 2 Pilot | `prestage`: consent, the pilot user in App-ClinicResults-Users. `test --idp entra` signs the pilot in through Entra while production still trusts Okta | Remove the pilot |
 | 3 Cut over | `cutover`: the app trusts Entra; the Okta app is hidden but stays active and assigned | `rollback` |
 | 5 Confirm | `syslog.mjs`: zero Okta sign-ins to the app after the cut-over, Entra sign-ins with CA061 | - |
 | 6 Retire | `"retired": true`: the Okta app goes INACTIVE (kept) | `"retired": false` |
 
-The app checks the ID token itself: signature against the IdP's keys,
+Through Entra the sign-in also requests the API's `Results.Read` scope, and a test passes only if the API token arrived (that token is where CA061 is evaluated). The app checks the ID token itself: signature against the IdP's keys,
 issuer, audience, expiry and nonce. After the cut-over it refuses a token
 from Okta. That is what makes the cut-over real, not a redirect change
 (`tests/lib.test.mjs`).

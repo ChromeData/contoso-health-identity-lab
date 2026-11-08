@@ -156,7 +156,7 @@ output "nhi_inventory" {
     clinic_lab_results = var.enable_clinic_results_app ? {
       service_principal_object_id = azuread_service_principal.clinic_results[0].object_id
       owners                      = local.app_owners
-      credential_type             = "none (public client: auth code + PKCE, loopback redirect, no secret or certificate)"
+      credential_type             = "none (public client: auth code + PKCE, loopback redirect, no secret or certificate; its API Clinic Lab Results API holds none either)"
       credential_expires          = null
       outbound_secret             = "none"
     } : null
@@ -310,6 +310,11 @@ output "okta_idp_client_secret_command" {
 output "clinic_results_client_id" {
   description = "Client id of Clinic Lab Results (null while off). CA061 targets it; lab/okta-migration/cutover.mjs reads it from Graph by display name."
   value       = one(azuread_application.clinic_results[*].client_id)
+}
+
+output "clinic_results_api_client_id" {
+  description = "Client id of Clinic Lab Results API, the resource CA061 targets (Conditional Access cannot target the public client). Null while off."
+  value       = one(azuread_application.clinic_results_api[*].client_id)
 }
 
 output "clinic_results_users_group_object_id" {
