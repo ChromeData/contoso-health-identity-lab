@@ -1,0 +1,15 @@
+resource group rg-identity-lab-tiertest (eastus)
+NSG (default rules only: VNet in, nothing from the internet)
+VNet vnet-tiertest 10.43.0.0/24, DNS -> DC01 10.42.2.4
+peering peer-tiertest-to-lab
+peering peer-lab-to-tiertest
+NIC (no public IP)
+VM vm-t2dev-01 Standard_F1als_v7 (Windows Server 2022 Azure Edition, Trusted Launch, like DC01)
+{
+  "vm": "vm-t2dev-01",
+  "rg": "rg-identity-lab-tiertest",
+  "location": "eastus",
+  "size": "Standard_F1als_v7",
+  "privateIp": "10.43.0.4",
+  "adminPasswordKeychain": "contoso-lab-tiertest-admin"
+}
