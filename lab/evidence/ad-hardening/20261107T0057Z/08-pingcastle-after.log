@@ -1,0 +1,34 @@
+run command lab-44dd2819: lab/scripts/dc/hardening/Invoke-PingCastle.ps1 on vm-dc01
+PingCastle 4.0.0.31, signer: CN=Netwrix Corporation, O=Netwrix Corporation, L=Irvine, S=California, C=US, SERIALNUMBER=4300460, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US
+SCORES after: global=50 stale=30 privileged=50 trusts=0 anomalies=43
+RULE PrivilegedAccounts P-Delegated 20
+RULE StaleObjects S-OldNtlm 15
+RULE Anomalies A-AuditDC 10
+RULE PrivilegedAccounts P-ProtectedUsers 10
+RULE StaleObjects S-ADRegistration 10
+RULE PrivilegedAccounts P-RecycleBin 10
+RULE Anomalies A-MinPwdLen 10
+RULE PrivilegedAccounts P-SchemaAdmin 10
+RULE Anomalies A-DC-Spooler 10
+RULE StaleObjects S-DC-SubnetMissing 5
+RULE Anomalies A-HardenedPaths 5
+RULE Anomalies A-NotEnoughDC 5
+RULE Anomalies A-PreWin2000Other 2
+RULE Anomalies A-WeakRSARootCert2 1
+RULE StaleObjects S-DefenderASR 0
+RULE StaleObjects S-FirewallScript 0
+RULE StaleObjects S-KerberosArmoring 0
+RULE StaleObjects S-KerberosArmoringDC 0
+RULE PrivilegedAccounts P-UnprotectedOU 0
+RULE Anomalies A-NoServicePolicy 0
+RULE Anomalies A-NoNetSessionHardening 0
+RULE Anomalies A-PreWin2000AuthenticatedUsers 0
+RULE Anomalies A-NoGPOLLMNR 0
+RULE Anomalies A-DsHeuristicsLDAPSecurity 0
+RULE Anomalies A-DnsZoneAUCreateChild 0
+RULE Anomalies A-AuditPowershell 0
+RULE Anomalies A-RootDseAnonBinding 0
+RULE StaleObjects S-FolderOptions 0
+RULE StaleObjects S-TerminalServicesGPO 0
+REPORT C:\LabTools\pingcastle\report-after\ad_hc_corp.contosohealthlab.com.xml
+state: Succeeded, exit code: 0
