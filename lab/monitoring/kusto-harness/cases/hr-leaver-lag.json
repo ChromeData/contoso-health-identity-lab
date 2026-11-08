@@ -140,13 +140,13 @@
       }
     },
     {
-      "id": "judged-in-an-earlier-run",
+      "id": "outside-the-look-back",
       "kind": "negative",
-      "label": "AD disabled 50 minutes ago: an earlier run already judged it (one alert per leaver)",
+      "label": "AD disabled 70 minutes ago: outside the 15-60 minute look-back; the three runs that covered it already judged it",
       "tables": {
         "AADProvisioningLogs": [
           {
-            "TimeGenerated": "ago:50m",
+            "TimeGenerated": "ago:70m",
             "ServicePrincipal": "{\"Id\": \"x\", \"Name\": \"Contoso HR Inbound Provisioning\"}",
             "Action": "Update",
             "SourceIdentity": "{\"Id\": \"400104\", \"Name\": \"\"}",
@@ -157,6 +157,7 @@
           }
         ]
       }
-    }
+    },
+    {"id": "skipped-run-or-late-row-still-alerts", "kind": "positive", "label": "AD disabled 40 minutes ago and Entra ID still enabled: the 15-minute run that would have judged it was skipped (or the row arrived late). The 45-minute look-back still alerts (review of #233)", "tables": {"AADProvisioningLogs": [{"TimeGenerated": "ago:40m", "ServicePrincipal": "{\"Id\": \"x\", \"Name\": \"Contoso HR Inbound Provisioning\"}", "Action": "Update", "SourceIdentity": "{\"Id\": \"400105\", \"Name\": \"\"}", "TargetIdentity": "{\"Id\": \"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee\", \"Name\": \"\"}", "ProvisioningStatusInfo": "{\"Status\": \"success\"}", "CycleId": "c1", "ModifiedProperties": "[{\"displayName\": \"accountDisabled\", \"oldValue\": null, \"newValue\": \"True\"}, {\"displayName\": \"parentDistinguishedName\", \"oldValue\": null, \"newValue\": \"OU=Disabled,DC=corp,DC=contosohealthlab,DC=com\"}]"}]}, "expect": [{"AdObjectGuid": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", "EmployeeId": "400105", "Severity": "High", "Reason": "AD disabled, Entra ID still enabled after 15 minutes"}], "expectRows": 1}
   ]
 }

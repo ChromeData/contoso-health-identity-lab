@@ -1,4 +1,4 @@
-index=entra sourcetype="azure:loganalytics:aadprovisioninglogs" earliest=-30m latest=now
+index=entra sourcetype="azure:loganalytics:aadprovisioninglogs" earliest=-60m latest=now
 ``` ========================================================================== ```
 ``` Detection (SPL): Contoso ITDR - HR leaver still enabled in Entra ID after 15 minutes ```
 ``` Lab:             Contoso Health Identity Platform - Splunk second SIEM     ```
@@ -19,7 +19,7 @@ index=entra sourcetype="azure:loganalytics:aadprovisioninglogs" earliest=-30m la
 ``` @conf disabled = 0 ```
 ``` @conf enableSched = 1 ```
 ``` @conf cron_schedule = */15 * * * * ```
-``` @conf dispatch.earliest_time = -30m ```
+``` @conf dispatch.earliest_time = -60m ```
 ``` @conf dispatch.latest_time = now ```
 ``` @conf counttype = number of events ```
 ``` @conf relation = greater than ```

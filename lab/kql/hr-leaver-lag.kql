@@ -25,9 +25,13 @@
 //       objectGUID, ModifiedProperties AccountEnabled -> False, and
 //       ProvisioningStatusInfo.Status = success (a failed export does not
 //       count as a disable).
-//   Lag = an inbound leaver row 15-30 minutes old with no cloud-disable row
-//   for that objectGUID at or after it. Each leaver is judged in exactly one
-//   15-minute run (the rule runs every 15 minutes), so it alerts once.
+//   Lag = an inbound leaver row 15-60 minutes old with no cloud-disable row
+//   for that objectGUID at or after it. The 45-minute look-back overlaps
+//   three 15-minute runs, so a skipped run or a row that arrives late (up to
+//   45 minutes) is still judged (review of #233). A leaver still enabled is
+//   therefore alerted up to 3 times; the rule's incident grouping (Account
+//   = the AD objectGUID, 1-hour look-back) keeps them in ONE incident. The
+//   rule's query period (PT1H) covers Lag + LookBack.
 //
 // LICENSE
 //   Entra ID P1 (provisioning log export). Inbound provisioning: Entra ID
@@ -51,11 +55,11 @@
 // =============================================================================
 
 let Lag = 15m;
-let JudgeWindow = 15m;   // = the rule's frequency: each leaver judged once
+let LookBack = 45m;      // 3 runs of 15 minutes overlap: a skipped run or a late row is still judged
 let InboundApp = "Contoso HR Inbound Provisioning";
 let CloudSyncApp = "corp.contosohealthlab.com";
 let Inbound = AADProvisioningLogs
-| where TimeGenerated between (ago(Lag + JudgeWindow) .. ago(Lag))
+| where TimeGenerated between (ago(Lag + LookBack) .. ago(Lag))
 | where tostring(parse_json(ServicePrincipal).Name) == InboundApp
 | mv-apply mp = todynamic(ModifiedProperties) on (
     where tostring(mp.displayName) =~ "accountDisabled" and tostring(mp.newValue) =~ "True"
@@ -67,7 +71,7 @@ let Inbound = AADProvisioningLogs
 | extend InboundStatus = tostring(parse_json(ProvisioningStatusInfo).Status)
 | project LeaverTime = TimeGenerated, AdObjectGuid, EmployeeId, InboundStatus, CycleId;
 let CloudDisabled = AADProvisioningLogs
-| where TimeGenerated > ago(Lag + JudgeWindow)
+| where TimeGenerated > ago(Lag + LookBack)
 | where tostring(parse_json(ServicePrincipal).Name) == CloudSyncApp
 // Only a SUCCESSFUL cloud write counts: a failed export can log the attempted
 // AccountEnabled = False change while the Entra account stays enabled

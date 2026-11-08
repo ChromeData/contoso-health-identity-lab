@@ -707,6 +707,24 @@ Describe 'HR leaver lag: only a SUCCESSFUL cloud write counts as a disable (PR #
         $llSpl | Should -Match ([regex]::Escape('eval InboundStatus=if(Kind=="inbound", RowStatus, null())'))
     }
 
+    It 'judges each leaver in overlapping runs (45-minute look-back), so a skipped run or a late row still alerts (PR #233 review)' {
+        $llKql | Should -Match 'let LookBack = 45m;'
+        $llKql | Should -Match ([regex]::Escape('where TimeGenerated between (ago(Lag + LookBack) .. ago(Lag))'))
+        $llKql | Should -Not -Match 'JudgeWindow'
+        # The Sentinel rule's query period must cover Lag + LookBack (15m + 45m), and repeats group per account.
+        $v4 = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'terraform' 'modules' 'monitoring' 'itdr_v4.tf')
+        $block = ([regex]::Match($v4, '(?s)hr_leaver_lag = \{.*?\n    \}')).Value
+        $block | Should -Match 'period\s+= "PT1H"'
+        $block | Should -Match 'group_by\s+= local.actor_group_by'
+        # SPL twin: the same 60-minute window, one alert per leaver by suppression on AdObjectGuid.
+        $llSpl | Should -Match 'earliest=-60m'
+        $llSpl | Should -Match ([regex]::Escape('@conf dispatch.earliest_time = -60m'))
+        $llSpl | Should -Match ([regex]::Escape('@conf alert.suppress.fields = AdObjectGuid'))
+        $c = @($llCases.cases | Where-Object id -EQ 'skipped-run-or-late-row-still-alerts')
+        $c.Count | Should -Be 1
+        $c[0].kind | Should -Be 'positive'
+    }
+
     It 'the engine cases include a failed cloud export that still alerts' {
         $c = @($llCases.cases | Where-Object id -EQ 'cloud-export-failed')
         $c.Count | Should -Be 1
