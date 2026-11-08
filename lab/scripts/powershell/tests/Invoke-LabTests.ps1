@@ -60,6 +60,9 @@
                                        read-back (log, TenantId, service)
       Clear-LeaverAdGroups (lab/scripts/dc) every group off disabled leavers in
                                        OU=Disabled, never enabled or protected accounts
+      AdHardening (lab/scripts/dc/     ASCII-only files, Protected Users never takes
+        hardening)                     the NTLM-path admins, deny-logon template and
+                                       its read-back, GPO version bump, LAPS values
       ScriptAnalyzerScope              analyzer suppressions are per function,
                                        justified, never per file
     Passing proves the logic does what the comments say. It does not prove the

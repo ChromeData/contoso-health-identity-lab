@@ -1,0 +1,14 @@
+run command lab-ff736c82: lab/scripts/dc/hardening/Enable-WindowsLaps.ps1 on vm-dc01
+Enable-WindowsLaps APPLY at 2026-11-07 01:00:10Z
+Schema has msLAPS attributes: False
+  Update-LapsADSchema done
+Self-write on OU=Domain Controllers,DC=corp,DC=contosohealthlab,DC=com and OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com; Tier1-Admins may read on OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+GPO LAPS - DC01 DSRM password to AD 71390f6f-4c37-4b6d-b8a3-95e6f16edc7e -> OU=Domain Controllers,DC=corp,DC=contosohealthlab,DC=com
+GPO LAPS - Tier1 servers local admin to AD 90173ced-c300-468d-bdf4-fad445d4e377 -> OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+--- stderr ---
+C:\Packages\Plugins\Microsoft.CPlat.Core.RunCommandHandlerWindows\2.0.23\Downloads\Script_lab-ff736c82_0.ps1 : Cannot 
+convert the "Microsoft.ActiveDirectory.Management.ADPropertyValueCollection" value of type 
+"Microsoft.ActiveDirectory.Management.ADPropertyValueCollection" to type "System.Int64".
+    + CategoryInfo          : InvalidArgument: (:) [Script_lab-ff736c82_0.ps1], RuntimeException
+    + FullyQualifiedErrorId : ConvertToFinalInvalidCastException,Script_lab-ff736c82_0.ps1
+state: Failed, exit code: 1

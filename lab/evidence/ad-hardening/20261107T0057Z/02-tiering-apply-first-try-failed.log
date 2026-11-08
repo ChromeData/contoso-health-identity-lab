@@ -1,0 +1,33 @@
+run command lab-bf9c448d: lab/scripts/dc/hardening/Set-AdTiering.ps1 on vm-dc01
+Set-AdTiering APPLY at 2026-11-07 00:57:50Z
+OUs
+  + OU OU=Tier0,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Accounts,OU=Tier0,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Groups,OU=Tier0,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Accounts,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Groups,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Accounts,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Groups,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Devices,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+Groups
+  + group Tier0-Admins
+  + group Tier1-Admins
+  + group Tier2-Admins
+Accounts
+  + t0-adm-01 in OU=Accounts,OU=Tier0,DC=corp,DC=contosohealthlab,DC=com
+  + t1-adm-01 in OU=Accounts,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + t2-adm-01 in OU=Accounts,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+Protected Users
+  members (new accounts only): t0-adm-01, t1-adm-01, t2-adm-01
+  left out on purpose (NTLM remote-session path): tier0-admin-01, tier0-admin-02, contosoadmin
+GPO: Tier0 - Deny logon to Tier1 and Tier2
+--- stderr ---
+C:\Packages\Plugins\Microsoft.CPlat.Core.RunCommandHandlerWindows\2.0.23\Downloads\Script_lab-bf9c448d_0.ps1 : The 
+specified wildcard character pattern is not valid: 
+*[{827D319E-6EAC-11D2-A4EA-00C04F79F83A}{803E14A0-B4FB-11D0-A0D0-00A0C90F574B}]*
+    + CategoryInfo          : NotSpecified: (:) [Script_lab-bf9c448d_0.ps1], WildcardPatternException
+    + FullyQualifiedErrorId : RuntimeException,Script_lab-bf9c448d_0.ps1
+state: Failed, exit code: 1
