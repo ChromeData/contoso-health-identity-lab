@@ -190,7 +190,9 @@ $rule = @{
     name              = 'EPM - Rules (lab)'
     description       = 'lab/scripts/intune/New-IntuneEpmAndLaps.ps1. One file, support approved, 24 h per approval (Microsoft fixed).'
     platforms         = 'windows10'
-    technologies      = 'mdm,endpointPrivilegeManagement'
+    # The rules template takes endpointPrivilegeManagement ONLY (template read
+    # 2026-11-08; 'mdm,endpointPrivilegeManagement' is refused with 400).
+    technologies      = 'endpointPrivilegeManagement'
     templateReference = @{ templateId = 'cff02aad-51b1-498d-83ad-81161a393f56_1' }
     settings          = @(@{
         settingInstance = @{

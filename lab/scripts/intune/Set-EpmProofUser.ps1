@@ -64,7 +64,7 @@ if ($u) {
     Enable-LocalUser -Name $name
     Write-Output "RESET: local account $name (password from the Keychain)"
 } else {
-    New-LocalUser -Name $name -Password $secure -FullName 'EPM proof standard user' -Description 'Standard user for the Intune EPM proof (lab/scripts/intune, ADR 0036)' | Out-Null
+    New-LocalUser -Name $name -Password $secure -FullName 'EPM proof standard user' -Description 'EPM proof standard user (ADR 0036)' | Out-Null
     Write-Output "CREATED: local account $name"
 }
 
