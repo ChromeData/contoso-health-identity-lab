@@ -254,6 +254,10 @@ Source: hostile review round 2, finding R4.
   The condition gives the same "no standing read" result on the existing
   vault in one owner apply. Revisit trigger: a third Tier-0 secret, or any
   reader of the vault other than the operator, the DC and APPLY.
+- **Operator plans use `-lock=false`.** A state lock is a blob lease, which
+  needs blob write, so a locking plan by the operator fails on the state
+  containers. The documented commands (`lab/scripts/operator/README.md`,
+  `op`) say `-lock=false`, as the PLAN workflow already does.
 - **Apply effect:** azurerm marks `condition` ForceNew, so the plan
   REPLACES `azurerm_role_assignment.operator["Key Vault Secrets User"]` and
   `["Storage Blob Data Contributor"]` (destroy + create).

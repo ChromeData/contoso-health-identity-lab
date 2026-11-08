@@ -3,7 +3,7 @@
 # op - run one command AS THE LAB OPERATOR
 # -----------------------------------------------------------------------------
 #   lab/scripts/operator/op az ad sp list --display-name "gh-oidc" -o table
-#   lab/scripts/operator/op tofu -chdir=lab/terraform/envs/bootstrap plan
+#   lab/scripts/operator/op tofu -chdir=lab/terraform/envs/bootstrap plan -lock=false
 #   lab/scripts/operator/op aws s3 ls
 # Sets AZURE_CONFIG_DIR (the operator's own az profile) and AWS_PROFILE
 # (idlab-operator), signing in first if the Azure session has lapsed.
