@@ -85,7 +85,15 @@ non-interactive, triggers an alert. The threshold is 1.
   The APPLY pipeline identity can change this group (ADR 0005).
 - **Risk: the seeded password is in Terraform state,** which the PLAN
   identity and any same-repo PR can read. It stays exposed until the
-  post-apply rotation in human step 6 is done.
+  post-apply rotation in human step 6 is done. **Open on 2026-11-07:** a
+  read showed both accounts' password was last set at creation (capture
+  log E11f), so the seeded value still works. The owner rotates it with
+  `lab/scripts/break-glass/rotate-password.sh` (runbook
+  [break-glass-password-rotation](../runbooks/break-glass-password-rotation.md)).
+  After that the value in state is stale (`ignore_changes = [password]`
+  keeps a plan from setting it back). Removing the password method
+  entirely is not possible for a cloud user, so the rotated password is
+  the backup, and the passkey is the sign-in.
 - **Risk: the tenant-creation account is also a standing Global
   Administrator** until it is converted. `Convert-BuildAccountToEligible.ps1`
   turns it into a 180-day eligible assignment, and refuses unless
