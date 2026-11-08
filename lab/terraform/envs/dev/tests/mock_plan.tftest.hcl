@@ -904,6 +904,7 @@ run "flags_without_premium_warn" {
     enable_pim_demo_readers             = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
+    enable_lcw_leaver_trigger           = true
     enable_access_reviews_privileged    = true
     vault_feed_v2_columns               = true
   }
@@ -923,6 +924,7 @@ run "flags_without_premium_warn" {
     check.pim_aws_admin_requires_sso_apps,
     check.b2b_requires_governance,
     check.nhi_governance_requires_premium,
+    check.lcw_leaver_trigger_requires_premium,
     check.access_reviews_require_governance,
     check.vault_feed_v2_requires_itdr,
   ]
@@ -938,3 +940,50 @@ run "flags_without_premium_warn" {
 # a root test cannot expect a failure inside a child module's variable).
 # The same holds for enable_itdr_detections_v2 without enable_itdr_detections
 # (modules/monitoring/tests/itdr_v2.tftest.hcl).
+
+# The scheduled leaver's trigger group (E122 follow-up): enable_lcw_leaver_trigger
+# alone creates All-Workforce, without CA008's flag; off, nothing is planned.
+run "lcw_leaver_trigger_creates_all_workforce_without_ca008" {
+  command = plan
+
+  variables {
+    enable_premium                      = true
+    enable_phishing_resistant_all_users = false
+    enable_lcw_leaver_trigger           = true
+  }
+
+  # Mock ids stay unknown at plan (see the header); give the group a known id
+  # so the output can be compared.
+  override_resource {
+    target          = module.groups[0].azuread_group.all_workforce
+    override_during = plan
+    values = {
+      object_id = "00000000-0000-0000-0000-00000000a11f"
+    }
+  }
+
+  assert {
+    condition     = output.all_workforce_group_object_id == "00000000-0000-0000-0000-00000000a11f"
+    error_message = "enable_lcw_leaver_trigger alone must create All-Workforce (the scheduled leaver's trigger group), without enable_phishing_resistant_all_users"
+  }
+
+  assert {
+    condition     = output.staff_passkey_rollout_enabled == false
+    error_message = "the leaver trigger alone must not switch on the staff passkey rollout (Invoke-PostApply.ps1 reads staff_passkey_rollout_enabled, not the shared group)"
+  }
+}
+
+run "lcw_leaver_trigger_off_plans_no_all_workforce" {
+  command = plan
+
+  variables {
+    enable_premium                      = true
+    enable_phishing_resistant_all_users = false
+    enable_lcw_leaver_trigger           = false
+  }
+
+  assert {
+    condition     = output.all_workforce_group_object_id == null
+    error_message = "with both flags off, All-Workforce must not be planned"
+  }
+}

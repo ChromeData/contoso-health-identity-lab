@@ -207,6 +207,7 @@ combinations that cannot work.
 | `pim_require_approval` | **`true`** | Approval on Privileged-IAM-Admins activation (pim) | Tier-1 approvers |
 | `enable_identity_protection_ca` | `false` | CA006 user risk High, CA007 sign-in risk High (conditional-access) | `enable_premium`, P2 licences **assigned**; Microsoft's managed risk policy set off by hand first |
 | `enable_phishing_resistant_all_users` | `false` | CA008, the workforce authentication strength, CA008 pilot group, dynamic All-Workforce group | `enable_premium`; `admin_fido2_allowed_aaguids` or `accept_admin_synced_passkey_risk` |
+| `enable_lcw_leaver_trigger` | `false` | dynamic All-Workforce group alone, the scheduled leaver workflow's trigger (a leaver drops out when HR disables the account) | `enable_premium` |
 | `ca008_allow_all_users_enforcement` | `false` | Second key: CA008 enforced on all users | registration report shows full coverage; pilot ran enforced |
 | `accept_admin_synced_passkey_risk` | `false` | Second key: allow the rollout with no admin AAGUID allow-list (record it in the risk register) | a reviewed risk acceptance |
 | `enable_registration_ca` | `false` | CA009: register security info with a one-time TAP or a phishing-resistant method | `enable_premium` |
