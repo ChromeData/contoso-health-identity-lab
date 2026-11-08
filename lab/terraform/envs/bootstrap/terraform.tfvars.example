@@ -57,6 +57,10 @@ enable_evidence_pack          = false
 evidence_storage_account_name = "stidlabevidence7f3a"
 evidence_resource_group_name  = "rg-identity-lab"
 
+# CanNotDelete lock on that same evidence account (main.tf). CI cannot remove
+# it; a human Owner can. The operator can too until its Owner is cut.
+enable_evidence_delete_lock = false
+
 # PIM-Demo-Readers' Azure half (read-only presenter): Reader, Microsoft
 # Sentinel Reader and Log Analytics Reader on this subscription, for a group
 # whose members are eligible-only. After the envs/dev apply that creates it:

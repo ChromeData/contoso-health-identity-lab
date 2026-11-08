@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Okta to Entra tracker</title>
+<style>
+:root{--bg:#fff;--fg:#1b1f24;--mut:#5b6470;--line:#d8dde3;--tile:#f4f6f8;--s0:#8a94a3;--s1:#b7791f;--s2:#2b6cb0;--s3:#2f855a;--s4:#4a5568}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f1216;--fg:#e6e9ed;--mut:#9aa4b1;--line:#2a3038;--tile:#171b21}}
+:root[data-theme="dark"]{--bg:#0f1216;--fg:#e6e9ed;--mut:#9aa4b1;--line:#2a3038;--tile:#171b21}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;margin:0;padding:24px 16px;max-width:1100px;margin-inline:auto}
+h1{font-size:22px;margin:0 0 4px}p.m{color:var(--mut);margin:0 0 18px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px}
+.tile{background:var(--tile);border-radius:8px;padding:12px}.tile b{display:block;font-size:26px}.tile span{color:var(--mut)}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:640px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-weight:600}td.n{text-align:right}
+.s{display:inline-block;padding:2px 8px;border-radius:99px;color:#fff;font-size:13px}.s-0{background:var(--s0)}.s-1{background:var(--s1)}.s-2{background:var(--s2)}.s-3{background:var(--s3)}.s-4{background:var(--s4)}
+pre{background:var(--tile);padding:12px;border-radius:8px;overflow-x:auto;font-size:13px}
+</style></head><body>
+<h1>Okta to Entra app migration</h1>
+<p class="m">Generated 2026-11-07T02:40:28Z from the Okta API and Microsoft Graph by lab/okta-migration/inventory.mjs.</p>
+<div class="tiles"><div class="tile"><b>3</b><span>inventoried</span></div><div class="tile"><b>0</b><span>pre-staged</span></div><div class="tile"><b>0</b><span>piloting</span></div><div class="tile"><b>0</b><span>cut over</span></div><div class="tile"><b>0</b><span>retired</span></div></div>
+<div class="wrap"><table><thead><tr><th>App</th><th>Owner</th><th>Protocol</th><th>Users</th><th>Wave</th><th>Status</th><th>Test result</th></tr></thead><tbody>
+<tr><td>Clinic Lab Results</td><td>Clinic lab manager (business) / Clinic IT lead (technical)</td><td>OIDC</td><td class="n">1</td><td class="n">1</td><td><span class="s s-0">inventoried</span></td><td>PASS okta 2026-11-07T02:40:03Z</td></tr>
+<tr><td>Clinic Billing</td><td>Clinic revenue-cycle manager</td><td>SAML 2.0</td><td class="n">0</td><td class="n">2</td><td><span class="s s-0">inventoried</span></td><td>not tested</td></tr>
+<tr><td>Clinic Scheduling (legacy)</td><td>Clinic operations manager</td><td>Bookmark</td><td class="n">1</td><td class="n">2</td><td><span class="s s-0">inventoried</span></td><td>not tested</td></tr>
+</tbody></table></div>
+<h2>Group rules (Okta to Entra)</h2><pre>| Clinic staff by login domain | `String.substringAfter(user.login, &quot;@&quot;) == &quot;contosohealthlab.com&quot;` | `(user.userPrincipalName -endsWith &quot;@contosohealthlab.com&quot;)` | Not copied: a login-domain rule means every hospital user after the acquisition. Assigned app group + access package instead. |
+| Clinic billing by department | `user.department == &quot;Clinic Billing&quot;` | `(user.department -eq &quot;Clinic Billing&quot;)` | Copy as a dynamic group when the app moves (HR owns the attribute). |
+</pre>
+<h2>Phishing-resistant posture</h2><pre>| okta@ContosoHealthLab.onmicrosoft.com | SUPER_ADMIN | signed_nonce, token:software:totp | yes |
+
+| Policy | Rule | Factors | Demands phishing-resistant |
+|---|---|---|---|
+| Any two factors | Catch-all Rule | 2FA | yes |
+| Okta Admin Console | Admin App Policy | 2FA | no |
+| Okta Admin Console | Catch-all Rule | 2FA | no |
+| Okta Dashboard | Catch-all Rule | 2FA | no |
+| Okta Browser Plugin | Catch-all Rule | 2FA | no |
+| Okta Account Management Policy | Password Expiry Rule | 1FA | no |
+| Okta Account Management Policy | Catch-all Rule | 2FA_If_Possible | no |
+| Okta OIN Submission Tester | Catch-all Rule | 1FA | no |
+| Clinic clinical apps | Clinic staff: two factors, re-auth every 8h | 2FA | no |
+| Clinic clinical apps | Catch-all Rule | deny | no |
+</pre>
+</body></html>
