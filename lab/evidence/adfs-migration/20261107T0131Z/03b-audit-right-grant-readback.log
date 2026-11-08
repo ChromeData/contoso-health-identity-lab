@@ -1,0 +1,13 @@
+run command lab-6e8891bb: lab/adfs/scripts/10b-Set-AdfsAuditRight.ps1 on vm-dc01
+WARNING: Waiting for service 'Active Directory Federation Services (adfssrv)' to stop...
+WARNING: Waiting for service 'Active Directory Federation Services (adfssrv)' to stop...
+WARNING: Waiting for service 'Active Directory Federation Services (adfssrv)' to stop...
+WARNING: Waiting for service 'Active Directory Federation Services (adfssrv)' to stop...
+{
+    "mode":  "Grant",
+    "changed":  false,
+    "line":  "SeAuditPrivilege = *S-1-5-80-2246541699-21809830-3603976364-117610243-975697593,*S-1-5-19,*S-1-5-20,*S-1-5-21-1067174854-3188284702-1788255269-4101",
+    "effectiveOnDc01":  "SeAuditPrivilege = *S-1-5-19,*S-1-5-20,gmsa-adfs$,*S-1-5-80-2246541699-21809830-3603976364-117610243-975697593",
+    "holds":  true
+}
+state: Succeeded, exit code: 0

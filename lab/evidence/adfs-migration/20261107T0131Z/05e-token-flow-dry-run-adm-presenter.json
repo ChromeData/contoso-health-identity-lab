@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "stored": false,
+  "claims": {
+    "aud": "https://management.core.windows.net",
+    "tid": "86a2e327-4951-4348-a3c4-6f4b79ffd8f2",
+    "upn": "adm-presenter@ContosoHealthLab.onmicrosoft.com",
+    "appid": "cf6d7e68-f018-4e0a-a7b3-126e053fb88d",
+    "amr": [
+      "fido",
+      "mfa"
+    ],
+    "wids": 1,
+    "exp": "2026-11-07T03:48:00.000Z"
+  }
+}
+
+[exited with code 0]

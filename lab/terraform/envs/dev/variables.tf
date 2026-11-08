@@ -317,6 +317,21 @@ variable "enable_phishing_resistant_all_users" {
   default     = false
 }
 
+variable "enable_lcw_leaver_trigger" {
+  type        = bool
+  description = <<-EOT
+    Create the dynamic All-Workforce group (enabled, HR-synced members) for
+    the SCHEDULED leaver Lifecycle Workflow, without CA008: the workflow runs
+    for a user when HR's leaver disables the account and the user drops out
+    of the group (post-apply/New-LifecycleWorkflows.ps1
+    -IncludeScheduledLeaver). Until this, a leaver kept the access package
+    until IT ran 04-Leaver.ps1 (capture log E122). The same group as
+    enable_phishing_resistant_all_users creates; either flag creates it once.
+    Needs enable_premium (dynamic groups are P1).
+  EOT
+  default     = false
+}
+
 variable "ca008_scope" {
   type        = string
   description = <<-EOT
@@ -1064,6 +1079,35 @@ variable "enable_adfs_https" {
     again after lab/adfs/scripts/19-Remove-Adfs.ps1.
   EOT
   default     = false
+}
+
+variable "enable_connect_health_registration" {
+  type        = bool
+  description = <<-EOT
+    TIME-BOXED (ADR 0031): create adm-connecthealth-reg with an ACTIVE Hybrid
+    Identity Administrator role, so lab/adfs/connect-health/register.sh can
+    register the Connect Health agent on DC01 with a passkey sign-in and no
+    person at the server. Changes no Conditional Access policy. Needs
+    connect_health_registration_until_utc. Off by default; the PR that turns
+    it on is followed by one that turns it off (that deletes the account and
+    the role).
+  EOT
+  default     = false
+}
+
+variable "connect_health_registration_until_utc" {
+  type        = string
+  description = <<-EOT
+    End of the Connect Health registration window, RFC 3339 UTC (e.g.
+    "2026-11-08T18:00:00Z"). While enable_connect_health_registration is on,
+    every envs/dev plan after this time FAILS, so nothing else can be applied
+    until the flag is turned off. Keep it within 24 hours of the PR.
+  EOT
+  default     = ""
+  validation {
+    condition     = var.connect_health_registration_until_utc == "" || can(timecmp(var.connect_health_registration_until_utc, "2000-01-01T00:00:00Z"))
+    error_message = "connect_health_registration_until_utc must be an RFC 3339 timestamp such as 2026-11-08T18:00:00Z."
+  }
 }
 
 variable "enable_claims_viewer_app" {
