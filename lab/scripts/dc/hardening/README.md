@@ -14,6 +14,20 @@ Windows PowerShell 5.1 reads a file without a BOM as ANSI.
 | `Enable-WindowsLaps.ps1` | Extends the schema for Windows LAPS and sets the permissions. It creates two GPOs that back up to AD with encryption: DC01's DSRM password, and the local admin password on Tier 1 servers. `Rotate=yes` proves one rotation. |
 | `Test-AdHardening.ps1` | Reads back every setting above and prints PASS or FAIL. `SignIn=yes` adds the sign-in proof (see below). |
 
+## Review fixes after the live run (PR #225, Greptile)
+
+These four changes came after the 2026-11-07 run. They are tested offline (Pester) and have **not run on DC01 yet**,
+because DC01 was deallocated after the job. The live results above came from the earlier version.
+
+- `Set-AdTiering.ps1`: a dry run no longer needs the three passwords. Only an apply that creates an account needs them.
+- `Test-AdHardening.ps1`: each LAPS GPO must be linked, enabled, to exactly its OU (Domain Controllers, or
+  Tier1\Servers). The server policy's decryptor must be `<NETBIOS>\Tier1-Admins`. The deny-logon GPO check now
+  also fails on a disabled link.
+- `Test-AdHardening.ps1`: `SignIn=yes` without `T2Password` now stops before it creates anything, instead of
+  skipping the Protected Users half.
+- `Invoke-PingCastle.ps1`: on every run, it deletes the extracted folder and extracts again from the hash-checked
+  zip. A cached exe is never reused.
+
 ## Run it
 
 ```bash

@@ -9,7 +9,8 @@
 
     WHY THESE CHECKS
       The zip is pinned by SHA-256 to one release (4.0.0.31, 2026-10-13),
-      so a changed download is refused. The exe must also carry a valid
+      so a changed download is refused. The exe is extracted fresh from that
+      checked zip on every run; an old extracted folder is never reused. The exe must also carry a valid
       Authenticode signature, or the script stops before running it.
 
     LICENCE
@@ -49,7 +50,11 @@ if (-not (Test-Path -LiteralPath $Zip)) { Invoke-WebRequest -UseBasicParsing -Ur
 $got = (Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($got -ne $Sha256) { Remove-Item -LiteralPath $Zip -Force; throw "PingCastle zip hash mismatch (got $got): refused" }
 
-if (-not (Test-Path -LiteralPath $Bin)) { Expand-Archive -LiteralPath $Zip -DestinationPath $Bin }
+# Extract fresh from the hash-checked zip on EVERY run. A cached folder from
+# an earlier run is not trusted: the zip hash proves only the zip, and a
+# swapped exe with any valid signature would otherwise run as SYSTEM.
+if (Test-Path -LiteralPath $Bin) { Remove-Item -LiteralPath $Bin -Recurse -Force }
+Expand-Archive -LiteralPath $Zip -DestinationPath $Bin
 $exe = Get-ChildItem -LiteralPath $Bin -Recurse -Filter 'PingCastle.exe' | Select-Object -First 1
 if (-not $exe) { throw 'PingCastle.exe not found in the pinned zip' }
 $sig = Get-AuthenticodeSignature -LiteralPath $exe.FullName

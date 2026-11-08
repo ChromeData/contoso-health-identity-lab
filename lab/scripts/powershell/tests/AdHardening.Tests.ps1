@@ -12,7 +12,10 @@
 #     and the read-back check fails when one right or one SID is missing;
 #   * a GPO version bump changes only the computer half;
 #   * the LAPS GPOs write AD backup + encryption, and only the DC policy
-#     backs up DSRM; the policy key is the Group Policy root, not Intune's.
+#     backs up DSRM; the policy key is the Group Policy root, not Intune's;
+#   * a dry run needs no secret; the sign-in proof never runs half;
+#   * GPO link read-back fails on a missing, extra or disabled link;
+#   * PingCastle always runs the exe from a fresh extract of the pinned zip.
 
 BeforeDiscovery {
     $script:HardeningDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' 'dc' 'hardening'))
@@ -34,9 +37,16 @@ BeforeAll {
     $script:Tiering = Join-Path $dir 'Set-AdTiering.ps1'
     $script:Laps = Join-Path $dir 'Enable-WindowsLaps.ps1'
     $script:Check = Join-Path $dir 'Test-AdHardening.ps1'
-    . ([scriptblock]::Create((Import-ScriptFunction $script:Tiering 'Assert-ProtectedUsersScope', 'New-DenyLogonInf', 'Get-NextGpoVersion')))
+    $script:PingCastle = Join-Path $dir 'Invoke-PingCastle.ps1'
+    function New-GpoReport {
+        # A Get-GPOReport -ReportType Xml shape: <GPO><LinksTo>... per link.
+        param([object[]]$Links)
+        $x = ($Links | ForEach-Object { "<LinksTo><SOMName>x</SOMName><SOMPath>$($_.Path)</SOMPath><Enabled>$($_.Enabled)</Enabled><NoOverride>false</NoOverride></LinksTo>" }) -join ''
+        [xml]"<GPO>$x</GPO>"
+    }
+    . ([scriptblock]::Create((Import-ScriptFunction $script:Tiering 'Assert-ProtectedUsersScope', 'Assert-AccountPassword', 'New-DenyLogonInf', 'Get-NextGpoVersion')))
     . ([scriptblock]::Create((Import-ScriptFunction $script:Laps 'Get-LapsPolicyValues', 'Get-BlobFingerprint')))
-    . ([scriptblock]::Create((Import-ScriptFunction $script:Check 'Test-InfDenyRights')))
+    . ([scriptblock]::Create((Import-ScriptFunction $script:Check 'Test-InfDenyRights', 'Test-GpoLinks', 'Assert-SignInInputs')))
     # Script-scope values the lifted functions read (same literals as the scripts).
     $script:LegacyAdmins = @('tier0-admin-01', 'tier0-admin-02', 'contosoadmin')
     $script:DenyRights = @('SeDenyInteractiveLogonRight', 'SeDenyRemoteInteractiveLogonRight',
@@ -157,5 +167,95 @@ Describe 'Windows LAPS policy (Enable-WindowsLaps.ps1)' {
         $a | Should -Match '^[0-9a-f]{12}$'
         $a | Should -Not -Be $b
         Get-BlobFingerprint -Bytes ([byte[]]@()) | Should -Be 'none'
+    }
+}
+
+Describe 'dry run needs no secret (Set-AdTiering.ps1)' {
+    It 'a dry run with no password does not throw' {
+        { Assert-AccountPassword -DoApply $false -Sam 't0-adm-01' -Password '' } | Should -Not -Throw
+    }
+
+    It 'an apply with no password throws before creating the account' {
+        { Assert-AccountPassword -DoApply $true -Sam 't0-adm-01' -Password '' } | Should -Throw '*No password parameter for t0-adm-01*'
+    }
+
+    It 'an apply with a password does not throw' {
+        { Assert-AccountPassword -DoApply $true -Sam 't0-adm-01' -Password 'x' } | Should -Not -Throw
+    }
+}
+
+Describe 'GPO link read-back (Test-AdHardening.ps1)' {
+    BeforeAll { $script:Want = @('corp.example/Tier1/Servers', 'corp.example/Tier2/Devices') }
+
+    It 'passes on exactly the expected enabled links' {
+        $r = New-GpoReport @(@{ Path = 'corp.example/Tier1/Servers'; Enabled = 'true' }, @{ Path = 'corp.example/Tier2/Devices'; Enabled = 'true' })
+        (Test-GpoLinks -Report $r -Expected $script:Want).Ok | Should -BeTrue
+    }
+
+    It 'fails when a link is missing' {
+        $r = New-GpoReport @(@{ Path = 'corp.example/Tier1/Servers'; Enabled = 'true' })
+        $res = Test-GpoLinks -Report $r -Expected $script:Want
+        $res.Ok | Should -BeFalse
+        $res.Detail | Should -Match 'missing: corp.example/Tier2/Devices'
+    }
+
+    It 'fails when there is no link at all' {
+        (Test-GpoLinks -Report ([xml]'<GPO></GPO>') -Expected $script:Want).Ok | Should -BeFalse
+    }
+
+    It 'fails on an extra link (for example the domain root)' {
+        $r = New-GpoReport @(@{ Path = 'corp.example/Tier1/Servers'; Enabled = 'true' }, @{ Path = 'corp.example/Tier2/Devices'; Enabled = 'true' }, @{ Path = 'corp.example'; Enabled = 'true' })
+        $res = Test-GpoLinks -Report $r -Expected $script:Want
+        $res.Ok | Should -BeFalse
+        $res.Detail | Should -Match 'extra: corp.example$'
+    }
+
+    It 'fails when an expected link is disabled' {
+        $r = New-GpoReport @(@{ Path = 'corp.example/Tier1/Servers'; Enabled = 'false' }, @{ Path = 'corp.example/Tier2/Devices'; Enabled = 'true' })
+        $res = Test-GpoLinks -Report $r -Expected $script:Want
+        $res.Ok | Should -BeFalse
+        $res.Detail | Should -Match 'disabled: corp.example/Tier1/Servers'
+    }
+
+    It 'the check script reads links and the server decryptor for both LAPS GPOs' {
+        $text = Get-Content -LiteralPath $script:Check -Raw
+        $text | Should -Match 'Link = "\$\(\$domain.DNSRoot\)/Domain Controllers"'
+        $text | Should -Match 'Link = "\$\(\$domain.DNSRoot\)/Tier1/Servers"; Reader = "\$\(\$domain.NetBIOSName\)\\Tier1-Admins"'
+        $text | Should -Match "-ValueName ADPasswordEncryptionPrincipal"
+    }
+}
+
+Describe 'sign-in proof never runs half (Test-AdHardening.ps1)' {
+    It 'SignIn=yes without T2Password stops' {
+        { Assert-SignInInputs -SignIn 'yes' -T2Password '' } | Should -Throw '*needs T2Password*'
+    }
+
+    It 'SignIn=yes with T2Password runs' {
+        { Assert-SignInInputs -SignIn 'yes' -T2Password 'x' } | Should -Not -Throw
+    }
+
+    It 'no sign-in proof needs no password' {
+        { Assert-SignInInputs -SignIn 'no' -T2Password '' } | Should -Not -Throw
+    }
+
+    It 'the guard runs before any AD module or object work' {
+        $text = Get-Content -LiteralPath $script:Check -Raw
+        $text.IndexOf('Assert-SignInInputs -SignIn $SignIn') | Should -BeLessThan $text.IndexOf('Import-Module ActiveDirectory')
+        $text.IndexOf('Assert-SignInInputs -SignIn $SignIn') | Should -BeGreaterThan 0
+    }
+}
+
+Describe 'PingCastle runs only what the pinned zip holds (Invoke-PingCastle.ps1)' {
+    It 'never reuses an extracted folder: it deletes it and extracts again' {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:PingCastle, [ref]$null, [ref]$null)
+        $expand = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Expand-Archive' }, $true))
+        $expand.Count | Should -Be 1
+        # Expand-Archive is a top-level statement, not inside an if (not behind a "folder exists" guard).
+        $p = $expand[0].Parent; while ($p -and $p -isnot [System.Management.Automation.Language.IfStatementAst] -and $p -isnot [System.Management.Automation.Language.ScriptBlockAst]) { $p = $p.Parent }
+        $p | Should -BeOfType ([System.Management.Automation.Language.ScriptBlockAst])
+        $text = Get-Content -LiteralPath $script:PingCastle -Raw
+        $text | Should -Match 'if \(Test-Path -LiteralPath \$Bin\) \{ Remove-Item -LiteralPath \$Bin -Recurse -Force \}'
+        $text.IndexOf('Remove-Item -LiteralPath $Bin') | Should -BeLessThan $text.IndexOf('Expand-Archive')
+        $text.IndexOf('Get-FileHash') | Should -BeLessThan $text.IndexOf('Expand-Archive')
     }
 }

@@ -85,6 +85,12 @@ function Assert-ProtectedUsersScope {
     return , $Names
 }
 
+function Assert-AccountPassword {
+    # Throws only when an account is about to be CREATED without a password.
+    param([bool]$DoApply, [string]$Sam, [string]$Password)
+    if ($DoApply -and -not $Password) { throw "No password parameter for $Sam (pass it as a protected parameter from the Keychain)" }
+}
+
 function New-DenyLogonInf {
     # Security template text (GptTmpl.inf) that denies every right in
     # $script:DenyRights to each SID. '*' marks a SID in a template.
@@ -167,7 +173,8 @@ $accounts = @(
 foreach ($a in $accounts) {
     $u = Get-ADUser -Filter "SamAccountName -eq '$($a.Sam)'"
     if (-not $u) {
-        if (-not $a.Pw) { throw "No password parameter for $($a.Sam) (pass it as a protected parameter from the Keychain)" }
+        # A dry run creates nothing, so it needs no secret; an apply does.
+        Assert-AccountPassword -DoApply $script:DoApply -Sam $a.Sam -Password $a.Pw
         if ($script:DoApply) {
             New-ADUser -Name $a.Sam -SamAccountName $a.Sam -UserPrincipalName "$($a.Sam)@$($domain.DNSRoot)" `
                 -Path $ou["$($a.Tier)-Accounts"] -Description "$($a.Tier) admin account. Signs in only to $($a.Tier) machines." `

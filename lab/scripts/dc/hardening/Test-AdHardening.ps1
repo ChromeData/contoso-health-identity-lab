@@ -13,7 +13,9 @@
       tier0-admin-01/02 and contosoadmin are NOT in Protected Users; the
       deny-logon GPO holds all five Deny rights for the four Tier 0 SIDs and
       is linked to Tier1\Servers and Tier2\Devices only; the LAPS schema is
-      there; both LAPS GPOs hold their values and links; DC01 has an
+      there; both LAPS GPOs hold their values, are linked (enabled) to
+      exactly their OU, and the server policy's decryptor is Tier1-Admins;
+      DC01 has an
       encrypted DSRM password in AD; the Cloud Sync agent service runs.
 
     SIGN-IN PROOF (-SignIn yes; writes one temporary object)
@@ -27,7 +29,8 @@
 .PARAMETER SignIn
     'yes' to run the sign-in proof.
 .PARAMETER T2Password
-    t2-adm-01's password (protected parameter, from the Keychain).
+    t2-adm-01's password (protected parameter, from the Keychain). Required
+    with SignIn=yes: the script stops before creating anything without it.
 #>
 #Requires -Version 5.1
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '',
@@ -60,6 +63,32 @@ function Test-InfDenyRights {
     return $true
 }
 
+function Test-GpoLinks {
+    # True only when the GPO report's links are EXACTLY the expected SOM
+    # paths (domain/OU/OU) and every one of them is enabled. A missing,
+    # extra or disabled link fails. Returns @{ Ok; Detail }.
+    param([xml]$Report, [string[]]$Expected)
+    $links = @($Report.GPO.LinksTo | Where-Object { $_ })
+    $have = @($links | ForEach-Object { "$($_.SOMPath)" })
+    $off = @($links | Where-Object { "$($_.Enabled)" -ne 'true' } | ForEach-Object { "$($_.SOMPath)" })
+    $missing = @($Expected | Where-Object { $have -notcontains $_ })
+    $extra = @($have | Where-Object { $Expected -notcontains $_ })
+    $ok = ($missing.Count -eq 0 -and $extra.Count -eq 0 -and $off.Count -eq 0)
+    $detail = "links: $($have -join '; ')"
+    if ($missing) { $detail += " | missing: $($missing -join '; ')" }
+    if ($extra) { $detail += " | extra: $($extra -join '; ')" }
+    if ($off) { $detail += " | disabled: $($off -join '; ')" }
+    return @{ Ok = $ok; Detail = $detail }
+}
+
+function Assert-SignInInputs {
+    # The sign-in proof has two halves; never run one and report success.
+    param([string]$SignIn, [string]$T2Password)
+    if ($SignIn -eq 'yes' -and -not $T2Password) {
+        throw 'SignIn=yes needs T2Password (keychain:contoso-lab-ad-t2-adm-01): without it the Protected Users half would be skipped'
+    }
+}
+
 function Test-LdapBind {
     # Returns 'ok' or the error message. Credentials stay in memory.
     param([string]$Server, [Net.NetworkCredential]$Credential, [ValidateSet('Kerberos', 'Ntlm')][string]$Auth)
@@ -78,6 +107,7 @@ function New-RandomPassword {
 }
 
 # ---------------------------------------------------------------------------
+Assert-SignInInputs -SignIn $SignIn -T2Password $T2Password
 Import-Module ActiveDirectory
 Import-Module GroupPolicy
 $domain = Get-ADDomain
@@ -110,19 +140,28 @@ if ($gpo) {
     $want = @("$sid-512", "$sid-519", "$sid-518", (Get-ADGroup 'Tier0-Admins').SID.Value)
     $text = if (Test-Path -LiteralPath $inf) { [IO.File]::ReadAllText($inf) } else { '' }
     Write-Check 'deny GPO: 5 Deny rights x 4 Tier 0 SIDs' (Test-InfDenyRights -Inf $text -Sids $want)
-    [xml]$rep = Get-GPOReport -Guid $gpo.Id -ReportType Xml
-    $links = @($rep.GPO.LinksTo | ForEach-Object { $_.SOMPath })
-    Write-Check 'deny GPO linked to Tier1/Servers and Tier2/Devices only' ($links.Count -eq 2 -and @($links | Where-Object { $_ -match '/Tier1/Servers$|/Tier2/Devices$' }).Count -eq 2) ($links -join '; ')
+    $l = Test-GpoLinks -Report ([xml](Get-GPOReport -Guid $gpo.Id -ReportType Xml)) -Expected @("$($domain.DNSRoot)/Tier1/Servers", "$($domain.DNSRoot)/Tier2/Devices")
+    Write-Check 'deny GPO linked (enabled) to Tier1/Servers and Tier2/Devices only' $l.Ok $l.Detail
 }
 
 # LAPS ---------------------------------------------------------------------
 $schemaNc = (Get-ADRootDSE).schemaNamingContext
 Write-Check 'LAPS schema (msLAPS-EncryptedDSRMPassword)' ([bool](Get-ADObject -SearchBase $schemaNc -Filter "lDAPDisplayName -eq 'msLAPS-EncryptedDSRMPassword'"))
 $root = 'HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\LAPS'
-foreach ($g in @(@{ N = 'LAPS - DC01 DSRM password to AD'; Dsrm = 1 }, @{ N = 'LAPS - Tier1 servers local admin to AD'; Dsrm = 0 })) {
+$lapsGpos = @(
+    @{ N = 'LAPS - DC01 DSRM password to AD'; Dsrm = 1; Link = "$($domain.DNSRoot)/Domain Controllers"; Reader = $null }
+    @{ N = 'LAPS - Tier1 servers local admin to AD'; Dsrm = 0; Link = "$($domain.DNSRoot)/Tier1/Servers"; Reader = "$($domain.NetBIOSName)\Tier1-Admins" }
+)
+foreach ($g in $lapsGpos) {
     $o = Get-GPO -Name $g.N -ErrorAction SilentlyContinue
     Write-Check "GPO $($g.N) exists" ([bool]$o)
     if (-not $o) { continue }
+    $l = Test-GpoLinks -Report ([xml](Get-GPOReport -Guid $o.Id -ReportType Xml)) -Expected @($g.Link)
+    Write-Check "$($g.N): linked (enabled) to $($g.Link) only" $l.Ok $l.Detail
+    if ($g.Reader) {
+        $p = (Get-GPRegistryValue -Guid $o.Id -Key $root -ValueName ADPasswordEncryptionPrincipal -ErrorAction SilentlyContinue).Value
+        Write-Check "$($g.N): only $($g.Reader) can decrypt" ("$p".Trim([char]0) -eq $g.Reader) "ADPasswordEncryptionPrincipal=$p"
+    }
     $bd = (Get-GPRegistryValue -Guid $o.Id -Key $root -ValueName BackupDirectory -ErrorAction SilentlyContinue).Value
     $enc = (Get-GPRegistryValue -Guid $o.Id -Key $root -ValueName ADPasswordEncryptionEnabled -ErrorAction SilentlyContinue).Value
     Write-Check "$($g.N): BackupDirectory=2 (AD), encryption on" ($bd -eq 2 -and $enc -eq 1) "BackupDirectory=$bd encryption=$enc"
@@ -157,13 +196,12 @@ if ($SignIn -eq 'yes') {
         Write-Check 'normal user signs in with NTLM' ($n -eq 'ok') $n
     }
     finally { Remove-ADUser -Identity $sam -Confirm:$false; Write-Output "  temporary user $sam deleted" }
-    if ($T2Password) {
-        $cred = New-Object Net.NetworkCredential('t2-adm-01', $T2Password, $domain.NetBIOSName)
-        $k = Test-LdapBind -Server $fqdn -Credential $cred -Auth Kerberos
-        $n = Test-LdapBind -Server $fqdn -Credential $cred -Auth Ntlm
-        Write-Check 't2-adm-01 (Protected Users) signs in with Kerberos' ($k -eq 'ok') $k
-        Write-Check 't2-adm-01 (Protected Users) is refused over NTLM' ($n -ne 'ok') $n
-    }
+    # Assert-SignInInputs already refused SignIn=yes without T2Password.
+    $cred = New-Object Net.NetworkCredential('t2-adm-01', $T2Password, $domain.NetBIOSName)
+    $k = Test-LdapBind -Server $fqdn -Credential $cred -Auth Kerberos
+    $n = Test-LdapBind -Server $fqdn -Credential $cred -Auth Ntlm
+    Write-Check 't2-adm-01 (Protected Users) signs in with Kerberos' ($k -eq 'ok') $k
+    Write-Check 't2-adm-01 (Protected Users) is refused over NTLM' ($n -ne 'ok') $n
 }
 
 Write-Output ("RESULT {0} failure(s)" -f $script:Failures)
