@@ -87,7 +87,7 @@ jobs:
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
     steps:
       - name: Get the HR file and its history
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -222,7 +222,7 @@ jobs:
       - name: Sign in to Microsoft as HR-SYNC (GitHub OIDC, no password)
         id: login
         if: ${{ steps.change.outputs.send_count != '0' && env.DRY_RUN != 'true' }}
-        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ vars.HR_SYNC_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
