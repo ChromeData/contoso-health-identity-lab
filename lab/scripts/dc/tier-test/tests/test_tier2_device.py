@@ -130,3 +130,45 @@ class KeychainWrite(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ArmTimeout(unittest.TestCase):
+    """Greptile #239: arm() must never wait forever (delete() of a paid VM)."""
+
+    def setUp(self):
+        self.mod = load()
+        self.mod.SUB, self.mod.TOKEN, self.mod.CTX = "sub", "tok", None
+
+    def test_every_request_has_a_finite_timeout(self):
+        seen = {}
+
+        class Resp:
+            status = 200
+            def read(self): return b"{}"
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def fake_urlopen(req, **kw):
+            seen.update(kw)
+            return Resp()
+
+        with mock.patch.object(self.mod.urllib.request, "urlopen", fake_urlopen):
+            self.assertEqual(self.mod.arm("GET", "/resourceGroups/x?api-version=1"), (200, {}))
+        self.assertIn("timeout", seen, "urlopen called without a timeout")
+        self.assertTrue(0 < seen["timeout"] <= 300)
+
+    def test_a_timeout_stops_with_a_clear_message(self):
+        def hang(req, **kw):
+            raise TimeoutError("timed out")
+
+        with mock.patch.object(self.mod.urllib.request, "urlopen", hang), self.assertRaises(SystemExit) as e:
+            self.mod.arm("DELETE", "/resourceGroups/rg-identity-lab-tiertest?api-version=1")
+        self.assertIn("no answer from Azure", str(e.exception))
+        self.assertIn("DELETE", str(e.exception))
+
+    def test_a_connection_failure_stops_too(self):
+        def refused(req, **kw):
+            raise self.mod.urllib.error.URLError("refused")
+
+        with mock.patch.object(self.mod.urllib.request, "urlopen", refused), self.assertRaises(SystemExit):
+            self.mod.arm("GET", "/x")

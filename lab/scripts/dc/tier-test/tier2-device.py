@@ -104,13 +104,20 @@ def connect():
                "--query", "accessToken", "-o", "tsv")
 
 
+# Every ARM call has a finite timeout (seconds per request, like run-on-dc.py).
+# Without one, an ARM endpoint that accepts the connection and then stops
+# answering would hold delete() forever, and the paid test VM would keep
+# running; the polling limits only help when control comes back.
+ARM_TIMEOUT = 120
+
+
 def arm(method, path, body=None, ok404=False):
     url = f"https://management.azure.com/subscriptions/{SUB}{path}"
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method,
                                  headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, context=CTX) as r:
+        with urllib.request.urlopen(req, timeout=ARM_TIMEOUT, context=CTX) as r:
             txt = r.read().decode()
             return r.status, (json.loads(txt) if txt else {})
     except urllib.error.HTTPError as e:
@@ -120,6 +127,11 @@ def arm(method, path, body=None, ok404=False):
         for v in SECRET_VALUES:
             txt = txt.replace(v, "***")
         raise SystemExit(f"{method} {path}: HTTP {e.code}: {txt[:800]}")
+    except (TimeoutError, urllib.error.URLError) as e:
+        # Fail closed and say so: the caller (and the person reading) must
+        # know the step did not finish, e.g. that the VM may still exist.
+        raise SystemExit(f"{method} {path}: no answer from Azure within {ARM_TIMEOUT}s or connection failed "
+                         f"({type(e).__name__}). Nothing is assumed done: check the resource group in the portal.")
 
 
 def wait(path, api, want="Succeeded", tries=90):
