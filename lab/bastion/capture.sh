@@ -50,8 +50,9 @@
 #       the container through the identity (API 2026-03-01
 #       sessionRecordingConfiguration). Native-client tunnelling stays OFF:
 #       Learn says recording covers browser sessions only.
-#   * DC01 is started if it was deallocated; "down" deallocates it again
-#     only in that case.
+#   * DC01 is started through preflight.sh if it is off; nothing here ever
+#     deallocates it (the leaver helper owns DC01's start/stop, program
+#     2026-11-08).
 #
 # What "down" removes: the Bastion, its public IP, the subnet, the identity
 # and its role assignment; shared-key access back off. The storage account
@@ -116,6 +117,12 @@ acct="$(az account show --query '[id, tenantId]' -o tsv | tr '\n' ' ')"
 read -r sub tenant <<<"$acct"
 [[ "$sub" == "$SUB" && "$tenant" == "$TENANT" ]] || die "not the lab subscription/tenant (run under lab/scripts/operator/op)"
 
+# One line per milestone in the shared progress log (program rule).
+progress() {
+  local f="${CONTOSO_PROGRESS_LOG:-$HOME/contoso-demo/readiness/progress.log}"
+  [[ -f "$f" ]] && printf '%s | bastion-capture | %s\n' "$(date -u +%FT%TZ)" "$*" >> "$f" || true
+}
+
 oid_of() { az ad user show --id "$1" --query id -o tsv; }
 guid() { python3 -I -c 'import uuid; print(uuid.uuid4())'; }
 
@@ -150,15 +157,20 @@ cmd_up() {
   need_session
   local s
   # --- DC01 --------------------------------------------------------------------
+  # DC01 (program 2026-11-08): the leaver helper OWNS DC01's start and
+  # deallocate. Others may start it only through preflight.sh, and NEVER
+  # deallocate it. So this script starts it that way if it is off, logs
+  # "DC01 needed by" / "done" in progress.log, and 'down' never stops it.
   local power; power="$(az vm get-instance-view -g "$RG" -n "$VM" --query "instanceView.statuses[?starts_with(code,'PowerState/')].code | [0]" -o tsv)"
+  progress "DC01 needed by bastion-capture (lab/bastion/capture.sh up)"
   if [[ "$power" != "PowerState/running" ]]; then
-    state_set dc01_started_by_capture yes
-    s=$(date +%s); log "DC01 is $power: starting it (deallocated again by 'down')"
-    az vm start -g "$RG" -n "$VM" -o none
+    s=$(date +%s); log "DC01 is $power: starting it through preflight.sh (it will NOT be deallocated by this script)"
+    bash "$(cd "$(dirname "${BASH_SOURCE[0]}")/../scripts/demo" && pwd)/preflight.sh" >/dev/null 2>&1 || true
+    power="$(az vm get-instance-view -g "$RG" -n "$VM" --query "instanceView.statuses[?starts_with(code,'PowerState/')].code | [0]" -o tsv)"
+    [[ "$power" == "PowerState/running" ]] || die "DC01 is still $power after preflight.sh"
     log "DC01 running ($(( $(date +%s) - s )) s)"
   else
-    [[ -n "$(state_get dc01_started_by_capture)" ]] || state_set dc01_started_by_capture no
-    log "DC01 already running: 'down' will leave it running"
+    log "DC01 already running"
   fi
 
   # --- Network -----------------------------------------------------------------
@@ -304,11 +316,8 @@ cmd_down() {
   az identity delete -g "$SANDBOX" -n "$UAMI" -o none 2>/dev/null || true
   [[ -n "${st_id:-}" ]] && az storage account update --ids "$st_id" --allow-shared-key-access false -o none
   log "Public IP, subnet, identity and its grant removed; shared-key access off"
-  if [[ "$(state_get dc01_started_by_capture)" == yes ]]; then
-    log "DC01 was started by 'up': deallocating it"
-    az vm deallocate -g "$RG" -n "$VM" -o none
-    state_set dc01_started_by_capture no
-  fi
+  # Never deallocate DC01 (the leaver helper owns it): only say we are done.
+  progress "done with DC01: bastion-capture (lab/bastion/capture.sh down); DC01 left running for its owner"
   # Read back.
   log "Read back: bastion=$(bastion_state) pip=$(az network public-ip show -g "$SANDBOX" -n "$PIP" --query name -o tsv 2>/dev/null || echo absent) subnet=$(az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet --query name -o tsv 2>/dev/null || echo absent) identity=$(az identity show -g "$SANDBOX" -n "$UAMI" --query name -o tsv 2>/dev/null || echo absent)"
   if [[ -n "${st_id:-}" ]]; then

@@ -116,8 +116,10 @@ password box. It is never printed, logged or put on a command line.
   activation (read 2026-11-07). The admin signed in with a passkey. A
   Tier-0 policy (1 hour cap, approval by PIM-Approvers-Tier0) is DESIGNED,
   not built.
-- **DC01 is started only if it was off,** and deallocated by `down` only in
-  that case. On 2026-11-07 it was already running, so `down` left it alone.
+- **DC01 is started through `preflight.sh` only if it is off, and never
+  deallocated by this script** (program 2026-11-08: the leaver helper owns
+  DC01's start and stop). `up` and `down` log "DC01 needed by" and "done" in
+  the shared progress log.
 
 ## Sources (checked 2026-11-07)
 
