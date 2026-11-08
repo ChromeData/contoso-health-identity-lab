@@ -250,7 +250,7 @@ Describe 'Containment playbook (lab/monitoring/playbook-contain.json)' {
         $if = $nwf.properties.definition.actions.If_Teams_configured
         ($if.expression | ConvertTo-Json -Depth 10 -Compress) | Should -Match 'teamsGroupId'
         ($if.expression | ConvertTo-Json -Depth 10 -Compress) | Should -Match 'teamsChannelId'
-        $post = $if.actions.Post_card_to_SOC_channel
+        $post = $if.actions.If_no_card_yet.actions.Post_card_to_SOC_channel
         $post.type | Should -Be 'ApiConnection'
         $post.inputs.host.connection.name | Should -Be "@parameters('`$connections')['teams']['connectionId']"
         $post.inputs.path | Should -Match '^/v1\.0/teams/conversation/adaptivecard/poster/Flow bot/location/'
@@ -265,8 +265,91 @@ Describe 'Containment playbook (lab/monitoring/playbook-contain.json)' {
         $find = @($actions | Where-Object Name -EQ 'Find_ticket_by_correlation_id')[0]
         $find.Action.inputs.queries.sysparm_query | Should -Match "correlation_id=@\{triggerBody\(\)\?\['object'\]\?\['name'\]\}"
         $nwf = @($notify.resources | Where-Object { $_.type -eq 'Microsoft.Logic/workflows' })[0]
-        $body = $nwf.properties.definition.actions.If_ServiceNow_configured.actions.Create_ServiceNow_incident.inputs.body
+        $body = $nwf.properties.definition.actions.If_ServiceNow_configured.actions.If_open_ticket_exists.else.actions.Create_ServiceNow_incident.inputs.body
         $body.correlation_id | Should -Be "@{triggerBody()?['object']?['name']}"
+    }
+}
+
+Describe 'Notify playbook: one ticket and one card per incident (review finding D2)' {
+    BeforeAll {
+        $nwf = @($notify.resources | Where-Object { $_.type -eq 'Microsoft.Logic/workflows' })[0]
+        $na = $nwf.properties.definition.actions
+        $nAll = @(Get-WorkflowAction -Actions $na)
+        $sev = "@triggerBody()?['object']?['properties']?['severity']"
+    }
+
+    It 'looks for the OPEN ticket of this incident (correlation_id + active) before anything else in the ServiceNow branch' {
+        $sn = $na.If_ServiceNow_configured.actions
+        @($sn.Keys)[0] | Should -Be 'Find_open_ticket'
+        $sn.Find_open_ticket.inputs.method | Should -Be 'GET'
+        $sn.Find_open_ticket.inputs.queries.sysparm_query | Should -Be "correlation_id=@{triggerBody()?['object']?['name']}^active=true"
+        $sn.Find_open_ticket.runtimeConfiguration.secureData.properties | Should -Contain 'inputs'
+    }
+
+    It 'creates a ticket ONLY when none is open, and only after a successful lookup (a failed read never doubles tickets)' {
+        $creates = @($nAll | Where-Object { $_.Action.type -eq 'Http' -and $_.Action.inputs.method -eq 'POST' })
+        $creates.Count | Should -Be 1
+        $creates[0].Name | Should -Be 'Create_ServiceNow_incident'
+        $creates[0].Scope | Should -Be 'If_open_ticket_exists/else'
+        $na.If_ServiceNow_configured.actions.If_open_ticket_exists.runAfter.Find_open_ticket | Should -Be @('Succeeded')
+    }
+
+    It 'a joined alert is a work note on the existing ticket and a comment on the incident' {
+        $yes = $na.If_ServiceNow_configured.actions.If_open_ticket_exists.actions
+        $yes.Add_work_note_for_joined_alert.inputs.method | Should -Be 'PATCH'
+        $yes.Add_work_note_for_joined_alert.inputs.uri | Should -Match "first\(body\('Find_open_ticket'\)\?\['result'\]\)\?\['sys_id'\]"
+        $yes.Add_work_note_for_joined_alert.inputs.body.work_notes | Should -Match 'No new ticket was opened'
+        $yes.Comment_joined_alert_on_Sentinel_incident.inputs.path | Should -Be '/Incidents/Comment'
+    }
+
+    It 'runs one at a time, so two runs can never both miss the ticket or the card marker' {
+        $trig = $nwf.properties.definition.triggers.Microsoft_Sentinel_incident
+        $trig.runTimeConfiguration.concurrency.runs | Should -Be 1
+        $trig.runTimeConfiguration.concurrency.maximumWaitingRuns | Should -BeGreaterThan 0
+    }
+
+    It 'posts the card only while the incident (read now, not the trigger copy) lacks the teams-card-posted label, and writes the label only after a delivered card' {
+        $t = $na.If_Teams_configured
+        # Parallel with ServiceNow (PR #230 review): a slow ServiceNow never holds the card.
+        @($t.runAfter.Keys) | Should -Be @('Map_severity_to_priority')
+        $t.runAfter.Map_severity_to_priority | Should -Be @('Succeeded')
+        @($na.If_ServiceNow_configured.runAfter.Keys) | Should -Be @('Map_severity_to_priority')
+        ($t | ConvertTo-Json -Depth 50) | Should -Not -Match "(body|outputs|actions)\\('(Find_open_ticket|Create_ServiceNow_incident|Add_work_note_for_joined_alert)'\\)"
+        $t.actions.Read_incident_now.inputs.method | Should -Be 'GET'
+        $t.actions.Read_incident_now.inputs.authentication.type | Should -Be 'ManagedServiceIdentity'
+        $t.actions.If_no_card_yet.runAfter.Read_incident_now | Should -Be @('Succeeded')
+        ($t.actions.If_no_card_yet.expression | ConvertTo-Json -Depth 6 -Compress) | Should -Match 'teams-card-posted'
+        $card = $t.actions.If_no_card_yet.actions
+        $card.Mark_card_posted.runAfter.Post_card_to_SOC_channel | Should -Be @('Succeeded')
+        $card.Mark_card_posted.actions.Write_card_marker.inputs.method | Should -Be 'PUT'
+        $card.Mark_card_posted.actions.Write_card_marker.inputs.body.properties | Should -Match 'teams-card-posted'
+        @($nAll | Where-Object { $_.Action.type -eq 'ApiConnection' -and $_.Action.inputs.path -like '/v1.0/teams/*' }).Count | Should -Be 1
+        @($nAll | Where-Object { $_.Name -eq 'Post_card_to_SOC_channel' })[0].Scope | Should -Be 'If_no_card_yet'
+    }
+
+    It 'retries the card marker with a FRESH incident read (new etag) and never re-posts the card (PR #230 review)' {
+        $loop = $na.If_Teams_configured.actions.If_no_card_yet.actions.Mark_card_posted
+        $loop.type | Should -Be 'Until'
+        [int]$loop.limit.count | Should -BeGreaterThan 1
+        $loop.limit.timeout | Should -Not -BeNullOrEmpty
+        $loop.expression | Should -Match "outputs\('Write_card_marker'\)\?\['statusCode'\]"
+        $inner = $loop.actions
+        $inner.Read_incident_for_marker.inputs.method | Should -Be 'GET'
+        $inner.Read_incident_for_marker.inputs.authentication.type | Should -Be 'ManagedServiceIdentity'
+        $inner.Write_card_marker.runAfter.Read_incident_for_marker | Should -Be @('Succeeded')
+        # The etag and properties come from the read INSIDE the loop, never the pre-post copy.
+        $inner.Write_card_marker.inputs.body.etag | Should -Be "@body('Read_incident_for_marker')?['etag']"
+        $inner.Write_card_marker.inputs.body.properties | Should -Not -Match 'Read_incident_now'
+        $inner.Write_card_marker.inputs.body.properties | Should -Match "body\('Read_incident_for_marker'\)"
+        # The Teams post is outside the loop: a retry writes the label only.
+        @($nAll | Where-Object { $_.Scope -eq 'Mark_card_posted' -and $_.Action.type -eq 'ApiConnection' }).Count | Should -Be 0
+        @($nAll | Where-Object { $_.Name -eq 'Post_card_to_SOC_channel' })[0].Scope | Should -Be 'If_no_card_yet'
+    }
+
+    It 'Informational incidents open no ticket and post no card (review finding B5)' {
+        foreach ($b in 'If_ServiceNow_configured', 'If_Teams_configured') {
+            ($na[$b].expression.and | ConvertTo-Json -Depth 5 -Compress) | Should -Match ([regex]::Escape('{"not":{"equals":["' + $sev + '","Informational"]}}')) -Because $b
+        }
     }
 }
 
@@ -575,5 +658,49 @@ Describe 'PowerShell script <_>' -ForEach $Scripts {
 
     It 'supports -WhatIf' {
         (Get-Command $path).Parameters.Keys | Should -Contain 'WhatIf'
+    }
+}
+
+Describe 'Splunk break-glass search: one result per throttle key (PR #230 review)' {
+    BeforeAll {
+        $bgSpl = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'splunk' 'detections' 'break-glass-signin.spl')
+    }
+
+    It 'every alert.suppress field is a stats BY field, so a new IP is never folded into a throttled row' {
+        $suppress = ([regex]::Match($bgSpl, 'alert\.suppress\.fields = ([A-Za-z,]+)')).Groups[1].Value -split ','
+        $suppress | Should -Contain 'IPAddress'
+        $statsLine = @($bgSpl -split "`n" | Where-Object { $_ -match '^\|\s*stats\s' })[-1]
+        $by = ([regex]::Match($statsLine, '\sBY\s+(.+)$')).Groups[1].Value -split '[,\s]+' | Where-Object { $_ }
+        foreach ($f in $suppress) { $by | Should -Contain $f -Because "throttle key $f must split results" }
+        $statsLine | Should -Not -Match 'latest\(IPAddress\)'
+    }
+
+    It 'a missing IPAddress is kept as empty, not dropped by stats BY' {
+        $bgSpl | Should -Match 'IPAddress=coalesce\(IPAddress, ""\)'
+    }
+}
+
+Describe 'KQL break-glass-signin: one row per account keeps every sign-in IP, result and correlation id (PR #230 review)' {
+    BeforeAll {
+        $bgKql = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'kql' 'break-glass-signin.kql')
+        $bgCases = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'monitoring' 'kusto-harness' 'cases' 'break-glass-signin.json') | ConvertFrom-Json
+    }
+
+    It 'summarizes by account only, and collects IPAddresses, ResultTypes and CorrelationIds next to arg_max' {
+        $bgKql | Should -Match 'by UserPrincipalName, UserId'
+        $bgKql | Should -Match 'IPAddresses = make_set\(IPAddress, \d+\)'
+        $bgKql | Should -Match 'ResultTypes = make_set\(tostring\(ResultType\), \d+\)'
+        $bgKql | Should -Match 'CorrelationIds = make_set\(CorrelationId, \d+\)'
+        $project = ([regex]::Match($bgKql, '(?ms)^\| project (.+?)^\| sort')).Groups[1].Value
+        foreach ($c in 'IPAddresses', 'ResultTypes', 'CorrelationIds') { $project | Should -Match "\b$c\b" -Because "$c must reach the alert" }
+    }
+
+    It 'has an engine case where an older success from another IP survives in the one row' {
+        $c = @($bgCases.cases | Where-Object id -EQ 'two-ips-one-row-keeps-both')[0]
+        $c | Should -Not -BeNullOrEmpty
+        $c.expectRows | Should -Be 1
+        @($c.tables.SigninLogs).Count | Should -Be 2
+        @($c.expect[0].IPAddresses).Count | Should -Be 2
+        $c.expect[0].ResultTypes | Should -Contain '0'
     }
 }
