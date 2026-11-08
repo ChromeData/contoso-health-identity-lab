@@ -545,9 +545,10 @@ performed by a privileged human.
 9. **GitHub side of OIDC.** `envs/bootstrap` creates the Entra trust; copy its
    outputs into repo **Variables** (not secrets), create the `prod`
    environment with a required reviewer, and set the `TF_*` / `TFSTATE_*`
-   variables listed in `lab/pipelines/README.md`. Two of them,
-   `TF_OPERATOR_IP_RANGES` and `TF_ALERT_EMAIL`, are repo **secrets** instead,
-   only so GitHub masks your IP and email in the public run logs.
+   variables listed in `lab/pipelines/README.md`. There are no repo secrets:
+   the five privacy values (your IP, mailboxes, app owner ids) go to the
+   pipeline config vault that `envs/bootstrap` creates
+   (`enable_pipeline_config_vault`), and the workflows read them over OIDC.
 
 10. **Lifecycle Workflows.** There is no azuread resource for them.
     `lab/scripts/powershell/post-apply/New-LifecycleWorkflows.ps1` creates the

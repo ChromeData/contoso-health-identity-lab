@@ -4,8 +4,9 @@
 # Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored - do NOT
 # commit real tenant ids / object ids. All values below are placeholders.
 # In CI the same values come from GitHub Actions *variables* (TF_*), except
-# operator_ip_ranges and alert_email, which come from the TF_OPERATOR_IP_RANGES /
-# TF_ALERT_EMAIL repo *secrets*.
+# the five privacy values (operator_ip_ranges, alert_email, app_owner_object_ids,
+# saml_cert_notification_emails, pim_alert_mailbox), which CI reads over OIDC
+# from the pipeline config Key Vault (lab/pipelines/README.md).
 # =============================================================================
 
 # Staging flags and CA states are NOT here - they live in the committed
