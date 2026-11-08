@@ -108,9 +108,11 @@ cd lab/pam
 ./vault-onboard-ad.sh -k <key-vault> -d corp.<domain>   # LDAP engine, svc-backup static role, tier0 library
 
 # PAM operations pack (section below): discovery -> onboarding -> reconciliation
-# DC01 discovery is RETIRED (2026-11-07, ADR 0036): svc-pam-discovery and its
-# Key Vault secret were deleted. Run discovery against the Samba harness instead:
-#   test/e2e.sh (it seeds its own svc-pam-discovery in a throwaway container)
+# DC01 discovery and onboarding are RETIRED (2026-11-07, ADR 0036):
+# svc-pam-discovery and its Key Vault secret were deleted. Not available in a
+# live run. The Samba harness (test/e2e.sh) is a SEPARATE, offline exercise:
+# never run it against a stack pointed at a real DC (its --force bypass deletes
+# Vault's ldap/ mount).
 ./onboard.sh --dry-run && ./onboard.sh
 ./reconcile.sh --verify
 
@@ -262,9 +264,9 @@ Output (gitignored): `out/discovery-<UTC>.{json,csv}` and
 and stored its password in Key Vault. With the Vault stand-in retired
 (ADR 0036), `lab/scripts/dc/Remove-PamDiscoveryAccount.ps1` deleted the
 account and the secret (capture log E157), and the domain build no longer
-creates it. Discovery now runs only against the Samba harness
-(`test/e2e.sh`), which seeds its own copy; the policy exclusion here stays
-for that harness.
+creates it. DC01 discovery is therefore not available. The Samba
+harness (`test/e2e.sh`) seeds its own copy and stays as a separate, offline
+exercise (never against a real DC); the policy exclusion here stays for it.
 
 ### 2. Bulk onboarding — `onboard.sh`
 
