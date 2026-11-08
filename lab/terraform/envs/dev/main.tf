@@ -773,6 +773,13 @@ module "apps" {
   servicenow_provisioning_job_enabled = var.servicenow_provisioning_job_enabled
   servicenow_provisioning_credentials = var.servicenow_provisioning_credentials
 
+  # ServiceNow access fulfilment (default false): the app ServiceNow uses to
+  # add/remove people on Clinical access packages after a manager approves in
+  # ServiceNow. No Graph permission; one catalog role on the Clinical catalog.
+  # Without governance there is no catalog, so the flag needs both.
+  enable_servicenow_fulfilment     = var.enable_servicenow_fulfilment && var.enable_governance
+  servicenow_fulfilment_catalog_id = var.enable_servicenow_fulfilment && var.enable_governance ? module.entitlement[0].catalog_id : ""
+
   # okta-clinic-idp (default false): Entra as the OIDC identity provider for
   # the acquired clinic's Okta org (runbook Phase 1, ADR 0022). The ONE
   # principal on it is App-Okta-Federation-Users; the client secret is a

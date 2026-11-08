@@ -337,6 +337,14 @@ by a human admin**, in a separate state container CI cannot reach:
     role assignments; the condition stops CI granting Owner to anything). The VM
     login role was added later: **re-apply bootstrap** before the pipeline
     applies `enable_intune_vm = true`, or the condition refuses the grant.
+    **Scope** (`apply_azure_scope`, `envs/bootstrap/least-privilege.tf`):
+    `subscription` for a first deployment only; `resource_group` (this lab,
+    after senior gap 8) puts both roles on `rg-identity-lab` alone, where every
+    Azure resource envs/dev manages lives. APPLY cannot remove the
+    `CanNotDelete` locks on the Key Vaults: none of its roles has
+    `Microsoft.Authorization/locks/delete`, and the condition stops it granting
+    itself Owner or User Access Administrator (tested with a mirror identity,
+    capture log E154).
   - APPLY: **Storage Blob Data Contributor** on the `tfstate` container only
     (apply takes the blob lease). PLAN: **Storage Blob Data Reader** on the
     same container (PR plans run with `-lock=false`). State holds the

@@ -824,3 +824,35 @@ variable "claims_viewer_saml_signing_cert_end_date" {
     error_message = "claims_viewer_saml_signing_cert_end_date must be RFC 3339, e.g. 2027-11-07T00:00:00Z."
   }
 }
+
+# -----------------------------------------------------------------------------
+# ServiceNow access fulfilment (servicenow_fulfilment.tf)
+# -----------------------------------------------------------------------------
+variable "enable_servicenow_fulfilment" {
+  type        = bool
+  description = <<-EOT
+    Create the app ServiceNow uses to fulfil approved access requests:
+    "ServiceNow - Access Fulfilment", certificate credential only
+    (files/servicenow-fulfilment.pem), no Graph API permission, and ONE
+    entitlement-management role: Access package assignment manager on
+    servicenow_fulfilment_catalog_id. lab/servicenow/README.md.
+  EOT
+  default     = false
+}
+
+variable "servicenow_fulfilment_catalog_id" {
+  type        = string
+  description = "Object id of the access package catalog ServiceNow may assign in (the Clinical catalog, module.entitlement catalog_id). Required when enable_servicenow_fulfilment = true."
+  default     = ""
+}
+
+variable "servicenow_fulfilment_app_display_name" {
+  type        = string
+  description = "Display name of the ServiceNow fulfilment app. lab/servicenow/apply.py finds its client id by this name."
+  default     = "ServiceNow - Access Fulfilment"
+
+  validation {
+    condition     = length(trimspace(var.servicenow_fulfilment_app_display_name)) > 0
+    error_message = "servicenow_fulfilment_app_display_name must not be empty."
+  }
+}

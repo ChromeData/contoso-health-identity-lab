@@ -236,6 +236,13 @@ jobs:
           # kusto-harness run-on-workspace.py: result decoding and verdict
           # (no workspace; the live runs are operator runs, capture log E114).
           python3 -I -m unittest discover -s lab/monitoring/kusto-harness/tests -p 'test_*.py' -v
+          # ServiceNow use cases (lab/servicenow): package resolution, the
+          # records apply.py writes (no delivery plan, names <= 40), the
+          # provisioning-mapping change, cleanup's guards (stdlib only).
+          python3 -I -m unittest discover -s lab/servicenow/tests -v
+          # ...and the server JavaScript that grants, removes and closes, in a
+          # node:vm sandbox with fake ServiceNow globals and a scripted Graph.
+          node --test lab/servicenow/tests/entra-access.test.mjs
           # Tier GPO proof device builder (lab/scripts/dc/tier-test): refuses an
           # existing VM, saves its password only after Azure accepts the VM
           # (mocked ARM and Keychain; no az).
