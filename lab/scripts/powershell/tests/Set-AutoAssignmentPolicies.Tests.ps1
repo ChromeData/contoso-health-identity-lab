@@ -143,8 +143,8 @@ Describe 'Membership rule rendering' {
 
     It 'every rendered automatic-assignment rule starts with the accountEnabled gate (<MatchOn> mode)' -ForEach @(@{ MatchOn = 'jobTitle' }, @{ MatchOn = 'jobCode' }) {
         # Top-level AND clause, not nested in an -or: a disabled user must never
-        # match any birthright package. E172 (2026-11-07) checked the live ICU
-        # policy carries the same clause.
+        # match any birthright package. A Graph read of the live ICU policy
+        # (2026-11-07, PR #256) shows the same clause.
         $all = @(Get-DesiredAutoPolicy -Rules $script:Rules -MatchOn $MatchOn)
         $all.Count | Should -BeGreaterThan 0
         foreach ($d in $all) {
