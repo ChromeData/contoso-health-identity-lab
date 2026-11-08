@@ -57,6 +57,11 @@
 .EXAMPLE
     Connect-MgGraph -Scopes 'DeviceManagementConfiguration.ReadWrite.All','Group.Read.All'
     ./New-IntuneEpmAndLaps.ps1 -UserGroupId <id> -DeviceGroupId <id> -FileHash <sha256> -WhatIf
+
+.EXAMPLE
+    # As the lab operator in a write session (app-only token, never on argv):
+    #   GRAPH_TOKEN=$(lab/scripts/operator/op az account get-access-token --resource-type ms-graph --query accessToken -o tsv) \
+    #   pwsh -c 'Connect-MgGraph -AccessToken (ConvertTo-SecureString $env:GRAPH_TOKEN -AsPlainText -Force) -NoWelcome; ./New-IntuneEpmAndLaps.ps1 -UserGroupId AllDevices -DeviceGroupId AllDevices -FileHash <sha256>'
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -73,8 +78,13 @@ $ErrorActionPreference = 'Stop'
 
 $ctx = Get-MgContext
 if (-not $ctx) { throw 'Not connected. Run Connect-MgGraph with the scopes in the help first.' }
-foreach ($s in @('DeviceManagementConfiguration.ReadWrite.All', 'Group.Read.All')) {
-    if ($ctx.Scopes -notcontains $s) { throw "The Graph session lacks $s." }
+# Delegated sessions list scopes; an app-only token (the lab operator in a
+# write session, Connect-MgGraph -AccessToken) lists its app roles there too.
+if ($ctx.Scopes -notcontains 'DeviceManagementConfiguration.ReadWrite.All') { throw 'The Graph session lacks DeviceManagementConfiguration.ReadWrite.All.' }
+# Group ids are only read when a group is the target. Directory.Read.All
+# includes Group.Read.All.
+if (($UserGroupId -ne 'AllDevices' -or $DeviceGroupId -ne 'AllDevices') -and -not (@($ctx.Scopes) | Where-Object { $_ -in 'Group.Read.All', 'Directory.Read.All' })) {
+    throw 'The Graph session lacks Group.Read.All (or Directory.Read.All), needed for a group target.'
 }
 
 $base = 'https://graph.microsoft.com/beta/deviceManagement/configurationPolicies'
