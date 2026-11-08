@@ -16,7 +16,13 @@
     supported install since Windows Server 2012 R2 (AD FS no longer needs
     IIS). It is still Tier 0 on Tier 0: AD FS holds a token-signing key that
     can mint a sign-in for any user (Golden SAML), so it belongs in the same
-    tier as the DC. Production puts AD FS on its own servers behind a WAP.
+    tier as the DC.
+
+    THIS IS A LAB SHORTCUT, NOT THE PRODUCTION DESIGN. Production uses a
+    dedicated AD FS server (in practice a farm of two or more), never a
+    domain controller, with a Web Application Proxy in front of it for
+    internet sign-ins. The lab puts AD FS on DC01 only because the trial
+    has no room for another VM. The script prints this line on every run.
 
     Steps (each is idempotent: a re-run skips what already exists):
       1. Guard: this computer is a domain controller of -DomainName.
@@ -80,6 +86,8 @@ Set-StrictMode -Version Latest
 if (-not $FederationServiceName) { $FederationServiceName = "sts.$DomainName" }
 
 function Write-Step([string]$Message) { Write-Output ("[adfs-install] {0}" -f $Message) }
+
+Write-Step 'LAB SHORTCUT: AD FS goes on this domain controller only because the Azure trial has no room for another VM. Production uses a dedicated AD FS server (a farm of two or more) behind a Web Application Proxy, never a domain controller.'
 
 # --- 1. This must be a DC of the named domain ---------------------------------
 $cs = Get-CimInstance Win32_ComputerSystem
@@ -160,7 +168,10 @@ $tmp = Join-Path $env:TEMP ("secpol-{0}.inf" -f [guid]::NewGuid())
 $null = & secedit.exe /export /areas USER_RIGHTS /cfg $tmp
 $line = (Get-Content $tmp | Where-Object { $_ -like 'SeAuditPrivilege*' })
 Remove-Item $tmp -Force
-$hasAudit = [bool]($line -and $line -match [regex]::Escape($gmsaSid))
+# secedit writes most accounts as *SID but some by name (DC01 2026-11-07
+# showed "gmsa-adfs$" after step 3b): accept either form.
+$items = @(("$line" -split '=', 2)[-1].Split(',') | ForEach-Object { $_.Trim() })
+$hasAudit = [bool](($items -contains "*$gmsaSid") -or ($items -contains "$GmsaName`$"))
 
 $svc = Get-Service adfssrv
 $props = Get-AdfsProperties
@@ -169,7 +180,7 @@ $props = Get-AdfsProperties
     identifier          = $props.Identifier.AbsoluteUri
     serviceState        = $svc.Status.ToString()
     tlsThumbprint       = $cert.Thumbprint
-    auditLevel          = $props.AuditLevel.ToString()
+    auditLevel          = (@($props.AuditLevel) -join ',')   # an array (e.g. Verbose); ToString() printed the type name
     gmsaHasSeAudit      = $hasAudit
     metadataUrl         = "https://$FederationServiceName/FederationMetadata/2007-06/FederationMetadata.xml"
 } | ConvertTo-Json
