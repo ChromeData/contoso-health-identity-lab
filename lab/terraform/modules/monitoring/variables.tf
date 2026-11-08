@@ -258,6 +258,39 @@ variable "break_glass_group_ids" {
   }
 }
 
+variable "break_glass_user_ids" {
+  type        = list(string)
+  description = "Object ids of the break-glass USER accounts (modules/groups output break_glass_user_object_ids). break-glass-signin.kql matches a sign-in by these immutable ids, so a renamed account still alerts; the bg-admin-NN naming convention stays as a second match (review finding D3, 2026-11-07)."
+  default     = []
+
+  validation {
+    condition     = alltrue([for id in var.break_glass_user_ids : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))])
+    error_message = "break_glass_user_ids: user object ids (GUIDs) only."
+  }
+}
+
+variable "break_glass_grouping_lookback" {
+  type        = string
+  description = "How long a break-glass incident keeps absorbing new alerts for the same account (NRT incident grouping, ISO 8601). Default 24 h: one incident, one Teams card and one ServiceNow ticket per account per day; each joined alert is a work note on that ticket (review finding D2)."
+  default     = "P1D"
+
+  validation {
+    condition     = contains(["PT1H", "PT5H", "PT12H", "P1D", "P2D", "P7D"], var.break_glass_grouping_lookback)
+    error_message = "break_glass_grouping_lookback: one of PT1H, PT5H, PT12H, P1D, P2D, P7D."
+  }
+}
+
+variable "drill_account_prefixes" {
+  type        = list(string)
+  description = "Account-name prefixes of drill-only accounts. An incident whose Account entity starts with one is labelled \"drill\" at creation, so close-build-noise.sh can close drill noise by label (review finding D2). Empty = no labelling rule."
+  default     = ["itdr-drill-"]
+
+  validation {
+    condition     = alltrue([for p in var.drill_account_prefixes : can(regex("^[a-z0-9][a-z0-9.-]{3,}$", p))])
+    error_message = "drill_account_prefixes: lower-case name prefixes of 4+ characters (a short prefix such as \"a\" would label real people's incidents)."
+  }
+}
+
 variable "privileged_user_ids" {
   type        = list(string)
   description = "Object ids of privileged users (break-glass, members / eligible members of the PIM groups, directory-role holders - Find-ShadowAdmins.ps1 -PrivilegedIdsPath). auth-method-changed-by-admin.kql makes any MFA / TAP change on them High."

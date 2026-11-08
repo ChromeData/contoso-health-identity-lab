@@ -29,11 +29,14 @@
 //     lab/docs/runbooks/break-glass-drill.md. Even then it should alert —
 //     you WANT the record. Suppress by correlating with a pre-logged change
 //     ticket, never by muting the rule.
-//   - Matching is on the naming convention (bg-admin-NN@...), so the rule does
-//     not hardcode a tenant domain. Production hardening: match on the
-//     accounts' immutable object ids (UserId) from a Sentinel watchlist, so a
-//     rename cannot blind the rule. Terraform output
-//     `break_glass_user_principal_names` lists the current accounts.
+//   - Matching is on the accounts' IMMUTABLE object ids (UserId), rendered by
+//     modules/monitoring from modules/groups' break_glass_user_object_ids
+//     into the BreakGlassUserIds placeholder below (2026-11-07, review
+//     finding D3). A rename of bg-admin-01 therefore does NOT blind the rule.
+//     The naming convention (bg-admin-NN@...) is kept as a second, OR-ed
+//     match: it covers a NEW break-glass account before the next apply adds
+//     its id, and it is what a paste of this file (empty id list) still
+//     catches. Either match alone raises the alert.
 //
 // SENTINEL RULE: NEAR-REAL-TIME (NRT), since 2026-11-05
 //   modules/monitoring deploys this query as an NRT rule: it runs every
@@ -45,14 +48,23 @@
 //   window equal to a 5-minute schedule (the first fix, #170) could miss a
 //   row when a run is late or skipped. Each ingested row is judged exactly
 //   once, so one sign-in no longer raises 12 alerts (incidents #42 / #48).
-//   Severity High · Entities: Account=UserPrincipalName, IP=IPAddress.
+//   Severity High · Entities: Account=UserPrincipalName + AadUserId=UserId,
+//   IP=IPAddress.
 //   The Log Analytics alert path (post-trial) runs the same query on its
 //   own 1 h window.
 //
-//   A second break-glass sign-in inside an hour joins the open incident
-//   (grouping by account + IP); the automation rule "notify again when an
-//   alert joins an open incident" (modules/monitoring) still posts its own
-//   Teams card and ServiceNow ticket.
+//   DEDUP (2026-11-07, review finding D2): one sign-in writes several rows
+//   (interactive + non-interactive legs, MFA steps) that are ingested over up
+//   to ~30 minutes, and each NRT run that sees new rows raises one alert
+//   (E49a: 12 alerts; E49c: three tickets for one sign-in). Now:
+//     - incident grouping is by ACCOUNT only over 24 h (was account + IP over
+//       1 h), so every late row and every new IP of the same break-glass
+//       account lands in ONE incident;
+//     - the notify playbook runs again when an alert joins, but it finds the
+//       incident's open ServiceNow ticket (correlation_id = incident name)
+//       and adds a work note to it; it posts NO second Teams card and opens
+//       NO second ticket. Result: one incident, one card, one ticket per
+//       account per day, with every joined alert noted on that ticket.
 //   Guarded by modules/monitoring/tests/notify.tftest.hcl (NRT, no time
 //   filter) and the Kusto harness case late-ingested-old-row.
 //
@@ -71,6 +83,10 @@
 //   admin per the runbook.
 // =============================================================================
 
+// Break-glass accounts by IMMUTABLE object id. Terraform renders the list
+// (modules/monitoring, var.break_glass_user_ids); an empty list here means
+// "no ids known" and the naming convention below still matches.
+let BreakGlassUserIds = dynamic([]); // @@BREAK_GLASS_USER_IDS@@
 // Break-glass naming convention from lab/terraform/modules/groups.
 let BreakGlassPattern = @"(?i)^bg-admin-\d{2}@";
 // SCHEMA TRAP: LocationDetails is `dynamic` in SigninLogs but `string` in
@@ -84,9 +100,24 @@ union
     (AADNonInteractiveUserSignInLogs
         | extend SignInType = "non-interactive"
         | extend LocationDetails = todynamic(tostring(LocationDetails)))
-| where UserPrincipalName matches regex BreakGlassPattern
+| where UserId in (BreakGlassUserIds) or UserPrincipalName matches regex BreakGlassPattern
+| extend MatchedBy = iff(UserId in (BreakGlassUserIds), "object id", "naming convention")
 | extend Country = tostring(LocationDetails.countryOrRegion)
-| project TimeGenerated, SignInType, UserPrincipalName, IPAddress, Country,
+// One row PER ACCOUNT (the newest of its rows, with a count): the NRT rule
+// makes one alert per row (AlertPerResult), so two break-glass accounts seen
+// in the same minute become two alerts, each groupable into its own
+// account's incident, instead of one alert naming both (review of #230).
+// The newest row's fields stay in the plain columns; IPAddresses, ResultTypes
+// and CorrelationIds keep EVERY sign-in of the account in the window, so an
+// older success from another IP is still in the alert, not only in the raw
+// logs (review of #230). Capped at 50 each (one NRT minute holds far fewer).
+| summarize arg_max(TimeGenerated, SignInType, MatchedBy, IPAddress, Country, AppDisplayName,
+                    ClientAppUsed, ResultType, ResultDescription, ConditionalAccessStatus, CorrelationId),
+            SignIns = count(), SignInTypes = make_set(SignInType, 2),
+            IPAddresses = make_set(IPAddress, 50), ResultTypes = make_set(tostring(ResultType), 50),
+            CorrelationIds = make_set(CorrelationId, 50)
+    by UserPrincipalName, UserId
+| project TimeGenerated, SignInType, SignInTypes, SignIns, UserPrincipalName, UserId, MatchedBy, IPAddress, Country,
           AppDisplayName, ClientAppUsed, ResultType, ResultDescription,
-          ConditionalAccessStatus, CorrelationId
+          ConditionalAccessStatus, CorrelationId, IPAddresses, ResultTypes, CorrelationIds
 | sort by TimeGenerated desc
