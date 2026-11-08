@@ -1,6 +1,6 @@
 # ADR 0028: OrangeHRM is the lab's HR system; a scheduled connector feeds Entra API-driven inbound provisioning
 
-- **Status:** RAN · tenant (2026-11-07, capture log E170-E173): a test worker was hired, moved and made a leaver in OrangeHRM's own screens, and the connector carried each change to Entra. Timings are in "Measured in the tenant" below. Option "Workday personal tenant" is DESIGNED only (an owner step).
+- **Status:** RAN · tenant (2026-11-07, capture log E174-E177): a test worker was hired, moved and made a leaver in OrangeHRM's own screens, and the connector carried each change to Entra. Timings are in "Measured in the tenant" below. Option "Workday personal tenant" is DESIGNED only (an owner step).
 - **Date:** 2026-11-07
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** 2027-02-07, or when a Workday personal development tenant is granted to the owner
@@ -164,7 +164,7 @@ by `hr-clicks.mjs` (a headless browser doing HR's clicks; screenshots kept).
 The connector ran with `--watch 60`. Times are UTC; "+" counts from HR's
 last click (the Save that finishes the task).
 
-**Hire** (capture log E170)
+**Hire** (capture log E174)
 
 | UTC | + | Step |
 |---|---|---|
@@ -179,7 +179,7 @@ last click (the Save that finishes the task).
 | 18:17:23 | 26:46 | ServiceNow: user created (40-minute cycle) |
 | 18:36:28 | 45:51 | AWS IAM Identity Center: user created (SCIM, 40-minute cycle), UserStatus ENABLED |
 
-**Job change** (E171): Sub Unit Nursing to ICU
+**Job change** (E175): Sub Unit Nursing to ICU
 
 | UTC | + | Step |
 |---|---|---|
@@ -191,7 +191,7 @@ last click (the Save that finishes the task).
 | by 18:23:37 | 3:22 | Dynamic groups: out of All-Nurses, into All-ICU and the ICU auto-assignment group |
 | 18:55:10 | 34:55 | "ICU - Critical Care Apps" delivered by its auto-assignment policy (see the leaver: by then the account was already off) |
 
-**Leaver** (E172): Terminate Employment, date today, reason Resigned
+**Leaver** (E176): Terminate Employment, date today, reason Resigned
 
 | UTC | + | Step |
 |---|---|---|
@@ -201,17 +201,17 @@ last click (the Save that finishes the task).
 | 18:37:58 | 0:39 | AD account disabled |
 | 18:47:56 | 10:37 | Cloud Sync: Entra "Account enabled: No" |
 | by 18:50:47 | 13:28 | Dynamic groups: out of All-ICU and the ICU auto-assignment group |
-| 18:55:10 | 17:51 | **Gap seen:** the ICU auto-assignment policy delivered "ICU - Critical Care Apps" (App-ICU-CriticalCare-Users) to the already-disabled account, 35 minutes after the job change. The policy's rule matches department ICU and does not exclude disabled accounts. The account cannot sign in (Entra disabled), and the user was deleted at clean-up. Fix (not built here): add `accountEnabled -eq true` to the birthright auto-assignment rules. "Nurse - Clinical Apps" went into its 3-day grace period, as before |
+| 18:55:10 | 17:51 | **Gap seen:** the ICU auto-assignment policy delivered "ICU - Critical Care Apps" (App-ICU-CriticalCare-Users) to the already-disabled account, 35 minutes after the job change. Correction (PR #256): the rule and the live policy DO require `accountEnabled -eq true`. Entitlement management evaluated the rule late and acted on an old state (it created the request at 18:53:55, 6 minutes after the disable). The account cannot sign in (Entra disabled), and the user was deleted at clean-up. The leaver fix is ADR 0029 (PR #257). "Nurse - Clinical Apps" went into its 3-day grace period, as before |
 | 18:57:24 | 20:05 | ServiceNow: user disabled (40-minute cycle) |
 | 19:16:29 | 39:10 | AWS IAM Identity Center: user disabled (SCIM, 40-minute cycle) |
 
-**Clean-up** (E173): OrangeHRM Terminate then Maintenance > Purge (19:17:02;
+**Clean-up** (E177): OrangeHRM Terminate then Maintenance > Purge (19:17:02;
 OrangeHRM keeps an anonymised "Purged Employee" row, so `hris.sh free-id
 100493` freed the number for retakes); `reset-demo-hire.sh 100493 --apply`
 as the operator removed the `hr-feed` row and the AD account; the
 ServiceNow record was deleted as the ServiceNow admin (read back: none);
 Cloud Sync deleted the Entra user, `--purge-entra` emptied Deleted users,
-and SCIM removed the AWS user (Entra gone by 19:29:32, AWS by 19:57:04; read back 0 everywhere at 19:57:16, E173). DC01 was deallocated again.
+and SCIM removed the AWS user (Entra gone by 19:29:32, AWS by 19:57:04; read back 0 everywhere at 19:57:16, E177). DC01 was deallocated again.
 
 **Read the timings this way.** HR's part, OrangeHRM to Active Directory,
 took 1:31 for the hire, 0:45 for the job change and 0:39 for the leaver.
@@ -251,7 +251,7 @@ demand here), app provisioning (40 minutes).
 
 - `lab/hris/` (OrangeHRM, connector, rehearsal driver) and
   `lab/hris/connector/tests/connector.test.mjs` (CI: `lab-tests.yml`)
-- Capture log E170-E173; screenshots in `~/contoso-demo/captures/hris/2026-11-07/` (outside the repo)
+- Capture log E174-E177; screenshots in `~/contoso-demo/captures/hris/2026-11-07/` (outside the repo)
 - Workday: [developer program](https://blog.workday.com/en-us/workday-open-developer-platform-generally-available.html), [FAQ](https://github.com/Workday/WorkdayDeveloperProgram/blob/main/FAQ.md)
 - OrangeHRM: [release notes (OAuth 2.0 in 5.4)](https://sourceforge.net/projects/orangehrm/files/stable/), [registering an OAuth client](https://api-starter-orangehrm.readme.io/reference/registering-a-client)
 - ServiceNow HRSD on a PDI: [community thread](https://www.servicenow.com/community/hrsd-forum/hr-plugin-activation-on-personal-dev/m-p/1321028)
