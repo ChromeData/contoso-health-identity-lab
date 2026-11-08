@@ -67,6 +67,11 @@ MDI is in the design.
     `operator_ips` watchlist (ADR 0013). MDI does not hold the lab's operator
     allowlist.
   These are the lab's own detections, not twins.
+  **Update 2026-11-08 (round 2, R24 / round 1 D7):** the Vault stand-in and
+  its `VaultCheckout_CL` feed were retired by ADR 0036, so
+  `tier0-logon-without-checkout.kql` has no source in the lab any more. Only
+  `dc-logon-outside-operator-allowlist.kql` remains a live custom
+  correlation. Read "two" in this ADR as "two when written; one today".
 - **The codifiable piece is wired in Terraform; the rest is a runbook.** MDI
   alerts reach the same Log Analytics workspace the KQL rules use through the
   Microsoft Defender XDR data connector
