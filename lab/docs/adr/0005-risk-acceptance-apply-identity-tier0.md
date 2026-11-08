@@ -81,9 +81,25 @@ production design.
   ("Prevent self-review" has to stay off while there's no second reviewer). The
   two-person rule this design assumes doesn't hold until a second
   maintainer exists.
-- **The approved run applies a fresh plan, not the PR's plan.** Drift since
-  the PR, from portal edits or other merges, is applied without a second
-  look; it's visible only in the run log.
+- **The owner approves the saved plan that is applied (changed 2026-11-07,
+  karen-review A2).** Until then the reviewer approved the run before its
+  fresh plan existed, so drift since the PR (portal edits, other merges,
+  repository variables) was applied unseen. Now the apply job plans first,
+  the gate shows that saved plan (summary, change set, sha256) in the
+  "Approve: apply" issue, refuses when its change set differs from the PR
+  plan comment, and accepts only the owner's hand-typed `approve <first 8 of
+  the sha256>`. The job then re-checks the file's sha256 and applies exactly
+  that file. What is left: a `workflow_dispatch` run has no PR to compare,
+  so the owner reads the full saved plan in the issue; and the change set
+  compares resource addresses and actions, not attribute values, so a
+  different value on the same resource is visible only in the issue's
+  summary and the plan log.
+- **Who approves.** The owner, by hand, from his own GitHub session. An AI
+  coding assistant builds and proposes changes but never approves an apply;
+  the gate refuses an approval that mentions "Claude" or "delegated". Earlier
+  gates (before 2026-11-07) were approved by the assistant on the owner's
+  account; that is recorded in the approval issues and the README's "How
+  this lab was built".
 - **Detection is partial.** APPLY's directory changes alert, but at Low or
   Medium, because most of them are expected: telling a reviewed change from
   misuse means matching each alert to a PR. Nothing alerts on APPLY signing

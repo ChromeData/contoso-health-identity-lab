@@ -150,6 +150,9 @@ enable_shared_clinical_ca     = false
 # clinic's Okta org (runbook Phase 1, ADR 0022; the org host goes in
 # terraform.tfvars / TF_VAR_, never here). The Okta side is the separate,
 # human-applied root lab/terraform/okta.
+# enable_clinic_results_app adds Clinic Lab Results, the first app moved OFF the
+# clinic's Okta (lab/okta-migration wave 1): public client, PKCE, no secret,
+# ONE assignment App-ClinicResults-Users, and CA061 (MFA + sign-in every 8 h).
 enable_sso_apps = true
 # Signing certificates must fit the tenant's 180-day key-credential policy
 # (Set-AppGovernancePolicy.ps1). Rotation = a new date here, then the IdP
@@ -164,6 +167,7 @@ enable_servicenow_sso                  = true
 enable_servicenow_provisioning         = true
 servicenow_provisioning_job_enabled    = true
 enable_okta_federation                 = true
+enable_clinic_results_app              = true
 
 # Non-human identity governance: App-Consent-Reviewers group (premium) for the
 # admin consent workflow; uami-agent-runtime for Entra Agent ID. The tenant
@@ -283,6 +287,7 @@ ca_policy_states = {
   CA022 = "enabledForReportingButNotEnforced" # PAM session broker + admin portals, admin strength (enable_pam_oidc_app; was CA009)
   CA023 = "enabledForReportingButNotEnforced" # protected actions (CA / named-location changes), auth context c2 - Graph-managed (enable_protected_actions_ca)
   CA060 = "enabledForReportingButNotEnforced" # shared clinical workstations (enable_shared_clinical_ca)
+  CA061 = "enabled"                           # Clinic Lab Results: MFA + sign-in every 8 h (enable_clinic_results_app). Enforced from the start: it replaces an Okta rule that was already enforced; report-only would weaken the app during the move
 }
 
 # CA008 scope: "all_users" while report-only (measure), "pilot" to enforce.

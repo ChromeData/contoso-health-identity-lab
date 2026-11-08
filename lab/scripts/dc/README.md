@@ -18,6 +18,7 @@ extension.
 | `run-on-dc.py` | Runs any of these scripts on DC01 with secret parameters as a managed run command: secrets come from the Keychain or Terraform state inside the helper, are scrubbed from output, never on a command line |
 | `04-Install-CloudSyncAgent.ps1` | Installs and registers the Entra provisioning agent (Cloud Sync) unattended: Microsoft-signature gate, gMSA, domain bind. Replaces the manual RDP step |
 | `Remove-DemoHire.ps1` | Demo retakes only (`lab/scripts/demo/reset-demo-hire.sh`): deletes the one AD account HR provisioning created for an employeeID, never outside `OU=Workforce` / `OU=Disabled`, never a protected (`adminCount=1`) account. Reports only unless `Apply=yes` |
+| `Clear-LeaverAdGroups.ps1` | Leaver hygiene (review finding C7): removes every on-premises group membership from DISABLED accounts directly in `OU=Disabled`, so a rehire comes back with only the new birthright. Never an enabled account, never a protected (`adminCount=1`) account; prints each removal as the record. Reports only unless `Apply=yes`. BUILT, offline tests; not yet run on DC01 |
 
 ## Run it
 
