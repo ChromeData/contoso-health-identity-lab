@@ -1,9 +1,9 @@
 {
   "_comment": [
-    "PAM policy for the Vault stand-in: CyberArk's Master Policy + Platforms in one file.",
+    "PAM policy for the Vault stand-in: the master policy and the per-tier platforms in one file.",
     "Read by tools/discover.py (classification), onboard.sh (what to vault, where, which Vault policy),",
     "rotate.sh (dependency gate) and reconcile.sh (rotated within policy?). No secrets here.",
-    "CyberArk vocabulary: a tier is a Platform (rotation interval, check-out rules); a library set or",
+    "Vocabulary: a tier is a Platform (rotation interval, check-out rules); a library set or",
     "static-role prefix plus its Vault policy is a Safe; 'exclusions' are documented Master Policy exceptions."
   ],
   "version": 1,

@@ -16,6 +16,8 @@
 #     read-only Azure roles of PIM-Demo-Readers
 #   * Opt-in Azure Policy guardrails (modules/azure-guardrails): no new
 #     standing Owner, Key Vaults keep deletion protection - Audit first
+#   * An opt-in CanNotDelete lock on the WORM evidence storage account
+#     (enable_evidence_delete_lock): CI's Contributor cannot remove it
 #
 # Why a separate root: the identities CI runs as must not be managed BY that
 # CI. If envs/dev owned them, a PR could widen the APPLY identity's Graph
@@ -26,7 +28,10 @@
 # Tier 0: RoleManagement.ReadWrite.Directory lets it assign itself any
 # directory role (Security Administrator is enough to delete the diagnostic
 # setting; Global Administrator is everything), and subscription Contributor
-# lets it delete or cap loga-idlab, which envs/dev owns. What keeps PR code
+# lets it delete or cap loga-idlab, which envs/dev owns (least-privilege.tf
+# can narrow that Contributor to rg-identity-lab and puts delete locks it
+# cannot remove on the two vaults; the evidence store's lock is PR #223's
+# enable_evidence_delete_lock). What keeps PR code
 # away from APPLY is the reviewer-gated `prod` environment and its
 # environment-scoped OIDC subject - not this file.
 #
@@ -169,15 +174,19 @@ resource "azurerm_role_assignment" "plan_reader" {
 # Virtual Machine Administrator Login (Contributor cannot create role
 # assignments at all).
 # -----------------------------------------------------------------------------
+# Scope: local.apply_azure_scope_id (least-privilege.tf). "resource_group"
+# (this lab) = rg-identity-lab only, where every Azure resource envs/dev
+# manages lives; "subscription" only for a first deployment, before
+# envs/dev has created that RG.
 resource "azurerm_role_assignment" "apply_contributor" {
-  scope                = data.azurerm_subscription.current.id
+  scope                = local.apply_azure_scope_id
   role_definition_name = "Contributor"
   principal_id         = local.apply_sp
   principal_type       = "ServicePrincipal"
 }
 
 resource "azurerm_role_assignment" "apply_rbac_admin_constrained" {
-  scope                = data.azurerm_subscription.current.id
+  scope                = local.apply_azure_scope_id
   role_definition_name = "Role Based Access Control Administrator"
   principal_id         = local.apply_sp
   principal_type       = "ServicePrincipal"
@@ -286,14 +295,14 @@ check "identity_protection_logs_need_workspace" {
 # blobs/read + blobs/add/action would remove them; ABAC is kept to match E05.
 # -----------------------------------------------------------------------------
 data "azurerm_storage_account" "evidence" {
-  count               = var.enable_evidence_pack ? 1 : 0
+  count               = var.enable_evidence_pack || var.enable_evidence_delete_lock ? 1 : 0
   name                = var.evidence_storage_account_name
   resource_group_name = var.evidence_resource_group_name
 
   lifecycle {
     precondition {
       condition     = can(regex("^[a-z0-9]{3,24}$", var.evidence_storage_account_name))
-      error_message = "enable_evidence_pack needs evidence_storage_account_name: the WORM account (envs/dev output evidence_storage_account_name, repo variable TF_EVIDENCE_STORAGE_ACCOUNT_NAME)."
+      error_message = "enable_evidence_pack and enable_evidence_delete_lock need evidence_storage_account_name: the WORM account (envs/dev output evidence_storage_account_name, repo variable TF_EVIDENCE_STORAGE_ACCOUNT_NAME)."
     }
   }
 }
@@ -422,4 +431,47 @@ module "azure_guardrails" {
   standing_owner_effect       = var.standing_owner_effect
   keyvault_protection_effect  = var.keyvault_protection_effect
   owner_allowed_principal_ids = var.owner_allowed_principal_ids
+}
+
+# -----------------------------------------------------------------------------
+# Delete lock on the WORM evidence account (enable_evidence_delete_lock).
+#
+# WHY: the evidence store's immutability policy stays UNLOCKED in the lab (a
+# program rule: the trial tenant must stay removable). Unlocked, an account
+# administrator can shorten or remove the policy, and nothing stopped a
+# Contributor or Owner deleting the whole storage account. A CanNotDelete
+# management lock makes "delete the account" fail for everyone until the
+# lock itself is removed first.
+#
+# WHO CAN REMOVE IT: removing a lock needs Microsoft.Authorization/locks/
+# delete. That is in Owner and User Access Administrator, NOT in Contributor
+# (its NotActions exclude Microsoft.Authorization/*/Delete). So:
+#   * CI's APPLY (Contributor) cannot remove it, and envs/dev cannot manage it,
+#     which is why it lives here in the human-applied root.
+#   * The lab operator CAN remove it while it still holds subscription Owner.
+#     The lock is unremovable by the operator only after the operator's Owner
+#     is cut (PR fix/operator-tier0-cut, ADR 0024 amendment) and applied.
+#   * A human Owner can always remove it. That is by design: the lab must be
+#     deletable when the trial ends.
+#
+# WHY THE ACCOUNT AND NOT THE RESOURCE GROUP: rg-identity-lab also holds
+# things the lab deletes on purpose (Azure Bastion after each capture, test
+# VMs). An RG-level lock would block those deletes. A lock on the account
+# alone protects the evidence and nothing else.
+#
+# WHAT IT DOES NOT DO: a CanNotDelete lock does not stop blob deletes or
+# overwrites (data plane); those are refused by the immutability policy
+# and the writers' ABAC condition. It does not stop someone editing the
+# immutability policy while it is Unlocked. Production closes that gap:
+# the policy is LOCKED, the account lives in a separate subscription the
+# identity team holds no Owner on, and it keeps this delete lock.
+# Source: learn.microsoft.com/azure/azure-resource-manager/management/lock-resources
+# -----------------------------------------------------------------------------
+resource "azurerm_management_lock" "evidence_cannot_delete" {
+  count = var.enable_evidence_delete_lock ? 1 : 0
+
+  name       = "lock-evidence-cannot-delete"
+  scope      = data.azurerm_storage_account.evidence[0].id
+  lock_level = "CanNotDelete"
+  notes      = "WORM evidence store. Deleting the account needs a human Owner to remove this lock first (envs/bootstrap, human-applied). CI's Contributor cannot remove it."
 }

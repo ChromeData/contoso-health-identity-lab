@@ -42,6 +42,11 @@
 #   * NoOtherWayIn: IAM Roles Anywhere trust anchors, profiles, CRLs and
 #     attribute mappings (a certificate way in without Entra).
 #   * CannotCloseOrDetachTheAccount.
+#   * NoServerShell + NoSessionLogTampering (new in v4, session-manager.tf):
+#     no Session Manager shell, SendCommand, EC2 Instance Connect or Fleet
+#     Manager GUI connection for the operator - servers are reached only
+#     through a PIM activation (LabServerSession) - and no edit or delete of
+#     the session preferences document or the session log group.
 #   * NoAuditTampering (new in v3, audit-trail.tf): the operator can't
 #     stop, delete or reconfigure any CloudTrail trail, can't delete the
 #     Access Analyzer or hide its findings (archive rules, UpdateFindings),
@@ -188,6 +193,43 @@ locals {
           "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion",
         ]
         Resource = [local.audit_bucket_arn, "${local.audit_bucket_arn}/*"]
+      },
+      {
+        # v4 (session-manager.tf): servers are reached ONLY through a PIM
+        # activation (LabServerSession). Without this the operator's
+        # AdministratorAccess opened a shell on the Session Manager server
+        # with no activation (seen live 2026-11-07 01:15:51Z, E126) and could
+        # SendCommand outside the logged shell. Account-wide: every channel
+        # that runs code on, or logs in to, an instance. Action names checked
+        # 2026-11-07 against the Service Authorization Reference (Systems
+        # Manager, EC2 Instance Connect, Fleet Manager GUI Connect).
+        Sid    = "NoServerShell"
+        Effect = "Deny"
+        Action = [
+          "ssm:StartSession", "ssm:ResumeSession", "ssm:SendCommand",
+          "ec2-instance-connect:SendSSHPublicKey", "ec2-instance-connect:SendSerialConsoleSSHPublicKey",
+          "ec2-instance-connect:OpenTunnel", "ssm-guiconnect:StartConnection",
+        ]
+        Resource = "*"
+      },
+      {
+        # v4: the operator can't switch the session log off or erase it:
+        # not edit or delete the account-wide preferences document, not
+        # delete or shorten the session log group. Scoped like the audit
+        # bucket (the operator still runs other documents and log groups;
+        # NoIamChanges stops it making a principal that sheds this Deny).
+        Sid    = "NoSessionLogTampering"
+        Effect = "Deny"
+        Action = [
+          "ssm:UpdateDocument", "ssm:DeleteDocument", "ssm:UpdateDocumentDefaultVersion",
+          "logs:DeleteLogGroup", "logs:DeleteLogStream", "logs:PutRetentionPolicy",
+          "logs:DeleteRetentionPolicy", "logs:DisassociateKmsKey",
+        ]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:document/SSM-SessionManagerRunShell",
+          "arn:${data.aws_partition.current.partition}:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/contoso-lab/session-manager",
+          "arn:${data.aws_partition.current.partition}:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/contoso-lab/session-manager:*",
+        ]
       },
       {
         Sid      = "CannotCloseOrDetachTheAccount"

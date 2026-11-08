@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # psm-ssh.sh - brokered, recorded SSH with an EPHEMERAL Vault-signed
-# certificate (CyberArk: PSM for SSH / PSMP + SSH Key Manager; the pattern
+# certificate (brokered SSH + an SSH key manager; the pattern
 # behind "zero standing access" to Linux).
 #
 #   setup     Vault SSH secrets engine as a user CA (ssh-client-signer), role

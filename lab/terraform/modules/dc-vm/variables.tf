@@ -100,7 +100,7 @@ variable "allowed_ip_ranges" {
 
 variable "key_vault_id" {
   type        = string
-  description = "Key Vault the DC's identity may write its three build secrets to (dc01-dsrm-password, svc-vault-rotator, svc-pam-discovery; ABAC-limited to those names in main.tf)."
+  description = "Key Vault the DC's identity may write its two build secrets to (dc01-dsrm-password, svc-vault-rotator; ABAC-limited to those names in main.tf)."
 }
 
 variable "auto_shutdown_time" {
@@ -124,4 +124,16 @@ variable "tags" {
   type        = map(string)
   description = "Tags applied to every resource in this module."
   default     = {}
+}
+
+variable "adfs_https_enabled" {
+  type        = bool
+  description = <<-EOT
+    Also admit HTTPS (443) to the DC from allowed_ip_ranges, for the
+    TEMPORARY AD FS migration exercise (lab/adfs/README.md): the operator's
+    test browser signs in to AD FS on DC01 through it. AD FS is Tier 0 like
+    the DC, and the allowlist is the same single /32. Off by default; turn it
+    off when 19-Remove-Adfs.ps1 has run.
+  EOT
+  default     = false
 }

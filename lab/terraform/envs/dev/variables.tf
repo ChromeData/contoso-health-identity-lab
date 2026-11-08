@@ -176,15 +176,16 @@ variable "operator_ip_ranges" {
     error_message = "Each operator_ip_ranges entry must be an IPv4 CIDR no wider than /24 (use a single host, e.g. 203.0.113.7/32)."
   }
 
-  # DC01 is Tier 0: with enable_dc the root refuses anything but single
+  # DC01 is Tier 0 and the v4 operator rule reads the same watchlist: with
+  # enable_dc or enable_itdr_detections_v4 the root refuses anything but single
   # hosts, the same rule modules/dc-vm and the monitoring watchlist enforce,
   # so the plan fails HERE with this message rather than deep in a module.
   # Cross-variable validation needs Terraform >= 1.9 (versions.tf).
   validation {
-    condition = !var.enable_dc || alltrue([
+    condition = !(var.enable_dc || var.enable_itdr_detections_v4) || alltrue([
       for c in var.operator_ip_ranges : try(endswith(c, "/32") && cidrnetmask(c) == "255.255.255.255", false)
     ])
-    error_message = "enable_dc = true: every operator_ip_ranges entry must be a single IPv4 host as /32 (DC01 RDP/LDAPS and the operator_ips watchlist admit single hosts only - ADR 0013)."
+    error_message = "enable_dc or enable_itdr_detections_v4 = true: every operator_ip_ranges entry must be a single IPv4 host as /32 (DC01 RDP/LDAPS and the operator_ips watchlist admit single hosts only - ADR 0013)."
   }
 }
 
@@ -313,6 +314,21 @@ variable "enable_phishing_resistant_all_users" {
     post-apply/Set-AuthenticationMethodsPolicy.ps1 -IncludeStaffRollout).
     Needs enable_premium (custom authentication strengths + dynamic groups
     are P1).
+  EOT
+  default     = false
+}
+
+variable "enable_lcw_leaver_trigger" {
+  type        = bool
+  description = <<-EOT
+    Create the dynamic All-Workforce group (enabled, HR-synced members) for
+    the SCHEDULED leaver Lifecycle Workflow, without CA008: the workflow runs
+    for a user when HR's leaver disables the account and the user drops out
+    of the group (post-apply/New-LifecycleWorkflows.ps1
+    -IncludeScheduledLeaver). Until this, a leaver kept the access package
+    until IT ran 04-Leaver.ps1 (capture log E122). The same group as
+    enable_phishing_resistant_all_users creates; either flag creates it once.
+    Needs enable_premium (dynamic groups are P1).
   EOT
   default     = false
 }
@@ -897,6 +913,30 @@ variable "enable_defender_for_identity" {
   default     = false
 }
 
+variable "enable_itdr_detections_v4" {
+  type        = bool
+  description = "Fourth ITDR set (modules/monitoring itdr_v4.tf, review findings B1, B2, C5, D1): operator sign-in outside its allowlist, operator permission changes, auth method added to a break-glass account, HR leaver lag, spray by ASN. Needs enable_itdr_detections and operator_principal_ids. Off: turn on in its own reviewed change."
+  default     = false
+}
+
+variable "operator_principal_ids" {
+  type        = list(string)
+  description = "The lab operator workload identity's ids (service principal object id, application object id, appId; ADR 0024, envs/operator outputs). Repo Variable TF_OPERATOR_PRINCIPAL_IDS (JSON list). Needed by enable_itdr_detections_v4."
+  default     = []
+}
+
+variable "trusted_egress_ranges" {
+  type        = list(string)
+  description = "The hospital's internet egress ranges (IPv4 CIDR); failed-signin-spike drops them from the brute-force shape only. None in the lab."
+  default     = []
+}
+
+variable "trusted_asns" {
+  type        = list(string)
+  description = "ASNs failed-signin-spray-by-asn ignores (the hospital's ISP). None in the lab."
+  default     = []
+}
+
 variable "enable_itdr_containment" {
   type        = bool
   description = <<-EOT
@@ -1035,4 +1075,104 @@ variable "servicenow_saml_signing_cert_end_date" {
   type        = string
   description = "Expiry of the ServiceNow SAML signing certificate (RFC 3339); null = Entra's 3-year default, which the lab's 180-day credential policy rejects."
   default     = null
+}
+
+# ---- Okta -> Entra app migration, wave 1 (Clinic Lab Results) -----------------
+
+variable "enable_clinic_results_app" {
+  type        = bool
+  description = <<-EOT
+    Okta -> Entra migration wave 1 (lab/okta-migration, runbook Phase 2):
+    the Clinic Lab Results app in Entra (modules/apps clinic_results.tf:
+    public client, PKCE, no secret, assignment required, ONE assignment
+    App-ClinicResults-Users) AND its Conditional Access policy CA061 (MFA,
+    sign-in every 8 h, the app group only), which needs a CA061 entry in
+    ca_policy_states. Needs enable_premium and enable_sso_apps. The Okta app
+    it replaces stays in lab/terraform/okta until the retire step.
+  EOT
+  default     = false
+}
+
+# ---- AD FS -> Entra migration exercise (lab/adfs, ADR 0009) -------------------
+
+variable "enable_adfs_https" {
+  type        = bool
+  description = <<-EOT
+    Admit HTTPS (443) to DC01 from operator_ip_ranges (the same /32), for the
+    TEMPORARY lab AD FS (lab/adfs/README.md): the operator's test browser
+    signs in to it through the Claims Viewer. Off by default. Turn it off
+    again after lab/adfs/scripts/19-Remove-Adfs.ps1.
+  EOT
+  default     = false
+}
+
+variable "enable_connect_health_registration" {
+  type        = bool
+  description = <<-EOT
+    TIME-BOXED (ADR 0031): create adm-connecthealth-reg with an ACTIVE Hybrid
+    Identity Administrator role, so lab/adfs/connect-health/register.sh can
+    register the Connect Health agent on DC01 with a passkey sign-in and no
+    person at the server. Changes no Conditional Access policy. Needs
+    connect_health_registration_until_utc. Off by default; the PR that turns
+    it on is followed by one that turns it off (that deletes the account and
+    the role).
+  EOT
+  default     = false
+}
+
+variable "connect_health_registration_until_utc" {
+  type        = string
+  description = <<-EOT
+    End of the Connect Health registration window, RFC 3339 UTC (e.g.
+    "2026-11-08T18:00:00Z"). While enable_connect_health_registration is on,
+    every envs/dev plan after this time FAILS, so nothing else can be applied
+    until the flag is turned off. Keep it within 24 hours of the PR.
+  EOT
+  default     = ""
+  validation {
+    condition     = var.connect_health_registration_until_utc == "" || can(timecmp(var.connect_health_registration_until_utc, "2000-01-01T00:00:00Z"))
+    error_message = "connect_health_registration_until_utc must be an RFC 3339 timestamp such as 2026-11-08T18:00:00Z."
+  }
+}
+
+variable "enable_claims_viewer_app" {
+  type        = bool
+  description = <<-EOT
+    Create the Contoso Claims Viewer SAML app in Entra (modules/apps
+    claims_viewer.tf): the app moved off AD FS, its AD FS claim rules
+    converted to a claims-mapping policy and app roles. Needs enable_sso_apps
+    and the two group ids below. Off by default.
+  EOT
+  default     = false
+}
+
+variable "claims_viewer_clinicians_group_object_id" {
+  type        = string
+  description = "Entra object id of GRP-ClaimsViewer-Clinicians (synced from AD; exists after lab/adfs/scripts/11-Add-ClaimsViewerRp.ps1 and one Cloud Sync cycle). Not secret."
+  default     = ""
+}
+
+variable "claims_viewer_admins_group_object_id" {
+  type        = string
+  description = "Entra object id of GRP-ClaimsViewer-Admins (synced from AD). Not secret."
+  default     = ""
+}
+
+variable "claims_viewer_saml_signing_cert_end_date" {
+  type        = string
+  description = "Expiry of the Claims Viewer SAML signing certificate (RFC 3339); null = Entra's default."
+  default     = null
+}
+
+variable "enable_servicenow_fulfilment" {
+  type        = bool
+  description = <<-EOT
+    Create "ServiceNow - Access Fulfilment" (modules/apps
+    servicenow_fulfilment.tf): the app ServiceNow uses to add or remove people
+    on Clinical access packages after a manager approves in ServiceNow.
+    Certificate credential only, no Graph API permission, one catalog role
+    (Access package assignment manager). Needs enable_governance (the
+    catalog). ServiceNow side: lab/servicenow/apply.py.
+  EOT
+  default     = false
 }

@@ -83,3 +83,18 @@ lab_admin_session_duration      = "PT1H"
 # write the operator is denied.
 enable_audit_baseline    = false
 audit_log_retention_days = 365
+
+# ---- Session Manager server path (optional, off by default - session-manager.tf)
+# One t4g.micro with NO inbound port, NO SSH key and NO public IP, reachable
+# only by a Session Manager shell; four interface endpoints (~$1/day); session
+# transcripts in CloudWatch Logs; the LabServerSession permission set for the
+# SCIM copy of PIM-AWS-Lab-Admins. Apply with idlab-labadmin. Turn it off
+# again after a capture (destroys the server and the endpoints).
+enable_session_manager        = false
+session_node_running          = true
+session_node_instance_type    = "t4g.micro"
+session_group_display_name    = "PIM-AWS-Lab-Admins"
+session_group_entra_object_id = "" # envs/dev output aws_admin_group_object_id
+session_target_tag_key        = "session-access"
+session_target_tag_value      = "lab-server-session"
+session_log_retention_days    = 30

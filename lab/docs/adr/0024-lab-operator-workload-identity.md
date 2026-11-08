@@ -5,6 +5,7 @@
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** 2027-02-04, or earlier on any revisit trigger
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
+- **Amended by:** [ADR 0030](0030-lab-operator-residual-risk.md) (2026-11-06, BUILT, not yet applied): standing rights cut to read-only, no Owner, writes only in an owner-opened session of at most 8 hours, only the owner applies `envs/operator`. The "no new reach: already Tier 0" notes below are retired reasoning.
 
 ## Context
 
@@ -122,7 +123,10 @@ switch.
   itself; review moved it to the account-wide IAM-write Deny above.) Still to capture: the Entra service-principal
   sign-in record and the CloudTrail `AssumeRoleWithWebIdentity` record.
 
-## Amendment 2026-11-05: who applies `envs/operator`
+## Amendment 2026-11-05: who applies `envs/operator` (RETIRED by ADR 0030)
+
+> Retired 2026-11-06: an identity must not apply changes to its own
+> permissions. Only the owner applies `envs/operator` (ADR 0030).
 
 The owner asked for the lab's remaining work to run without them. From this
 date, after the first human apply, changes to `envs/operator` are applied by
@@ -161,6 +165,12 @@ Two Graph application roles close the last two stated gaps in the demo:
   the Terraform body and refuses one that keeps access on silence without a
   reviewer and a fallback reviewer. `AccessReview.Read.All` stays too: the
   read-only report scripts check their Graph context for that exact name.
+- `Reports.Read.All` (added 2026-11-07): read the AD FS application migration
+  report (`GET /beta/reports/getRelyingPartyDetailedSummary`) as code, for
+  `lab/adfs`. It is the only application permission Microsoft Learn lists for
+  that call. It reads usage and sign-in summaries; nothing under `/reports`
+  writes. `tests/operator.tftest.hcl` pins that no other `Reports.*` role is
+  granted.
 
 No new reach: the operator was already Tier 0 (Consequences above), so it
 could have granted itself either role. Like every change here, both arrive

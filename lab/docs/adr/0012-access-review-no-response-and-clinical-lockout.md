@@ -187,6 +187,29 @@ reviewers behave, so they don't fill this table.
 - verify: whether package-policy reviews appear in the review definitions
   that the evidence pack reads.
 
+## Movers keep requested access: closed by design (added 2026-11-07)
+
+- **The gap.** Birthright (T3) access follows the HR attributes, so it
+  changes on a move. Requested (T2) packages, such as `ICU - Float Access`,
+  stay until their 180-day expiry. A mover can keep access that only the
+  old job justified for up to six months.
+- **Decision (DESIGNED, not built):** a department or job change ends every
+  T2 assignment or sends it to the new manager to re-certify:
+  1. A **Lifecycle Workflow** with the *mover* trigger (attribute change on
+     `department` or `jobTitle`) runs the task "Remove access package
+     assignment for user" for each T2 package. verify: the LCW task list
+     and that the mover trigger accepts these attributes.
+  2. Where a package must survive a move (for example a cross-unit float
+     role), the workflow instead starts an on-demand access review of that
+     assignment, reviewer the **new** manager, 7 days, no response means
+     removed.
+  3. T1 (privileged) eligibility is never carried over a move. The PIM
+     group owner re-approves it.
+- **Today:** `03-Mover.ps1` leaves birthright removal to the automatic
+  assignment policy and can remove a selected old requestable package.
+  The mover workflow is opt-in. Until the workflow above is built, other
+  T2 assignments remain until expiry unless removed separately.
+
 ## Revisit trigger
 
 - A clinical lockout traced to a review or an expiry.

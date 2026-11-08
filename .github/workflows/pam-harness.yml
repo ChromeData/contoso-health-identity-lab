@@ -33,7 +33,7 @@
 # ops-alice, ...), which are names, not credentials.
 #
 # Not on pull requests, on purpose: a full run takes several minutes and
-# pulls every stand-in image (Vault, Guacamole, Conjur, midPoint, PostgreSQL).
+# pulls every stand-in image (Vault, Guacamole, midPoint, PostgreSQL).
 # It runs on demand and nightly. It is therefore never a required check.
 #
 # Supply chain: actions pinned to full commit SHAs (same pins and rationale as

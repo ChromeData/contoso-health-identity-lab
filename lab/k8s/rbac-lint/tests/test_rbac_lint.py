@@ -2,7 +2,7 @@
 
 Run:  python3 -I -m unittest discover -s lab/k8s/rbac-lint/tests -v
 
-Ported from the earlier Conjur-Kubernetes-KubiScan lab (pytest there, stdlib
+Ported from the earlier Kubernetes-KubiScan lab (pytest there, stdlib
 unittest here like the lab's other Python tests), plus the tests for the
 fixes made while porting. Each test marked NEW FAILS against the earlier
 linter (checked 2026-11-06 by running this file against it):

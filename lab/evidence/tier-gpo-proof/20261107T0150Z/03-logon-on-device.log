@@ -1,0 +1,46 @@
+run command lab-27916a6e: lab/scripts/dc/tier-test/Test-TierLogon.ps1 on vm-t2dev-01
+{
+    "computer":  "T2DEV01.corp.contosohealthlab.com",
+    "ou":  "CN=T2DEV01,OU=Devices,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com",
+    "gpoApplied":  true,
+    "tier0AdminsSid":  "S-1-5-21-1067174854-3188284702-1788255269-3602",
+    "denyRights":  {
+                       "SeDenyRemoteInteractiveLogonRight":  "*S-1-5-21-1067174854-3188284702-1788255269-3602,*S-1-5-21-1067174854-3188284702-1788255269-512,*S-1-5-21-1067174854-3188284702-1788255269-518,*S-1-5-21-1067174854-3188284702-1788255269-519",
+                       "SeDenyNetworkLogonRight":  "*S-1-5-21-1067174854-3188284702-1788255269-3602,*S-1-5-21-1067174854-3188284702-1788255269-512,*S-1-5-21-1067174854-3188284702-1788255269-518,*S-1-5-21-1067174854-3188284702-1788255269-519",
+                       "SeDenyInteractiveLogonRight":  "*S-1-5-21-1067174854-3188284702-1788255269-3602,*S-1-5-21-1067174854-3188284702-1788255269-512,*S-1-5-21-1067174854-3188284702-1788255269-518,*S-1-5-21-1067174854-3188284702-1788255269-519",
+                       "SeDenyServiceLogonRight":  "*S-1-5-21-1067174854-3188284702-1788255269-3602,*S-1-5-21-1067174854-3188284702-1788255269-512,*S-1-5-21-1067174854-3188284702-1788255269-518,*S-1-5-21-1067174854-3188284702-1788255269-519",
+                       "SeDenyBatchLogonRight":  "*S-1-5-21-1067174854-3188284702-1788255269-3602,*S-1-5-21-1067174854-3188284702-1788255269-512,*S-1-5-21-1067174854-3188284702-1788255269-518,*S-1-5-21-1067174854-3188284702-1788255269-519"
+                   },
+    "logons":  [
+                   {
+                       "account":  "CORP\\t0-adm-01",
+                       "tier":  "Tier 0",
+                       "logonType":  "interactive (2)",
+                       "code":  1385,
+                       "result":  "DENIED: logon type not granted (1385)"
+                   },
+                   {
+                       "account":  "CORP\\t0-adm-01",
+                       "tier":  "Tier 0",
+                       "logonType":  "network (3)",
+                       "code":  1385,
+                       "result":  "DENIED: logon type not granted (1385)"
+                   },
+                   {
+                       "account":  "CORP\\t2-adm-01",
+                       "tier":  "Tier 2",
+                       "logonType":  "interactive (2)",
+                       "code":  0,
+                       "result":  "SIGNED IN"
+                   },
+                   {
+                       "account":  "CORP\\t2-adm-01",
+                       "tier":  "Tier 2",
+                       "logonType":  "network (3)",
+                       "code":  0,
+                       "result":  "SIGNED IN"
+                   }
+               ]
+}
+VERDICT: PASS - Tier 0 admin denied (1385) on every tested logon type; Tier 2 admin signed in on every tested logon type
+state: Succeeded, exit code: 0

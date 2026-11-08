@@ -1,10 +1,10 @@
 {
   "_comment": [
-    "Who may do what through the PAM stand-in (CyberArk: Safe membership). Lab personas, not real people.",
+    "Who may do what through the PAM stand-in. Lab personas, not real people.",
     "libraries: Vault library sets the person may check out from (psm-session.sh).",
     "ssh_roles: Vault SSH CA roles the person may get a certificate from (psm-ssh.sh).",
     "approves: Safes (library sets / SSH roles) for which this person's approval of a change counts toward",
-    "dual control (CyberArk: the Safe permission to authorise account requests). lib.sh itsm_validate counts",
+    "dual control (the permission to authorise account requests). lib.sh itsm_validate counts",
     "distinct approvers from ServiceNow's sysapproval_approver records, never the requester, only names listed",
     "here; pam-policy.json approvals_required says how many (tier0 2, tier1 1).",
     "Each person gets their own Guacamole user (no shared t0-operator). Lab: local password in",

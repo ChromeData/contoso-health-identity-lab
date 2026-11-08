@@ -8,7 +8,7 @@
 # hold no static credential at all and still own the cluster because its
 # service account can mint tokens, rewrite its own permissions, or read every
 # secret. Each object below plants one escalation path. Ported from the
-# author's earlier Conjur-Kubernetes-KubiScan lab, unchanged apart from this
+# author's earlier Kubernetes-KubiScan lab, unchanged apart from this
 # header. lab-pod-creator's namespace "app" is that lab's, not this one's.
 ---
 # Risk 1: `escalate`, grant yourself any permission, bypassing the normal

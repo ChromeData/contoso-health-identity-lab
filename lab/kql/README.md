@@ -1,6 +1,6 @@
 # KQL detections
 
-24 identity detections for Contoso Health, one `.kql` file each. These files
+29 identity detections for Contoso Health (24 until 2026-11-07, plus the fourth set below), one `.kql` file each. These files
 are the single source: `lab/terraform/modules/monitoring` deploys them as
 Microsoft Sentinel scheduled rules (during the Sentinel trial) or as Log
 Analytics scheduled query alerts (after it), and each one has an SPL twin in
@@ -18,13 +18,49 @@ that day ran on the Azure Data Explorer Kusto emulator on 2026-10-21 (below).
 The two added on 2026-11-06 (third set, below) have not run on the emulator:
 their cases ran on the Log Analytics query engine instead (RAN · harness,
 on the workspace's engine, E114). In the tenant, the Sentinel analytics
-rules list read on 2026-11-06 showed 16 of the first 22 as enabled
+rules list read on 2026-11-07 UTC (table below) showed 16 of the first 22 as enabled
 scheduled rules (plus Microsoft's Fusion rule); the five in
 `itdr_exclude_rules`, the break-glass rule (being moved to a near-real-time
 rule, `main.tf`) and the two third-set rules were not in it. (This paragraph
-said until 2026-11-06 that no workspace existed; that was out of date.) What
-has run offline (on
-2026-10-20, unless marked otherwise):
+said until 2026-11-06 that no workspace existed; that was out of date.) The live state is in the table below.
+
+### Running in Sentinel, and what has fired (live read, 2026-11-07 UTC)
+
+Read as the lab operator on 2026-11-07, before 02:35 UTC (the evening of
+2026-11-06 in US Eastern time): the workspace's analytics rules list, and
+`SecurityAlert` counted by rule name over the 30 days before that read. All
+dates in this table are UTC, so the two 2026-11-07 rows fall inside the window. "Fired" means alerts on
+real tenant events. Most of them came from the lab's own build and admin work
+(true events, benign cause); no rule's alerts have been triaged one by one,
+so the false-positive column records only what is known.
+
+| Rule (display name) | Running | Alerts, 30 days | Known false positives / notes |
+|---|---|---|---|
+| Permission granted to an application | Y | 718 | Lab setup grants; noisy during builds |
+| Failed sign-in spike from one IP | Y | 149 | Counts interrupts as failures (karen D1; PR #233). E113 was a staged trigger |
+| Directory role assigned outside PIM | Y | 144 | Pipeline and operator role work |
+| PIM activation | Y | 138 | Every activation is Medium and opens a ticket (karen B5; PR #233). Real activation: E40b |
+| Credential added to an app or service principal | Y | 110 | Lab app and operator certificate work |
+| CA policy, named location or auth strength changed outside IaC | Y | 108 | All on 2026-10-28/29, the graduation night (E30) |
+| Break-glass account sign-in (NRT) | Y | 48 | 2 sign-ins in the 2026-11-05 drill (E49); late rows added alerts (dedup: PR #230) |
+| Authentication method changed by an admin | Y | 42 | Lab passkey and TAP setup (E11c, E11d, E100) |
+| Member added to a privileged AD group | Y | 12 | 2026-11-07, AD work on DC01 |
+| Tier-0 logon on DC01 without a Vault check-out | Y | 9 | 2026-11-07, AD work on DC01 |
+| Security info registered from a risky or unfamiliar context | Y | 7 | Break-glass passkey registration (E41a) |
+| Legacy authentication attempts | Y | 0 | |
+| Sign-in from a blocked / watched country | Y | 0 | |
+| DCSync (replication by a non-DC account) | Y | 0 | |
+| Device-code flow sign-in | Y | 0 | |
+| Kerberoasting (RC4 service tickets) | Y | 0 | |
+| Member added to a privileged group outside PIM | Y | 0 | |
+| identity-risk, pim-activation-without-auth-context, sod-violation-granted, vault-privileged-access-anomaly, dc-logon-outside-operator-allowlist | N | - | In `itdr_exclude_rules` or waiting for a dependency |
+| dormant-privileged-account-reactivation, keyvault-bulk-secret-read | N | - | Third set, flag off (E114) |
+
+So: 24 written, 17 running (16 scheduled, 1 NRT) plus Fusion, 11 seen firing
+on real tenant events. Drill and test rules (`Contoso DRILL`, `Contoso TEST`)
+are temporary and not counted.
+
+What has run offline (on 2026-10-20, unless marked otherwise):
 
 - `modules/monitoring`'s mocked `terraform test` (32 runs) checks that every
   rule the module deploys exists here, that entity mappings and custom
@@ -80,10 +116,10 @@ approval-gated containment playbook (`enable_itdr_containment`).
 
 | Detection | Catches | Severity | Tables | Runs every / looks back | SPL twin | Deployed by | Containment |
 |---|---|---|---|---|---|---|---|
-| `pim-activation.kql` | A PIM for Groups / PIM for roles activation completed (T1078); expected for approved changes, every one reviewed | Medium | AuditLogs | 5 min / 1 h | `pim-activation.spl` | `enable_sentinel` or `enable_la_alerts` | no |
-| `break-glass-signin.kql` | Any sign-in attempt by an emergency-access account (T1078) | High | SigninLogs, AADNonInteractiveUserSignInLogs | 5 min / 1 h | `break-glass-signin.spl` | `enable_sentinel` or `enable_la_alerts` | no |
+| `pim-activation.kql` | A PIM for Groups / PIM for roles activation completed (T1078). Tier 0 decided by group object id first (the group is logged as type "Other"; the old rule never found it) | From the query: Informational for routine non-Tier-0 work (no ticket, no card), Low when off-hours or from a new IP, Medium for Tier 0, High for Tier 0 off-hours or from a new IP | AuditLogs (+ SigninLogs for the new-IP history) | 5 min / 1 day (alerts on the last hour only) | `pim-activation.spl` | `enable_sentinel` or `enable_la_alerts` | no |
+| `break-glass-signin.kql` | Any sign-in attempt by an emergency-access account (T1078), matched by the accounts' immutable object ids (a rename does not blind it) or the bg-admin-NN name; one incident per account per day | High | SigninLogs, AADNonInteractiveUserSignInLogs | 5 min / 1 h | `break-glass-signin.spl` | `enable_sentinel` or `enable_la_alerts` | no |
 | `blocked-country-signin.kql` | Sign-in from a blocked or watched country; flags a success from a block-list country (a CA gap) (T1078) | Medium | SigninLogs | 5 min / 1 h | `blocked-country-signin.spl` | `enable_sentinel` or `enable_la_alerts` | no |
-| `failed-signin-spike.kql` | 10+ failed sign-ins from one IP in one 10-minute bin: spray or brute force (T1110) | Medium | SigninLogs (interactive only; the rule header shows the AADNonInteractiveUserSignInLogs union to add) | 5 min / 1 h | `failed-signin-spike.spl` | `enable_sentinel` or `enable_la_alerts` | no |
+| `failed-signin-spike.kql` | 10+ credential failures (MFA interrupts not counted) from one IP inside any 10-minute window, windows every 5 minutes: spray or brute force (T1110). The hospital's egress ranges drop out of the brute-force shape only | Medium | SigninLogs (interactive only; the rule header shows the AADNonInteractiveUserSignInLogs union to add) | 5 min / 1 h | `failed-signin-spike.spl` | `enable_sentinel` or `enable_la_alerts` | no |
 | `legacy-auth.kql` | Sign-ins over legacy protocols that cannot do MFA; `StillSucceeding` means CA003 is not holding (T1078) | Low | SigninLogs, AADNonInteractiveUserSignInLogs | 1 h / 1 day | `legacy-auth.spl` | `enable_sentinel` or `enable_la_alerts` | no |
 
 ### ITDR (11)
@@ -109,7 +145,7 @@ approval-gated containment playbook (`enable_itdr_containment`).
 | `device-code-signin.kql` | Sign-in with the device code flow, or a token from such a session: device-code phishing (T1528, T1566.002, T1078.004); the detective twin of CA010 | Medium; per row High for a privileged user or a medium/high-risk sign-in, Low when blocked | SigninLogs, AADNonInteractiveUserSignInLogs | 5 min / 1 h | `device-code-signin.spl` | `enable_itdr_detections_v2` | yes |
 | `security-info-registered-risky.kql` | A user registered their own MFA method from a risky sign-in, a new country or an unmanaged device (T1098.005, T1556.006) | Medium; per row High for every privileged registration | AuditLogs, sign-in logs | 1 h / 14 days | `security-info-registered-risky.spl` | `enable_itdr_detections_v2` (**Sentinel only**: Log Analytics alerts look back 2 days at most) | yes |
 | `dc-logon-outside-operator-allowlist.kql` | RDP on DC01, or a network logon from a public IP, not from an unexpired `operator_ips` entry ([ADR 0013](../docs/adr/0013-tier0-domain-controller-exposure.md)) (T1133, T1021.001) | High; per row Medium for failures only | SecurityEvent, `operator_ips` watchlist | 5 min / 1 h | `dc-logon-outside-operator-allowlist.spl` (enabled; an empty `contoso_operator_ips.csv` lookup = every source alerts) | `enable_itdr_detections_v2` (the watchlist with `enable_dc`) | yes |
-| `vault-privileged-access-anomaly.kql` | PAM vault misuse, the CyberArk PTA / CPM alert equivalent: Tier-0 read outside a ticketed check-out, check-out without a ticket, rotation failure, root-token use, failed-login burst, Tier-0 access denied (T1555, T1078, T1110, T1562) | Medium (per row) | VaultCheckout_CL | 5 min / 6 h | `vault-privileged-access-anomaly.spl` | `enable_itdr_detections_v2` + `vault_feed_v2_columns` | **never** (the account is a Vault identity, not an AD one) |
+| `vault-privileged-access-anomaly.kql` | PAM vault misuse: Tier-0 read outside a ticketed check-out, check-out without a ticket, rotation failure, root-token use, failed-login burst, Tier-0 access denied (T1555, T1078, T1110, T1562) | Medium (per row) | VaultCheckout_CL | 5 min / 6 h | `vault-privileged-access-anomaly.spl` | `enable_itdr_detections_v2` + `vault_feed_v2_columns` | **never** (the account is a Vault identity, not an AD one) |
 | `sod-violation-granted.kql` | A grant that completes a pair in `lab/iga/sod-rules.json` (SOD-01 to SOD-09) (T1098) | Medium; per row the rule's own risk, Low under an approved exception | AuditLogs, `sod_holdings` watchlist (from `09-SoD-Report.ps1 -HoldingsSnapshotPath`; the upload is tenant-time) | 1 h / 14 days | `sod-violation-granted.spl` (enabled; an empty `contoso_sod_holdings.csv` = grants inside the 14-day window only) | `enable_itdr_detections_v2` (**Sentinel only**) | **never** (disabling a clinician over an SoD conflict is a patient-safety event, [ADR 0012](../docs/adr/0012-access-review-no-response-and-clinical-lockout.md)) |
 | `pim-activation-without-auth-context.kql` | A Tier-0 PIM activation that PIM let through on plain MFA because authentication context `c1` was not satisfied or CA021 was not enforced (T1078.004, T1556.009). Preview: activation strings still `verify:` | High (per row) | AuditLogs, sign-in logs | 1 h / 1 day | `pim-activation-without-auth-context.spl` | `enable_itdr_detections_v2` (keep in `itdr_exclude_rules` until verified) | yes |
 
@@ -138,6 +174,16 @@ both SPL twins as one-off searches on the local Splunk (they parse; the
 dormant twin gave the same five accounts and counts as the KQL on the same
 shortened window with the dormancy filter removed). Not run: the Kusto
 emulator, a Sentinel rule, an incident.
+
+**Fourth set (2026-11-07, review findings B1, B2, C5, D1; `enable_itdr_detections_v4`, off).** RAN · harness on the Log Analytics query engine only (capture log E131); no Sentinel rule exists for them.
+
+| File | Catches | Severity | Table | Schedule | SPL twin | Deployed by | Containment |
+|---|---|---|---|---|---|---|---|
+| `operator-signin-outside-allowlist.kql` | The lab operator's service principal (by id) signs in from an IP outside the operator_ips watchlist (T1078.004, T1528) | High on success, Medium failures only | AADServicePrincipalSignInLogs | 15 min / 1 h | yes (no data in Splunk: no feed sends this table) | v4 (**Sentinel only**: watchlist) | never |
+| `operator-permissions-changed.kql` | An app role, grant, credential, owner or app setting of the operator changed, by anyone, itself included (T1098) | High; Medium for a pure removal | AuditLogs | 5 min / 1 h | yes | v4 | never |
+| `break-glass-auth-method-added.kql` | Security info registered or changed on a break-glass account by anyone, an application included (the way the break-glass passkeys were minted, E11d) (T1098.005, T1556.006) | High; Medium for a failure or deletion | AuditLogs | 5 min / 1 h | yes | v4 | never |
+| `hr-leaver-lag.kql` | HR leaver disabled in AD but still enabled in Entra 15 minutes later, or the inbound AD write failed (T1078) | High | AADProvisioningLogs | 15 min / 1 h | yes (no data in Splunk) | v4 | never |
+| `failed-signin-spray-by-asn.kql` | Credential failures against 10+ distinct users, 3 or fewer tries each, from one ASN in 1 h (T1110.003) | Medium; High when one of them then signs in | SigninLogs, AADNonInteractiveUserSignInLogs | 15 min / 1 h | yes | v4 | never |
 
 ## Before a rule can be deployed
 

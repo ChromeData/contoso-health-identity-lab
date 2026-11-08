@@ -3,7 +3,7 @@
 # =============================================================================
 
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.9.0" # cross-variable validation (enable_operator_workload_ca) needs 1.9
 
   required_providers {
     azuread = {

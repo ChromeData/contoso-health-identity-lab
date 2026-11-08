@@ -220,6 +220,7 @@ function Get-OutcomeText {
     # unreadable / undelivered).
     param([Parameter(Mandatory)][string]$Kind, [Parameter(Mandatory)][string]$Mode, [hashtable]$Outcome = @{ state = 'pending' })
     if ($Kind -eq 'removed') { return 'nothing sent: deleting a row does not switch an account off (mark the person as a leaver instead)' }
+    if ($Outcome.state -eq 'held') { return 'held back by the safety check: NOT sent (see above)' }
     if ($Outcome.state -eq 'undelivered') { return 'not delivered: Microsoft refused this batch' }
     if ($Mode -eq 'dry-run') {
         switch ($Kind) {
@@ -269,15 +270,20 @@ function Get-ProvisioningLogLink {
 function Get-RefusalText {
     param($Refusal, [int]$Threshold)
     $kind = [string](Get-Field $Refusal 'kind'); $count = Get-Field $Refusal 'count'
+    # The send step records the threshold it really used (floor, percentage
+    # of the population or 3 sigma of history); prefer it over the default.
+    $t = Get-Field $Refusal 'threshold'
+    if ($t) { $Threshold = [int]$t }
     switch ($kind) {
-        'mass-disable' { return "This change would switch off **$count** people at once. The limit is $Threshold per push, because a broken HR export looks exactly like a mass layoff, and switching off a ward mid-shift is the bigger harm." }
-        'mass-access-change' { return "This change would move **$count** people to a different department or job title at once. The limit is $Threshold per push: access follows department and title, so a bad export would move or remove access for all of them." }
+        'mass-disable' { return "This change would switch off **$count** people at once. The limit for this push is $Threshold, because a broken HR export looks exactly like a mass layoff, and switching off a ward mid-shift is the bigger harm. Those rows were held back (quarantined); the other rows were not stopped." }
+        'mass-access-change' { return "This change would move **$count** people to a different department or job title at once. The limit for this push is ${Threshold}: access follows department and title, so a bad export would move or remove access for all of them. Those rows were held back (quarantined); the other rows were not stopped." }
         'bad-start-date' { return 'A new or current worker has no valid start date. It must look like 2026-11-09: the start date decides when day-one access begins.' }
         'bad-status' { return 'A row''s status is not one of joiner, active or leaver.' }
         'empty-field' { return 'A row is missing its employee ID, first name, last name or status.' }
         'missing-column' { return 'The header row (the first line) is missing a column.' }
         'no-rows' { return 'The file has no worker rows.' }
         'unknown-employee' { return 'An employee ID that was asked for is not in the HR file.' }
+        'upn-history' { return 'The run could not read the full history of the HR file, so it cannot tell which account names were already given out. Nothing was sent, so no one gets a name that is already taken.' }
         default { return 'The HR file could not be sent as it is.' }
     }
 }
@@ -373,7 +379,7 @@ elseif (-not $sendable -and -not $result) {
 elseif ($outcome -eq 'refused') {
     $md.Add('## HR change stopped by the safety check')
     $md.Add(''); $md.Add((Get-RefusalText $result['refusal'] $MaxChanges))
-    $md.Add(''); $md.Add('**Nothing was sent.** Check the HR file. If this really is one reviewed change (a reorganisation, a site closing), an administrator runs it by hand with `-Force` and its change ticket.')
+    $md.Add(''); $md.Add('**Nothing was sent.** Check the HR file. If this really is one reviewed change (a reorganisation, a site closing), add its change ticket to `lab/scripts/mock-hr/approved-bulk-changes.json` through a reviewed pull request, then send it with `-BulkChangeTicket`.')
 }
 elseif ($outcome -eq 'invalid') {
     $md.Add('## HR file not sent: it has a problem')
@@ -410,6 +416,18 @@ else {
     $md.Add(''); $md.Add('The send step stopped before it reached Microsoft (see its log). Nothing was sent; re-running is safe.')
 }
 
+# Rows the mass-change guard held back while the rest went (review C2).
+$held = @(if ($result -and $result['quarantined']) { $result['quarantined'] })
+# Those workers were never sent: mark them so their line does not read
+# "sent; Microsoft has not logged it yet" in a run whose other batches went.
+foreach ($q in $held) { $qid = [string](Get-Field $q 'employeeId'); if ($qid) { $personOutcome[$qid] = @{ state = 'held'; action = ''; errorCode = '' } } }
+$heldIds = @($held | ForEach-Object { [string](Get-Field $_ 'employeeId') })
+if ($held.Count -and $outcome -ne 'refused') {
+    $md.Add('')
+    $md.Add("**Held back by the safety check: $($held.Count) row(s).** $((Get-RefusalText $result['refusal'] $MaxChanges))")
+    $md.Add('An administrator checks the HR extract. A reviewed bulk event is re-sent with its change ticket (`-BulkChangeTicket`, listed in `lab/scripts/mock-hr/approved-bulk-changes.json` through a reviewed pull request).')
+}
+
 if ($changes) {
     $md.Add('')
     foreach ($c in @($sendable + $removed)) {
@@ -433,14 +451,14 @@ if ($jobId -and $mode -eq 'sent') {
 }
 
 # Technical details, folded.
-$leaversSent = @($sendable | Where-Object { $_['status'] -eq 'leaver' }).Count
-$moversSent = @($sendable | Where-Object { $_['kind'] -eq 'moved' }).Count
+$leaversSent = @($sendable | Where-Object { $_['status'] -eq 'leaver' -and [string]$_['employeeId'] -notin $heldIds }).Count
+$moversSent = @($sendable | Where-Object { $_['kind'] -eq 'moved' -and [string]$_['employeeId'] -notin $heldIds }).Count
 $md.Add('')
 $md.Add('<details><summary>Technical details</summary>')
 $md.Add('')
 if ($TriggerText) { $md.Add("- **Trigger:** $TriggerText") }
 if ($null -ne $changes) { $md.Add("- **Rows in this change:** $($sendable.Count) to send, $($removed.Count) removed (never sent)") }
-$md.Add("- **Safety check:** $leaversSent to switch off, $moversSent department/job-title change(s); limit $MaxChanges of each per push")
+$md.Add("- **Safety check:** $leaversSent to switch off, $moversSent department/job-title change(s); limit at least $MaxChanges of each per push, or 1 percent of the staff if that is more$(if ($held.Count) { "; $($held.Count) row(s) held back" })")
 if ($mode -eq 'dry-run') { $md.Add('- **Sign-in:** none (a dry run builds the payload and talks to nobody)') }
 else { $md.Add("- **Signed in as:** HR-SYNC over GitHub OIDC, no stored secret (sign-in: $(if ($SignInOutcome) { $SignInOutcome } else { 'not attempted' }))") }
 if ($batches) {

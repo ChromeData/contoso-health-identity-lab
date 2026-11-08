@@ -1,0 +1,5 @@
+run command lab-9f28cf72: lab/scripts/dc/tier-test/Join-Tier2Device.ps1 on vm-t2dev-01
+DNS: corp.contosohealthlab.com -> 10.42.2.4
+WARNING: The changes will take effect after you restart the computer T2DEV01.
+Joined T2DEV01 to corp.contosohealthlab.com in OU=Devices,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com. Restarting in 20 s.
+state: Succeeded, exit code: 0

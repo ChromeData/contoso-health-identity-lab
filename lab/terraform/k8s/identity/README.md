@@ -1,8 +1,7 @@
 # k8s/identity — Vault Kubernetes auth, workload service accounts, human RBAC, admission policy (stage 2 of 2)
 
-**Stand-ins:** Vault's Kubernetes auth method stands in for **CyberArk Conjur
-authn-k8s** (CyberArk Secrets Manager), or for **Entra Workload ID + Key
-Vault** on AKS. The two human groups are **impersonated** Kubernetes groups
+**Stand-ins:** Vault's Kubernetes auth method stands in for **Entra Workload
+ID + Azure Key Vault** on AKS (the target, ADR 0036). The two human groups are **impersonated** Kubernetes groups
 standing in for **Entra groups via AKS Entra integration**. kind stands in for
 AKS. See [`lab/docs/STAND-INS.md`](../../../docs/STAND-INS.md).
 
@@ -191,20 +190,19 @@ The Workload ID row is written as plan-only Terraform, with tests, in
 [`../aks-mapping`](../aks-mapping/README.md): the federated identity
 credential that is the Entra equivalent of the Vault role above.
 
-## CyberArk mapping
+## Microsoft mapping (ADR 0036)
 
-- **Conjur authn-k8s / Secrets Provider for Kubernetes** does the same job:
-  a Kubernetes identity in, a scoped secret out. The Conjur host's
-  annotations pin the namespace and service account (the role's
-  `bound_service_account_*` here), and policy grants `read`/`execute` on one
-  variable (the Vault policy here). Secrets Provider runs as an init or
-  sidecar container like the Vault Agent.
-- **Worth knowing for an interview:** classic authn-k8s proves the pod's
-  identity with a certificate that Conjur injects into the pod (over the
-  Kubernetes exec API), while Conjur's **JWT authenticator (authn-jwt)** can
-  validate the cluster's service-account tokens directly, which is the model
-  this lab shows. verify: current CyberArk docs on which is recommended for
-  new Kubernetes integrations.
+- **Entra Workload ID** does the same job: a Kubernetes identity in, a
+  scoped secret out. A federated identity credential pins the issuer,
+  namespace and service account (the role's `bound_service_account_*`
+  here), and an Azure RBAC role (*Key Vault Secrets User*) on one secret
+  replaces the Vault policy. The Key Vault provider for the Secrets Store
+  CSI driver mounts the secret, like the Vault Agent does here.
+- **Worth knowing for an interview:** Entra checks the pod's projected
+  service-account token using the public keys from the cluster's OIDC
+  issuer. Vault's Kubernetes auth instead calls the Kubernetes TokenReview
+  API using Vault's own service-account token. Both start from a projected
+  token; they check it differently (the `aks-mapping` guide says the same).
 
 ## Running
 

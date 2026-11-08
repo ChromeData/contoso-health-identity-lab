@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # =============================================================================
 # discover.py - privileged-account discovery against Active Directory
-# (CyberArk "Accounts Discovery" / "Discovery & Audit" equivalent).
+# ("accounts discovery" in PAM terms).
 #
 # Runs INSIDE the pam-tools container (../discover.sh starts it), so it reaches
 # the DC through the same extra_hosts mapping and AD root CA as Vault.

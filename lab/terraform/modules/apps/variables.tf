@@ -732,3 +732,127 @@ variable "servicenow_provisioning_app_display_name" {
     error_message = "servicenow_provisioning_app_display_name must not be empty."
   }
 }
+
+# ---- Clinic Lab Results (clinic_results.tf) -------------------------------------
+
+variable "enable_clinic_results_app" {
+  type        = bool
+  description = <<-EOT
+    Create Clinic Lab Results: the acquired clinic's first app moved from
+    Okta to Entra (okta-migration wave 1). Public-client app registration
+    (auth code + PKCE, loopback redirect, no secret), its enterprise app
+    (assignment required) and the assigned group App-ClinicResults-Users as
+    its ONE assignment. CA061 (modules/conditional-access) targets it. Off
+    by default.
+  EOT
+  default     = false
+}
+
+variable "clinic_results_display_name" {
+  type        = string
+  description = "Display name of the Clinic Lab Results app registration. lab/okta-migration finds the Entra app by this name, so it must match the Okta app's label."
+  default     = "Clinic Lab Results"
+
+  validation {
+    condition     = length(trimspace(var.clinic_results_display_name)) > 0
+    error_message = "clinic_results_display_name must not be empty."
+  }
+}
+
+variable "clinic_results_redirect_uris" {
+  type        = list(string)
+  description = <<-EOT
+    Public-client redirect URIs of Clinic Lab Results. Loopback only
+    (http://localhost:<port>/... or http://127.0.0.1:<port>/...): the app
+    runs on the clinic workstation (lab/okta-migration/clinic-results). Must
+    equal the redirect URI of the Okta app it replaces, so the cut-over
+    changes the IdP and nothing else.
+  EOT
+  default     = ["http://localhost:8471/callback"]
+
+  validation {
+    condition = length(var.clinic_results_redirect_uris) > 0 && alltrue([
+      for u in var.clinic_results_redirect_uris :
+      can(regex("^http://(localhost|127\\.0\\.0\\.1):[0-9]{2,5}/[A-Za-z0-9/_-]*$", u))
+    ])
+    error_message = "clinic_results_redirect_uris must be loopback http URIs with a port and a path (no wildcard, no remote host)."
+  }
+}
+
+# ---- Contoso Claims Viewer (claims_viewer.tf) ---------------------------------
+
+variable "enable_claims_viewer_app" {
+  type        = bool
+  description = <<-EOT
+    Create the Contoso Claims Viewer SAML app: the app migrated off AD FS
+    (lab/adfs, ADR 0009 phase 3), with the AD FS claim rules converted into a
+    claims-mapping policy and two app roles. Needs the two group object ids
+    below. envs/dev flag: enable_claims_viewer_app. Off by default.
+  EOT
+  default     = false
+}
+
+variable "claims_viewer_clinicians_group_object_id" {
+  type        = string
+  description = "Entra object id of GRP-ClaimsViewer-Clinicians (an AD group synced by Cloud Sync; lab/adfs/scripts/11-Add-ClaimsViewerRp.ps1 creates it). Gets app role ClaimsViewer.Clinician."
+  default     = ""
+
+  validation {
+    condition     = var.claims_viewer_clinicians_group_object_id == "" || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.claims_viewer_clinicians_group_object_id))
+    error_message = "claims_viewer_clinicians_group_object_id must be an object id (GUID), not a name."
+  }
+}
+
+variable "claims_viewer_admins_group_object_id" {
+  type        = string
+  description = "Entra object id of GRP-ClaimsViewer-Admins (synced from AD). Gets app role ClaimsViewer.Admin."
+  default     = ""
+
+  validation {
+    condition     = var.claims_viewer_admins_group_object_id == "" || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.claims_viewer_admins_group_object_id))
+    error_message = "claims_viewer_admins_group_object_id must be an object id (GUID), not a name."
+  }
+}
+
+variable "claims_viewer_saml_signing_cert_end_date" {
+  type        = string
+  description = "Expiry of the Claims Viewer SAML signing certificate (RFC 3339). null = Entra's default (3 years). Changing it replaces the certificate: re-run lab/adfs/claims-viewer/fetch-metadata.sh entra."
+  default     = null
+
+  validation {
+    condition     = var.claims_viewer_saml_signing_cert_end_date == null || can(formatdate("YYYY-MM-DD", var.claims_viewer_saml_signing_cert_end_date))
+    error_message = "claims_viewer_saml_signing_cert_end_date must be RFC 3339, e.g. 2027-11-07T00:00:00Z."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# ServiceNow access fulfilment (servicenow_fulfilment.tf)
+# -----------------------------------------------------------------------------
+variable "enable_servicenow_fulfilment" {
+  type        = bool
+  description = <<-EOT
+    Create the app ServiceNow uses to fulfil approved access requests:
+    "ServiceNow - Access Fulfilment", certificate credential only
+    (files/servicenow-fulfilment.pem), no Graph API permission, and ONE
+    entitlement-management role: Access package assignment manager on
+    servicenow_fulfilment_catalog_id. lab/servicenow/README.md.
+  EOT
+  default     = false
+}
+
+variable "servicenow_fulfilment_catalog_id" {
+  type        = string
+  description = "Object id of the access package catalog ServiceNow may assign in (the Clinical catalog, module.entitlement catalog_id). Required when enable_servicenow_fulfilment = true."
+  default     = ""
+}
+
+variable "servicenow_fulfilment_app_display_name" {
+  type        = string
+  description = "Display name of the ServiceNow fulfilment app. lab/servicenow/apply.py finds its client id by this name."
+  default     = "ServiceNow - Access Fulfilment"
+
+  validation {
+    condition     = length(trimspace(var.servicenow_fulfilment_app_display_name)) > 0
+    error_message = "servicenow_fulfilment_app_display_name must not be empty."
+  }
+}
