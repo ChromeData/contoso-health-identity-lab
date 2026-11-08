@@ -9,7 +9,9 @@ helper uses the *managed* run command (Microsoft.Compute/virtualMachines/
 runCommands, protectedParameters) through the ARM REST API directly:
 
   * each secret is fetched INSIDE this process, from the macOS Keychain
-    (keychain:<service>) or from Terraform state (tfoutput:<output name>);
+    (keychain:<service>), from Terraform state (tfoutput:<output name>) or
+    from a JSON object the caller writes to stdin (stdin:<key>, for a value
+    that lives only in the calling process, e.g. rotate-build-admin.py);
     nothing secret is in argv or the environment;
   * protected parameters are never returned by Azure, and every secret value
     is scrubbed from anything this script prints;
@@ -67,21 +69,31 @@ def sh(*cmd):
     return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.strip()
 
 
+_STDIN = None
+
+
 def resolve(ref):
+    global _STDIN
     kind, _, name = ref.partition(":")
+    if kind == "stdin":
+        if _STDIN is None:
+            _STDIN = json.loads(sys.stdin.read() or "{}")
+        if name not in _STDIN:
+            raise SystemExit(f"stdin secret '{name}' was not given")
+        return _STDIN[name]
     if kind == "keychain":
         return sh("security", "find-generic-password", "-s", name, "-w")
     if kind == "tfoutput":
         tf = os.environ.get("TERRAFORM") or shutil.which("terraform") or os.path.expanduser("~/.local/bin/terraform")
         return sh(tf, "-chdir=lab/terraform/envs/dev", "output", "-raw", name)
-    raise SystemExit(f"unknown secret source '{kind}' (use keychain:<service> or tfoutput:<name>)")
+    raise SystemExit(f"unknown secret source '{kind}' (use keychain:<service>, tfoutput:<name> or stdin:<key>)")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("script")
     ap.add_argument("--param", action="append", default=[], help="Name=value (not secret)")
-    ap.add_argument("--secret", action="append", default=[], help="Name=keychain:<svc> | Name=tfoutput:<output>")
+    ap.add_argument("--secret", action="append", default=[], help="Name=keychain:<svc> | Name=tfoutput:<output> | Name=stdin:<key>")
     ap.add_argument("--rg", default="rg-identity-lab")
     ap.add_argument("--vm", default="vm-dc01")
     ap.add_argument("--timeout", type=int, default=3600)

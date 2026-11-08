@@ -1,0 +1,18 @@
+Lab preflight Sun Nov  8 13:17 EST
+  ✓ Operator signed in (no password, certificate)
+  ✓ DC01 (the on-site directory server) is running
+  ✓ Sync agent on DC01 is connected
+  ✓ Cloud Sync (Active Directory → Entra) is running (Active)
+  ✓ HR front door (HR → Active Directory) is on
+  ✓ AWS sync (Entra → AWS) is on, last cycle Succeeded
+  ✓ No leftover demo hire (Sam Rivera) in Entra
+  ✓ HR file is clean (no Sam Rivera yet)
+  ✓ Evidence runner on this Mac is online
+  ✓ No change is waiting for approval
+  ✓ Splunk is running (http://127.0.0.1:8000, set time to All time)
+  ✓ Splunk live feed: last poll 4 min ago, newest tenant event received 4 min ago (10779 tenant events received in 24 h)
+  ✓ Sign-ins: All 11 identities sign in with no human (6 skipped)
+  ✓ Microsoft trials end 2026-11-26 (17 days left)
+  ✓ More than 2 hours before DC01's 7 pm (New York) shutdown
+
+READY

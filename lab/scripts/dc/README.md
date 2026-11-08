@@ -15,10 +15,11 @@ extension.
 | `02-Configure-Domain.ps1` | DNS forwarder to Azure DNS, UPN suffix, OUs, KDS root key, AD CS (LDAPS), PAM-managed accounts + delegation, prints the provisioning OU expression |
 | `03-Get-LdapsCaCert.ps1` | Prints the lab root CA certificate (PEM) for Vault's LDAPS trust |
 | `configure-sync.py` | Steps 5 and 6 by Graph: Cloud Sync (scoped OUs, password hash, hire date) and the HR app's connectivity + mappings. Idempotent |
-| `run-on-dc.py` | Runs any of these scripts on DC01 with secret parameters as a managed run command: secrets come from the Keychain or Terraform state inside the helper, are scrubbed from output, never on a command line |
+| `run-on-dc.py` | Runs any of these scripts on DC01 with secret parameters as a managed run command: secrets come from the Keychain, Terraform state or the caller's stdin (`stdin:<key>`) inside the helper, are scrubbed from output, never on a command line |
 | `04-Install-CloudSyncAgent.ps1` | Installs and registers the Entra provisioning agent (Cloud Sync) unattended: Microsoft-signature gate, gMSA, domain bind. Replaces the manual RDP step |
 | `Remove-DemoHire.ps1` | Demo retakes only (`lab/scripts/demo/reset-demo-hire.sh`): deletes the one AD account HR provisioning created for an employeeID, never outside `OU=Workforce` / `OU=Disabled`, never a protected (`adminCount=1`) account. Reports only unless `Apply=yes` |
 | `Clear-LeaverAdGroups.ps1` | Leaver hygiene (review finding C7): removes every on-premises group membership from DISABLED accounts directly in `OU=Disabled`, so a rehire comes back with only the new birthright. Never an enabled account, never a protected (`adminCount=1`) account; prints each removal as the record. Reports only unless `Apply=yes`. BUILT, offline tests; not yet run on DC01 |
+| `rotate-build-admin.py` + `Reset-BuildAdminPassword.ps1` | New random password for the build admin `contosoadmin` (owner decision only). Made on the Mac, written straight into Keychain item `contoso-lab-dc01-admin` over stdin, sent to DC01 as a protected parameter, then written as a new version of Key Vault secret `dc01-admin-password` (kv-idlab-20f1); never printed, never in argv or a file. DC01 stops if a service or task runs as `contosoadmin`, resets the account, and checks Kerberos: the new password gets a ticket, the old one is refused. Terraform state keeps only the first build password (dead after a rotation). `lab/scripts/operator/op python3 -I lab/scripts/dc/rotate-build-admin.py` |
 
 ## Run it
 
@@ -61,7 +62,8 @@ for an Enterprise Admin.
    `terraform -chdir=lab/terraform/envs/dev output -raw dc_admin_password | pbcopy`
    (macOS; `clip.exe` on Windows, `xclip -selection clipboard` on Linux).
    **Change it immediately** and store the new one in Key Vault as
-   `dc01-admin-password`.
+   `dc01-admin-password`. Later rotations: `rotate-build-admin.py` (no RDP;
+   it updates the Keychain item and the Key Vault secret together).
 
    **Cloud Sync agent, no RDP:** `04-Install-CloudSyncAgent.ps1` installs and
    registers it through run-command. Microsoft publishes no direct installer
