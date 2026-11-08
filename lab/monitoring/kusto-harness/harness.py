@@ -70,7 +70,7 @@ RECORD_SCHEMA = "contoso-kusto-harness/v1"
 LICENSE_URL = "https://aka.ms/adx.emulator.license"
 REL_TIME = re.compile(r"^(ago|in):(\d+)(s|m|h|d)$")
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-PLACEHOLDER = re.compile(r"(?m)^\s*let\s+([A-Za-z_]\w*)\s*=\s*dynamic\(\[\]\);\s*//\s*@@([A-Z_]+)@@")
+PLACEHOLDER = re.compile(r"(?m)^\s*let\s+([A-Za-z_]\w*)\s*=\s*dynamic\(\[\]\);\s*//\s*@@([A-Z0-9_]+)@@")
 XFAIL = re.compile(r"^CODE-NEEDED-\d+: .+")
 GUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 CONVERT = {
@@ -342,8 +342,12 @@ def validate_cases(cases, rules, tables, watchlists, shims):
         for name in k["lets"]:
             if name not in rules[k["rule"]]["placeholders"]:
                 problems.append(f"{cid}: lets.{name} is not a Terraform-rendered placeholder let of {k['rule']}")
-            elif not (isinstance(k["lets"][name], list) and all(isinstance(x, str) for x in k["lets"][name])):
-                problems.append(f"{cid}: lets.{name} must be a list of strings (object ids)")
+            # Strings (object ids, CIDRs, ASNs) or whole numbers (the PIM
+            # working hours / days lists); never booleans or mixed types.
+            elif not (isinstance(k["lets"][name], list) and (
+                    all(isinstance(x, str) for x in k["lets"][name]) or
+                    all(isinstance(x, int) and not isinstance(x, bool) for x in k["lets"][name]))):
+                problems.append(f"{cid}: lets.{name} must be a list of strings (object ids, ranges) or of whole numbers")
         for t, variant in k["tableVariant"].items():
             if t not in tables or variant not in tables[t]["variants"]:
                 problems.append(f"{cid}: unknown table variant {t}={variant}")

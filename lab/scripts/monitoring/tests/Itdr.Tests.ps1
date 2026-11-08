@@ -52,7 +52,10 @@ BeforeDiscovery {
         'tier0-logon-without-checkout', 'ad-privileged-group-change', 'kerberoast-rc4-service-ticket',
         'dcsync-replication-request',
         # Third set (itdr_v3.tf, 2026-11-06): same structural checks.
-        'dormant-privileged-account-reactivation', 'keyvault-bulk-secret-read'
+        'dormant-privileged-account-reactivation', 'keyvault-bulk-secret-read',
+        # Fourth set (itdr_v4.tf, 2026-11-07, review findings B1, B2, C5, D1).
+        'operator-signin-outside-allowlist', 'operator-permissions-changed', 'break-glass-auth-method-added',
+        'hr-leaver-lag', 'failed-signin-spray-by-asn'
     )
     $script:IacAwareRules = @('app-credential-added', 'app-consent-granted', 'ca-policy-changed',
         'role-assigned-outside-pim', 'pim-group-member-added-outside-pim')
@@ -449,6 +452,13 @@ Describe 'ITDR detection <_> (KQL + SPL twin)' -ForEach $ItdrRules {
         ([regex]::Matches($splText, '@stanza ')).Count | Should -Be 1
         $splText | Should -Match ([regex]::Escape("lab/kql/$_.kql"))
     }
+
+    It 'SPL twin: the pipeline is real SPL, not commented out (review of #233)' {
+        $lines = $splText -split "`n"
+        @($lines | Where-Object { $_ -match '^\| (where|eval|stats|table|lookup|spath)\b' }).Count | Should -BeGreaterThan 1
+        @($lines | Where-Object { $_ -match '^``` \| ' }).Count | Should -Be 0
+        @($lines | Select-Object -Skip 1 | Where-Object { $_ -and $_ -notmatch '^```' -and $_ -notmatch '^\|' }).Count | Should -Be 0
+    }
 }
 
 Describe 'Splunk app and Terraform module stay in sync' {
@@ -680,6 +690,49 @@ Describe 'Splunk break-glass search: one result per throttle key (PR #230 review
     }
 }
 
+Describe 'HR leaver lag: only a SUCCESSFUL cloud write counts as a disable (PR #233 review)' {
+    BeforeAll {
+        $llKql = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'kql' 'hr-leaver-lag.kql')
+        $llSpl = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'splunk' 'detections' 'hr-leaver-lag.spl')
+        $llCases = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'monitoring' 'kusto-harness' 'cases' 'hr-leaver-lag.json') | ConvertFrom-Json
+    }
+
+    It 'KQL CloudDisabled requires ProvisioningStatusInfo.Status == success' {
+        $block = ([regex]::Match($llKql, '(?s)let CloudDisabled = .*?;')).Value
+        $block | Should -Match ([regex]::Escape('where tostring(parse_json(ProvisioningStatusInfo).Status) =~ "success"'))
+    }
+
+    It 'SPL drops a cloud row whose status is not success (null-safe) and keeps InboundStatus from inbound rows only' {
+        $llSpl | Should -Match ([regex]::Escape('eval Kind=if(Kind=="cloud" AND coalesce(lower(RowStatus), "")!="success", null(), Kind)'))
+        $llSpl | Should -Match ([regex]::Escape('eval InboundStatus=if(Kind=="inbound", RowStatus, null())'))
+    }
+
+    It 'judges each leaver in overlapping runs (45-minute look-back), so a skipped run or a late row still alerts (PR #233 review)' {
+        $llKql | Should -Match 'let LookBack = 45m;'
+        $llKql | Should -Match ([regex]::Escape('where TimeGenerated between (ago(Lag + LookBack) .. ago(Lag))'))
+        $llKql | Should -Not -Match 'JudgeWindow'
+        # The Sentinel rule's query period must cover Lag + LookBack (15m + 45m), and repeats group per account.
+        $v4 = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'terraform' 'modules' 'monitoring' 'itdr_v4.tf')
+        $block = ([regex]::Match($v4, '(?s)hr_leaver_lag = \{.*?\n    \}')).Value
+        $block | Should -Match 'period\s+= "PT1H"'
+        $block | Should -Match 'group_by\s+= local.actor_group_by'
+        # SPL twin: the same 60-minute window, one alert per leaver by suppression on AdObjectGuid.
+        $llSpl | Should -Match 'earliest=-60m'
+        $llSpl | Should -Match ([regex]::Escape('@conf dispatch.earliest_time = -60m'))
+        $llSpl | Should -Match ([regex]::Escape('@conf alert.suppress.fields = AdObjectGuid'))
+        $c = @($llCases.cases | Where-Object id -EQ 'skipped-run-or-late-row-still-alerts')
+        $c.Count | Should -Be 1
+        $c[0].kind | Should -Be 'positive'
+    }
+
+    It 'the engine cases include a failed cloud export that still alerts' {
+        $c = @($llCases.cases | Where-Object id -EQ 'cloud-export-failed')
+        $c.Count | Should -Be 1
+        $c[0].kind | Should -Be 'positive'
+        ($c[0].tables.AADProvisioningLogs | Where-Object { $_.ServicePrincipal -match 'corp\.contosohealthlab\.com' }).ProvisioningStatusInfo | Should -Match 'failure'
+    }
+}
+
 Describe 'KQL break-glass-signin: one row per account keeps every sign-in IP, result and correlation id (PR #230 review)' {
     BeforeAll {
         $bgKql = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'kql' 'break-glass-signin.kql')
@@ -702,5 +755,34 @@ Describe 'KQL break-glass-signin: one row per account keeps every sign-in IP, re
         @($c.tables.SigninLogs).Count | Should -Be 2
         @($c.expect[0].IPAddresses).Count | Should -Be 2
         $c.expect[0].ResultTypes | Should -Contain '0'
+    }
+}
+
+Describe 'Spray by ASN: a hit is a success AFTER the first sprayed failure (PR #233 review)' {
+    BeforeAll {
+        $spKql = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'kql' 'failed-signin-spray-by-asn.kql')
+        $spSpl = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'splunk' 'detections' 'failed-signin-spray-by-asn.spl')
+        $spCases = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'monitoring' 'kusto-harness' 'cases' 'failed-signin-spray-by-asn.json') | ConvertFrom-Json
+    }
+
+    It 'KQL keeps FirstFail and LastOk per user and counts a hit only when LastOk > FirstFail' {
+        $spKql | Should -Match ([regex]::Escape('FirstFail = minif(TimeGenerated, ResultType in (CredentialFailureCodes))'))
+        $spKql | Should -Match ([regex]::Escape('LastOk = maxif(TimeGenerated, ResultType == "0")'))
+        $spKql | Should -Match ([regex]::Escape('Hit = isnotnull(FirstFail) and isnotnull(LastOk) and LastOk > FirstFail'))
+        $spKql | Should -Match ([regex]::Escape('CompromisedCount = countif(Hit)'))
+        $spKql | Should -Not -Match 'Oks'
+    }
+
+    It 'SPL twin applies the same order check' {
+        $spSpl | Should -Match ([regex]::Escape('min(eval(if(Fail==1, _time, null()))) AS FirstFail'))
+        $spSpl | Should -Match ([regex]::Escape('max(eval(if(Ok==1, _time, null()))) AS LastOk'))
+        $spSpl | Should -Match ([regex]::Escape('LastOk>FirstFail'))
+        $spSpl | Should -Not -Match 'Oks'
+    }
+
+    It 'has an engine case where a success BEFORE the spray stays Medium' {
+        $c = @($spCases.cases | Where-Object id -EQ 'success-before-the-spray')
+        $c.Count | Should -Be 1
+        $c[0].expect[0].Severity | Should -Be 'Medium'
     }
 }
