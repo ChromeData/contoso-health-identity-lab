@@ -360,7 +360,7 @@ variable "lab_vm_operator_activation_max_duration" {
 
 variable "lab_vm_operator_eligibility_duration" {
   type        = string
-  description = "How long an ELIGIBLE assignment of Contoso Lab VM Operator lasts before it must be renewed (PIM policy cap and the schedule). No access review covers direct assignments, so this expiry is the review."
+  description = "How long an ELIGIBLE assignment of Contoso Lab VM Operator lasts before it must be renewed (PIM policy cap and the schedule). No access review covers direct assignments, so this expiry is the review. Renew one person with terraform apply -replace on its azurerm_pim_eligible_role_assignment.lab_vm_operator instance; a plain apply does not renew."
   default     = "P180D"
 
   validation {

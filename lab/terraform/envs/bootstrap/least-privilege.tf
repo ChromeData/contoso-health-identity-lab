@@ -139,8 +139,14 @@ resource "azurerm_role_management_policy" "lab_vm_operator" {
 
   # Eligibility EXPIRES (lab_vm_operator_eligibility_duration, default
   # P180D, as PIM-AWS-Lab-Admins): these are direct, named assignments that no
-  # group access review covers, so the expiry is the review. Renewal is a
-  # reviewed bootstrap apply (the schedule below restarts from that apply).
+  # group access review covers, so the expiry is the review.
+  # RENEWAL: a plain bootstrap apply does NOT renew. The eligibility schedule
+  # is set when the assignment is created, and an unchanged configuration
+  # plans no change. To renew one person on purpose (a reviewed decision):
+  #   terraform apply -replace='azurerm_pim_eligible_role_assignment.lab_vm_operator["<object id>"]'
+  # which re-creates it with a fresh 180 days. To let it lapse, remove the
+  # id from lab_vm_operator_eligible_object_ids (Azure has already ended it;
+  # the next plan may show it as gone).
   eligible_assignment_rules {
     expiration_required = true
     expire_after        = var.lab_vm_operator_eligibility_duration
