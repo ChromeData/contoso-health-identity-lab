@@ -1,0 +1,47 @@
+[
+  {
+    "EventID": "4724",
+    "SubjectUserName": "contosoadmin",
+    "TableName": "PrimaryResult",
+    "n": "1",
+    "t0": "2026-11-07T01:54:56.6346069Z",
+    "t1": "2026-11-07T01:54:56.6346069Z",
+    "targets": "[\"T2DEV01$\"]"
+  },
+  {
+    "EventID": "4738",
+    "SubjectUserName": "DC01$",
+    "TableName": "PrimaryResult",
+    "n": "3",
+    "t0": "2026-11-07T03:55:12.6893798Z",
+    "t1": "2026-11-08T18:09:40.9207243Z",
+    "targets": "[\"svc-pam-discovery\",\"t0-adm-01\",\"contosoadmin\"]"
+  },
+  {
+    "EventID": "4724",
+    "SubjectUserName": "DC01$",
+    "TableName": "PrimaryResult",
+    "n": "2",
+    "t0": "2026-11-07T03:58:07.6377825Z",
+    "t1": "2026-11-08T18:09:40.920814Z",
+    "targets": "[\"t0-adm-01\",\"contosoadmin\"]"
+  },
+  {
+    "EventID": "4724",
+    "SubjectUserName": "pGMSA_7aa293fc$",
+    "TableName": "PrimaryResult",
+    "n": "7",
+    "t0": "2026-11-07T04:52:20.8541287Z",
+    "t1": "2026-11-07T23:12:50.974887Z",
+    "targets": "[\"test.preview\",\"test.hris\",\"test.leaver\",\"sam.rivera\",\"test.exit\"]"
+  },
+  {
+    "EventID": "4738",
+    "SubjectUserName": "pGMSA_7aa293fc$",
+    "TableName": "PrimaryResult",
+    "n": "5",
+    "t0": "2026-11-07T05:56:55.3111177Z",
+    "t1": "2026-11-07T23:47:00.9679536Z",
+    "targets": "[\"test.preview\",\"test.hris\",\"test.leaver\",\"test.exit\"]"
+  }
+]
