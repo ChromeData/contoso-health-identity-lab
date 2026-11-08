@@ -91,6 +91,16 @@ mock_provider "azuread" {
 }
 mock_provider "random" {}
 
+# modules/leaver-extension looks up Microsoft Graph's app role ids (E183:
+# EntitlementManagement.ReadWrite.All for the leaver Logic App's identity).
+override_data {
+  target = module.leaver_extension[0].data.azuread_service_principal.msgraph
+  values = {
+    object_id    = "12121212-1212-1212-1212-121212121212"
+    app_role_ids = { "EntitlementManagement.ReadWrite.All" = "9acd699f-1e81-4958-b001-93b1d2506e19" }
+  }
+}
+
 run "plan_lab_tfvars" {
   command = plan
 

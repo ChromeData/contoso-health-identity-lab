@@ -13,7 +13,14 @@ mock_provider "azurerm" {
     }
   }
 }
-mock_provider "azuread" {}
+mock_provider "azuread" {
+  mock_data "azuread_service_principal" {
+    defaults = {
+      object_id    = "12121212-1212-1212-1212-121212121212"
+      app_role_ids = { "EntitlementManagement.ReadWrite.All" = "9acd699f-1e81-4958-b001-93b1d2506e19", "Directory.ReadWrite.All" = "19dbc75e-c2e2-444c-a770-ec69d8559fc7" }
+    }
+  }
+}
 # time_sleep is mocked too: a mocked apply never waits 90 s.
 mock_provider "time" {}
 
@@ -44,6 +51,10 @@ run "narrowest_grant_on_the_given_catalogs_only" {
   assert {
     condition     = time_sleep.identity_replication.create_duration == "90s" && time_sleep.identity_replication.triggers["principal_object_id"] == "99999999-9999-9999-9999-999999999999"
     error_message = "the catalog role must wait for the new managed identity to replicate (SubjectNotFound, as for the ServiceNow fulfilment SP)"
+  }
+  assert {
+    condition     = azuread_app_role_assignment.entitlement_management_readwrite.app_role_id == "9acd699f-1e81-4958-b001-93b1d2506e19" && azuread_app_role_assignment.entitlement_management_readwrite.resource_object_id == "12121212-1212-1212-1212-121212121212" && azuread_app_role_assignment.entitlement_management_readwrite.principal_object_id == "99999999-9999-9999-9999-999999999999"
+    error_message = "E183: the Logic App identity gets exactly Graph EntitlementManagement.ReadWrite.All (app-only), read through the replication wait; never Directory.* or another role"
   }
   assert {
     condition     = output.principal_id == "99999999-9999-9999-9999-999999999999"
