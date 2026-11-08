@@ -5,6 +5,7 @@
 import importlib.util
 import json
 import os
+import re
 import sys
 import unittest
 
@@ -203,6 +204,32 @@ class UndoRequests(unittest.TestCase):
         sn = FakeSn({"sc_req_item": [{"correlation_id": "pkg/r9", "_q": "number=RITM0010099^cat_item.name=Request app access"}]})
         ev = {"steps": {"uc1": {"ritm": "RITM0010099"}, "leaver": {"setup_request": "r5", "ritm": "RITM0010100"}}}
         self.assertEqual(prove.request_refs_of(sn, ev), ["r9", "r5"])
+
+
+class FulfilmentWait(unittest.TestCase):
+    """The catalog role must wait for the SP to replicate (SubjectNotFound,
+    apply run 42512070374). terraform test cannot see which expression feeds
+    principal_object_id, so this reads the Terraform source itself."""
+
+    TF = os.path.join(ROOT, "..", "terraform", "modules", "apps", "servicenow_fulfilment.tf")
+
+    def block(self, kind, name):
+        src = open(self.TF).read()
+        m = re.search(r'^resource "%s" "%s" \{\n(.*?)^\}' % (kind, name), src, re.S | re.M)
+        self.assertIsNotNone(m, f"{kind}.{name} not found")
+        return m.group(1)
+
+    def test_assignment_reads_the_principal_through_the_wait(self):
+        b = self.block("azuread_access_package_catalog_role_assignment", "servicenow_fulfilment")
+        line = re.search(r"^\s*principal_object_id\s*=\s*(.+)$", b, re.M).group(1).strip()
+        self.assertTrue(line.startswith("time_sleep.servicenow_fulfilment_sp_replication[0]"),
+                        f"principal_object_id = {line}: it must come through the time_sleep, not straight from the SP")
+
+    def test_wait_is_keyed_to_the_sp_and_long_enough(self):
+        b = self.block("time_sleep", "servicenow_fulfilment_sp_replication")
+        self.assertRegex(b, r"service_principal_object_id\s*=\s*azuread_service_principal\.servicenow_fulfilment\[0\]\.object_id")
+        secs = int(re.search(r'create_duration\s*=\s*"(\d+)s"', b).group(1))
+        self.assertGreaterEqual(secs, 60)
 
 
 if __name__ == "__main__":
