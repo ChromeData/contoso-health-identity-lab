@@ -1066,6 +1066,35 @@ variable "enable_adfs_https" {
   default     = false
 }
 
+variable "enable_connect_health_registration" {
+  type        = bool
+  description = <<-EOT
+    TIME-BOXED (ADR 0031): create adm-connecthealth-reg with an ACTIVE Hybrid
+    Identity Administrator role, so lab/adfs/connect-health/register.sh can
+    register the Connect Health agent on DC01 with a passkey sign-in and no
+    person at the server. Changes no Conditional Access policy. Needs
+    connect_health_registration_until_utc. Off by default; the PR that turns
+    it on is followed by one that turns it off (that deletes the account and
+    the role).
+  EOT
+  default     = false
+}
+
+variable "connect_health_registration_until_utc" {
+  type        = string
+  description = <<-EOT
+    End of the Connect Health registration window, RFC 3339 UTC (e.g.
+    "2026-11-08T18:00:00Z"). While enable_connect_health_registration is on,
+    every envs/dev plan after this time FAILS, so nothing else can be applied
+    until the flag is turned off. Keep it within 24 hours of the PR.
+  EOT
+  default     = ""
+  validation {
+    condition     = var.connect_health_registration_until_utc == "" || can(timecmp(var.connect_health_registration_until_utc, "2000-01-01T00:00:00Z"))
+    error_message = "connect_health_registration_until_utc must be an RFC 3339 timestamp such as 2026-11-08T18:00:00Z."
+  }
+}
+
 variable "enable_claims_viewer_app" {
   type        = bool
   description = <<-EOT
