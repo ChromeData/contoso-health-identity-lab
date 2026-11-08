@@ -212,8 +212,8 @@ jobs:
           bash lab/scripts/break-glass/tests/rotate-password.test.sh
           node --test lab/scripts/demo/signin/tests/lib.test.mjs lab/scripts/demo/signin/tests/enroll.test.mjs lab/scripts/demo/signin/tests/identity.test.mjs
           node --test lab/terraform/okta/tests/trust-claims.test.mjs
-          # Contoso HR form (lab/hr-app, ADR 0027): roster rules, API, GitHub store (fake gh).
-          node --test lab/hr-app/tests/hr-app.test.mjs
+          # HR connector (lab/hris, ADR 0028): OrangeHRM -> feed rules, GitHub store (fake gh), seed, view columns.
+          node --test lab/hris/connector/tests/connector.test.mjs
           # Okta -> Entra migration tools: EL->Entra rule translation, tracker, System Log filter, the app's ID-token check (no network).
           node --test lab/okta-migration/tests/lib.test.mjs
           bash lab/scripts/demo/tests/containment-drill.test.sh
