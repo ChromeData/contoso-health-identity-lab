@@ -1,0 +1,80 @@
+// =============================================================================
+// Detection: Lab operator workload identity signs in from outside its allowlist
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, fourth set)
+// SPL twin:  lab/splunk/detections/operator-signin-outside-allowlist.spl
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   A sign-in by the lab operator's service principal ("Contoso Lab Operator
+//   (local Mac, certificate)", ADR 0024) from an IP address that is not an
+//   unexpired entry of the operator_ips watchlist. The operator holds Tier-0
+//   Graph app roles and Subscription Owner, and its certificate key sits in
+//   one Mac's Keychain: a sign-in from anywhere else means the key left that
+//   Mac. Conditional Access for workload identities is not licensed in the
+//   lab (ADR 0024), so this detection is the compensating control (review
+//   finding B1, 2026-11-07).
+//   Failed sign-ins alert too (Medium): someone holds the app id and is
+//   trying.
+//
+// TABLE / SOURCE
+//   AADServicePrincipalSignInLogs (Entra diagnostic setting
+//   ServicePrincipalSignInLogs; it had rows on 2026-11-07, read as the
+//   operator). Matched by the operator's IMMUTABLE ids: ServicePrincipalId
+//   or AppId in OperatorPrincipalIds (rendered by modules/monitoring from
+//   var.operator_principal_ids). An empty list matches nothing, so the module
+//   refuses to deploy this rule with an empty list.
+//   Allowlist: the Sentinel watchlist operator_ips (IpRange = SearchKey,
+//   ExpiresOn), the same one dc-logon-outside-operator-allowlist.kql reads.
+//   Empty or expired watchlist = every operator sign-in alerts (fail closed).
+//
+// LICENSE
+//   Entra ID P1 for the sign-in log export; Microsoft Sentinel for the
+//   watchlist (the rule is Sentinel only).
+//
+// MITRE ATT&CK
+//   T1078.004 Valid Accounts: Cloud Accounts (a stolen workload credential).
+//   T1528 Steal Application Access Token.
+//
+// FALSE-POSITIVE NOTES
+//   - The Mac's public IP changes with the network it is on (the operator
+//     signed in from 5 addresses in the 7 days to 2026-11-07). Keep the
+//     watchlist current, or expect an alert per new network. That noise is
+//     the honest cost of a key on a laptop.
+//   - IPv6: a dual-stack network can sign in over IPv6. ipv4_is_in_any_range
+//     never matches an IPv6 address, so it alerts. Add the IPv6 prefix
+//     handling before production use (not built).
+//
+// SEVERITY (the Severity column)
+//   High   : a successful sign-in from outside the allowlist.
+//   Medium : failed sign-ins only.
+//
+// AUTOMATED RESPONSE
+//   Notify playbook (Teams card + ServiceNow ticket). No containment: the
+//   containment playbook acts on users, and disabling the operator is the
+//   kill switch a person runs (lab/scripts/operator/kill-switch.sh).
+// =============================================================================
+
+let LookBack = 1h;
+let OperatorPrincipalIds = dynamic([]); // @@OPERATOR_PRINCIPAL_IDS@@
+// isfuzzy keeps the query valid where the watchlist or _GetWatchlist does not
+// exist (the empty typed datatable is then the whole allowlist).
+let AllowedRanges = toscalar(
+    union isfuzzy=true
+        (datatable(IpRange:string, ExpiresOn:string)[]),
+        (_GetWatchlist('operator_ips')
+            | project IpRange = tostring(SearchKey), ExpiresOn = tostring(ExpiresOn))
+    | where isnotnull(todatetime(ExpiresOn)) and todatetime(ExpiresOn) > now()
+    | summarize make_set(IpRange));
+AADServicePrincipalSignInLogs
+| where TimeGenerated > ago(LookBack)
+| where ServicePrincipalId in (OperatorPrincipalIds) or AppId in (OperatorPrincipalIds)
+| extend Allowed = isnotnull(parse_ipv4(IPAddress)) and ipv4_is_in_any_range(IPAddress, AllowedRanges)
+| where not(Allowed)
+| summarize SignIns = count(), Succeeded = countif(ResultType == "0"),
+            ResultTypes = make_set(ResultType, 10), FirstSeen = min(TimeGenerated),
+            LastSeen = max(TimeGenerated)
+    by ServicePrincipalId, ServicePrincipalName, AppId, IPAddress
+| extend Severity = iff(Succeeded > 0, "High", "Medium")
+| extend TimeGenerated = LastSeen
+| project TimeGenerated, Severity, ServicePrincipalName, ServicePrincipalId, AppId, IPAddress,
+          SignIns, Succeeded, ResultTypes, FirstSeen, LastSeen
+| sort by TimeGenerated desc

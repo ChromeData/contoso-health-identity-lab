@@ -77,26 +77,42 @@ locals {
   #                       group by those entity types AND alert severity.
   #   la_mute          -> Log Analytics alert mute (null = the period).
   core_rules = {
+    # Severity from the query since 2026-11-07 (review findings B5, B6): a
+    # routine, non-Tier-0 activation is Informational (no ticket, no card),
+    # Tier 0 is Medium, Tier 0 off-hours or from a new IP is High. One alert
+    # per activation, so each carries its own severity; grouped per account
+    # AND severity, so a High never hides inside an older Medium incident.
+    # Period P1D: the new-IP check reads, for each activation, the admin's
+    # sign-ins of the 22 h ending an hour before it (up to 24 h back); only
+    # activations of the last hour alert. Not P2D: Sentinel refuses a period
+    # of 2 days or more with a frequency under 1 hour (BadRequest, proven
+    # 2026-10-27, see itdr.tf), and this rule must run every 5 minutes.
     pim_activation = {
       file         = "pim-activation.kql"
       display_name = "Contoso - PIM activation (just-in-time elevation)"
-      description  = "A PIM for Groups / PIM for roles activation completed. Expected for approved changes; every one is reviewed."
+      description  = "A PIM for Groups / PIM for roles activation completed. Severity from the query: Informational for routine non-Tier-0 work (no ticket), Low when unusual, Medium for Tier 0, High for Tier 0 outside working hours or from a new IP."
       severity     = "Medium"
       frequency    = "PT5M"
-      period       = "PT1H"
+      period       = "P1D"
       suppress     = null
       tactics      = ["PrivilegeEscalation"]
       techniques   = ["T1078"]
       entities = [
-        { type = "Account", fields = [{ identifier = "FullName", column = "Actor" }] },
+        { type = "Account", fields = [{ identifier = "FullName", column = "Actor" }, { identifier = "AadUserId", column = "ActorObjectId" }] },
         { type = "IP", fields = [{ identifier = "Address", column = "ActorIp" }] },
       ]
-      severity_column  = null
-      custom_details   = {}
-      alert_per_result = false
-      group_by         = null
+      severity_column = "Severity"
+      custom_details = {
+        ElevatedTo = "ElevatedTo"
+        Tier0By    = "Tier0By"
+        OffHours   = "OffHours"
+        NewIp      = "NewIp"
+      }
+      alert_per_result = true
+      group_by         = ["Account"]
       la_severity      = 2
-      la_mute          = null
+      # One hit stays matchable for the 1 h alert window, not the 1-day period.
+      la_mute = "PT1H"
     }
     break_glass_signin = {
       file         = "break-glass-signin.kql"
@@ -143,7 +159,7 @@ locals {
     failed_signin_spike = {
       file         = "failed-signin-spike.kql"
       display_name = "Contoso - Failed sign-in spike from one IP (spray / brute force)"
-      description  = "10+ failed sign-ins from one IP in the same 10-minute clock bin (:00, :10, ...)."
+      description  = "10+ credential failures (wrong password, lockout, expired, disabled or unknown account; MFA interrupts not counted) from one IP inside any 10-minute window (windows start every 5 minutes). The hospital's trusted egress ranges are dropped from the brute-force shape only."
       severity     = "Medium"
       frequency    = "PT5M"
       period       = "PT1H"
@@ -203,6 +219,10 @@ locals {
       for k, r in local.itdr_v3_rules : k => r
       if var.enable_itdr_detections_v3 && !contains(var.itdr_exclude_rules, k)
     },
+    {
+      for k, r in local.itdr_v4_rules : k => r
+      if var.enable_itdr_detections_v4 && !contains(var.itdr_exclude_rules, k)
+    },
   )
 
   rules = merge(local.core_rules, local.itdr_selected)
@@ -213,22 +233,24 @@ locals {
   # privileged-by-id), and the deployed rules judge by IMMUTABLE ids.
   kql_placeholder = "dynamic([]); // @@%s@@"
   kql_lists = {
-    IAC_PRINCIPAL_IDS     = var.iac_principal_ids
-    PRIVILEGED_GROUP_IDS  = var.privileged_group_ids
-    BREAK_GLASS_GROUP_IDS = var.break_glass_group_ids
-    BREAK_GLASS_USER_IDS  = var.break_glass_user_ids
-    PRIVILEGED_USER_IDS   = var.privileged_user_ids
-    AZURE_PIM_GROUP_IDS   = var.azure_pim_group_ids
+    IAC_PRINCIPAL_IDS      = var.iac_principal_ids
+    PRIVILEGED_GROUP_IDS   = var.privileged_group_ids
+    BREAK_GLASS_GROUP_IDS  = var.break_glass_group_ids
+    BREAK_GLASS_USER_IDS   = var.break_glass_user_ids
+    TIER0_GROUP_IDS        = var.tier0_group_ids
+    PIM_WORK_HOURS         = var.pim_work_hours_local
+    PIM_WORK_DAYS          = var.pim_work_days_local
+    OPERATOR_PRINCIPAL_IDS = var.operator_principal_ids
+    TRUSTED_EGRESS_RANGES  = var.trusted_egress_ranges
+    TRUSTED_ASNS           = var.trusted_asns
+    PRIVILEGED_USER_IDS    = var.privileged_user_ids
+    AZURE_PIM_GROUP_IDS    = var.azure_pim_group_ids
   }
+  # One replace() per placeholder, innermost first (Terraform has no fold).
+  # Every name in kql_lists must appear here; tests/notify.tftest.hcl and the
+  # harness check the rendered text.
   rule_queries = {
-    for k, r in local.rules : k => replace(replace(replace(replace(replace(replace(
-      file("${local.kql_dir}/${r.file}"),
-      format(local.kql_placeholder, "IAC_PRINCIPAL_IDS"), "dynamic(${jsonencode(local.kql_lists.IAC_PRINCIPAL_IDS)}); // @@IAC_PRINCIPAL_IDS@@"),
-      format(local.kql_placeholder, "PRIVILEGED_GROUP_IDS"), "dynamic(${jsonencode(local.kql_lists.PRIVILEGED_GROUP_IDS)}); // @@PRIVILEGED_GROUP_IDS@@"),
-      format(local.kql_placeholder, "BREAK_GLASS_GROUP_IDS"), "dynamic(${jsonencode(local.kql_lists.BREAK_GLASS_GROUP_IDS)}); // @@BREAK_GLASS_GROUP_IDS@@"),
-      format(local.kql_placeholder, "BREAK_GLASS_USER_IDS"), "dynamic(${jsonencode(local.kql_lists.BREAK_GLASS_USER_IDS)}); // @@BREAK_GLASS_USER_IDS@@"),
-      format(local.kql_placeholder, "PRIVILEGED_USER_IDS"), "dynamic(${jsonencode(local.kql_lists.PRIVILEGED_USER_IDS)}); // @@PRIVILEGED_USER_IDS@@"),
-    format(local.kql_placeholder, "AZURE_PIM_GROUP_IDS"), "dynamic(${jsonencode(local.kql_lists.AZURE_PIM_GROUP_IDS)}); // @@AZURE_PIM_GROUP_IDS@@")
+    for k, r in local.rules : k => replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(file("${local.kql_dir}/${r.file}"), format(local.kql_placeholder, "IAC_PRINCIPAL_IDS"), "dynamic(${jsonencode(local.kql_lists.IAC_PRINCIPAL_IDS)}); // @@IAC_PRINCIPAL_IDS@@"), format(local.kql_placeholder, "PRIVILEGED_GROUP_IDS"), "dynamic(${jsonencode(local.kql_lists.PRIVILEGED_GROUP_IDS)}); // @@PRIVILEGED_GROUP_IDS@@"), format(local.kql_placeholder, "BREAK_GLASS_GROUP_IDS"), "dynamic(${jsonencode(local.kql_lists.BREAK_GLASS_GROUP_IDS)}); // @@BREAK_GLASS_GROUP_IDS@@"), format(local.kql_placeholder, "BREAK_GLASS_USER_IDS"), "dynamic(${jsonencode(local.kql_lists.BREAK_GLASS_USER_IDS)}); // @@BREAK_GLASS_USER_IDS@@"), format(local.kql_placeholder, "PRIVILEGED_USER_IDS"), "dynamic(${jsonencode(local.kql_lists.PRIVILEGED_USER_IDS)}); // @@PRIVILEGED_USER_IDS@@"), format(local.kql_placeholder, "AZURE_PIM_GROUP_IDS"), "dynamic(${jsonencode(local.kql_lists.AZURE_PIM_GROUP_IDS)}); // @@AZURE_PIM_GROUP_IDS@@"), format(local.kql_placeholder, "TIER0_GROUP_IDS"), "dynamic(${jsonencode(local.kql_lists.TIER0_GROUP_IDS)}); // @@TIER0_GROUP_IDS@@"), format(local.kql_placeholder, "PIM_WORK_HOURS"), "dynamic(${jsonencode(local.kql_lists.PIM_WORK_HOURS)}); // @@PIM_WORK_HOURS@@"), format(local.kql_placeholder, "PIM_WORK_DAYS"), "dynamic(${jsonencode(local.kql_lists.PIM_WORK_DAYS)}); // @@PIM_WORK_DAYS@@"), format(local.kql_placeholder, "OPERATOR_PRINCIPAL_IDS"), "dynamic(${jsonencode(local.kql_lists.OPERATOR_PRINCIPAL_IDS)}); // @@OPERATOR_PRINCIPAL_IDS@@"), format(local.kql_placeholder, "TRUSTED_EGRESS_RANGES"), "dynamic(${jsonencode(local.kql_lists.TRUSTED_EGRESS_RANGES)}); // @@TRUSTED_EGRESS_RANGES@@"), format(local.kql_placeholder, "TRUSTED_ASNS"), "dynamic(${jsonencode(local.kql_lists.TRUSTED_ASNS)}); // @@TRUSTED_ASNS@@")
   }
 }
 

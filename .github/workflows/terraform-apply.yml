@@ -149,6 +149,9 @@ env:
   # ITDR: the APPLY identity by immutable id (envs/bootstrap output
   # iac_principal_ids) and extra privileged users - JSON lists of GUIDs.
   TF_VAR_iac_principal_ids: ${{ vars.TF_IAC_PRINCIPAL_IDS || '[]' }}
+  # The lab operator's ids (ADR 0024; envs/operator outputs) for the fourth
+  # ITDR set (enable_itdr_detections_v4) - JSON list of GUIDs.
+  TF_VAR_operator_principal_ids: ${{ vars.TF_OPERATOR_PRINCIPAL_IDS || '[]' }}
   TF_VAR_privileged_user_object_ids: ${{ vars.TF_PRIVILEGED_USER_OBJECT_IDS || '[]' }}
   TF_VAR_evidence_storage_account_name: ${{ vars.TF_EVIDENCE_STORAGE_ACCOUNT_NAME || 'stidlabevidence' }}
   # TF_B2B_CONNECTED_ORGANIZATION (an object) is passed on the plan step, not
