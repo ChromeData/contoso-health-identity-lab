@@ -122,11 +122,15 @@ run "plan_lab_tfvars" {
     error_message = "Day 1 + apps: CA001-CA010 and CA020 exist (enable_premium + the CA flags); enable_sso_apps plans the AWS IAM Identity Center and Clinical Portal apps; the PAM app (enable_pam_oidc_app) is still off"
   }
   assert {
+    condition     = nonsensitive(output.apps_nhi_inventory).clinic_lab_results != null && output.ca_policy_display_names["CA061"] == "CA061 - Require MFA and sign-in every 8h for Clinic Lab Results"
+    error_message = "lab.tfvars: enable_clinic_results_app reaches BOTH modules - modules/apps plans Clinic Lab Results (its NHI row is set) and modules/conditional-access plans CA061 for it (Okta -> Entra wave 1)"
+  }
+  assert {
     condition     = nonsensitive(output.apps_nhi_inventory).servicenow_provisioning != null && output.servicenow_provisioning_job_enabled == true
     error_message = "lab.tfvars: enable_servicenow_provisioning plans the ServiceNow provisioning app and servicenow_provisioning_job_enabled starts its cycle (started after Test Connection + on-demand + sign-in, capture-log E82/E83)"
   }
   assert {
-    condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003", "CA004", "CA020", "CA010", "CA001", "CA009", "CA006", "CA007", "CA005"], k) ? "enabled" : "enabledForReportingButNotEnforced")])
+    condition     = alltrue([for k, v in var.ca_policy_states : v == (contains(["CA003", "CA004", "CA020", "CA010", "CA001", "CA009", "CA006", "CA007", "CA005", "CA061"], k) ? "enabled" : "enabledForReportingButNotEnforced")])
     error_message = "every CA policy in lab.tfvars is report-only except the graduated list; one graduation per PR, with its checklist"
   }
   # Day 2 (E16/E16c/E17c): PIM tiers, the Global Administrator policy, the
@@ -289,6 +293,7 @@ run "plan_legacy_flags_on_new_flags_off" {
     enable_servicenow_sso                   = false
     enable_servicenow_provisioning          = false
     enable_okta_federation                  = false
+    enable_clinic_results_app               = false
     enable_device_code_block                = false
     enable_admin_session_controls           = false
     enable_pim_auth_context                 = false
@@ -325,6 +330,10 @@ run "plan_legacy_flags_on_new_flags_off" {
     }
   }
 
+  assert {
+    condition     = nonsensitive(output.apps_nhi_inventory).clinic_lab_results == null && output.ca_policy_display_names["CA061"] == null
+    error_message = "enable_clinic_results_app = false: neither Clinic Lab Results nor CA061 may be planned"
+  }
   assert {
     condition     = alltrue([for k in ["CA009", "CA010", "CA020", "CA021", "CA060"] : output.ca_policy_display_names[k] == null])
     error_message = "CA009, CA010, CA020, CA021 and CA060 must not be planned while their flags are off"
@@ -405,6 +414,7 @@ run "plan_all_flags_on_sentinel" {
     enable_servicenow_sso               = true
     enable_servicenow_provisioning      = true
     enable_okta_federation              = true
+    enable_clinic_results_app           = true
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
     enable_pim_tiers                    = true
@@ -439,6 +449,7 @@ run "plan_all_flags_on_sentinel" {
       CA022 = "enabledForReportingButNotEnforced"
       CA023 = "enabledForReportingButNotEnforced"
       CA060 = "enabledForReportingButNotEnforced"
+      CA061 = "enabledForReportingButNotEnforced"
     }
     # The workforce passkey rollout needs the admin key-model allow-list.
     admin_fido2_allowed_aaguids = ["cb69481e-8ff7-4039-93ec-0a2729a154a8"]
@@ -552,6 +563,7 @@ run "plan_all_flags_on_la_alerts" {
     enable_servicenow_sso               = true
     enable_servicenow_provisioning      = true
     enable_okta_federation              = true
+    enable_clinic_results_app           = true
     enable_scim_provisioning            = true
     enable_pam_oidc_app                 = true
     enable_pim_tiers                    = true
@@ -584,6 +596,7 @@ run "plan_all_flags_on_la_alerts" {
       CA022 = "enabledForReportingButNotEnforced"
       CA023 = "enabledForReportingButNotEnforced"
       CA060 = "enabledForReportingButNotEnforced"
+      CA061 = "enabledForReportingButNotEnforced"
     }
     # The workforce passkey rollout needs the admin key-model allow-list.
     admin_fido2_allowed_aaguids = ["cb69481e-8ff7-4039-93ec-0a2729a154a8"]
@@ -640,6 +653,7 @@ run "pim_auth_context_refused_while_ca021_report_only" {
     enable_premium = true
     # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
     enable_identity_protection_ca           = false
+    enable_clinic_results_app               = false
     enable_registration_ca                  = false
     enable_device_code_block                = false
     enable_admin_session_controls           = false
@@ -676,6 +690,7 @@ run "pim_auth_context_refused_in_the_same_change_as_ca021_enabled" {
     enable_premium = true
     # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
     enable_identity_protection_ca           = false
+    enable_clinic_results_app               = false
     enable_registration_ca                  = false
     enable_device_code_block                = false
     enable_admin_session_controls           = false
@@ -707,6 +722,7 @@ run "attestation_without_ca021_enabled_is_refused" {
   variables {
     # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
     enable_identity_protection_ca        = false
+    enable_clinic_results_app            = false
     enable_registration_ca               = false
     enable_device_code_block             = false
     enable_admin_session_controls        = false
@@ -733,6 +749,7 @@ run "pim_auth_context_allowed_once_ca021_enforced" {
   variables {
     # pinned: lab.tfvars turns these on from Day 1; this run's ca_policy_states is CA021-only
     enable_identity_protection_ca        = false
+    enable_clinic_results_app            = false
     enable_registration_ca               = false
     enable_device_code_block             = false
     enable_admin_session_controls        = false
@@ -879,6 +896,7 @@ run "flags_without_premium_warn" {
     enable_servicenow_sso               = true
     enable_servicenow_provisioning      = true
     enable_okta_federation              = true
+    enable_clinic_results_app           = true
     enable_pim_tiers                    = true
     enable_helpdesk_au_scoping          = true
     enable_global_admin_pim_policy      = true
@@ -900,6 +918,7 @@ run "flags_without_premium_warn" {
     check.servicenow_sso_requires_sso_apps,
     check.servicenow_provisioning_requires_sso_apps,
     check.okta_federation_requires_sso_apps,
+    check.clinic_results_requires_sso_apps,
     check.pim_extensions_require_premium,
     check.pim_aws_admin_requires_sso_apps,
     check.b2b_requires_governance,

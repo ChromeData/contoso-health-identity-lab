@@ -54,9 +54,37 @@ Describe 'Get-ConnectHealthAdfsService in <File>' -ForEach $script:Files {
     }
 }
 
+Describe 'callers count the services safely under Set-StrictMode -Version Latest (<File>)' -ForEach $script:Files {
+    BeforeAll {
+        $path = Join-Path $script:Dir $File
+        . ([scriptblock]::Create(@(Get-FunctionText $path 'Get-ConnectHealthAdfsService')[0]))
+        # Every expression in the file that counts the function's output, run as written.
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$null)
+        $script:Counts = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.MemberExpressionAst] -and $n.Member.Extent.Text -eq 'Count' -and $n.Expression.Extent.Text -match 'Get-ConnectHealthAdfsService' }, $true) | ForEach-Object { $_.Extent.Text })
+        $script:Installed = @()
+        Mock Get-Service {
+            foreach ($n in $Name) { $script:Installed | Where-Object { $_.Name -like $n } }
+        }
+    }
+
+    It 'has at least one count expression' { $script:Counts.Count | Should -BeGreaterThan 0 }
+
+    It 'gives <Expected> with <Case>' -ForEach @(
+        @{ Case = 'no agent'; Names = @(); Expected = 0 }
+        @{ Case = 'the current agent (one service)'; Names = @('AzureADConnectHealthAgent'); Expected = 1 }
+        @{ Case = 'the older agent (two services)'; Names = @('AdHealthAdfsDiagnosticsService', 'AdHealthAdfsInsightsService'); Expected = 2 }
+    ) {
+        $script:Installed = @($Names | ForEach-Object { [pscustomobject]@{ Name = $_ } })
+        foreach ($expr in $script:Counts) {
+            $sb = [scriptblock]::Create("Set-StrictMode -Version Latest; $expr")
+            & $sb | Should -Be $Expected -Because $expr
+        }
+    }
+}
+
 Describe '19-Remove-Adfs.ps1 inventory' {
-    It 'reports connectHealth from the shared check' {
-        Get-Content -Raw (Join-Path $script:Dir '19-Remove-Adfs.ps1') | Should -Match 'connectHealth\s+=\s+\(\(Get-ConnectHealthAdfsService\)\.Count -gt 0\)'
+    It 'reports connectHealth from the shared check, wrapped in @()' {
+        Get-Content -Raw (Join-Path $script:Dir '19-Remove-Adfs.ps1') | Should -Match 'connectHealth\s+=\s+\(@\(Get-ConnectHealthAdfsService\)\.Count -gt 0\)'
     }
 }
 

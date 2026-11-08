@@ -83,6 +83,7 @@ variable "policy_states" {
       CA022         enable_pam_session_ca           (PAM session broker; was CA009)
       CA023         enable_protected_actions_ca     (protected actions, auth context; Graph-managed)
       CA060         enable_shared_clinical_ca       (shared clinical workstations)
+      CA061         enable_clinic_results_ca        (Clinic Lab Results, moved from Okta)
     CA011 is TAKEN but is not a key here: the token-protection pilot,
     Graph-managed by post-apply/Set-TokenProtectionPolicy.ps1 (report-only
     by default; -Enforce is its own second key). Never reuse the number.
@@ -103,6 +104,7 @@ variable "policy_states" {
     CA022 = "enabledForReportingButNotEnforced" # PAM session broker + admin portals, admin strength
     CA023 = "enabledForReportingButNotEnforced" # protected actions step-up, auth context (Graph-managed)
     CA060 = "enabledForReportingButNotEnforced" # shared clinical workstations
+    CA061 = "enabledForReportingButNotEnforced" # Clinic Lab Results (moved from Okta)
   }
 
   validation {
@@ -119,10 +121,10 @@ variable "policy_states" {
       for k in keys(var.policy_states) : contains([
         "CA001", "CA002", "CA003", "CA004", "CA005", "CA006", "CA007", "CA008", "CA009", "CA010",
         "CA020", "CA021", "CA022", "CA023",
-        "CA060",
+        "CA060", "CA061",
       ], k)
     ])
-    error_message = "policy_states accepts only the keys CA001..CA010, CA020..CA023 and CA060."
+    error_message = "policy_states accepts only the keys CA001..CA010, CA020..CA023, CA060 and CA061."
   }
 
   validation {
@@ -833,4 +835,30 @@ variable "tags_note" {
     convention as modules/groups).
   EOT
   default     = "contoso-health-identity-lab"
+}
+
+# ---- CA061 Clinic Lab Results (clinical.tf) -----------------------------------
+
+variable "enable_clinic_results_ca" {
+  type        = bool
+  description = <<-EOT
+    Create CA061: Clinic Lab Results (the first app moved from the clinic's
+    Okta, modules/apps clinic_results.tf) needs MFA and a sign-in every 8
+    hours, for its app group only. Needs ca061_app_ids (the app's client id)
+    and ca061_group_object_ids, and a CA061 entry in policy_states. Default
+    false.
+  EOT
+  default     = false
+}
+
+variable "ca061_app_ids" {
+  type        = list(string)
+  description = "The ONE application CA061 targets: [Clinic Lab Results client id] (modules/apps output clinic_results_client_id)."
+  default     = []
+}
+
+variable "ca061_group_object_ids" {
+  type        = list(string)
+  description = "Users CA061 applies to: App-ClinicResults-Users (modules/apps output clinic_results_users_group_object_id). Never All users."
+  default     = []
 }

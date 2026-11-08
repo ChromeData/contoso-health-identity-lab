@@ -64,6 +64,9 @@ function Write-Step([string]$Message) { Write-Output ("[adfs-remove] {0}" -f $Me
 # both, so neither version reads as "not installed". The same function is in
 # 12-Install-ConnectHealthAgent.ps1 and 19-Remove-Adfs.ps1 (run-on-dc.py
 # sends one file); lab/adfs/tests/ConnectHealth.Tests.ps1 keeps them equal.
+# PowerShell unrolls a function's output (one service = a scalar, none =
+# $null), and under Set-StrictMode -Version Latest .Count on those throws: so
+# every caller wraps the call in @(...).
 function Get-ConnectHealthAdfsService {
     @(Get-Service -Name 'AdHealthAdfs*', 'AzureADConnectHealthAgent' -ErrorAction SilentlyContinue)
 }
@@ -99,7 +102,7 @@ $auditsProven = [bool]$anyAudit -and ($oldest -le $since)
 $inventory = [ordered]@{
     adfsService       = $adfs
     relyingParty      = $(if ($adfs) { [bool](Get-AdfsRelyingPartyTrust -Identifier $RpIdentifier) } else { $false })
-    connectHealth     = ((Get-ConnectHealthAdfsService).Count -gt 0)
+    connectHealth     = (@(Get-ConnectHealthAdfsService).Count -gt 0)
     dkmContainer      = [bool](Get-ADObject -Filter "DistinguishedName -eq '$dkm'" -ErrorAction SilentlyContinue)
     gmsa              = [bool](Get-ADServiceAccount -Filter "Name -eq '$GmsaName'")
     tokenIssuances    = $recent.Count
