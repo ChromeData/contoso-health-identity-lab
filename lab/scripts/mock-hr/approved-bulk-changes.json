@@ -1,0 +1,5 @@
+{
+  "schema": "approved-bulk-changes/1",
+  "_comment": "Reviewed bulk HR events (reorganisation, site closing) that may pass the mass-change guard. Change this file only through a reviewed pull request: the PR review IS the approval. Each entry: ticket (CHGnnnnnnn), kind (disable | access-change), maxCount, expires (YYYY-MM-DD, inclusive), reason. Empty on purpose: the lab has had no reviewed bulk event.",
+  "changes": []
+}

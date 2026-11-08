@@ -47,6 +47,7 @@ incidents.
 | [0024](0024-lab-operator-workload-identity.md) | Unattended admin work runs as the lab operator: a certificate-only Entra workload identity (key in the Mac's Keychain), which AWS trusts through Entra web-identity federation. Tier 0, one kill switch for both clouds | Identity platform / Tier 0 |
 | [0025](0025-aws-admin-just-in-time-through-entra.md) | AWS administration is a 2-hour PIM-for-Groups activation in Entra (PIM-AWS-Lab-Admins -> SCIM -> IAM Identity Center permission set LabAdministrator), not the root user; the operator is denied IAM, Identity Center and account-creating Organizations writes, so it cannot mint another admin path | Identity platform / Tier 0 |
 | [0026](0026-positive-controls-every-check-seen-to-fail.md) | A check counts only after it has been seen to fail: tools are judged by counted output, never exit codes alone, and the merge gate's Checkov and TruffleHog run on every PR against a fixture they must catch and a clean twin they must pass; the verified-only TruffleHog mode stays a stated blind spot | Pipeline / all checks |
+| [0030](0030-lab-operator-residual-risk.md) | The lab operator is read-only by default: no Owner, no standing Graph write; writes exist only in an owner-opened session of at most 8 hours (Azure part time-bound by PIM, Graph part removed by the closing apply); only the owner applies `envs/operator`; workload-identity CA (CA090) DESIGNED, blocked by licence. States the honest count of standing Tier-0 principals | Identity platform / Tier 0 |
 
 ## Format
 
