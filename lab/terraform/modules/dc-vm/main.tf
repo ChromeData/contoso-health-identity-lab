@@ -281,6 +281,20 @@ locals {
   EOT
 }
 
+# CHANGING THE CONDITION REPLACES THIS ASSIGNMENT (delete, then create).
+# azurerm marks `condition` ForceNew (provider 4.81 source), so a narrower name
+# list is a replace, not an update. Measured on a throwaway resource group,
+# 2026-11-08, as the lab operator:
+#   * create_before_destroy does NOT help: Azure refuses a second assignment
+#     with the same principal, role and scope whatever its condition
+#     (409 RoleAssignmentExists), so the apply would fail. Do not add it.
+#   * ARM itself CAN update a condition in place (a PUT to the same assignment
+#     name changed it, createdOn kept). Only an azapi_update_resource could use
+#     that; the lab does not carry the azapi provider for this one change.
+# Impact of the replace: for the seconds between delete and create, DC01 cannot
+# write, read or delete its own build secrets. Nothing on DC01 uses Key Vault
+# continuously: only 02-Configure-Domain.ps1 and the run-command scripts do,
+# by hand. Apply while none of them runs (DC01 is deallocated most of the time).
 resource "azurerm_role_assignment" "dc_kv_secrets_officer" {
   scope                = var.key_vault_id
   role_definition_name = "Key Vault Secrets Officer"
