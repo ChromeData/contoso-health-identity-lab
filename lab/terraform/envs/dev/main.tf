@@ -66,6 +66,9 @@
 #                                          for post-apply/Set-DirectoryRolePimPolicies.ps1.
 #   enable_pim_azure_resources          -> Azure PIM: eligible Contributor on the
 #                                          RG (premium; HUMAN Owner applies).
+#   enable_pim_keyvault_officers        -> Azure PIM: eligible Key Vault Secrets
+#                                          Officer on kv-idlab (premium; HUMAN
+#                                          Owner applies; ADR 0036).
 #   enable_pim_demo_readers             -> PIM-Demo-Readers: read-only presenter
 #                                          access (Global Reader + Security
 #                                          Reader), eligible-only, no approval;
@@ -251,8 +254,8 @@ check "pim_aws_admin_requires_sso_apps" {
 
 check "pim_extensions_require_premium" {
   assert {
-    condition     = !(var.enable_pim_tiers || var.enable_pim_azure_resources || var.enable_helpdesk_au_scoping || var.enable_global_admin_pim_policy || var.enable_pim_demo_readers) || var.enable_premium
-    error_message = "enable_pim_tiers / enable_pim_azure_resources / enable_helpdesk_au_scoping / enable_global_admin_pim_policy / enable_pim_demo_readers have no effect unless enable_premium = true (modules/pim is premium-tier)."
+    condition     = !(var.enable_pim_tiers || var.enable_pim_azure_resources || var.enable_pim_keyvault_officers || var.enable_helpdesk_au_scoping || var.enable_global_admin_pim_policy || var.enable_pim_demo_readers) || var.enable_premium
+    error_message = "enable_pim_tiers / enable_pim_azure_resources / enable_pim_keyvault_officers / enable_helpdesk_au_scoping / enable_global_admin_pim_policy / enable_pim_demo_readers have no effect unless enable_premium = true (modules/pim is premium-tier)."
   }
 }
 
@@ -487,6 +490,15 @@ module "pim" {
   enable_pim_azure_resources = var.enable_pim_azure_resources
   azure_pim_scope_id         = azurerm_resource_group.idlab.id
 
+  # Just-in-time Key Vault Secrets Officer on the lab vault (ADR 0036,
+  # modules/pim keyvault.tf). Like PIM-Azure-RG-Contributors, its members
+  # are STANDING (the group is eligible), so they join CA002 / CA020 scope
+  # through privileged_review_targets: each must be an adm- account with a
+  # passkey. key_vault_secrets_officer_ids still grants the role ACTIVELY;
+  # empty that list only after an activation has been seen to work.
+  enable_pim_keyvault_officers = var.enable_pim_keyvault_officers
+  keyvault_pim_scope_id        = module.keyvault.key_vault_id
+
   # AWS admin as a PIM-for-Groups activation (ADR 0025). The group is
   # assigned to the AWS app in module.apps below; it stays out of the CA002 /
   # CA020 scope (privileged_review_targets) on purpose.
@@ -655,9 +667,11 @@ module "monitoring" {
   operator_principal_ids = var.operator_principal_ids
   trusted_egress_ranges  = var.trusted_egress_ranges
   trusted_asns           = var.trusted_asns
-  # PIM-Azure-RG-Contributors: standing members are its intended path (the
-  # group is eligible for the Azure role) - reported on its own, Medium path.
-  azure_pim_group_ids = var.enable_premium ? [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null] : []
+  # PIM-Azure-RG-Contributors and PIM-KeyVault-Secrets-Officers: standing
+  # members are their intended path (the GROUP is eligible for the Azure
+  # role) - reported on their own, Medium path. A new member of either can
+  # request Tier-0 access (the DC's RG; the lab vault's secrets).
+  azure_pim_group_ids = var.enable_premium ? [for g in [module.pim[0].azure_pim_group_object_id, module.pim[0].keyvault_pim_group_object_id] : g if g != null] : []
   privileged_user_ids = distinct(concat(
     var.enable_premium ? module.groups[0].break_glass_user_object_ids : [],
     var.privileged_user_object_ids,
@@ -677,6 +691,11 @@ locals {
     [module.groups[0].break_glass_group_object_id, module.groups[0].priv_iam_admins_group_object_id],
     values(module.pim[0].tier_group_object_ids),
     [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null],
+    # PIM-KeyVault-Secrets-Officers (enable_pim_keyvault_officers): eligible
+    # for Key Vault Secrets Officer on the lab vault, so a member added is
+    # one activation away from writing Tier-0 secrets. Watched like
+    # PIM-Azure-RG-Contributors (null, so skipped, while the flag is off).
+    [for g in [module.pim[0].keyvault_pim_group_object_id] : g if g != null],
     # PIM-AWS-Lab-Admins (ADR 0025): members arrive only by PIM activation
     # (written by MS-PIM), so a direct add is a way around the 2-hour,
     # MFA + reason activation into AWS admin. Watched here, but deliberately

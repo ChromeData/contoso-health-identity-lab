@@ -66,7 +66,7 @@ jobs:
         run: |
           set -uo pipefail
           fail=0
-          dirs="lab/terraform/envs/dev lab/terraform/envs/bootstrap lab/terraform/envs/operator lab/terraform/aws lab/terraform/okta lab/terraform/k8s/platform lab/terraform/k8s/identity lab/terraform/k8s/aks-mapping"
+          dirs="lab/terraform/envs/dev lab/terraform/envs/bootstrap lab/terraform/envs/operator lab/terraform/aws lab/terraform/okta lab/terraform/k8s/platform lab/terraform/k8s/identity lab/terraform/k8s/keyvault-trust"
           for m in lab/terraform/modules/*/; do dirs="$dirs ${m%/}"; done
           for d in $dirs; do
             echo "::group::$d"
