@@ -1,0 +1,139 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "name": { "type": "string" },
+    "location": { "type": "string" },
+    "tags": { "type": "object", "defaultValue": {} }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('name')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "identity": { "type": "SystemAssigned" },
+      "properties": {
+        "state": "Enabled",
+        "accessControl": {
+          "triggers": {
+            "openAuthenticationPolicies": {
+              "policies": {
+                "AzureADLifecycleWorkflowsAuthPOPAuthPolicy": {
+                  "type": "AADPOP",
+                  "claims": [
+                    { "name": "iss", "value": "[concat('https://sts.windows.net/', subscription().tenantId, '/')]" },
+                    { "name": "aud", "value": "https://management.azure.com" },
+                    { "name": "appid", "value": "ce79fdc4-cd1d-4ea5-8139-e74d7dbe0bb7" },
+                    { "name": "m", "value": "POST" },
+                    { "name": "u", "value": "management.azure.com" },
+                    { "name": "p", "value": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Logic/workflows/', parameters('name'))]" }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {},
+          "triggers": {
+            "manual": {
+              "type": "Request",
+              "kind": "Http",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "subject": { "type": "object", "properties": { "id": { "type": "string" } } },
+                        "task": { "type": "object", "properties": { "id": { "type": "string" } } },
+                        "workflow": { "type": "object", "properties": { "id": { "type": "string" } } }
+                      }
+                    },
+                    "source": { "type": "string" },
+                    "type": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "actions": {
+            "Check_subject_id": {
+              "type": "If",
+              "runAfter": {},
+              "expression": {
+                "and": [
+                  { "equals": [ "@length(string(coalesce(triggerBody()?['data']?['subject']?['id'], '')))", 36 ] }
+                ]
+              },
+              "actions": {
+                "Get_assignments": {
+                  "type": "Http",
+                  "runAfter": {},
+                  "inputs": {
+                    "method": "GET",
+                    "uri": "https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement/assignments",
+                    "queries": {
+                      "$filter": "@{concat('target/objectId eq ''', triggerBody()?['data']?['subject']?['id'], '''')}",
+                      "$expand": "assignmentPolicy"
+                    },
+                    "authentication": { "type": "ManagedServiceIdentity", "audience": "https://graph.microsoft.com" }
+                  }
+                },
+                "For_each_assignment": {
+                  "type": "Foreach",
+                  "runAfter": { "Get_assignments": [ "Succeeded" ] },
+                  "foreach": "@body('Get_assignments')?['value']",
+                  "actions": {
+                    "Delivered_and_automatic": {
+                      "type": "If",
+                      "runAfter": {},
+                      "expression": {
+                        "and": [
+                          { "equals": [ "@toLower(string(items('For_each_assignment')?['state']))", "delivered" ] },
+                          { "not": { "equals": [ "@items('For_each_assignment')?['assignmentPolicy']?['automaticRequestSettings']", "@null" ] } }
+                        ]
+                      },
+                      "actions": {
+                        "Admin_remove": {
+                          "type": "Http",
+                          "runAfter": {},
+                          "inputs": {
+                            "method": "POST",
+                            "uri": "https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement/assignmentRequests",
+                            "headers": { "Content-Type": "application/json" },
+                            "body": {
+                              "requestType": "adminRemove",
+                              "assignment": { "id": "@{items('For_each_assignment')?['id']}" }
+                            },
+                            "authentication": { "type": "ManagedServiceIdentity", "audience": "https://graph.microsoft.com" }
+                          }
+                        }
+                      },
+                      "else": { "actions": {} }
+                    }
+                  }
+                }
+              },
+              "else": { "actions": {} }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {}
+      }
+    }
+  ],
+  "outputs": {
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('name')), '2019-05-01', 'full').identity.principalId]"
+    },
+    "workflowName": { "type": "string", "value": "[parameters('name')]" }
+  }
+}

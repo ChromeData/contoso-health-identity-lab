@@ -198,6 +198,25 @@ run "plan_lab_tfvars" {
 # the first ITDR PR would): CI reads lab.tfvars, so the rules whose tables
 # cannot have data yet - DC01 SecurityEvent, the risk tables, the extended
 # vault feed - and the PREVIEW rule stay out of the plan, on both paths.
+run "plan_lab_leaver_extension" {
+  command = plan
+  assert {
+    condition     = var.enable_lcw_leaver_extension && output.leaver_extension_logic_app_name == "la-lcw-leaver-remove-birthright"
+    error_message = "ADR 0029: lab.tfvars plans the leaver Logic App (enable_lcw_leaver_extension)"
+  }
+}
+
+run "plan_leaver_extension_off_by_default" {
+  command = plan
+  variables {
+    enable_lcw_leaver_extension = false
+  }
+  assert {
+    condition     = output.leaver_extension_logic_app_name == null
+    error_message = "the leaver Logic App exists only when enable_lcw_leaver_extension is on"
+  }
+}
+
 run "plan_lab_itdr_hold_back" {
   command = plan
   variables {

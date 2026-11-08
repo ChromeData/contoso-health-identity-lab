@@ -500,3 +500,8 @@ output "servicenow_saml_signing_cert_activation_command" {
   description = "S1a: the Update-MgServicePrincipal line that activates the ServiceNow SAML signing certificate (azuread cannot set preferredTokenSigningKeyThumbprint)."
   value       = one(module.apps[*].servicenow_saml_signing_cert_activation_command)
 }
+
+output "leaver_extension_logic_app_name" {
+  description = "ADR 0029 leaver Logic App name (null while enable_lcw_leaver_extension is off): pass it to New-LifecycleWorkflows.ps1 -LeaverExtensionLogicAppName."
+  value       = one(module.leaver_extension[*].logic_app_name)
+}

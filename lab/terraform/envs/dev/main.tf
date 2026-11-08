@@ -509,6 +509,25 @@ module "entitlement" {
 }
 
 # -----------------------------------------------------------------------------
+# Leaver extension (ADR 0029): a Logic App that Lifecycle Workflows' scheduled
+# leave-date leaver calls to adminRemove BIRTHRIGHT (automatic-policy) access
+# packages, which the built-in "Remove all access package assignments" task
+# skips. System-assigned identity, Access package assignment manager on the
+# Clinical catalog only. The custom task extension and the task in the
+# workflow are added by post-apply/New-LifecycleWorkflows.ps1
+# -IncludeLeaveDateLeaver -LeaverExtensionLogicAppName.
+# -----------------------------------------------------------------------------
+module "leaver_extension" {
+  source = "../../modules/leaver-extension"
+  count  = var.enable_premium && var.enable_governance && var.enable_lcw_leaver_extension ? 1 : 0
+
+  resource_group_name = azurerm_resource_group.idlab.name
+  location            = var.location
+  catalog_ids         = { clinical = module.entitlement[0].catalog_id }
+  tags                = var.tags
+}
+
+# -----------------------------------------------------------------------------
 # AD DS domain controller (the on-prem half of HR -> AD -> Cloud Sync -> Entra).
 # Promotion is done by lab/scripts/dc/*.ps1 via az vm run-command.
 # -----------------------------------------------------------------------------

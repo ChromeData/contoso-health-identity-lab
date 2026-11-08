@@ -85,4 +85,24 @@ Describe 'New-LifecycleWorkflows.ps1 -OfflinePreview' {
         $j = Get-PreviewBody -Lines $global:LcwOut -Category 'joiner'
         $j['executionConditions']['scope']['rule'] | Should -Be "(department eq 'Nursing') and (accountEnabled eq true)"
     }
+
+    It '-LeaverExtensionLogicAppName adds the custom task extension (PoP, no callback) right after the built-in package removal' {
+        & $script:Lcw -OfflinePreview -IncludeLeaveDateLeaver -LeaverExtensionLogicAppName 'la-lcw-leaver-remove-birthright' | Out-Null
+        $ext = @(foreach ($l in $global:LcwOut) { if ($l -match '^\s*\{' -and $l -match 'logicAppTriggerEndpointConfiguration') { $l | ConvertFrom-Json -AsHashtable } })
+        $ext.Count | Should -Be 1
+        $ext[0]['endpointConfiguration']['logicAppWorkflowName'] | Should -Be 'la-lcw-leaver-remove-birthright'
+        $ext[0]['endpointConfiguration']['resourceGroupName'] | Should -Be 'RG-IDENTITY-LAB'
+        $ext[0]['authenticationConfiguration']['@odata.type'] | Should -Be '#microsoft.graph.azureAdPopTokenAuthentication'
+        $ext[0].Contains('callbackConfiguration') | Should -BeFalse   # fire and forget: no LCW permission on the Logic App
+        $w = @(foreach ($l in $global:LcwOut) { if ($l -match '^\s*\{' -and $l -match '"category"') { $b = $l | ConvertFrom-Json -AsHashtable; if ($b['displayName'] -eq 'Contoso - Leaver (HR leave date, scheduled)') { $b } } })[0]
+        $defs = @($w['tasks'] | ForEach-Object { $_['taskDefinitionId'] })
+        $i = [array]::IndexOf($defs, '<taskDefinitionId: Remove all access package assignments for user>')
+        $defs[$i + 1] | Should -Be '<taskDefinitionId: Run a Custom Task Extension>'
+        (@($w['tasks'][$i + 1]['arguments']) | Where-Object { $_['name'] -eq 'customTaskExtensionID' })['value'] | Should -Be '<customTaskExtensionId>'
+        $w['tasks'][$i + 1]['continueOnError'] | Should -BeTrue
+    }
+
+    It '-LeaverExtensionLogicAppName without -IncludeLeaveDateLeaver is refused' {
+        { & $script:Lcw -OfflinePreview -LeaverExtensionLogicAppName 'la-x' } | Should -Throw '*needs -IncludeLeaveDateLeaver*'
+    }
 }

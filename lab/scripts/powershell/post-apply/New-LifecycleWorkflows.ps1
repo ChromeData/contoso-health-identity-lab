@@ -272,6 +272,21 @@
     step 3). Automating that adminRemove needs a new Graph permission on
     an automated identity (owner decision; see the PR).
 
+.PARAMETER LeaverExtensionLogicAppName
+    ADR 0029. With -IncludeLeaveDateLeaver: the Logic App from
+    modules/leaver-extension (Terraform output leaver_extension_logic_app_name).
+    The script finds or creates the custom task extension "Contoso - Remove
+    birthright packages (leaver)" (Proof-of-Possession token, no callback:
+    fire and forget) and adds the task "Run a Custom Task Extension" right
+    after "Remove all access package assignments". The Logic App then
+    adminRemoves every delivered assignment made by an automatic policy,
+    which the built-in task skips. Needs LifecycleWorkflows-CustomExt.ReadWrite.All
+    (or LifecycleWorkflows.ReadWrite.All) and Logic App Contributor on the
+    Logic App (Learn, create customTaskExtension).
+
+.PARAMETER LeaverExtensionSubscriptionId / LeaverExtensionResourceGroup
+    Where that Logic App lives. Resource group default RG-IDENTITY-LAB.
+
 .PARAMETER LeaveDateLeaverWorkflowName
     Default "Contoso - Leaver (HR leave date, scheduled)".
 
@@ -402,6 +417,18 @@ param(
     [int]$ScheduleIntervalHours = 0,
 
     [Parameter()]
+    [ValidatePattern('^[A-Za-z0-9-]{1,80}$', ErrorMessage = 'Logic App name: letters, digits and hyphens.')]
+    [string]$LeaverExtensionLogicAppName = '',
+
+    [Parameter()]
+    [ValidatePattern('^$|^[0-9a-fA-F-]{36}$', ErrorMessage = 'Subscription id must be a GUID.')]
+    [string]$LeaverExtensionSubscriptionId = '',
+
+    [Parameter()]
+    [ValidatePattern('^[A-Za-z0-9._()-]{1,90}$', ErrorMessage = 'Resource group name not valid.')]
+    [string]$LeaverExtensionResourceGroup = 'RG-IDENTITY-LAB',
+
+    [Parameter()]
     [switch]$OfflinePreview
 )
 
@@ -518,6 +545,8 @@ $taskCatalog = [ordered]@{
     # Mover (-IncludeMover only). verify: display names in the tenant.
     RemovePackage     = @{ Names = @('Remove access package assignment for user'); Params = @('accessPackageId') }
     MoverNotify       = @{ Names = @('Send email to notify manager of user move', "Send email to manager about user's job change"); Params = @() }
+    # Leaver extension (-LeaverExtensionLogicAppName only). Read from the tenant 2026-11-08.
+    RunExtension      = @{ Names = @('Run a Custom Task Extension'); Params = @('customTaskExtensionID') }
 }
 
 function Get-NormalizedName { param([string]$Name) return ($Name -replace '[^A-Za-z0-9]', '').ToLowerInvariant() }
@@ -571,6 +600,7 @@ $def = @{}
 foreach ($key in $taskCatalog.Keys) {
     if ($key -eq 'AddGroups' -and -not $JoinerGroupMailNicknames) { continue }
     if ($key -in 'RemovePackage', 'MoverNotify' -and -not $IncludeMover) { continue }
+    if ($key -eq 'RunExtension' -and -not $LeaverExtensionLogicAppName) { continue }
     $def[$key] = Resolve-TaskDefinition -Key $key
     Write-Verbose "Resolved $key -> $($def[$key]['displayName']) ($($def[$key]['id']))"
 }
@@ -744,6 +774,45 @@ $leaverBody = [ordered]@{
 }
 
 # ---- Scheduled leaver on employeeLeaveDateTime (-IncludeLeaveDateLeaver) -----
+if ($LeaverExtensionLogicAppName -and -not $IncludeLeaveDateLeaver) { throw '-LeaverExtensionLogicAppName needs -IncludeLeaveDateLeaver (the task goes into that workflow).' }
+if ($LeaverExtensionLogicAppName -and -not $OfflinePreview -and -not $LeaverExtensionSubscriptionId) { throw '-LeaverExtensionLogicAppName needs -LeaverExtensionSubscriptionId (where the Logic App lives).' }
+
+# ---- Custom task extension for the leaver (ADR 0029) --------------------------
+# Find by display name, else create. PoP token (Learn: new extensions are PoP
+# only); NO callbackConfiguration = fire and forget, so the Logic App's
+# identity needs no Lifecycle Workflows permission.
+$extensionName = 'Contoso - Remove birthright packages (leaver)'
+$extensionId = $null
+if ($LeaverExtensionLogicAppName) {
+    $extBody = [ordered]@{
+        displayName                 = $extensionName
+        description                 = 'adminRemove of access packages assigned by an AUTOMATIC policy (the built-in task skips them). Logic App from lab/terraform/modules/leaver-extension; ADR 0029.'
+        endpointConfiguration       = [ordered]@{
+            '@odata.type'        = '#microsoft.graph.logicAppTriggerEndpointConfiguration'
+            subscriptionId       = $(if ($OfflinePreview -and -not $LeaverExtensionSubscriptionId) { '<subscription id>' } else { $LeaverExtensionSubscriptionId })
+            resourceGroupName    = $LeaverExtensionResourceGroup
+            logicAppWorkflowName = $LeaverExtensionLogicAppName
+        }
+        authenticationConfiguration = [ordered]@{ '@odata.type' = '#microsoft.graph.azureAdPopTokenAuthentication' }
+        clientConfiguration         = [ordered]@{ '@odata.type' = '#microsoft.graph.customExtensionClientConfiguration'; maximumRetries = 1; timeoutInMilliseconds = 1000 }
+    }
+    if ($OfflinePreview) {
+        Write-Console "POST $lcw/customTaskExtensions" -ForegroundColor DarkYellow
+        Write-Console ($extBody | ConvertTo-Json -Depth 8)
+        $extensionId = '<customTaskExtensionId>'
+    }
+    else {
+        $found = @(Get-GraphCollection -Uri "$lcw/customTaskExtensions" | Where-Object { [string]$_['displayName'] -eq $extensionName })
+        if ($found.Count -gt 1) { throw "$($found.Count) custom task extensions are named '$extensionName' - delete the extras first." }
+        if ($found.Count -eq 1) { $extensionId = [string]$found[0]['id']; Add-Result $extensionName $extensionId 'up-to-date' 'existing extension reused' }
+        elseif ($PSCmdlet.ShouldProcess($extensionName, 'create custom task extension')) {
+            $extensionId = [string](Invoke-Graph -Method POST -Uri "$lcw/customTaskExtensions" -Body $extBody)['id']
+            Add-Result $extensionName $extensionId 'created'
+        }
+        else { $extensionId = '<customTaskExtensionId>'; Add-Result $extensionName '' 'whatif-create' }
+    }
+}
+
 $leaveDateLeaverBody = $null
 if ($IncludeLeaveDateLeaver) {
     # The on-demand leaver's tasks minus "Disable user account": HR has
@@ -766,7 +835,17 @@ if ($IncludeLeaveDateLeaver) {
                 offsetInDays       = 0
             }
         }
-        tasks               = @($leaverTasks | Select-Object -Skip 1)
+        tasks               = @(
+            $leaverTasks | Select-Object -Skip 1 | ForEach-Object {
+                $_
+                if ($extensionId -and [string]$_['displayName'] -eq 'Remove all access package assignments') {
+                    $extArgs = [ordered]@{}
+                    $extArgs[(Get-DefinitionParameterName -Definition $def.RunExtension -Pattern '^customTaskExtensionID$' -DocumentedName 'customTaskExtensionID')] = $extensionId
+                    ConvertTo-LcwTask -Definition $def.RunExtension -DisplayName 'Remove birthright packages (Logic App, adminRemove)' -ContinueOnError $true `
+                        -Description 'The built-in task above skips assignments made by an automatic policy (measured 2026-11-08); this adminRemoves them. ADR 0029.' -Arguments $extArgs
+                }
+            }
+        )
     }
 }
 

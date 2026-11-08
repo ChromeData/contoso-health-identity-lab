@@ -94,6 +94,11 @@ pim_tier0_auth_context_switchover_step1 = false
 # Then post-apply/New-B2BConnectedOrganization.ps1.
 enable_b2b_governance = false
 
+# ADR 0029 (PR #257): Logic App that adminRemoves birthright packages for HR
+# leavers (the LCW built-in task skips automatic-policy assignments). Plan:
+# the Logic App deployment + 1 catalog role assignment. Owner approves the apply.
+enable_lcw_leaver_extension = true
+
 # Risk-based Conditional Access - CA006 (user risk High -> MFA + secure
 # password change) and CA007 (sign-in risk High -> block). Entra ID P2: flip
 # only after the E5 licences are ASSIGNED, and set the Microsoft-managed
