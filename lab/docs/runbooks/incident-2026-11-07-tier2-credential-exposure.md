@@ -38,13 +38,16 @@ rotation).
 | `contosoadmin` from anywhere else | DC01 itself (Run Command and services: `::1`, `-`), and one RDP logon from 10.42.250.5 at 02:13Z: the Azure Bastion subnet, the recorded session E133 |
 | `t0-adm-01` from anywhere else | DC01 itself only (`::1`), up to the rotation at 03:58Z |
 | DCSync (4662 with the replication rights) | Only `DC01$`, the DC's own account (12 events). No other principal |
-| Group membership changes (4728, 4732, 4756 and removals) | None after 01:50Z |
+| Group membership additions (4728, 4732, 4756) | None after 01:50Z. Removals (4729, 4733, 4757) are not collected, so they cannot be ruled out |
 | Password resets and account changes | The planned ones only: the `t0-adm-01` rotation (03:58Z, E156), the `svc-pam-discovery` retirement (03:55Z, E157), the `contosoadmin` rotation (2026-11-08 18:09Z, E178), and the HR provisioning gMSA on test workers |
 
-**Not checked (limits):** the VM's own logs (the VM was deleted). Directory
-object changes (5136: GPO and AdminSDHolder edits) are not collected by
-DC01's data collection rule, so a GPO or AdminSDHolder diff was not possible
-from the logs.
+**Not checked (limits):** the VM's own logs (the VM was deleted). DC01's
+data collection rule collects only 4624, 4625, 4648, 4662, 4672, 4720,
+4722, 4724, 4725, 4728, 4732, 4738, 4756, 4768 and 4769. So these are NOT
+covered, and an empty result says nothing about them: 5136 (GPO and
+AdminSDHolder edits), group removals (4729, 4733, 4757), self password
+changes (4723), Kerberos pre-auth failures (4771) and NTLM validation
+(4776). The conclusions above are limited to collected events.
 
 ## Containment and fixes
 
@@ -62,5 +65,5 @@ from the logs.
 compromised and rotated them. The VM lived 8 minutes with no public IP. I
 reviewed the DC logs for the whole window: only the expected join and test
 logons, all inside 96 seconds, nothing from that subnet afterwards, no
-DCSync by anyone but the DC, no group changes. The test now uses a delegated
-join account."
+DCSync by anyone but the DC, no group additions. Changing the test to use a
+delegated join account and a no-rights test account is still an owner task."
