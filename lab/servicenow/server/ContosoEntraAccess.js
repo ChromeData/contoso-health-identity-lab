@@ -55,6 +55,7 @@ ContosoEntraAccess.GRAPH = 'https://graph.microsoft.com/v1.0';
 ContosoEntraAccess.EM = ContosoEntraAccess.GRAPH + '/identityGovernance/entitlementManagement';
 ContosoEntraAccess.CORRELATION = 'Entra ID Governance';
 ContosoEntraAccess.MAX_DAYS = 180;
+ContosoEntraAccess.ACTIVE_STATES = ['delivered', 'delivering', 'partiallyDelivered'];
 // Some removals accepted, some never sent: follow the accepted ones, never close.
 ContosoEntraAccess.PARTIAL = ContosoEntraAccess.CORRELATION + ' - partial';
 
@@ -202,8 +203,16 @@ ContosoEntraAccess.prototype = {
             // lifecycle workflow when HR disables the account.
             for (var k in mine) {
                 var pkg = mine[k];
+                // Every state that may already grant access, the same set as
+                // lab/scripts/powershell/04-Leaver.ps1: delivered, delivering,
+                // partiallyDelivered. Read by package (catalog-role 403 otherwise),
+                // filtered here so the query stays the shape seen working live.
                 var list = this.graph('get', ContosoEntraAccess.EM + '/assignments?$filter=' + encodeURIComponent(
-                    "accessPackage/id eq '" + pkg.accessPackageId + "' and target/objectId eq '" + oid + "' and state eq 'delivered'"));
+                    "accessPackage/id eq '" + pkg.accessPackageId + "' and target/objectId eq '" + oid + "'"));
+                var active = [];
+                for (var j = 0; j < list.value.length; j++)
+                    if (ContosoEntraAccess.ACTIVE_STATES.indexOf(String(list.value[j].state)) >= 0) active.push(list.value[j]);
+                list = { value: active };
                 for (var i = 0; i < list.value.length; i++) {
                     var res = this.graph('post', ContosoEntraAccess.EM + '/assignmentRequests', {
                         requestType: 'adminRemove',

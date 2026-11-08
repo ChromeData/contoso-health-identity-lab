@@ -159,7 +159,7 @@ test('"another app" maps to no package -> IAM decides by hand, no Graph call', (
 test('leaver: a later failure keeps the removal already accepted (tracked + shown)', () => {
   const env = makeEnv({
     graph: (m, url) => {
-      if (m === 'get' && url.includes("pkg-icu")) return { value: [{ id: 'asg-1' }] };
+      if (m === 'get' && url.includes("pkg-icu")) return { value: [{ id: 'asg-1', state: 'delivered' }] };
       if (m === 'post') return { id: 'rm-1' };
       throw 'Graph GET -> 503 ServiceUnavailable';
     },
@@ -217,4 +217,22 @@ test('poller looks at plain and partial tickets', () => {
   env.x._check = (gr) => seen.push(gr.getUniqueValue());
   env.x.checkInFlight();
   assert.deepEqual(plain(seen), ['r1', 't1'], 'needs-IAM tickets are left to people');
+});
+
+test('leaver removes assignments still delivering or partially delivered, skips expired', () => {
+  const env = makeEnv({
+    graph: (m, url) => {
+      if (m === 'get' && url.includes('pkg-icu')) return { value: [{ id: 'a-del', state: 'delivering' }, { id: 'a-old', state: 'expired' }] };
+      if (m === 'get' && url.includes('pkg-ph')) return { value: [{ id: 'a-part', state: 'partiallyDelivered' }] };
+      if (m === 'post') return { id: 'rm-' + Math.random().toString(36).slice(2, 6) };
+      return { value: [] };
+    },
+  });
+  env.db.sc_task.t1 = { sys_id: 't1', number: 'SCTASK0010099', state: '1', correlation_id: '' };
+  const refs = plain(env.x.removeAll(env.rec('sc_task', 't1'), { u_entra_object_id: 'ed258a73-ff42-4bb3-9144-15330b67fe0e' }));
+  const removed = env.calls.filter((c) => c[0] === 'post').map((c) => c[2].assignment.id);
+  assert.deepEqual(plain(removed), ['a-del', 'a-part']);
+  assert.equal(refs.length, 2);
+  assert.notEqual(String(env.db.sc_task.t1.state), '3', 'not closed: the removals are followed first');
+  assert.equal(env.db.sc_task.t1.correlation_display, 'Entra ID Governance');
 });
