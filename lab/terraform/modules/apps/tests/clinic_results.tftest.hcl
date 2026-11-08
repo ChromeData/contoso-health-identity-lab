@@ -9,6 +9,10 @@
 #     email only), SP with assignment required, the assigned group
 #     App-ClinicResults-Users (member drift ignored) and ONE assignment of it;
 #   * no client secret or certificate exists for it (NHI row: none);
+#   * its API "Clinic Lab Results API" (the resource CA061 targets, because
+#     Conditional Access cannot target a public client): one delegated scope
+#     Results.Read, api://<client id>, assignment required with the SAME
+#     group, the client pre-authorized and declaring that scope;
 #   * a remote host, https or a wildcard redirect is refused;
 #   * the other apps are unchanged.
 
@@ -66,6 +70,17 @@ mock_provider "azuread" {
   }
 }
 
+# The API gets its own client id, so "the client declares the API" and "CA061
+# is wired from the API" cannot pass by sharing the client's mock id.
+override_resource {
+  target = azuread_application.clinic_results_api
+  values = {
+    id        = "/applications/27272727-2727-2727-2727-272727272727"
+    object_id = "27272727-2727-2727-2727-272727272727"
+    client_id = "28282828-2828-2828-2828-282828282828"
+  }
+}
+
 variables {
   aws_users_group_object_id = "55555555-5555-5555-5555-555555555555"
   app_owner_object_ids      = ["66666666-6666-6666-6666-666666666666", "ffffffff-ffff-ffff-ffff-ffffffffffff"] # a named owner + a backup (ADR 0018)
@@ -79,6 +94,9 @@ run "clinic_results_absent_by_default" {
       length(azuread_application.clinic_results) == 0
       && length(azuread_service_principal.clinic_results) == 0
       && length(azuread_group.clinic_results_users) == 0
+      && length(azuread_application.clinic_results_api) == 0
+      && length(azuread_service_principal.clinic_results_api) == 0
+      && output.clinic_results_api_client_id == null
       && length(azuread_app_role_assignment.clinic_results_users) == 0
       && output.clinic_results_client_id == null
       && output.clinic_results_users_group_object_id == null
@@ -112,12 +130,12 @@ run "clinic_results_on_plans_public_client_sp_group_one_assignment" {
     error_message = "no ROPC / device code: the browser sign-in (with CA) is the only door"
   }
   assert {
-    condition = toset([for a in one(azuread_application.clinic_results[0].required_resource_access).resource_access : a.id]) == toset([
+    condition = toset([for a in one([for r in azuread_application.clinic_results[0].required_resource_access : r if r.resource_app_id == "00000003-0000-0000-c000-000000000000"]).resource_access : a.id]) == toset([
       "37f7f235-527c-4136-accd-4a02d197296e", # openid
       "14dad69e-099b-42c9-810b-d002981feec1", # profile
       "64a6cdd6-997a-4b52-ad60-8e8b9f49d1ab", # email
-    ]) && alltrue([for a in one(azuread_application.clinic_results[0].required_resource_access).resource_access : a.type == "Scope"])
-    error_message = "the app must declare only openid, profile and email, delegated"
+    ]) && alltrue(flatten([for r in azuread_application.clinic_results[0].required_resource_access : [for a in r.resource_access : a.type == "Scope"]]))
+    error_message = "the app must declare openid, profile and email from Graph, all delegated"
   }
   assert {
     condition     = azuread_service_principal.clinic_results[0].app_role_assignment_required == true
@@ -138,6 +156,35 @@ run "clinic_results_on_plans_public_client_sp_group_one_assignment" {
   assert {
     condition     = output.clinic_results_client_id == azuread_application.clinic_results[0].client_id && output.clinic_results_users_group_object_id == azuread_group.clinic_results_users[0].object_id
     error_message = "the outputs CA061 is wired from must be the app's client id and the group's id"
+  }
+  assert {
+    condition = (
+      azuread_application.clinic_results_api[0].display_name == "Clinic Lab Results API"
+      && azuread_application.clinic_results_api[0].sign_in_audience == "AzureADMyOrg"
+      && one(azuread_application.clinic_results_api[0].api).requested_access_token_version == 2
+      && [for sc in one(azuread_application.clinic_results_api[0].api).oauth2_permission_scope : sc.value] == ["Results.Read"]
+    )
+    error_message = "the API must be single tenant, v2 tokens, one delegated scope Results.Read"
+  }
+  assert {
+    condition     = azuread_application_identifier_uri.clinic_results_api[0].identifier_uri == "api://${azuread_application.clinic_results_api[0].client_id}"
+    error_message = "the API's App ID URI must be api://<its client id>"
+  }
+  assert {
+    condition     = azuread_service_principal.clinic_results_api[0].app_role_assignment_required == true && azuread_app_role_assignment.clinic_results_api_users[0].principal_object_id == azuread_group.clinic_results_users[0].object_id
+    error_message = "the API requires assignment, and the same app group is its one principal"
+  }
+  assert {
+    condition = (
+      azuread_application_pre_authorized.clinic_results_client[0].authorized_client_id == azuread_application.clinic_results[0].client_id
+      && azuread_application_pre_authorized.clinic_results_client[0].permission_ids == toset(["5b7c3e1a-2d4f-4c8e-9a61-7f0b2c9d4e13"])
+      && length([for r in azuread_application.clinic_results[0].required_resource_access : r if r.resource_app_id == azuread_application.clinic_results_api[0].client_id]) == 1
+    )
+    error_message = "the client must be pre-authorized for Results.Read and declare it"
+  }
+  assert {
+    condition     = output.clinic_results_api_client_id == "28282828-2828-2828-2828-282828282828" && output.clinic_results_api_client_id != output.clinic_results_client_id
+    error_message = "CA061 is wired from the API's client id (output clinic_results_api_client_id)"
   }
   assert {
     condition     = length(azuread_app_role_assignment.servicenow_users) == 0 && length(azuread_app_role_assignment.okta_federation_users) == 0 && azuread_app_role_assignment.aws_users.principal_object_id == "55555555-5555-5555-5555-555555555555"

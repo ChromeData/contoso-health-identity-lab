@@ -15,10 +15,12 @@ extension.
 | `02-Configure-Domain.ps1` | DNS forwarder to Azure DNS, UPN suffix, OUs, KDS root key, AD CS (LDAPS), PAM-managed accounts + delegation, prints the provisioning OU expression |
 | `03-Get-LdapsCaCert.ps1` | Prints the lab root CA certificate (PEM) for Vault's LDAPS trust |
 | `configure-sync.py` | Steps 5 and 6 by Graph: Cloud Sync (scoped OUs, password hash, hire date) and the HR app's connectivity + mappings. Idempotent |
-| `run-on-dc.py` | Runs any of these scripts on DC01 with secret parameters as a managed run command: secrets come from the Keychain or Terraform state inside the helper, are scrubbed from output, never on a command line |
+| `run-on-dc.py` | Runs any of these scripts on DC01 with secret parameters as a managed run command: secrets come from the Keychain, Terraform state or the caller's stdin (`stdin:<key>`) inside the helper, are scrubbed from output, never on a command line |
 | `04-Install-CloudSyncAgent.ps1` | Installs and registers the Entra provisioning agent (Cloud Sync) unattended: Microsoft-signature gate, gMSA, domain bind. Replaces the manual RDP step |
+| `hardening/` | AD hardening, RAN 2026-11-07: Tier 0/1/2 OUs and admins, Protected Users for the new admins only, a GPO that denies Tier 0 sign-in on Tier 1/2 computers, Windows LAPS for the DSRM password (AD, encrypted), PingCastle before/after. See `hardening/README.md` |
 | `Remove-DemoHire.ps1` | Demo retakes only (`lab/scripts/demo/reset-demo-hire.sh`): deletes the one AD account HR provisioning created for an employeeID, never outside `OU=Workforce` / `OU=Disabled`, never a protected (`adminCount=1`) account. Reports only unless `Apply=yes` |
 | `Clear-LeaverAdGroups.ps1` | Leaver hygiene (review finding C7): removes every on-premises group membership from DISABLED accounts directly in `OU=Disabled`, so a rehire comes back with only the new birthright. Never an enabled account, never a protected (`adminCount=1`) account; prints each removal as the record. Reports only unless `Apply=yes`. BUILT, offline tests; not yet run on DC01 |
+| `rotate-build-admin.py` + `Reset-BuildAdminPassword.ps1` | New random password for the build admin `contosoadmin` (owner decision only). Made on the Mac, written straight into Keychain item `contoso-lab-dc01-admin` over stdin, sent to DC01 as a protected parameter (handed to `run-on-dc.py` on stdin, from memory), then written as a new version of Key Vault secret `dc01-admin-password` (kv-idlab-20f1); never printed, never in argv or a file. DC01 stops if a service or task runs as `contosoadmin`, resets the account, and checks Kerberos: the new password gets a ticket, the old one must get the KDC's bad-password answer (any other error fails the run). One run at a time (lock). The old Keychain value goes back only when DC01 proves AD was not touched; otherwise both values are kept (new in the Keychain, old in Key Vault). Terraform state keeps only the first build password (dead after a rotation). `lab/scripts/operator/op python3 -I lab/scripts/dc/rotate-build-admin.py` |
 
 ## Run it
 
@@ -61,7 +63,8 @@ for an Enterprise Admin.
    `terraform -chdir=lab/terraform/envs/dev output -raw dc_admin_password | pbcopy`
    (macOS; `clip.exe` on Windows, `xclip -selection clipboard` on Linux).
    **Change it immediately** and store the new one in Key Vault as
-   `dc01-admin-password`.
+   `dc01-admin-password`. Later rotations: `rotate-build-admin.py` (no RDP;
+   it updates the Keychain item and the Key Vault secret together).
 
    **Cloud Sync agent, no RDP:** `04-Install-CloudSyncAgent.ps1` installs and
    registers it through run-command. Microsoft publishes no direct installer
@@ -119,7 +122,8 @@ for an Enterprise Admin.
 lab/scripts/dc/configure-sync.py cloudsync --domain corp.$DOMAIN \
   --ou "OU=Workforce,DC=corp,..." --ou "OU=Disabled,DC=corp,..."      # never ServiceAccounts / PrivilegedAccounts
 lab/scripts/dc/configure-sync.py hrapp --domain corp.$DOMAIN --sp <spId> --job <jobId> \
-  --default-ou "OU=Workforce,DC=corp,..." --parent-dn-file <the expression 02 printed>
+  --default-ou "OU=Workforce,DC=corp,..." --parent-dn-file <the expression 02 printed> \
+  --mail-domain $DOMAIN                                                # AD mail on a verified domain (E121)
 ```
 
 `cloudsync` creates the AD2AAD configuration from Microsoft's template, scopes
@@ -129,7 +133,12 @@ HR provisioning app to the agent (domain + default OU), sets the OU expression,
 takes the UPN straight from the HR `userName` (the verified suffix) and formats
 the SCIM `hireDate` into `msDS-cloudExtensionAttribute1`. Without the hire date
 every birthright rule matches nobody, and `Set-AutoAssignmentPolicies.ps1`
-refuses to run. Cloud Sync runs every 20 minutes; the first HR push to a
+refuses to run. `--mail-domain` replaces the template's mail mapping
+(`<local part>@DefaultDomain()`, on create only) with `<local part>@<verified
+domain>` on every update. Without it no synced worker had a mail value in
+Entra, so the joiner workflow's "Generate TAP and send email" task failed for
+the manager (capture log E121, E121b). The address gets no mailbox: in the lab
+`contosohealthlab.com` has no mail service. Cloud Sync runs every 20 minutes; the first HR push to a
 just-promoted DC can fail with LDAP "Busy" (51): re-send the feed, it upserts.
 
 ## Verify
@@ -141,9 +150,9 @@ az vm run-command invoke -g $RG -n $VM --command-id RunPowerShellScript --script
    Test-NetConnection localhost -Port 636 | Select TcpTestSucceeded"
 ```
 
-- [ ] Domain, OUs, UPN suffix and the five accounts (`svc-vault-rotator`, `svc-pam-discovery`, `svc-backup`, `tier0-admin-01`/`02`) are listed
+- [ ] Domain, OUs, UPN suffix and the four accounts (`svc-vault-rotator`, `svc-backup`, `tier0-admin-01`/`02`) are listed
 - [ ] `TcpTestSucceeded : True` on 636 (LDAPS needs the DC certificate; re-run `certutil -pulse` if not)
-- [ ] Key Vault holds `dc01-dsrm-password`, `svc-vault-rotator` and `svc-pam-discovery` (names only: `az keyvault secret list --vault-name $KV -o table`)
+- [ ] Key Vault holds `dc01-dsrm-password` and `svc-vault-rotator` (names only: `az keyvault secret list --vault-name $KV -o table`)
 
 ## Why it's built this way
 
@@ -156,14 +165,26 @@ az vm run-command invoke -g $RG -n $VM --command-id RunPowerShellScript --script
 - **The reconcile-account trade-off is explicit.** Vault must rotate Domain
   Admin passwords, and AdminSDHolder overwrites OU delegation on protected
   accounts, so `svc-vault-rotator` is granted on AdminSDHolder. That makes it
-  Tier 0, the same position as a CyberArk CPM reconcile account. Its password
+  Tier 0, the same position as any PAM reconcile account. Its password
   lives only in Key Vault and should be rotated by Vault (`ldap/rotate-root`).
-- **The DC's identity can write only its three build secrets.** An ABAC
+- **The DC's identity can write only its two build secrets.** An ABAC
   condition on its Key Vault Secrets Officer grant
-  (`lab/terraform/modules/dc-vm/main.tf`) limits it to `dc01-dsrm-password`,
-  `svc-vault-rotator` and `svc-pam-discovery` (the read-only discovery bind for
-  `lab/pam/discover.sh`); it cannot read or change any other secret's value
+  (`lab/terraform/modules/dc-vm/main.tf`) limits it to `dc01-dsrm-password`
+  and `svc-vault-rotator`; it cannot read or change any other secret's value
   in the vault (secret names stay visible through ARM).
 - **Single-DC lab shortcut.** The DC points DNS at itself and forwards to
   168.63.129.16. Add the DC IP to the VNet's DNS servers once member servers
   join.
+
+## Retired: `svc-pam-discovery` (2026-11-07)
+
+`svc-pam-discovery` was the read-only LDAP bind for `lab/pam/discover.sh`,
+the discovery step of the HashiCorp Vault stand-in. ADR 0036 retires that
+stand-in, so the account had no user. Its 30-day password would have expired
+on 2026-11-26. `Remove-PamDiscoveryAccount.ps1` (through `run-on-dc.py`)
+disabled and deleted the account, then deleted its Key Vault secret with the
+DC's own identity. It refuses any account that is not the plain bind at
+`OU=ServiceAccounts`. `02-Configure-Domain.ps1` no longer creates it, and the
+DC's Key Vault grant no longer names it. The local samba test harness
+(`lab/pam/test/samba-ad`) still seeds its own `svc-pam-discovery` in a
+throwaway container; that is not DC01.

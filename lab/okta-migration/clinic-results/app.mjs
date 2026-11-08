@@ -54,7 +54,7 @@ export function authorizeUrl(idp, { state, nonce, challenge, redirect = REDIRECT
   const u = new URL(idp.authorization_endpoint);
   u.search = new URLSearchParams({
     client_id: idp.client_id, response_type: 'code', redirect_uri: redirect,
-    scope: 'openid profile email', state, nonce,
+    scope: idp.scope || 'openid profile email', state, nonce,
     code_challenge: challenge, code_challenge_method: 'S256',
   }).toString();
   return u.toString();
@@ -105,10 +105,44 @@ export function checkCallback(pendingEntry, loginCookie, active) {
   return { ok: true };
 }
 
-export function readConf(file = CONF) {
+// One login id per browser: a second /login (another tab) reuses the
+// browser's existing cr_login value instead of replacing it, so the first
+// tab's callback still matches. A missing or malformed value gets a new one.
+export function browserLoginId(existing, make = () => b64u(crypto.randomBytes(24))) {
+  return existing && /^[A-Za-z0-9_-]{32}$/.test(existing) ? existing : make();
+}
+
+// The login-id cookie. Path=/ on purpose: /login must SEE it to reuse it
+// (a cookie scoped to /callback is never sent to /login). HttpOnly, Lax,
+// 10 minutes - it names a browser, it is not a session.
+export const loginCookieHeader = (id) => `cr_login=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600`;
+
+// Every cr_login value the browser sent. A browser may send two (an old
+// Path=/callback cookie from an earlier version next to the Path=/ one, the
+// longer path first), so the callback matches against ALL of them.
+export function loginCookies(cookieHeader) {
+  return [...String(cookieHeader || '').matchAll(/(?:^|;\s*)cr_login=([A-Za-z0-9_-]+)/g)].map((m) => m[1]);
+}
+// Expires the Path=/callback cookie earlier versions set, so it stops
+// shadowing the current one.
+export const LEGACY_LOGIN_COOKIE_CLEAR = 'cr_login=; Path=/callback; Max-Age=0';
+
+// An Entra block without the API (configs written before the CA061 fix)
+// would sign people in with no API token - so CA061 would never run. Such a
+// block is refused: re-run cutover.mjs prestage. Pure: unit-tested.
+export function checkIdpBlock(name, idp) {
+  if (name === 'entra' && !(idp && idp.api_audience && /\/Results\.Read(\s|$)/.test(idp.scope || ''))) {
+    throw new Error('the Entra config has no API scope (written before CA061 moved to the API): run node lab/okta-migration/cutover.mjs prestage');
+  }
+}
+
+// checkActive = false: read the file as it is (a rollback must work even when
+// the saved Entra block is stale or broken - it only needs Okta).
+export function readConf(file = CONF, { checkActive = true } = {}) {
   if (!fs.existsSync(file)) throw new Error(`no IdP config at ${file}: run node lab/okta-migration/cutover.mjs prestage`);
   const c = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (!c[c.active]) throw new Error(`config names "${c.active}" active but has no such IdP`);
+  if (checkActive) checkIdpBlock(c.active, c[c.active]);
   return c;
 }
 
@@ -155,25 +189,39 @@ export function serve({ port = PORT, conf = CONF } = {}) {
       if (url.pathname === '/login') {
         const { verifier, challenge } = pkcePair();
         const state = b64u(crypto.randomBytes(16)); const nonce = b64u(crypto.randomBytes(16));
-        const browser = b64u(crypto.randomBytes(24));
+        // The Path=/ cookie is the one /login can see (the legacy one is
+        // scoped to /callback and never sent here).
+        const browser = browserLoginId(loginCookies(req.headers.cookie)[0]);
         pending.set(state, { verifier, nonce, idp: c.active, t: Date.now(), browser });
-        return send(302, '', { location: authorizeUrl(c[c.active], { state, nonce, challenge, redirect: `http://localhost:${port}/callback` }), 'set-cookie': `cr_login=${browser}; HttpOnly; SameSite=Lax; Path=/callback; Max-Age=600` });
+        return send(302, '', { location: authorizeUrl(c[c.active], { state, nonce, challenge, redirect: `http://localhost:${port}/callback` }), 'set-cookie': [loginCookieHeader(browser), LEGACY_LOGIN_COOKIE_CLEAR] });
       }
       if (url.pathname === '/callback') {
         if (url.searchParams.get('error')) return send(400, `<p>Sign-in refused by the IdP: ${esc(url.searchParams.get('error'))}: ${esc(url.searchParams.get('error_description') || '')}</p>`);
         const p = pending.get(url.searchParams.get('state'));
-        const loginCookie = (req.headers.cookie || '').match(/(?:^|;\s*)cr_login=([A-Za-z0-9_-]+)/)?.[1];
+        const sent = loginCookies(req.headers.cookie);
+        const loginCookie = sent.find((v) => p && v === p.browser) || sent[0];
         const chk = checkCallback(p, loginCookie, c.active);
-        if (p) pending.delete(url.searchParams.get('state'));
+        // A callback from another browser does not consume the state: the
+        // browser that started the login can still finish it.
+        if (p && !/another browser/.test(chk.why || '')) pending.delete(url.searchParams.get('state'));
         if (!chk.ok) return send(chk.code, `<p>Sign-in refused: ${esc(chk.why)}. <a href="/login">Sign in again</a>.</p>`);
         const idp = c[p.idp];
+        checkIdpBlock(p.idp, idp);
         const tok = await getJson(idp.token_endpoint, {
           method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
-          body: new URLSearchParams({ grant_type: 'authorization_code', client_id: idp.client_id, code: url.searchParams.get('code'), redirect_uri: `http://localhost:${port}/callback`, code_verifier: p.verifier, scope: 'openid profile email' }).toString(),
+          body: new URLSearchParams({ grant_type: 'authorization_code', client_id: idp.client_id, code: url.searchParams.get('code'), redirect_uri: `http://localhost:${port}/callback`, code_verifier: p.verifier, scope: idp.scope || 'openid profile email' }).toString(),
         });
         const jwks = await getJson(idp.jwks_uri);
         const claims = verifyIdToken(tok.id_token, { jwks, issuer: idp.issuer, audience: idp.client_id, nonce: p.nonce });
         const rec = signinRecord(p.idp, claims);
+        // Entra: the sign-in also asks for the app's API (the resource
+        // Conditional Access CA061 targets). Check that token too: issued by
+        // the same issuer, for the API, signed by the same keys.
+        if (idp.api_audience) {
+          if (!tok.access_token) throw new Error('no API token: the sign-in did not reach Clinic Lab Results API (the CA061 resource)');
+          const at = verifyIdToken(tok.access_token, { jwks, issuer: idp.issuer, audience: idp.api_audience });
+          rec.api_token = { audience: Array.isArray(at.aud) ? at.aud[0] : at.aud, scp: at.scp || null };
+        }
         fs.mkdirSync(path.dirname(conf), { recursive: true, mode: 0o700 });
         fs.appendFileSync(path.join(path.dirname(conf), 'signins.jsonl'), JSON.stringify(rec) + '\n', { mode: 0o600 });
         const id = b64u(crypto.randomBytes(18)); sessions.set(id, rec);

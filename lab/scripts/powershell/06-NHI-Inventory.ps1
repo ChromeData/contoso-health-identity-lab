@@ -144,7 +144,9 @@
     have no owner, expiry or rotation on record. Each entry becomes a row in
     nhi_secrets.csv (names and store LOCATIONS only - the register never holds
     a value) and is checked: SECRET-NO-OWNER (High), SECRET-EXPIRED (High),
-    SECRET-NO-EXPIRY and SECRET-NO-ROTATION (Medium). Findings carry OWASP
+    SECRET-EXPIRING (Medium, within 30 days), SECRET-NO-EXPIRY and
+    SECRET-NO-ROTATION (Medium). The monthly secret-expiry workflow
+    (Test-SecretExpiry.ps1) runs the same check with a 60-day window. Findings carry OWASP
     NHI2 / NHI7 like the Entra ones. createdOn / expiresOn are yyyy-MM-dd or
     "unknown (<reason>)" - an explicit no-date marker that is still flagged
     SECRET-NO-EXPIRY, with the reason. An unreadable or invalid register
@@ -464,7 +466,10 @@ $ReadSignIns = -not $SkipSignInActivity
 function Test-SecretsRegister {
     # Pure: register entries -> one row per secret + its findings. Never
     # reads or prints a value: the register holds names and store locations.
-    param([Parameter(Mandatory)]$Register, [Parameter(Mandatory)][datetime]$Now, [string]$Source = 'register')
+    # -WarnDays: an entry that expires within this many days is SECRET-EXPIRING
+    # (Medium), so a rotation is planned before the outage, not after it
+    # (review finding H1). 0 turns the warning off.
+    param([Parameter(Mandatory)]$Register, [Parameter(Mandatory)][datetime]$Now, [string]$Source = 'register', [int]$WarnDays = 30)
     $rows = [System.Collections.Generic.List[object]]::new(); $fx = [System.Collections.Generic.List[object]]::new()
     $entries = @($(if ($Register -is [System.Collections.IDictionary] -and $Register.Contains('secrets')) { $Register['secrets'] }) | Where-Object { $_ })
     if (-not $entries.Count) { throw 'the secrets register has no secrets[] entries' }
@@ -498,6 +503,7 @@ function Test-SecretsRegister {
         }
         if (-not $owner) { & $add 'SECRET-NO-OWNER' 'High' "$name ($([string]$e['system'])) has no owner role" }
         if ($exp -and $exp -lt $Now.Date) { & $add 'SECRET-EXPIRED' 'High' "$name expired on $($exp.ToString('yyyy-MM-dd')) and is still listed" }
+        elseif ($exp -and $WarnDays -gt 0 -and $exp -le $Now.Date.AddDays($WarnDays)) { & $add 'SECRET-EXPIRING' 'Medium' "$name expires on $($exp.ToString('yyyy-MM-dd')) ($([int]($exp - $Now.Date).TotalDays) day(s)): rotate it before then" }
         elseif (-not $exp) { & $add 'SECRET-NO-EXPIRY' 'Medium' ("$name has no expiry date on record ($([string]$e['status']))" + $(if ($undated) { ": $undated" })) }
         if (-not $rot) { & $add 'SECRET-NO-ROTATION' 'Medium' "$name has no rotation rule" }
         $rows.Add([pscustomobject][ordered]@{ Source = $Source; Name = $name; System = [string]$e['system']; Store = [string]$e['store']; Owner = $owner

@@ -10,7 +10,7 @@
 #                                      new-country or unmanaged context
 #   dc_logon_outside_operator_allowlist  DC01 logon from outside the
 #                                      operator_ips watchlist (ADR 0013)
-#   vault_privileged_access_anomaly    PAM vault misuse (PTA / CPM analogue)
+#   vault_privileged_access_anomaly    PAM vault misuse (credential read, rotation failure)
 #   sod_violation_granted              separation-of-duties pair completed
 #                                      (lab/iga/sod-rules.json, ADR 0012)
 #   pim_activation_without_auth_context  Tier-0 PIM activation without the
@@ -136,7 +136,7 @@ locals {
     vault_privileged_access_anomaly = {
       file         = "vault-privileged-access-anomaly.kql"
       display_name = "Contoso ITDR - PAM vault anomaly (credential read, rotation failure, root token, login burst)"
-      description  = "Vault-side misuse a CyberArk shop gets from PTA / CPM alerts: Tier-0 credential read outside a ticketed check-out, Tier-0 check-out without a ticket, rotation failure, root-token use, failed-login burst, Tier-0 access denied (T1555, T1078, T1110, T1562). Returns nothing until ingest-vault-audit.sh ships the extended feed (vault_feed_v2_columns)."
+      description  = "Vault-side misuse a PAM team watches for: Tier-0 credential read outside a ticketed check-out, Tier-0 check-out without a ticket, rotation failure, root-token use, failed-login burst, Tier-0 access denied (T1555, T1078, T1110, T1562). Returns nothing until ingest-vault-audit.sh ships the extended feed (vault_feed_v2_columns)."
       severity     = "Medium"
       frequency    = "PT5M"
       period       = "PT6H" # 1 h judged + 4 h 5 m of check-out history (see the .kql)
@@ -150,12 +150,12 @@ locals {
       ]
       severity_column = "Severity"
       custom_details = {
-        Signal           = "Signal"
-        CyberArkAnalogue = "CyberArkAnalogue"
-        VaultPath        = "VaultPath"
-        Ticket           = "Ticket"
-        Events           = "Events"
-        LoginNames       = "LoginNames"
+        Signal     = "Signal"
+        PamTerm    = "PamTerm"
+        VaultPath  = "VaultPath"
+        Ticket     = "Ticket"
+        Events     = "Events"
+        LoginNames = "LoginNames"
       }
       alert_per_result = true
       group_by         = local.actor_group_by
@@ -225,17 +225,18 @@ locals {
   # Rules whose look-back is longer than a Log Analytics alert allows
   # (P2D). Deployed on the Sentinel path only.
   # The v3 set (itdr_v3.tf) adds its own two.
-  sentinel_only_rule_keys = concat(["security_info_registered_risky", "sod_violation_granted"], local.v3_sentinel_only_rule_keys)
+  sentinel_only_rule_keys = concat(["security_info_registered_risky", "sod_violation_granted"], local.v3_sentinel_only_rule_keys, local.v4_sentinel_only_rule_keys)
 
   # Rules that never trigger the containment playbook, whatever
   # containment_rule_keys says (variables.tf refuses them there too).
   # The v3 Key Vault rule is added from itdr_v3.tf.
-  itdr_never_contain = concat(["sod_violation_granted", "vault_privileged_access_anomaly"], local.v3_never_contain)
+  itdr_never_contain = concat(["sod_violation_granted", "vault_privileged_access_anomaly"], local.v3_never_contain, local.v4_never_contain)
 
   # The operator_ips watchlist exists whenever the v2 set is on Sentinel,
   # even while dc_logon_outside_operator_allowlist is still excluded, so the
   # allowlist is in place BEFORE the rule that reads it.
-  operator_ips_watchlist_on = var.enable_sentinel && var.enable_itdr_detections_v2
+  # The v4 operator sign-in rule reads it too (review of #233): on for either.
+  operator_ips_watchlist_on = var.enable_sentinel && (var.enable_itdr_detections_v2 || var.enable_itdr_detections_v4)
 }
 
 # -----------------------------------------------------------------------------

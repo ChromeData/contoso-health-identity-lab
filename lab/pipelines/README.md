@@ -296,7 +296,7 @@ Dependabot has no pip entry, so bump that pin by hand.
 **Dependabot** is configured in [`../../.github/dependabot.yml`](../../.github/dependabot.yml):
 weekly, grouped `github-actions` bumps (SHA and the `# vX.Y.Z` comment
 together) plus Terraform provider bumps for `envs/dev`, `envs/bootstrap`,
-`aws` and the three `k8s` roots (`platform`, `identity`, `aks-mapping`). Pin
+`aws` and the three `k8s` roots (`platform`, `identity`, `keyvault-trust`). Pin
 bumps arrive as reviewable PRs, without reintroducing floating tags. The image
 digests in the Kubernetes segment (kind node, busybox, Vault Agent) are bumped
 by hand.
@@ -337,6 +337,14 @@ by a human admin**, in a separate state container CI cannot reach:
     role assignments; the condition stops CI granting Owner to anything). The VM
     login role was added later: **re-apply bootstrap** before the pipeline
     applies `enable_intune_vm = true`, or the condition refuses the grant.
+    **Scope** (`apply_azure_scope`, `envs/bootstrap/least-privilege.tf`):
+    `subscription` for a first deployment only; `resource_group` (this lab,
+    after senior gap 8) puts both roles on `rg-identity-lab` alone, where every
+    Azure resource envs/dev manages lives. APPLY cannot remove the
+    `CanNotDelete` locks on the Key Vaults: none of its roles has
+    `Microsoft.Authorization/locks/delete`, and the condition stops it granting
+    itself Owner or User Access Administrator (tested with a mirror identity,
+    capture log E154).
   - APPLY: **Storage Blob Data Contributor** on the `tfstate` container only
     (apply takes the blob lease). PLAN: **Storage Blob Data Reader** on the
     same container (PR plans run with `-lock=false`). State holds the
@@ -450,36 +458,34 @@ privacy-only exceptions follow the list):
       `TF_VAR_require_scim_credentials=true` so a CI apply that would create
       it empty fails instead.
 
-**Repository *secrets* (Settings → Secrets and variables → Actions →
-Secrets).** Not credentials: both workflows read them as `secrets.*` only
-because GitHub masks secrets in run logs but prints variables in every step's
-env header, and the repo is public.
-- [ ] `TF_OPERATOR_IP_RANGES`  JSON list, e.g. `["203.0.113.7/32"]` — Key Vault
-      firewall, the DC and Intune VM NSGs, the evidence store firewall and,
-      with `enable_dc`, the Sentinel `operator_ips` watchlist. Each entry a
-      single IPv4 host as /32: required when `enable_dc = true` (DC01 NSG and
-      the `operator_ips` watchlist), and never wider than /24 otherwise;
-      `0.0.0.0/0` fails validation. Unset = `[]` (no public vault access, no
-      inbound to the VMs). The Terraform variable is also `sensitive`, so the
-      plan comment hides it.
-- [ ] `TF_ALERT_EMAIL`         post-trial alert address (also `sensitive` in
-      Terraform). Unset = no notifications.
-- [ ] `TF_PIM_ALERT_MAILBOX`   one security mailbox for PIM notifications
-      (`pim_alert_mailbox`, `sensitive`). Both workflows map it to
-      `TF_VAR_pim_alert_mailbox`. Unset = no PIM mailbox (tenant default
-      notifications only).
-- [ ] `TF_APP_OWNER_OBJECT_IDS` (JSON list) and
-      `TF_SAML_CERT_NOTIFICATION_EMAILS` (JSON list) for `modules/apps`:
-      secrets only so the public logs mask a person's object id and mailbox.
-- [ ] If you set any of these, also create it as a **Dependabot** secret
-      (Settings → Secrets and variables → Dependabot) with the same name and
-      value. Dependabot-triggered PR runs see only Dependabot secrets, so
-      without them the weekly Dependabot plan falls back to `[]`/'' and shows
-      false Key Vault firewall / NSG / action-group removals.
-      `terraform-plan.yml` flags this with a warning banner in the plan
-      comment. (verify: `id-token: write` and repo Variables are honoured in
-      Dependabot-triggered `pull_request` runs; if not, azure/login fails and
-      the plan check is red on Dependabot PRs.)
+**No repository secrets.** The workflows hold no stored value of any kind.
+The five privacy values below are not credentials; they used to be repo
+secrets (and Dependabot copies) only so GitHub masked them. They now live in
+the **pipeline config vault** (`envs/bootstrap` `pipeline-config.tf`,
+repo Variable `TF_PIPELINE_CONFIG_VAULT`, default `kv-idlab-cicd-20f1`).
+Step *Pipeline config from Key Vault* (`.github/scripts/pipeline-config.sh`)
+reads them after the OIDC sign-in, as PLAN or APPLY (Key Vault Secrets User on
+that vault only), masks each value and each list element, and exports them
+as `TF_VAR_*`. A value it cannot read stops the job: the old secrets fell
+back to `[]`/'' and planned removals. Every read is an `AuditEvent` in
+loga-idlab. Write a value with
+`printf '%s' '<value>' | lab/scripts/operator/set-pipeline-config.sh <vault> <name>`
+(stdin only, shape-checked).
+
+| Key Vault secret | Terraform variable | Shape |
+|---|---|---|
+| `tf-operator-ip-ranges` | `operator_ip_ranges` | JSON list, e.g. `["203.0.113.7/32"]`: Key Vault firewall, the DC and Intune VM NSGs, the evidence store firewall and the Sentinel `operator_ips` watchlist. Each entry one IPv4 /32 with `enable_dc`; never wider than /24; `0.0.0.0/0` fails validation. |
+| `tf-alert-email` | `alert_email` | one address (post-trial alerts) |
+| `tf-app-owner-object-ids` | `app_owner_object_ids` | JSON list of the human app owners' object ids (`modules/apps`) |
+| `tf-saml-cert-notification-emails` | `saml_cert_notification_emails` | JSON list of SAML certificate expiry mailboxes |
+| `tf-pim-alert-mailbox` | `pim_alert_mailbox` | one security mailbox for PIM notifications |
+
+All five are also `sensitive` in Terraform, so the plan comment hides them.
+Dependabot PR runs use the same OIDC sign-in and the same vault, so there is
+no Dependabot secret to keep in step either. (verify: `id-token: write` and
+repo Variables are honoured in Dependabot-triggered `pull_request` runs; if
+not, azure/login fails and the plan check is red on Dependabot PRs, as
+before.)
 
 Policy knobs (staging flags, CA states, blocked countries) are **not**
 variables: they live in the committed `lab/terraform/envs/dev/lab.tfvars`, so
@@ -635,11 +641,9 @@ a user, `mallory`). `terraform plan -detailed-exitcode` must then exit 2
   job for those files; it is left as is. `terraform-apply.yml` excludes
   `lab/terraform/k8s/**`, so merging k8s-only changes does not start a
   reviewer-gated no-op apply.
-- **`aks-mapping` is never applied, by anything.** The third root under
-  `lab/terraform/k8s` holds the Entra Workload ID federated credential that
-  replaces the Vault role on AKS. `pipeline.sh` runs only fmt, validate and
-  the mocked `terraform test` on it, in its Terraform stage. It holds no
-  credential and runs no plan against a tenant. `terraform-apply.yml`'s
-  `!lab/terraform/k8s/**` keeps it out of the Entra apply. It can't be applied
-  here at all: Entra must fetch the cluster's OIDC keys, and kind's issuer
-  isn't public.
+- **`keyvault-trust` is applied only by the operator's local pipeline run.**
+  The third root under `lab/terraform/k8s` holds the Entra Workload ID
+  federated credential and the one-secret Key Vault grant (ADR 0036). No
+  workflow applies it: `k8s-identity.yml` runs the static stages only, and
+  `terraform-apply.yml`'s `!lab/terraform/k8s/**` keeps it out of the Entra
+  apply. CI holds no identity that could create an app registration.

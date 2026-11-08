@@ -1,0 +1,195 @@
+{
+  "rule": "failed-signin-spray-by-asn",
+  "about": "A spray spread over many IPs of one network: credential failures against 10+ distinct users from one ASN in 1 h, 3 or fewer tries each (review finding D1, 2026-11-07).",
+  "cases": [
+    {
+      "id": "spray-over-many-ips",
+      "kind": "positive",
+      "label": "12 users, one failure each, each from a different IP of AS64511: Medium",
+      "tables": {
+        "SigninLogs": [
+          {
+            "_repeat": 12,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.{i}",
+            "ResultType": "50126",
+            "AutonomousSystemNumber": "64511"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "Medium",
+          "Asn": "64511",
+          "DistinctUsers": 12
+        }
+      ],
+      "expectRows": 1
+    },
+    {
+      "id": "spray-with-a-hit",
+      "kind": "positive",
+      "label": "Same spray, and user1 then signs in successfully from that ASN: High",
+      "tables": {
+        "SigninLogs": [
+          {
+            "_repeat": 12,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.{i}",
+            "ResultType": "50126",
+            "AutonomousSystemNumber": "64511"
+          },
+          {
+            "_repeat": 1,
+            "TimeGenerated": "ago:10m",
+            "UserPrincipalName": "user1@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.200",
+            "ResultType": "0",
+            "AutonomousSystemNumber": "64511"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "Compromised": [
+            "user1@contosohealthlab.onmicrosoft.com"
+          ],
+          "CompromisedCount": 1
+        }
+      ]
+    },
+    {
+      "id": "non-interactive-leg-counts",
+      "kind": "positive",
+      "label": "6 users in SigninLogs + 6 others in the non-interactive table = 12 distinct users",
+      "tables": {
+        "SigninLogs": [
+          {
+            "_repeat": 6,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.{i}",
+            "ResultType": "50126",
+            "AutonomousSystemNumber": "64511"
+          }
+        ],
+        "AADNonInteractiveUserSignInLogs": [
+          {
+            "_repeat": 6,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "other{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.{i}",
+            "ResultType": "50126",
+            "AutonomousSystemNumber": "64511"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "DistinctUsers": 12
+        }
+      ]
+    },
+    {
+      "id": "nine-users",
+      "kind": "negative",
+      "label": "9 users is under the threshold",
+      "tables": {
+        "SigninLogs": [
+          {
+            "_repeat": 9,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.{i}",
+            "ResultType": "50126",
+            "AutonomousSystemNumber": "64511"
+          }
+        ]
+      }
+    },
+    {
+      "id": "trusted-asn",
+      "kind": "negative",
+      "label": "The hospital's own ASN is ignored",
+      "lets": {
+        "TrustedAsns": [
+          "64511"
+        ]
+      },
+      "tables": {
+        "SigninLogs": [
+          {
+            "_repeat": 12,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.{i}",
+            "ResultType": "50126",
+            "AutonomousSystemNumber": "64511"
+          }
+        ]
+      }
+    },
+    {
+      "id": "mfa-interrupts",
+      "kind": "negative",
+      "label": "12 users hitting MFA prompts (50074) are not failures",
+      "tables": {
+        "SigninLogs": [
+          {
+            "_repeat": 12,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.{i}",
+            "ResultType": "50074",
+            "AutonomousSystemNumber": "64511"
+          }
+        ]
+      }
+    },
+    {
+      "id": "hit-among-many-successes",
+      "kind": "positive",
+      "label": "12 sprayed users and 60 OTHER users signing in fine from the same ASN; sprayed user5 also succeeds: still High (the hit is judged per user before any list is capped)",
+      "tables": {
+        "SigninLogs": [
+          {
+            "_repeat": 12,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.{i}",
+            "ResultType": "50126",
+            "AutonomousSystemNumber": "64511"
+          },
+          {
+            "_repeat": 60,
+            "TimeGenerated": "ago:20m",
+            "UserPrincipalName": "ok{i}@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.100",
+            "ResultType": "0",
+            "AutonomousSystemNumber": "64511"
+          },
+          {
+            "_repeat": 1,
+            "TimeGenerated": "ago:10m",
+            "UserPrincipalName": "user5@contosohealthlab.onmicrosoft.com",
+            "IPAddress": "198.51.100.5",
+            "ResultType": "0",
+            "AutonomousSystemNumber": "64511"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "Severity": "High",
+          "CompromisedCount": 1,
+          "DistinctUsers": 12
+        }
+      ],
+      "expectRows": 1
+    },
+    {"id": "success-before-the-spray", "kind": "positive", "label": "user1 signs in normally 40 minutes ago, then the 12-user spray 20 minutes ago: no success AFTER a failure, so no hit and the alert stays Medium (review of #233)", "tables": {"SigninLogs": [{"_repeat": 12, "TimeGenerated": "ago:20m", "UserPrincipalName": "user{i}@contosohealthlab.onmicrosoft.com", "IPAddress": "198.51.100.{i}", "ResultType": "50126", "AutonomousSystemNumber": "64511"}, {"_repeat": 1, "TimeGenerated": "ago:40m", "UserPrincipalName": "user1@contosohealthlab.onmicrosoft.com", "IPAddress": "198.51.100.200", "ResultType": "0", "AutonomousSystemNumber": "64511"}]}, "expect": [{"Severity": "Medium", "CompromisedCount": 0, "DistinctUsers": 12}], "expectNone": [{"Severity": "High"}], "expectRows": 1}
+  ]
+}

@@ -1,0 +1,30 @@
+run command lab-504d2cf6: lab/scripts/dc/hardening/Set-AdTiering.ps1 on vm-dc01
+Set-AdTiering DRY RUN at 2026-11-07 00:57:04Z
+OUs
+  + OU OU=Tier0,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Accounts,OU=Tier0,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Groups,OU=Tier0,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Accounts,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Groups,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Accounts,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Groups,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Servers,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + OU OU=Devices,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+Groups
+  + group Tier0-Admins
+  + group Tier1-Admins
+  + group Tier2-Admins
+Accounts
+  + t0-adm-01 in OU=Accounts,OU=Tier0,DC=corp,DC=contosohealthlab,DC=com
+  + t1-adm-01 in OU=Accounts,OU=Tier1,DC=corp,DC=contosohealthlab,DC=com
+  + t2-adm-01 in OU=Accounts,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com
+Protected Users
+  members added: t0-adm-01, t1-adm-01, t2-adm-01
+  left out on purpose (NTLM remote-session path): tier0-admin-01, tier0-admin-02, contosoadmin
+GPO: Tier0 - Deny logon to Tier1 and Tier2
+  would deny SeDenyInteractiveLogonRight, SeDenyRemoteInteractiveLogonRight, SeDenyNetworkLogonRight, SeDenyBatchLogonRight, SeDenyServiceLogonRight to Domain/Enterprise/Schema Admins + Tier0-Admins on Tier1\Servers and Tier2\Devices
+Computers in Tier 1 / Tier 2 OUs today: 0 (the deny GPO applies to these only)
+Set-AdTiering done.
+state: Succeeded, exit code: 0

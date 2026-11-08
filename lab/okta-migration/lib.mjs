@@ -315,6 +315,13 @@ export function latestTest(results, app) {
   return results.filter((r) => r.app === app).sort((a, b) => String(a.at).localeCompare(String(b.at))).pop() || null;
 }
 
+// The API scope the Entra sign-in requests, so Entra issues a token for the
+// API and evaluates CA061 there. Pure: unit-tested.
+export function entraApiFields(api) {
+  if (!api || !api.appId) throw new Error('Entra has no "Clinic Lab Results API": the API part of the Entra PR is not applied - CA061 would not be evaluated');
+  return { scope: `openid profile email api://${api.appId}/Results.Read`, api_audience: api.appId };
+}
+
 // ---- System Log ---------------------------------------------------------------
 
 // The filter for "who signed in to this app" in the Okta System Log. For an

@@ -156,7 +156,7 @@ output "nhi_inventory" {
     clinic_lab_results = var.enable_clinic_results_app ? {
       service_principal_object_id = azuread_service_principal.clinic_results[0].object_id
       owners                      = local.app_owners
-      credential_type             = "none (public client: auth code + PKCE, loopback redirect, no secret or certificate)"
+      credential_type             = "none (public client: auth code + PKCE, loopback redirect, no secret or certificate; its API Clinic Lab Results API holds none either)"
       credential_expires          = null
       outbound_secret             = "none"
     } : null
@@ -312,6 +312,11 @@ output "clinic_results_client_id" {
   value       = one(azuread_application.clinic_results[*].client_id)
 }
 
+output "clinic_results_api_client_id" {
+  description = "Client id of Clinic Lab Results API, the resource CA061 targets (Conditional Access cannot target the public client). Null while off."
+  value       = one(azuread_application.clinic_results_api[*].client_id)
+}
+
 output "clinic_results_users_group_object_id" {
   description = "Object id of App-ClinicResults-Users, the ONE principal on Clinic Lab Results and CA061's user scope (null while off). Pilot members are added post-apply."
   value       = one(azuread_group.clinic_results_users[*].object_id)
@@ -341,4 +346,15 @@ output "claims_viewer_saml_signing_cert_activation_command" {
 output "claims_viewer_role_assignments" {
   description = "Group object id -> app role value on the Claims Viewer (the converted AD FS rules 3a/3b)."
   value       = { for k, a in azuread_app_role_assignment.claims_viewer : a.principal_object_id => local.claims_viewer_roles[k].value }
+}
+
+output "servicenow_fulfilment" {
+  description = "The ServiceNow fulfilment app (null when enable_servicenow_fulfilment = false). client_id goes into ServiceNow property contoso.entra.fulfilment.client_id (lab/servicenow/apply.py looks it up by display name)."
+  value = var.enable_servicenow_fulfilment ? {
+    client_id                   = azuread_application.servicenow_fulfilment[0].client_id
+    service_principal_object_id = azuread_service_principal.servicenow_fulfilment[0].object_id
+    catalog_role                = "Access package assignment manager (${local.access_package_assignment_manager_role_id})"
+    catalog_id                  = var.servicenow_fulfilment_catalog_id
+    graph_api_permissions       = "none"
+  } : null
 }

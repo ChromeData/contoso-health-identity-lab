@@ -396,6 +396,34 @@ pipeline only manages the Entra side.
 
 ---
 
+## ServiceNow access fulfilment
+
+**BUILT** (`enable_servicenow_fulfilment`, [`servicenow_fulfilment.tf`](servicenow_fulfilment.tf),
+3 mocked runs in `tests/servicenow_fulfilment.tftest.hcl`). The same design
+**RAN · tenant** on 2026-11-07 with a throwaway twin of this app, deleted
+after the proof (capture-log E170-E172; [`lab/servicenow`](../../../servicenow/README.md)).
+
+ServiceNow asks Entra ID Governance to add or remove a person on a Clinical
+access package after the manager approved in ServiceNow. The app:
+
+| Property | Value | Why |
+|---|---|---|
+| Graph API permissions | **none** | the Graph reference lets an app-only caller hold an entitlement-management role *instead of* `EntitlementManagement.ReadWrite.All` |
+| Role | *Access package assignment manager* (`e2182095-...`) on the Clinical catalog only | add / remove people on existing packages; cannot edit packages, policies or groups |
+| Credential | certificate, public half in [`files/servicenow-fulfilment.pem`](files/servicenow-fulfilment.pem) | no client secret anywhere; the private key exists only in the instance's key store |
+| Sign-in | assignment required, hidden | an app-only client: no user gets a token for it |
+
+**Replication wait.** The catalog role assignment waits 90 s after the
+service principal is created (`time_sleep`, keyed to the SP's object id):
+entitlement management refused it with *SubjectNotFound* when it came right
+after the SP (catch-up apply run 42512070374, 2026-11-08).
+
+Residual risk: the role spans the whole Clinical catalog (Pharmacy included).
+Entra still enforces incompatible packages (seen live: an ICU nurse was
+refused Pharmacy), every request carries the ServiceNow ticket number, and
+requestable packages expire. Rotation: `lab/servicenow/fulfilment-cert.py`
+then a PR.
+
 ## Validation status (offline only)
 
 | Check | Result |
@@ -546,6 +574,7 @@ tracker and the cut-over tools are in [`lab/okta-migration/`](../../../okta-migr
 | Group | `App-ClinicResults-Users`, **assigned**, member drift ignored | Not a copy of Okta's `Clinic-Staff`: its rule (login domain) means every hospital user after the acquisition |
 | Assignment | the group, default access role, the only one | One principal per app, as everywhere in this module |
 | Conditional Access | CA061 (modules/conditional-access `clinical.tf`): MFA strength + sign-in every 8 h, the group only, break-glass excluded; **enforced** (lab.tfvars) | The Okta policy it replaces was "two factors, re-authenticate after 8 hours", already enforced |
+| API (the CA061 target) | `Clinic Lab Results API`: `api://<client id>`, one delegated scope `Results.Read`, v2 tokens, assignment required (same group), the client pre-authorized; hidden from My Apps | Conditional Access cannot target a public client (Graph 1034 `PublicClientsAreUnsupported`, run 42512070374). Learn: CA "is applied when a client calls a service". The client requests `Results.Read` at sign-in, so CA061 is evaluated on the API token |
 
 Post-apply, as the operator (`lab/okta-migration/cutover.mjs prestage` does
 both and reads them back): admin consent on the three delegated scopes

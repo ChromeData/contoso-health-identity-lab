@@ -2,14 +2,15 @@
 # lab/k8s/manifests/nightly-report-networkpolicy.yaml
 # -----------------------------------------------------------------------------
 # Nothing may connect TO the nightly-report pod. It is a batch job: it reads
-# its database credential from the Vault Agent sidecar (a file on a shared
-# in-pod volume) and makes outbound calls only. Its probes are exec probes
+# its database credential from a CSI volume (a file the Secrets Store CSI
+# Driver writes; the Key Vault call is made by the driver's Azure provider,
+# not by this pod) and makes outbound calls only. Its probes are exec probes
 # (a file check), so no kubelet traffic needs to reach it either.
 #
-# Ingress only, on purpose: egress (Vault, the database, DNS) is left open
-# here because the lab's kind cluster runs the default CNI, and an egress
-# allow-list that drifts from the Vault and database addresses would fail the
-# e2e for reasons unrelated to identity. The production equivalent adds an
+# Ingress only, on purpose: egress (the database, DNS) is left open here
+# because the lab's kind cluster runs the default CNI, and an egress
+# allow-list that drifts from the database address would fail the e2e for
+# reasons unrelated to identity. The production equivalent adds an
 # egress allow-list per destination (lab/docs/STAND-INS.md).
 #
 # Also satisfies Checkov CKV2_K8S_6 ("pods which lack an associated

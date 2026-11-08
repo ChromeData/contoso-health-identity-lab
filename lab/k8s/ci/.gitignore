@@ -1,3 +1,5 @@
-# Written only with KEEP_CLUSTER=1: the kept cluster's Vault dev root token
-# and the seed hash (0600). Never commit them; the next full run deletes them.
+# Run state (0600): run.env holds this run's ids and the names of its
+# throwaway Azure objects; seed.sha256 holds the hash of the current
+# Key Vault value. Identifiers and a hash only, never a secret value.
+# Never commit them; a full teardown deletes them.
 .state/

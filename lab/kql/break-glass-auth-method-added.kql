@@ -1,0 +1,73 @@
+// =============================================================================
+// Detection: Authentication method added or changed on a break-glass account
+// Lab:       Contoso Health Identity Platform  (lab/ - ITDR pack, fourth set)
+// SPL twin:  lab/splunk/detections/break-glass-auth-method-added.spl
+// -----------------------------------------------------------------------------
+// WHAT IT CATCHES
+//   Any security-info registration, update or default change on a
+//   break-glass (emergency access) account, by ANYONE: the account itself,
+//   an admin, or an application. Break-glass accounts are excluded from every
+//   CA policy and hold standing Global Administrator, so a new method on
+//   them is a working, CA-exempt GA credential.
+//   Why a new rule: auth-method-changed-by-admin.kql excludes self-service
+//   rows ("User registered security info") because the actor must differ
+//   from the target. But an APPLICATION that provisions a passkey through
+//   Graph is logged as "User registered security info" with the app as the
+//   actor: that is exactly how the lab operator minted both break-glass
+//   passkeys (capture log E11d; the audit rows read back on 2026-11-07 show
+//   actor app "Contoso Lab Operator (local Mac, certificate)", ResultReason
+//   "User registered Fido2 Authentication Method"). That path was invisible
+//   (review finding B2, 2026-11-07).
+//
+// TABLE / SOURCE
+//   AuditLogs, Category "UserManagement", ActivityDisplayName containing
+//   "security info" (User/Admin registered / updated / changed default /
+//   deleted security info). Target = a TargetResources user whose object id
+//   is in BreakGlassUserIds (rendered by modules/monitoring from
+//   modules/groups) or whose UPN matches bg-admin-NN@ (fallback).
+//
+// LICENSE
+//   Entra ID Free audit logs, exported with P1.
+//
+// MITRE ATT&CK
+//   T1098.005 Account Manipulation: Device Registration.
+//   T1556.006 Modify Authentication Process: Multi-Factor Authentication.
+//
+// FALSE-POSITIVE NOTES
+//   - The planned break-glass key replacement (ADR 0003) fires. Link the
+//     change ticket and close it.
+//
+// SEVERITY (the Severity column)
+//   High   : a method registered, updated or made default (success).
+//   Medium : a failed attempt, or a deletion.
+//
+// AUTOMATED RESPONSE
+//   Notify playbook (Teams card + ServiceNow ticket). Never containment:
+//   the containment playbook refuses break-glass accounts by design.
+// =============================================================================
+
+let LookBack = 1h;
+let BreakGlassUserIds = dynamic([]); // @@BREAK_GLASS_USER_IDS@@
+let BreakGlassPattern = @"(?i)^bg-admin-\d{2}@";
+AuditLogs
+| where TimeGenerated > ago(LookBack)
+| where Category == "UserManagement"
+| where ActivityDisplayName has "security info"
+| mv-apply tr = TargetResources on (
+    where tostring(tr.type) =~ "User"
+    | where tostring(tr.id) in (BreakGlassUserIds) or tostring(tr.userPrincipalName) matches regex BreakGlassPattern
+    | take 1
+    | extend TargetUpn = tostring(tr.userPrincipalName), TargetObjectId = tostring(tr.id)
+  )
+| where isnotempty(TargetObjectId) or isnotempty(TargetUpn)
+| extend ActorUpn = tostring(InitiatedBy.user.userPrincipalName)
+| extend ActorApp = tostring(InitiatedBy.app.displayName)
+| extend Actor = iff(isnotempty(ActorUpn), ActorUpn, ActorApp)
+| extend ActorKind = case(isnotempty(ActorApp), "application",
+                          ActorUpn =~ TargetUpn, "the account itself",
+                          "an admin")
+| extend IsDelete = ActivityDisplayName has "deleted"
+| extend Severity = iff(Result =~ "success" and not(IsDelete), "High", "Medium")
+| project TimeGenerated, Severity, ActivityDisplayName, ResultReason, Result, TargetUpn, TargetObjectId,
+          Actor, ActorKind, CorrelationId
+| sort by TimeGenerated desc

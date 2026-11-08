@@ -3,9 +3,9 @@
 # -----------------------------------------------------------------------------
 # Everything a reviewer should see change in a PR lives here: staging flags and
 # Conditional Access states. Tenant-specific identifiers (ids, domain) come
-# from terraform.tfvars locally or TF_* GitHub variables in CI; the operator IP
-# and alert email come from the TF_OPERATOR_IP_RANGES / TF_ALERT_EMAIL repo
-# secrets (masked in public logs).
+# from terraform.tfvars locally or TF_* GitHub variables in CI; the operator IP,
+# alert email and the other privacy values come from the pipeline config Key
+# Vault, read over OIDC (lab/pipelines/README.md).
 # Both workflows pass -var-file=lab.tfvars.
 # =============================================================================
 
@@ -53,6 +53,7 @@ enable_access_reviews_inactive    = true
 # role's own PIM policy, written by post-apply/Set-DirectoryRolePimPolicies.ps1.
 enable_pim_tiers               = true
 enable_pim_azure_resources     = false
+enable_pim_keyvault_officers   = false
 enable_helpdesk_au_scoping     = true
 enable_global_admin_pim_policy = true
 
@@ -112,6 +113,11 @@ enable_identity_protection_ca = true
 # (ca008_scope = "pilot"); all-users enforcement needs
 # ca008_allow_all_users_enforcement = true as a separate, reviewed line.
 enable_phishing_resistant_all_users = false
+
+# The scheduled leaver's trigger group (All-Workforce) without CA008. Off:
+# turning it on is its own reviewed PR, then the owner runs
+# post-apply/New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver (E122 gap).
+enable_lcw_leaver_trigger = false
 # The rollout above needs the ADMIN key-model allow-list (AAGUIDs of the
 # issued security keys, not tenant identifiers) so admins cannot satisfy
 # CA002 / CA021 / CA022 with a synced passkey - or this explicit risk acceptance.
@@ -171,6 +177,7 @@ clinical_portal_preauthorize_azure_cli = false
 enable_servicenow_sso                  = true
 enable_servicenow_provisioning         = true
 servicenow_provisioning_job_enabled    = true
+enable_servicenow_fulfilment           = true
 enable_okta_federation                 = true
 enable_clinic_results_app              = true
 
@@ -204,7 +211,7 @@ containment_on_alert_added = false
 # vault_feed_v2_columns goes on in the SAME PR that runs
 # ingest-vault-audit.sh --signals all (else every Tier-0 check-out alerts).
 # operator_ips_expires_on = ADR 0013's review date: the operator_ips
-# watchlist rows (from operator_ip_ranges, enable_dc only) stop counting
+# watchlist rows (from operator_ip_ranges, enable_dc or enable_itdr_detections_v4 only) stop counting
 # after it, and the plan warns. A date is a policy knob, not a tenant id.
 enable_itdr_detections_v2 = true
 vault_feed_v2_columns     = false
@@ -241,6 +248,7 @@ itdr_exclude_rules = [
   "dc_logon_outside_operator_allowlist",
   "vault_privileged_access_anomaly",
   "pim_activation_without_auth_context",
+  "tier0_logon_without_checkout", # ADR 0036: built on Vault check-out events; no source once Vault is retired. Replacement (Bastion subnet + PIM activation) is DESIGNED
 ]
 
 # Defender for Identity (ADR 0023): the native AD-attack detector. Off because

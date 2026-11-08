@@ -9,6 +9,7 @@ locals {
     { "Privileged-IAM-Admins" = var.priv_iam_admins_group_object_id },
     { for k, g in azuread_group.pim_tier : var.pim_tier_groups[k].display_name => g.object_id },
     { for g in azuread_group.azure_pim : var.azure_pim_group_name => g.object_id },
+    { for g in azuread_group.keyvault_pim : var.keyvault_pim_group_name => g.object_id },
   )
 }
 
@@ -224,4 +225,14 @@ output "demo_readers_activation_policy" {
     in_quarterly_review   = local.review_enabled
     azure_rbac            = "envs/bootstrap enable_pim_demo_readers_azure_rbac (human-applied)"
   } : null
+}
+
+output "keyvault_pim_group_object_id" {
+  description = "Group eligible for Key Vault Secrets Officer on the lab vault (add members post-apply), or null."
+  value       = one(azuread_group.keyvault_pim[*].object_id)
+}
+
+output "keyvault_pim_eligible_assignment_id" {
+  description = "Terraform id ({scope}|{roleDefinitionId}|{principalId}) of the Key Vault PIM eligible assignment, or null."
+  value       = one(azurerm_pim_eligible_role_assignment.keyvault_pim[*].id)
 }

@@ -40,8 +40,8 @@ import { execFileSync } from 'node:child_process';
 import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
-import { HERE, REPO, OKTA_ROOT, okta, nowIso, graphAll, checkSwitchTarget } from './lib.mjs';
-import { CONF, CONF_DIR, readConf, serve } from './clinic-results/app.mjs';
+import { HERE, REPO, OKTA_ROOT, okta, nowIso, graphAll, checkSwitchTarget, entraApiFields } from './lib.mjs';
+import { CONF, CONF_DIR, readConf, serve, checkIdpBlock } from './clinic-results/app.mjs';
 import { graph } from '../scripts/demo/signin/lib.mjs';
 
 const WAVES = path.join(HERE, 'waves.json');
@@ -81,7 +81,11 @@ function entraApp(displayName) {
   const app = r.value[0];
   const sp = graph('GET', `servicePrincipals?$filter=appId eq '${app.appId}'&$select=id,appId,displayName,appRoleAssignmentRequired`).value[0] || null;
   const tenant = graph('GET', 'organization?$select=id').value[0].id;
-  return { app, sp, tenant };
+  // Its API (modules/apps clinic_results.tf): the resource CA061 targets,
+  // because Conditional Access cannot target the public client itself.
+  const apiR = graph('GET', `applications?$filter=displayName eq '${`${displayName} API`.replace(/'/g, "''")}'&$select=appId`).value;
+  const api = apiR.length === 1 ? apiR[0] : null;
+  return { app, sp, tenant, api };
 }
 
 function idpBlocks({ org, oktaClientId, entra }) {
@@ -102,6 +106,7 @@ function idpBlocks({ org, oktaClientId, entra }) {
       authorization_endpoint: `${a}/oauth2/v2.0/authorize`,
       token_endpoint: `${a}/oauth2/v2.0/token`,
       jwks_uri: `${a}/discovery/v2.0/keys`,
+      ...entraApiFields(entra.api),
     };
   }
   return blocks;
@@ -149,12 +154,17 @@ async function prestage() {
   const e = entraApp(p.entra_app);
   const prev = fs.existsSync(CONF) ? JSON.parse(fs.readFileSync(CONF, 'utf8')) : null;
   checkSwitchTarget(appLabel, prev);
-  const blocks = idpBlocks({ org: o.org, oktaClientId: a.credentials.oauthClient.client_id, entra: e && e.sp ? e : null });
+  // The Entra block needs the client AND its API (the CA061 resource): with
+  // only the client, an Entra sign-in would skip CA061, so the app stays on
+  // Okta and the config gets no Entra block until the API exists.
+  const entraReady = e && e.sp && e.api;
+  if (e && e.sp && !e.api) log(`Entra has "${p.entra_app}" but not "${p.entra_app} API" (the CA061 resource): no Entra block yet - apply the Entra PR`);
+  const blocks = idpBlocks({ org: o.org, oktaClientId: a.credentials.oauthClient.client_id, entra: entraReady ? e : null });
   const conf = { app: appLabel, active: prev?.active || 'okta', ...blocks, history: prev?.history || [] };
   if (conf.active === 'entra' && !conf.entra) throw new Error('config says entra is active but the Entra app is gone: run rollback');
   writeConf(conf);
   log(`config written (${CONF}): active = ${conf.active}; okta client ${blocks.okta.client_id}${blocks.entra ? `; entra client ${blocks.entra.client_id}` : ''}`);
-  if (!e || !e.sp) { log(`Entra app "${p.entra_app}" does not exist yet: the Entra pre-stage PR has not been applied. Okta side only.`); return; }
+  if (!entraReady) { log(`Entra side not complete yet (client${e && e.sp ? ' yes' : ' no'}, API${e && e.api ? ' yes' : ' no'}): Okta side only.`); return; }
   if (!e.sp.appRoleAssignmentRequired) throw new Error('the Entra enterprise app does not require assignment');
   log(ensureConsent(e.sp.id));
   for (const l of ensurePilots(e.sp.id, p.pilot)) log(l);
@@ -166,6 +176,7 @@ async function test({ idp, as }) {
   checkSwitchTarget(appLabel, conf);
   const want = idp || conf.active;
   if (!conf[want]) throw new Error(`no ${want} block in the config: run prestage`);
+  checkIdpBlock(want, conf[want]);
   const upn = as || plan().pilot[0];
   if (!upn) throw new Error('no pilot user in waves.json and no --as');
   // A staging run (--idp differs from production) uses a temporary config
@@ -191,8 +202,11 @@ async function test({ idp, as }) {
     await s.close();
     const lines = fs.readFileSync(signinsFile, 'utf8').split('\n').filter(Boolean);
     const rec = lines.length > before ? JSON.parse(lines[lines.length - 1]) : null;
-    const ok = rec && rec.idp === want && rec.user.toLowerCase() === upn.toLowerCase() && rec.issuer === conf[want].issuer;
-    verdict = { result: ok ? 'PASS' : 'FAIL', idp: want, staging: want !== conf.active, app: appLabel, user: upn, issuer: rec?.issuer || null, amr: rec?.amr || null, at: nowIso(), seconds: Math.round((Date.now() - started) / 1000), banner: (text.match(/Signed in as[^\n]*/) || [''])[0] };
+    // Through Entra, PASS also needs the API token: that is the sign-in CA061
+    // (MFA + 8 h) was evaluated on.
+    const apiOk = want !== 'entra' || (rec && rec.api_token && rec.api_token.audience === conf.entra.api_audience);
+    const ok = rec && rec.idp === want && rec.user.toLowerCase() === upn.toLowerCase() && rec.issuer === conf[want].issuer && apiOk;
+    verdict = { result: ok ? 'PASS' : 'FAIL', idp: want, staging: want !== conf.active, app: appLabel, user: upn, issuer: rec?.issuer || null, amr: rec?.amr || null, api_token: rec?.api_token || null, at: nowIso(), seconds: Math.round((Date.now() - started) / 1000), banner: (text.match(/Signed in as[^\n]*/) || [''])[0] };
   } catch (e) {
     verdict = { result: 'FAIL', idp: want, staging: want !== conf.active, app: appLabel, user: upn, error: String(e.message).slice(0, 400), at: nowIso(), seconds: Math.round((Date.now() - started) / 1000) };
   } finally {
@@ -226,9 +240,18 @@ async function switchTo(target) {
   // The Okta apply then carries waves_override; make the PR right after.
   const emergency = target === 'okta' && args.includes('--emergency');
   if (p.cutover !== wantCutover && !emergency) throw new Error(`waves.json says cutover = ${p.cutover} for "${appLabel}": set it to ${wantCutover} first (the reviewed change), then run ${cmd} again${target === 'okta' ? ' - or, in an incident, rollback --emergency' : ''}`);
-  const conf = readConf();
+  // Raw read: the destination is what must be valid. A cut-over needs a
+  // complete Entra block (with the API, or CA061 would be skipped); a
+  // rollback needs ONLY the Okta block, so a stale Entra block can never
+  // stand between an incident and restoring Okta.
+  const conf = readConf(CONF, { checkActive: false });
   checkSwitchTarget(appLabel, conf);
-  if (!conf.entra) throw new Error('no Entra block in the config: run prestage after the Entra PR is applied');
+  if (target === 'entra') {
+    if (!conf.entra) throw new Error('no Entra block in the config: run prestage after the Entra PR is applied');
+    checkIdpBlock('entra', conf.entra); // before ANY change
+  } else if (!conf.okta || !conf.okta.client_id) {
+    throw new Error('no Okta block in the config: cannot roll back to Okta');
+  }
   if (!(await portFree())) throw new Error('port 8471 is in use (app.mjs running?): stop it first - nothing was changed');
   if (conf.active === target) log(`the app already trusts ${target}`);
   // Order matters. Cut-over: app to Entra FIRST, then hide the Okta tile -

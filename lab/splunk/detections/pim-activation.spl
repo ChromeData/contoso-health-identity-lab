@@ -51,6 +51,13 @@ index=entra sourcetype="azure:loganalytics:auditlogs" LoggedByService="PIM" earl
 ``` PT5M / PT1H, severity Medium, trigger > 0 rows, 1 h grouping by Account +   ```
 ``` IP entities (Actor, ActorIp).                                               ```
 ``` ========================================================================== ```
+``` 2026-11-07 (review findings B5, B6): the group is read from type Group   ```
+``` OR a named type Other entry (the shape the tenant really logs), and Tier 0 ```
+``` is decided by name (Tier-0 roles, PIM-Tier0-*, PIM-AWS-Lab-Admins,        ```
+``` Privileged-IAM-Admins). DIFFERENCE from the KQL twin, stated plainly: no   ```
+``` object-id match, no off-hours and no new-IP leg here (no Splunk lookup for ```
+``` the ids, no sign-in history join), so Severity is Medium for Tier 0 and    ```
+``` Informational otherwise, and OffHours / NewIp read "not computed".        ```
 ``` @stanza Contoso - PIM activation (just-in-time elevation) ```
 ``` @conf description = A PIM for Groups / PIM for roles activation completed. Expected for approved changes; every one is reviewed. KQL twin: lab/kql/pim-activation.kql ```
 ``` @conf disabled = 0 ```
@@ -76,7 +83,7 @@ index=entra sourcetype="azure:loganalytics:auditlogs" LoggedByService="PIM" earl
 | spath path=InitiatedBy.user.id output=ActorObjectId
 | spath path=InitiatedBy.user.ipAddress output=ActorIp
 | spath path=TargetResources{} output=TR
-| eval TRGroup=mvfilter(spath(TR, "type")=="Group")
+| eval TRGroup=mvfilter(spath(TR, "type")=="Group" OR (spath(TR, "type")=="Other" AND spath(TR, "displayName")!=""))
 | eval TRRole=mvfilter(spath(TR, "type")=="Role")
 | eval TRGroup1=mvindex(TRGroup, 0)
 | eval TRRole1=mvindex(TRRole, 0)
@@ -85,7 +92,10 @@ index=entra sourcetype="azure:loganalytics:auditlogs" LoggedByService="PIM" earl
 | eval HasGroup=if(isnotnull(TargetGroup) AND TargetGroup!="", 1, 0)
 | eval ElevatedTo=if(HasGroup==1, TargetGroup, TargetRole)
 | eval ElevationType=if(HasGroup==1, "PIM for Groups", "PIM for roles")
-| eval HighValue=if(isnotnull(ElevatedTo) AND in(ElevatedTo, "Privileged-IAM-Admins", "Global Administrator", "Privileged Role Administrator", "Security Administrator", "Application Administrator", "User Administrator"), "true", "false")
+| eval Tier0By=if(isnotnull(ElevatedTo) AND (in(ElevatedTo, "Global Administrator", "Privileged Role Administrator", "Privileged Authentication Administrator", "Security Administrator", "Conditional Access Administrator", "Application Administrator", "Cloud Application Administrator", "Hybrid Identity Administrator", "Authentication Policy Administrator", "Privileged-IAM-Admins", "PIM-AWS-Lab-Admins") OR like(ElevatedTo, "PIM-Tier0-%")), "name", "")
+| eval HighValue=if(Tier0By!="", "true", "false")
+| eval OffHours="not computed", NewIp="not computed"
+| eval Severity=if(HighValue=="true", "Medium", "Informational")
 | spath path=AdditionalDetails{} output=AdditionalDetails
 | sort 0 - _time
-| table TimeGenerated, Actor, ActorObjectId, ActorIp, ElevationType, ElevatedTo, HighValue, Result, ActivityDisplayName, CorrelationId, AdditionalDetails
+| table TimeGenerated, Actor, ActorObjectId, ActorIp, ElevationType, ElevatedTo, HighValue, Tier0By, OffHours, NewIp, Severity, Result, ActivityDisplayName, CorrelationId, AdditionalDetails

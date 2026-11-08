@@ -64,7 +64,7 @@ jobs:
           if ! files="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"; then
             echo "::warning::git diff failed; failing closed (tf=true)"
             echo "tf=true" >> "$GITHUB_OUTPUT"
-          elif grep -qE '^(lab/terraform/|\.github/workflows/terraform-plan\.yml$|\.github/scripts/plain-plan\.py$)' <<< "$files"; then
+          elif grep -qE '^(lab/terraform/|\.github/workflows/terraform-plan\.yml$|\.github/scripts/plain-plan\.py$|\.github/scripts/pipeline-config\.sh$)' <<< "$files"; then
             echo "tf=true" >> "$GITHUB_OUTPUT"
           else
             echo "tf=false" >> "$GITHUB_OUTPUT"
@@ -100,14 +100,12 @@ jobs:
       TF_VAR_key_vault_name: ${{ vars.TF_KEY_VAULT_NAME || 'kv-idlab' }}
       TF_VAR_onmicrosoft_domain: ${{ vars.TF_ONMICROSOFT_DOMAIN }}
       TF_VAR_pim_approver_object_ids: ${{ vars.TF_PIM_APPROVER_OBJECT_IDS || '[]' }}
-      # PRIVACY, not credentials: GitHub masks *secrets* in public run logs but
-      # prints *variables* in every step's env header. Your home IP and email
-      # are therefore stored as repository SECRETS purely so they are masked.
-      # Dependabot-triggered runs see only *Dependabot* secrets, so store every
-      # TF_* secret there too, or the plan shows false removals (the comment
-      # names the missing ones).
-      TF_VAR_operator_ip_ranges: ${{ secrets.TF_OPERATOR_IP_RANGES || '[]' }}
-      TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+      # PRIVACY values (operator IP ranges, alert email, app owner ids, SAML
+      # certificate emails, PIM alert mailbox) are NOT here and NOT GitHub
+      # secrets: step "Pipeline config from Key Vault" reads them with this
+      # job's OIDC sign-in (envs/bootstrap pipeline-config.tf) and exports
+      # them masked. No value is stored in GitHub, Dependabot runs included.
+      PIPELINE_CONFIG_VAULT: ${{ vars.TF_PIPELINE_CONFIG_VAULT || 'kv-idlab-cicd-20f1' }}
       TF_VAR_sentinel_playbook_id: ${{ vars.TF_SENTINEL_PLAYBOOK_ID }}
       TF_VAR_key_vault_secrets_officer_ids: ${{ vars.TF_KV_SECRETS_OFFICER_IDS || '[]' }}
       TF_VAR_access_review_fallback_group_object_id: ${{ vars.TF_ACCESS_REVIEW_FALLBACK_GROUP_OBJECT_ID }}
@@ -119,9 +117,8 @@ jobs:
       TF_VAR_intune_vm_admin_login_object_ids: ${{ vars.TF_INTUNE_VM_ADMIN_LOGIN_OBJECT_IDS || '[]' }}
       # Senior-scope extensions (all staging flags live in lab.tfvars). Tenant
       # identifiers come from Variables; owner ids and the certificate mailbox
-      # are SECRETS so the env header masks them, AND sensitive Terraform
-      # variables: masking covers only the whole secret string (not each id
-      # of a JSON list) and never the PR comment. aws_scim_credentials is
+      # come from the pipeline config vault (masked per element) AND are
+      # sensitive Terraform variables, so the PR comment never shows them. aws_scim_credentials is
       # NEVER passed here: it is written once by a local seeding apply.
       TF_VAR_pim_tier0_approver_object_ids: ${{ vars.TF_PIM_TIER0_APPROVER_OBJECT_IDS || '[]' }}
       TF_VAR_privileged_review_reviewer_group_object_id: ${{ vars.TF_PRIVILEGED_REVIEW_REVIEWER_GROUP_OBJECT_ID }}
@@ -131,14 +128,9 @@ jobs:
       TF_VAR_aws_saml_acs_urls: ${{ vars.TF_AWS_SAML_ACS_URLS || '[]' }}
       TF_VAR_aws_access_portal_url: ${{ vars.TF_AWS_ACCESS_PORTAL_URL }}
       TF_VAR_aws_scim_template_id: ${{ vars.TF_AWS_SCIM_TEMPLATE_ID }}
-      TF_VAR_app_owner_object_ids: ${{ secrets.TF_APP_OWNER_OBJECT_IDS || '[]' }}
       # The APPLY app owns every app in modules/apps, whoever runs the plan.
       TF_VAR_apply_client_id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
-      TF_VAR_saml_cert_notification_emails: ${{ secrets.TF_SAML_CERT_NOTIFICATION_EMAILS || '[]' }}
       TF_VAR_containment_playbook_id: ${{ vars.TF_CONTAINMENT_PLAYBOOK_ID }}
-      # PIM notification mailbox (modules/pim): a SECRET for the same reason as
-      # the alert email. Unset = '' = tenant-default PIM notifications.
-      TF_VAR_pim_alert_mailbox: ${{ secrets.TF_PIM_ALERT_MAILBOX }}
       # CA010-Exclusion-<reason> groups, excluded next to break-glass (group
       # ids, so a Variable). Unset = none. Set here, not only in a local
       # terraform.tfvars, or the next CI apply removes the exception.
@@ -153,6 +145,9 @@ jobs:
       # ITDR: the APPLY identity by immutable id (envs/bootstrap output
       # iac_principal_ids) and extra privileged users - JSON lists of GUIDs.
       TF_VAR_iac_principal_ids: ${{ vars.TF_IAC_PRINCIPAL_IDS || '[]' }}
+      # The lab operator's ids (ADR 0024; envs/operator outputs) for the fourth
+      # ITDR set (enable_itdr_detections_v4) - JSON list of GUIDs.
+      TF_VAR_operator_principal_ids: ${{ vars.TF_OPERATOR_PRINCIPAL_IDS || '[]' }}
       TF_VAR_privileged_user_object_ids: ${{ vars.TF_PRIVILEGED_USER_OBJECT_IDS || '[]' }}
       TF_VAR_evidence_storage_account_name: ${{ vars.TF_EVIDENCE_STORAGE_ACCOUNT_NAME || 'stidlabevidence' }}
       # TF_B2B_CONNECTED_ORGANIZATION (an object) is passed on the plan step,
@@ -186,6 +181,13 @@ jobs:
           client-id: ${{ vars.AZURE_PLAN_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # The five privacy values, from Key Vault, as the PLAN app (Key Vault
+      # Secrets User on that vault only). Fails closed: a value it cannot
+      # read stops the job instead of planning its removal.
+      - name: Pipeline config from Key Vault (OIDC, no stored secret)
+        id: config
+        run: .github/scripts/pipeline-config.sh
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
@@ -306,14 +308,6 @@ jobs:
           SUMMARY_FILE: ${{ runner.temp }}/plain-summary.md
           CHANGESET_FILE: ${{ runner.temp }}/changeset.txt
           CHANGESET_SHA256: ${{ steps.changeset.outputs.sha256 }}
-          # In a Dependabot run `secrets` holds Dependabot secrets only. Each
-          # EMPTY_* is the string true/false (is it unset?), never a value.
-          DEPENDABOT_RUN: ${{ github.actor == 'dependabot[bot]' }}
-          EMPTY_TF_OPERATOR_IP_RANGES: ${{ secrets.TF_OPERATOR_IP_RANGES == '' }}
-          EMPTY_TF_ALERT_EMAIL: ${{ secrets.TF_ALERT_EMAIL == '' }}
-          EMPTY_TF_APP_OWNER_OBJECT_IDS: ${{ secrets.TF_APP_OWNER_OBJECT_IDS == '' }}
-          EMPTY_TF_SAML_CERT_NOTIFICATION_EMAILS: ${{ secrets.TF_SAML_CERT_NOTIFICATION_EMAILS == '' }}
-          EMPTY_TF_PIM_ALERT_MAILBOX: ${{ secrets.TF_PIM_ALERT_MAILBOX == '' }}
         with:
           script: |
             const fs = require('fs');
@@ -344,20 +338,8 @@ jobs:
             const checksLine = failed.length === 0
               ? 'Terraform checks: formatting, setup, validation and plan all passed.'
               : `Terraform checks: **${listed} did not pass** (see Technical details below).`;
-            // verify: Dependabot runs honour id-token: write + vars; if not,
-            // azure/login fails and this comment shows every step skipped.
-            const banner = [];
-            const missing = Object.keys(process.env)
-              .filter(k => k.startsWith('EMPTY_TF_') && process.env[k] === 'true')
-              .map(k => k.slice('EMPTY_'.length)).sort();
-            if (process.env.DEPENDABOT_RUN === 'true' && missing.length > 0) {
-              const msg = `Dependabot run without these Dependabot secrets: ${missing.join(', ')}. ` +
-                'A Key Vault firewall, NSG, action-group, app-owner, certificate-mailbox or ' +
-                'PIM-notification removal they feed is NOT real drift unless the repo secret ' +
-                'is unset too. Store every TF_* secret you use as a Dependabot secret as well.';
-              core.warning(msg);
-              banner.push('> [!WARNING]', `> ${msg}`, '');
-            }
+            // Dependabot runs need the same OIDC sign-in as any PR (they read the
+            // pipeline config vault too); without it the config step fails.
             // Change set + fingerprint for the apply gate (plan-changeset.sh).
             // Only when the step succeeded, so a stale fingerprint is never kept.
             let changeset = '';
@@ -381,7 +363,6 @@ jobs:
               '',
               checksLine,
               '',
-              ...banner,
               '<details><summary>Technical details: step results and the full Terraform plan</summary>',
               '',
               `| step | result |`,

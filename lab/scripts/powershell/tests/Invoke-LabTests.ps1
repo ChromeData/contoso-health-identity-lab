@@ -51,12 +51,18 @@
                                        only); both workflows' safety properties
       Remove-DemoHire (lab/scripts/dc) one Workforce/Disabled account by employeeID,
                                        never protected or out-of-scope accounts
+      TierTest (lab/scripts/dc/        GPO "applied" from gpresult /x (filtered-out
+      tier-test)                       GPOs are not applied), disposable test accounts
+                                       only, no build-admin join, failed AD reads stop
       AdfsDcScripts (lab/adfs/scripts) 10b audit right: a half-done change is
                                        repaired, Revoke after the gMSA is gone;
                                        12b Connect Health: success only after a
                                        read-back (log, TenantId, service)
       Clear-LeaverAdGroups (lab/scripts/dc) every group off disabled leavers in
                                        OU=Disabled, never enabled or protected accounts
+      AdHardening (lab/scripts/dc/     ASCII-only files, Protected Users never takes
+        hardening)                     the NTLM-path admins, deny-logon template and
+                                       its read-back, GPO version bump, LAPS values
       ScriptAnalyzerScope              analyzer suppressions are per function,
                                        justified, never per file
     Passing proves the logic does what the comments say. It does not prove the

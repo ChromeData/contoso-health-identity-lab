@@ -1,6 +1,6 @@
 # ADR 0029: The HR leaver removes birthright access packages through a Logic App, because the built-in Lifecycle Workflows task skips them
 
-- **Status:** The leave-date leaver workflow is RAN · tenant (2026-11-07/08, worker 100496): it ran by itself, but it did not remove the birthright package. The Logic App step is BUILT (Terraform `modules/leaver-extension`, tests pass) and waits for the owner's apply approval. It has not run yet.
+- **Status:** The leave-date leaver workflow is RAN · tenant (2026-11-07/08, capture log E179-E181; worker 100496 in E180): it ran by itself, but it did not remove the birthright package. The Logic App step is BUILT (Terraform `modules/leaver-extension`, tests pass) and waits for the owner's apply approval. It has not run yet.
 - **Date:** 2026-11-08
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** after the first tenant run of the Logic App, or 2027-02-08
@@ -17,7 +17,7 @@ mover keeps the old bundle through the first shifts). For a leaver, 72 h of
 standing access is too long. The owner's decision (2026-11-07): the leaver
 gap must close by itself, with no hand step.
 
-## What we measured (2026-11-07/08, lab tenant, times in UTC)
+## What we measured (2026-11-07/08, lab tenant, times in UTC; capture log E180)
 
 | Step | Time |
 |---|---|

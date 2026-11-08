@@ -7,44 +7,40 @@
 // -----------------------------------------------------------------------------
 // WHAT IT CATCHES
 //   tier0-logon-without-checkout.kql watches the DC side (a Tier-0 logon with
-//   no check-out). This rule watches the VAULT side - the HashiCorp Vault
-//   stand-in for the CyberArk Digital Vault (ADR 0007) - for the misuse a
-//   CyberArk shop gets from PTA (Privileged Threat Analytics) and CPM
-//   alerts. One rule, one Signal column, one row per event or burst:
+//   no check-out). This rule watches the VAULT side - the local HashiCorp
+//   Vault harness (lab/pam; ADR 0036 replaces it with Azure Key Vault and
+//   Windows LAPS) - for the misuse a PAM team watches for. One rule, one
+//   Signal column, one row per event or burst. PamTerm names the event in
+//   general PAM words:
 //
-//   Signal                      What happened                    CyberArk analogue
-//   Tier0CredReadUncovered      read of ldap/static-cred/tier0/* PTA retrieval analytics:
-//                               by a token with no CHG ticket    credential retrieved outside
-//                               and no TIER-0 (tier0-admins)     a ticketed request (verify:
-//                               check-out by the same operator   PTA event name)
+//   Signal                      What happened                    PamTerm
+//   Tier0CredReadUncovered      read of ldap/static-cred/tier0/* retrieval outside a ticketed
+//                               by a token with no CHG ticket    request
+//                               and no TIER-0 (tier0-admins)
+//                               check-out by the same operator
 //                               in the last 4 h (a low-tier
 //                               check-out does not cover it)
-//   Tier0CheckoutWithoutTicket  tier0-admins check-out whose     Master Policy "dual control /
-//                               token carries no valid ticket    ticketing integration" bypass
+//   Tier0CheckoutWithoutTicket  tier0-admins check-out whose     dual control / ticketing
+//                               token carries no valid ticket    bypassed
 //                               (psm-session.sh always sets one,
 //                               so this is root or an ad-hoc
 //                               token skipping the ITSM gate)
-//   RotationFailed              rotate-role / rotate-root /      CPM "change failed" on an
-//                               library check-in returned an     account (the exposed
-//                               error: the password that was     password stays valid)
+//   RotationFailed              rotate-role / rotate-root /      password rotation failed (the
+//                               library check-in returned an     exposed password stays valid)
+//                               error: the password that was
 //                               just used may still be valid
-//   RootTokenUse                any request made with a root-    no PTA name: CyberArk's
-//                               policy token (production: root   built-in Administrator
-//                               is revoked after init; any use   logon to the Vault
+//   RootTokenUse                any request made with a root-    built-in vault administrator
+//                               policy token (production: root   used
+//                               is revoked after init; any use
 //                               is an incident)
-//   AuthFailureBurst            >= 5 failed vault logins or      PTA "Suspicious Vault login"
-//                               invalid-token calls from one     class (verify: PTA event
-//                               address in a 10-min clock bin,   name)
+//   AuthFailureBurst            >= 5 failed vault logins or      failed vault logon burst
+//                               invalid-token calls from one
+//                               address in a 10-min clock bin,
 //                               ACROSS login names (a spray of
 //                               1-4 tries per name still counts;
 //                               LoginNames lists them)
-//   Tier0AccessDenied           a VALID token denied on a        Safe-permission violation
-//                               tier0 path (wrong Safe)          (Vault audit, ITAAL)
-//   Named PTA detection confirmed in vendor material: "Suspected credentials
-//   theft" (= tier0-logon-without-checkout.kql; e.g. Elastic's CyberArk PTA
-//   integration lists it as a PTA CEF event). "Unmanaged privileged access"
-//   appears in secondary material only - verify: docs.cyberark.com PTA
-//   security events. The other PTA names above are verify: items too.
+//   Tier0AccessDenied           a VALID token denied on a        vault permission violation
+//                               tier0 path (wrong policy)
 //
 // SEVERITY (dynamic - the Severity column)
 //   High   : Tier0CredReadUncovered, Tier0CheckoutWithoutTicket, a
@@ -214,14 +210,14 @@ Vault
     Signal == "RootTokenUse",                                                              "Low",
     Signal == "AuthFailureBurst" and array_length(LoginNames) > 0,                         "High",
     "Medium")
-| extend CyberArkAnalogue = case(
-    Signal == "Tier0CredReadUncovered",     "PTA-style: retrieval outside a ticketed request",
-    Signal == "Tier0CheckoutWithoutTicket", "Master Policy dual control / ticketing bypassed",
-    Signal == "RotationFailed",             "CPM change failed",
-    Signal == "RootTokenUse",               "Built-in Vault Administrator used",
-    Signal == "AuthFailureBurst",           "PTA-style: failed Vault logon burst",
-    "Safe permission violation")
-| project TimeGenerated, Severity, Signal, CyberArkAnalogue, Actor, Operator, VaultActor, Ticket, Account,
+| extend PamTerm = case(
+    Signal == "Tier0CredReadUncovered",     "retrieval outside a ticketed request",
+    Signal == "Tier0CheckoutWithoutTicket", "dual control / ticketing bypassed",
+    Signal == "RotationFailed",             "password rotation failed",
+    Signal == "RootTokenUse",               "built-in vault administrator used",
+    Signal == "AuthFailureBurst",           "failed vault logon burst",
+    "vault permission violation")
+| project TimeGenerated, Severity, Signal, PamTerm, Actor, Operator, VaultActor, Ticket, Account,
           Library, LoginName, LoginNames, VaultPath, VaultPaths, Events, Errors, NonLabRootPaths, AuditTamper,
           RemoteAddress, SourceHost, TokenPolicies, FirstSeen, RequestIds
 | sort by TimeGenerated desc

@@ -5,25 +5,31 @@
 # the running contoso-k8s kind cluster (stage 11 of lab/k8s/ci/pipeline.sh,
 # after the rotation drill in stage 9 and the drift drill in stage 10).
 #
-#   a. platform     node, Vault server + injector Ready, Vault version pinned,
-#                   Pod Security Admission labels on both namespaces
-#   b. workload     nightly-report Ready WITH the injected vault-agent; the
-#                   rendered /vault/secrets/db hashes to the CURRENT value
-#                   (hashed inside the pod); the app container has no
-#                   Kubernetes token; only the agent holds the aud=vault token;
-#                   the Deployment carries no env value / Secret reference
-#   c. Vault        a TokenRequest for nightly-report (aud=vault, 10 min) logs
-#                   in; the Vault token is least-privilege and <= 15 min; read
-#                   db OK, read other -> 403, write db -> 403; unapproved-job
-#                   (aud=vault) and nightly-report WITHOUT aud=vault are both
-#                   refused; the API server refuses the aud=vault token (401)
-#                   while accepting a default-audience one; a revoked token is
-#                   refused
-#   d. binding      identity is namespace + name + OBJECT, not a name: a
-#                   service account called nightly-report in another namespace
+#   a. platform     node, CSI driver + Azure provider Ready, the CSIDriver
+#                   requests tokens for exactly api://AzureADTokenExchange,
+#                   Pod Security labels on both namespaces, the public
+#                   issuer serves the API server's own discovery doc + JWKS
+#   b. workload     nightly-report Ready and NOTHING injected; the mounted
+#                   /mnt/secrets-store/db hashes to the CURRENT value (hashed
+#                   inside the pod); the pod holds no token of any kind; the
+#                   Deployment carries no env value / Secret reference; the
+#                   SecretProviderClass syncs nothing into a Secret
+#   c. Entra +      a TokenRequest for nightly-report (aud AzureADTokenExchange,
+#      Key Vault    10 min) is exchanged by Entra for a Key Vault token of
+#                   this app only; it reads clinical-db (sha256 = current), and
+#                   Key Vault refuses it the decoy in the SAME vault, a write
+#                   and a list (403, RBAC); Entra refuses unapproved-job's
+#                   token and nightly-report's default-audience token; the
+#                   API server refuses the exchange-audience token (401)
+#                   while accepting a default-audience one
+#   d. binding      identity is namespace + name, not a name: a service
+#                   account called nightly-report in another namespace
 #                   (other-team, a fixture created and deleted here) is
-#                   refused by Vault; a token dies with its service account
-#                   (deleted and recreated under the same name -> 401)
+#                   refused by Entra; a token dies with its service account
+#                   at the API server (deleted and recreated -> 401); a REAL
+#                   pod running as unapproved-job that names the same
+#                   SecretProviderClass never gets the file (Entra refuses
+#                   the driver's token for it)
 #   e. no static    the value is in no Secret / ConfigMap / Deployment /
 #      secret       ReplicaSet / Pod in clinical-apps (plain, base64, decoded);
 #                   no legacy service-account token Secrets; both service
@@ -52,34 +58,33 @@
 #                   RoleBinding patch (+ User mallory, by the kind admin, with
 #                   bodies) and Terraform's revert; the VAP's write
 #
-# Never as root for Vault: the pipeline starts this script without the Vault
-# root token in its environment, and the script unsets VAULT_TOKEN anyway.
-# Every Vault assertion uses the token the WORKLOAD gets from its own
-# Kubernetes login. (Kubernetes fixtures and server-side dry runs use the
-# kind admin's kubeconfig, as a cluster operator would; RBAC assertions
-# impersonate the identity under test.)
+# Never as the operator for Entra or Key Vault: the script uses no az and no
+# operator credential. Every Entra and Key Vault assertion uses the token the
+# WORKLOAD gets by exchanging its own service-account token. (Kubernetes
+# fixtures and server-side dry runs use the kind admin's kubeconfig, as a
+# cluster operator would; RBAC assertions impersonate the identity under
+# test.)
 #
 # The secret value is never printed. Its hash is compared inside the pod; the
-# copy read back over the workload's Vault login (to search the namespace's
-# objects for it) only lives in a shell variable. JWTs and Vault tokens travel
-# in 0600 files / stdin, never on a command line, and command output echoed as
-# evidence passes through redact first (a regression that lets the deployer
-# mint a token would otherwise print that token).
+# copy read back over the workload's own Key Vault token (to search the
+# namespace's objects for it) only lives in a shell variable. JWTs and access
+# tokens travel in 0600 files / stdin, never on a command line, and command
+# output echoed as evidence passes through redact first.
 #
 # Negative checks cannot pass by accident: a "denied" must be the server's
-# own Forbidden / 403 / 400 naming the reason, not a connection error. Each
-# block also has a positive control (the same role logs in; the same group
-# CAN do its allowed action) run against the same cluster first.
+# own Forbidden / 403 / 400 naming the reason (an Entra AADSTS code, Key
+# Vault's ForbiddenByRbac), not a connection error. Each block also has a
+# positive control (the same exchange works for nightly-report; the same
+# group CAN do its allowed action) run against the same cluster first.
 #
 # Usage: lab/k8s/test/k8s-e2e.sh
-#   K8S_E2E_SEED_SHA256_FILE  sha256 of the CURRENT clinical/data/db value
-#                             (set by pipeline.sh, which rewrites it after the
-#                             stage-9 rotation; default
-#                             lab/k8s/ci/.state/seed.sha256, kept when the
-#                             pipeline ran with KEEP_CLUSTER=1)
-#   Run standalone on a kept cluster, section (h) expects the audit trail of
-#   the pipeline's drift drill (stage 10) from that run.
-#   VAULT_ADDR                default http://127.0.0.1:18200
+#   K8S_E2E_SEED_SHA256_FILE  sha256 of the CURRENT clinical-db value (set by
+#                             pipeline.sh, which rewrites it after the stage-9
+#                             rotation; default lab/k8s/ci/.state/seed.sha256)
+#   lab/k8s/ci/.state/run.env this run's tenant, client id and vault name
+#                             (identifiers only; written by pipeline stage 4)
+#   Run standalone on a kept cluster (KEEP_CLUSTER=1), section (h) expects
+#   the audit trail of the pipeline's drift drill (stage 10) from that run.
 # Prints PASS/FAIL per assertion; last line "K8S E2E PASSED (n/n)", else exit 1.
 # =============================================================================
 # shellcheck source-path=SCRIPTDIR
@@ -87,7 +92,10 @@
 source "$(dirname "${BASH_SOURCE[0]}")/../ci/lib.sh"
 need kubectl; need jq; need curl; need docker; need base64
 
-unset VAULT_TOKEN   # see header: never as root
+load_run_env || die "no $RUN_ENV - run lab/k8s/ci/pipeline.sh (KEEP_CLUSTER=1 keeps a cluster you can re-test)"
+[[ -n "${WORKLOAD_CLIENT_ID:-}" && -n "${AZ_TENANT_ID:-}" && -n "${KV_NAME:-}" && -n "${SA_ISSUER:-}" ]] \
+  || die "$RUN_ENV is incomplete (stage 4 did not finish)"
+KV_URL="https://$KV_NAME.vault.azure.net"
 
 SEED_FILE="${K8S_E2E_SEED_SHA256_FILE:-$STATE_DIR/seed.sha256}"
 [[ -s "$SEED_FILE" ]] || die "no seed hash at $SEED_FILE - run lab/k8s/ci/pipeline.sh (KEEP_CLUSTER=1 keeps a cluster you can re-test)"
@@ -97,12 +105,14 @@ SEED_SHA=$(tr -d ' \r\n' < "$SEED_FILE")
 T=$(mktemp -d "${TMPDIR:-/tmp}/k8s-e2e.XXXXXX")
 DB_VALUE=""
 JWT_OLD=""
+THIEF_EVENT=""
 # Section (d)'s fixture namespace. Created and deleted by this script; the
 # EXIT trap removes it too if the script dies in between.
 OTHER_NS=other-team
 OTHER_NS_CREATED=0
 cleanup() {
   DB_VALUE=""; JWT_OLD=""
+  k -n "$APP_NS" delete pod e2e-spc-borrow --ignore-not-found --wait=false >/dev/null 2>&1 || true
   if [[ "$OTHER_NS_CREATED" == 1 ]]; then
     k delete namespace "$OTHER_NS" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   fi
@@ -139,10 +149,10 @@ abort() { fail "$*"; printf '\nK8S E2E ABORTED (%d failure(s))\n' "$FAILS"; exit
 step()  { printf '\n'; log "== $*"; }
 info()  { printf '%s\n' "$*" | indent; }   # evidence lines - never a secret
 # Belt and braces for echoed command output: JWTs (header.payload.signature,
-# base64url, the header always starts eyJ) and Vault service/batch tokens.
+# base64url, the header always starts eyJ) - service-account tokens and
+# Entra access tokens alike.
 redact() {
-  sed -E -e 's/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/<jwt redacted>/g' \
-         -e 's/hv[sb]\.[A-Za-z0-9_-]{20,}/<vault token redacted>/g'
+  sed -E -e 's/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/<jwt redacted>/g'
 }
 
 expect_ok() { # expect_ok DESC CMD... : must exit 0
@@ -218,20 +228,26 @@ find_pod() { # newest Ready, not-terminating nightly-report pod -> $POD
 
 pod_exec() { k -n "$APP_NS" exec "$POD" -c "$WORKLOAD_CTR" -- "$@"; }
 
-sidecar_injected() {
+nothing_injected() {
+  # The CSI driver adds no container: the pod runs exactly what the
+  # Deployment declares (one app container, no init containers).
   local cs ics
   cs=$(jq -r '[.spec.containers[].name] | join(",")' "$T/pod.json")
   ics=$(jq -r '[.spec.initContainers[]?.name] | join(",")' "$T/pod.json")
-  info "pod $POD containers=[$cs] initContainers=[$ics]"
-  jq -e '[.spec.containers[].name] | index("vault-agent") != null' "$T/pod.json" >/dev/null
+  info "pod $POD containers=[$cs] initContainers=[${ics}]"
+  [[ "$cs" == "$WORKLOAD_CTR" && -z "$ics" ]]
+}
+
+csi_volume_mounted() {
+  jq -e --arg spc "$SPC_NAME" '[.spec.volumes[]? | select(.csi.driver == "secrets-store.csi.k8s.io"
+      and .csi.volumeAttributes.secretProviderClass == $spc)] | length == 1' "$T/pod.json" >/dev/null
 }
 
 rendered_file_matches() {
-  # Hashed INSIDE the app container: the value never crosses kubectl. tr drops
-  # a trailing newline in case a template adds one; the seed has none.
+  # Hashed INSIDE the app container: the value never crosses kubectl.
   local got
-  got=$(pod_exec sh -c 'test -s /vault/secrets/db && tr -d "\r\n" < /vault/secrets/db | sha256sum' 2>/dev/null | awk '{print $1}') || return 1
-  info "in-pod sha256 ${got:0:12}...  seeded ${SEED_SHA:0:12}...  (value not printed)"
+  got=$(pod_exec sh -c "test -s $MOUNTED_FILE && tr -d '\\r\\n' < $MOUNTED_FILE | sha256sum" 2>/dev/null | awk '{print $1}') || return 1
+  info "in-pod sha256 ${got:0:12}...  current ${SEED_SHA:0:12}...  (value not printed)"
   [[ -n "$got" && "$got" == "$SEED_SHA" ]]
 }
 
@@ -242,16 +258,21 @@ app_has_no_kube_token() {
   pod_exec sh -c 'test ! -e /var/run/secrets/kubernetes.io/serviceaccount/token && echo absent' 2>/dev/null | grep -qx absent
 }
 
-only_agent_holds_vault_token() {
-  local mp
-  mp=$(jq -r '[.spec.containers[] | select(.name == "vault-agent") | .volumeMounts[]? | select(.name == "vault-token") | .mountPath] | first // empty' "$T/pod.json")
-  info "vault-token: projected, audience=$(jq -r '[.spec.volumes[]? | select(.name == "vault-token") | .projected.sources[]?.serviceAccountToken | select(. != null)] | first | "\(.audience), expirationSeconds=\(.expirationSeconds)"' "$T/pod.json"); vault-agent mounts it at ${mp:-?}"
-  jq -e --arg app "$WORKLOAD_CTR" '
-    ([.spec.volumes[]? | select(.name == "vault-token") | .projected.sources[]?.serviceAccountToken
-      | select(. != null and .audience == "vault" and .expirationSeconds <= 600)] | length == 1)
-    and ([.spec.containers[] | select(.name == "vault-agent") | .volumeMounts[]? | select(.name == "vault-token")] | length >= 1)
-    and ([.spec.containers[] | select(.name == $app) | .volumeMounts[]? | select(.name == "vault-token")] | length == 0)' \
-    "$T/pod.json" >/dev/null
+pod_holds_no_token() {
+  # No projected service-account token volume at all: the CSI driver gets
+  # the pod's token from the kubelet and hands it only to the provider.
+  local n
+  n=$(jq '[.spec.volumes[]? | .projected.sources[]?.serviceAccountToken | select(. != null)] | length' "$T/pod.json")
+  info "projected serviceAccountToken volumes in the pod spec: $n"
+  [[ "$n" == 0 ]]
+}
+
+spc_syncs_nothing() {
+  local spc
+  spc=$(k -n "$APP_NS" get secretproviderclass "$SPC_NAME" -o json) || return 1
+  info "SecretProviderClass $SPC_NAME: provider=$(jq -r '.spec.provider' <<<"$spc") usePodIdentity=$(jq -r '.spec.parameters.usePodIdentity' <<<"$spc") clientID=$(jq -r '.spec.parameters.clientID[0:8]' <<<"$spc")... secretObjects=$(jq '.spec.secretObjects // [] | length' <<<"$spc")"
+  jq -e --arg c "$WORKLOAD_CLIENT_ID" '(.spec.secretObjects // [] | length) == 0 and .spec.parameters.usePodIdentity == "false"
+    and .spec.parameters.clientID == $c' <<<"$spc" >/dev/null
 }
 
 deployment_has_no_static_secret() {
@@ -263,7 +284,7 @@ deployment_has_no_static_secret() {
       and ($s.automountServiceAccountToken == false)' "$T/deploy.json" >/dev/null
 }
 
-# --- Vault helpers ---------------------------------------------------------------------
+# --- Entra + Key Vault helpers -----------------------------------------------------------
 mint_token_ns() { # mint_token_ns NAMESPACE SA [AUDIENCE] -> JWT on stdout (captured, never printed)
   if [[ -n "${3:-}" ]]; then
     k -n "$1" create token "$2" --audience "$3" --duration 10m
@@ -274,30 +295,122 @@ mint_token_ns() { # mint_token_ns NAMESPACE SA [AUDIENCE] -> JWT on stdout (capt
 
 mint_token() { mint_token_ns "$APP_NS" "$@"; }   # mint_token SA [AUDIENCE], in clinical-apps
 
-jwt_claims() { # printf '%s' JWT | jwt_claims -> payload JSON (base64url; the signature is Vault's TokenReview's job)
+jwt_claims() { # printf '%s' JWT | jwt_claims -> payload JSON (base64url; checking the signature is Entra's job)
   jq -R 'split(".")[1] | gsub("-"; "+") | gsub("_"; "/") | . + ("=" * ((4 - length % 4) % 4)) | @base64d | fromjson'
 }
 
-vault_login() { # vault_login ROLE JWT -> LOGIN_CODE, LOGIN_TOKEN ("" if none); body in $T/login.json
-  # jq builds the body from stdin (-R): the JWT is never an argument.
-  printf '%s' "$2" | jq -Rc --arg role "$1" '{role: $role, jwt: .}' > "$T/login-req.json"
-  LOGIN_CODE=$(vault_http POST auth/kubernetes/login "$T/login.json" "" "$T/login-req.json")
-  rm -f "$T/login-req.json"
-  LOGIN_TOKEN=$(jq -r '.auth.client_token // empty' "$T/login.json" 2>/dev/null || true)
+entra_exchange() { # entra_exchange JWT -> EX_CODE; body in $T/ex.json; on success the bearer header in $T/kv.hdr
+  # OAuth 2.0 client credentials with a federated client assertion (Microsoft
+  # Learn, "Microsoft identity platform and the OAuth 2.0 client credentials
+  # flow", third case: federated credential). The body goes on stdin: the JWT
+  # is never an argument. client_id is the app's id, not a secret.
+  rm -f "$T/kv.hdr"
+  EX_CODE=$(printf 'grant_type=client_credentials&client_id=%s&scope=%s&client_assertion_type=%s&client_assertion=%s' \
+      "$WORKLOAD_CLIENT_ID" "https%3A%2F%2Fvault.azure.net%2F.default" \
+      "urn%3Aietf%3Aparams%3Aoauth%3Aclient-assertion-type%3Ajwt-bearer" "$1" \
+    | https_status POST "https://login.microsoftonline.com/$AZ_TENANT_ID/oauth2/v2.0/token" "$T/ex.json" "" - \
+        application/x-www-form-urlencoded)
+  local at
+  at=$(jq -r '.access_token // empty' "$T/ex.json" 2>/dev/null || true)
+  if [[ -n "$at" ]]; then
+    printf 'Authorization: Bearer %s\n' "$at" > "$T/kv.hdr"
+    printf '%s' "$at" | jwt_claims > "$T/at-claims.json" 2>/dev/null || true
+  fi
+  at=""
+  jq 'del(.access_token)' "$T/ex.json" > "$T/ex.safe.json" 2>/dev/null || true
+  rm -f "$T/ex.json"
 }
 
-login_denied() { # login_denied ROLE JWT CLAIMS_FILTER : Vault answers 400/403 with an error and issues no token
-  # The token must exist and carry exactly the claims under test (jq filter),
-  # so the refusal is about that ONE difference from the positive control -
-  # an empty or malformed JWT ("missing jwt") would otherwise "pass".
+entra_error() { # -> the AADSTS code and the first words of Entra's error (never secret)
+  jq -r '"\(.error // "?") \((.error_description // "") | capture("(?<c>AADSTS[0-9]+)").c // "") \((.error_description // "") | split("\r\n")[0] | .[0:110])"' \
+    "$T/ex.safe.json" 2>/dev/null || echo "(no JSON body)"
+}
+
+claims_ok() {
   local c
-  [[ -n "$2" ]] || { info "no token was minted"; return 1; }
-  c=$(printf '%s' "$2" | jwt_claims) || return 1
+  c=$(printf '%s' "$JWT_EX" | jwt_claims) || return 1
+  info "$(jq -r '"iss=\(.iss) aud=\(.aud | join(",")) sub=\(.sub) lifetime=\(.exp - .iat)s"' <<<"$c")"
+  jq -e --arg iss "$SA_ISSUER" --arg aud "$EXCHANGE_AUDIENCE" \
+    '.iss == $iss and .aud == [$aud] and .sub == "system:serviceaccount:clinical-apps:nightly-report" and (.exp - .iat) <= 600' <<<"$c" >/dev/null
+}
+
+exchange_ok() {
+  entra_exchange "$JWT_EX"
+  if [[ "$EX_CODE" != 200 || ! -s "$T/kv.hdr" ]]; then
+    info "Entra: HTTP $EX_CODE $(entra_error)"
+    return 1
+  fi
+  info "Entra: HTTP 200, token_type=$(jq -r '.token_type' "$T/ex.safe.json"), expires_in=$(jq -r '.expires_in' "$T/ex.safe.json")s"
+}
+
+access_token_scoped() {
+  # The claims of the Entra access token (its payload only; the token itself
+  # is never printed): for Key Vault, issued to THIS app, in THIS tenant.
+  [[ -s "$T/at-claims.json" ]] || return 1
+  info "$(jq -r '"aud=\(.aud) appid=\(.appid // .azp | .[0:8])... tid=\(.tid | .[0:8])... idtyp=\(.idtyp // "?") lifetime=\(.exp - .iat)s"' "$T/at-claims.json")"
+  # aud: a v1 token names Key Vault by URL; a v2 token (what the lab tenant
+  # issued in the first live run, 2026-11-07) by the application id of
+  # Microsoft's "Azure Key Vault" first-party app, cfa8b339-82a2-471a-a3c9-0fc0be7a4093.
+  jq -e --arg c "$WORKLOAD_CLIENT_ID" --arg t "$AZ_TENANT_ID" \
+    '(.aud == "https://vault.azure.net" or .aud == "https://vault.azure.net/" or .aud == "cfa8b339-82a2-471a-a3c9-0fc0be7a4093")
+     and ((.appid // .azp) == $c) and .tid == $t and (.exp - .iat) > 0' \
+    "$T/at-claims.json" >/dev/null
+}
+
+kv() { # kv METHOD PATH [BODY_FILE|-] -> HTTP status, as the WORKLOAD's Key Vault token; body in $T/kv.json
+  https_status "$1" "$KV_URL/$2?api-version=$KV_API_VERSION" "$T/kv.json" "$T/kv.hdr" "${3:-}"
+}
+
+kv_error() { jq -r '"\(.error.code // "?")/\(.error.innererror.code // "-")"' "$T/kv.json" 2>/dev/null || echo "(no JSON body)"; }
+
+read_db_ok() {
+  local code got
+  [[ -s "$T/kv.hdr" ]] || return 1
+  code=$(kv GET "secrets/$SECRET_NAME")
+  DB_VALUE=$(jq -r '.value // empty' "$T/kv.json" 2>/dev/null || true)
+  rm -f "$T/kv.json"
+  [[ "$code" == 200 && -n "$DB_VALUE" ]] || { info "Key Vault: HTTP $code"; return 1; }
+  got=$(printf '%s' "$DB_VALUE" | sha256_stdin)
+  info "GET secrets/$SECRET_NAME -> HTTP 200; sha256 ${got:0:12}... (current ${SEED_SHA:0:12}..., value not printed)"
+  [[ "$got" == "$SEED_SHA" ]]
+}
+
+kv_denied() { # kv_denied METHOD PATH [BODY_FILE|-] : a WORKING workload token gets 403 from Azure RBAC
+  # A dead or wrong-audience token is refused with 401, so a 403 here is
+  # Key Vault's authorization saying no; the positive read must still work.
+  local code
+  [[ -s "$T/kv.hdr" && "$(kv GET "secrets/$SECRET_NAME")" == 200 ]] || { info "workload token not usable"; return 1; }
+  rm -f "$T/kv.json"
+  code=$(kv "$@")
+  info "$1 $2 -> HTTP $code $(kv_error)"
+  jq -r '.value // empty' "$T/kv.json" 2>/dev/null | grep -q . && { info "a value came back"; return 1; }
+  [[ "$code" == 403 ]] && grep -q 'Forbidden' "$T/kv.json"
+}
+
+write_denied() { printf '{"value":"e2e-overwrite-attempt"}' | kv_denied PUT "secrets/$SECRET_NAME" -; }
+
+# Entra's refusal codes for a federated credential that does not match
+# (seen in the 2026-11-07 run): the subject (namespace:name) -> 700213, the
+# audience -> 700212. A check accepts ONLY its own code: an expired assertion
+# or a failed issuer lookup is a different AADSTS code and must not pass as
+# proof of the refusal under test.
+AADSTS_SUBJECT=AADSTS700213
+AADSTS_AUDIENCE=AADSTS700212
+
+exchange_denied() { # exchange_denied JWT CLAIMS_FILTER EXPECTED_AADSTS : Entra answers 400/401 with exactly that code and issues no token
+  # The token must exist and carry exactly the claims under test (jq filter),
+  # so the refusal is about that ONE difference from the positive control.
+  local c
+  [[ -n "$1" ]] || { info "no token was minted"; return 1; }
+  c=$(printf '%s' "$1" | jwt_claims) || return 1
   info "presented: $(jq -r '"aud=\(.aud | join(",")) sub=\(.sub)"' <<<"$c")"
-  jq -e "$3" <<<"$c" >/dev/null || { info "token claims are not the ones under test"; return 1; }
-  vault_login "$1" "$2"
-  info "Vault: HTTP $LOGIN_CODE $(vault_errors "$T/login.json")"
-  [[ ( "$LOGIN_CODE" == 400 || "$LOGIN_CODE" == 403 ) && -z "$LOGIN_TOKEN" ]]
+  jq -e "$2" <<<"$c" >/dev/null || { info "token claims are not the ones under test"; return 1; }
+  entra_exchange "$1"
+  info "Entra: HTTP $EX_CODE $(entra_error)"
+  [[ -n "${3:-}" ]] || { info "no expected AADSTS code given"; return 1; }
+  [[ ( "$EX_CODE" == 400 || "$EX_CODE" == 401 ) && ! -s "$T/kv.hdr" ]] || return 1
+  grep -qE "(^|[^0-9A-Za-z])$3([^0-9]|$)" "$T/ex.safe.json" \
+    || { info "refused, but not with $3 (a different failure is not this proof)"; return 1; }
 }
 
 api_endpoint() { # -> API_SERVER (URL) + $T/api-ca.crt, from the kind context (only those two fields are read)
@@ -317,107 +430,51 @@ api_status() { # api_status JWT -> HTTP status of GET $API_SERVER/api with that 
   rm -f "$T/api.hdr"
 }
 
-api_rejects_vault_audience() {
+api_rejects_exchange_audience() {
   # GET /api is open to every AUTHENTICATED identity (ClusterRole
   # system:discovery), so the status code is purely the authentication result:
   # 200 = the API server accepted the token, 401 = it did not.
   # Positive control first: a default-audience token for the same SA -> 200.
-  local jwt_api jwt_vault code_api code_vault
+  local jwt_api jwt_ex code_api code_ex
   api_endpoint || { info "API server URL / CA not found in context $KUBE_CONTEXT"; return 1; }
   jwt_api=$(mint_token nightly-report 2>/dev/null) || jwt_api=""
-  jwt_vault=$(mint_token nightly-report vault 2>/dev/null) || jwt_vault=""
-  [[ -n "$jwt_api" && -n "$jwt_vault" ]] || { info "could not mint the two tokens"; return 1; }
+  jwt_ex=$(mint_token nightly-report "$EXCHANGE_AUDIENCE" 2>/dev/null) || jwt_ex=""
+  [[ -n "$jwt_api" && -n "$jwt_ex" ]] || { info "could not mint the two tokens"; return 1; }
   code_api=$(api_status "$jwt_api")
-  code_vault=$(api_status "$jwt_vault")
-  jwt_api=""; jwt_vault=""
-  info "GET $API_SERVER/api as nightly-report: default-audience token -> HTTP $code_api; aud=vault token -> HTTP $code_vault"
-  [[ "$code_api" == 200 && "$code_vault" == 401 ]]
+  code_ex=$(api_status "$jwt_ex")
+  jwt_api=""; jwt_ex=""
+  info "GET $API_SERVER/api as nightly-report: default-audience token -> HTTP $code_api; aud=$EXCHANGE_AUDIENCE token -> HTTP $code_ex"
+  [[ "$code_api" == 200 && "$code_ex" == 401 ]]
 }
 
-wl() { # wl METHOD PATH [BODY_FILE|-] -> HTTP status, as the WORKLOAD's Vault token; body in $T/wl.json
-  vault_http "$1" "$2" "$T/wl.json" "$T/wl.hdr" "${3:-}"
+# --- platform helpers ----------------------------------------------------------------------
+csidriver_one_audience() {
+  local aud
+  aud=$(k get csidriver secrets-store.csi.k8s.io -o json | jq -c '[.spec.tokenRequests[]?.audience]') || return 1
+  info "CSIDriver secrets-store.csi.k8s.io tokenRequests audiences=$aud"
+  [[ "$aud" == "[\"$EXCHANGE_AUDIENCE\"]" ]]
 }
 
-vault_healthy_pinned() {
-  local code
-  code=$(vault_http GET sys/health "$T/health.json")
-  info "GET $VAULT_ADDR/v1/sys/health -> $code $(jq -c '{initialized, sealed, version}' "$T/health.json" 2>/dev/null)"
-  [[ "$code" == 200 ]] && jq -e '.initialized == true and .sealed == false' "$T/health.json" >/dev/null
+csidriver_token_lifetime() {
+  # The lifetime the CSI driver itself requests for the pod's token: the live
+  # CSIDriver object, not a token this test mints with --duration.
+  local exp
+  exp=$(k get csidriver secrets-store.csi.k8s.io -o json | jq -c '[.spec.tokenRequests[]?.expirationSeconds]') || return 1
+  info "CSIDriver secrets-store.csi.k8s.io tokenRequests expirationSeconds=$exp"
+  [[ "$exp" == "[600]" ]]
 }
 
-vault_version_pinned() { jq -e '.version | startswith("2.1.1")' "$T/health.json" >/dev/null 2>&1; }
-
-claims_ok() {
-  local c
-  c=$(printf '%s' "$JWT_VAULT" | jwt_claims) || return 1
-  info "$(jq -r '"aud=\(.aud | join(",")) sub=\(.sub) lifetime=\(.exp - .iat)s"' <<<"$c")"
-  jq -e '.aud == ["vault"] and .sub == "system:serviceaccount:clinical-apps:nightly-report" and (.exp - .iat) <= 600' <<<"$c" >/dev/null
-}
-
-login_ok() {
-  vault_login nightly-report "$JWT_VAULT"
-  if [[ "$LOGIN_CODE" != 200 || -z "$LOGIN_TOKEN" ]]; then
-    info "Vault: HTTP $LOGIN_CODE $(vault_errors "$T/login.json")"
-    return 1
-  fi
-  printf 'X-Vault-Token: %s\n' "$LOGIN_TOKEN" > "$T/wl.hdr"
-  LOGIN_TOKEN=""
-  info "$(jq -r '.auth | "policies=\(.token_policies | join(",")) lease=\(.lease_duration)s sa=\(.metadata.service_account_namespace)/\(.metadata.service_account_name)"' "$T/login.json")"
-}
-
-wl_lookup() { [[ -s "$T/wl.hdr" && "$(wl GET auth/token/lookup-self)" == 200 ]] && cp "$T/wl.json" "$T/lookup.json"; }
-
-policies_minimal() {
-  [[ -s "$T/lookup.json" ]] || return 1
-  info "token policies: $(jq -r '.data.policies | join(",")' "$T/lookup.json")"
-  jq -e '(.data.policies - ["default"]) == ["nightly-report-read"]' "$T/lookup.json" >/dev/null
-}
-
-ttl_bounded() {
-  [[ -s "$T/lookup.json" ]] || return 1
-  info "$(jq -r '.data | "ttl=\(.ttl)s creation_ttl=\(.creation_ttl)s renewable=\(.renewable)"' "$T/lookup.json")"
-  jq -e '.data.ttl > 0 and .data.ttl <= 900 and .data.creation_ttl <= 900' "$T/lookup.json" >/dev/null
-}
-
-read_db_ok() {
-  local code got
-  [[ -s "$T/wl.hdr" ]] || return 1
-  code=$(wl GET clinical/data/db)
-  DB_VALUE=$(jq -r '.data.data.password // empty' "$T/wl.json" 2>/dev/null || true)
-  rm -f "$T/wl.json"
-  [[ "$code" == 200 && -n "$DB_VALUE" ]] || { info "Vault: HTTP $code"; return 1; }
-  got=$(printf '%s' "$DB_VALUE" | sha256_stdin)
-  info "HTTP 200; sha256 ${got:0:12}... (seeded ${SEED_SHA:0:12}..., value not printed)"
-  [[ "$got" == "$SEED_SHA" ]]
-}
-
-wl_status_is() { # wl_status_is WANT METHOD PATH [BODY_FILE|-]
-  local want="$1" code; shift
-  [[ -s "$T/wl.hdr" ]] || return 1
-  code=$(wl "$@")
-  info "$1 $2 -> HTTP $code $(vault_errors "$T/wl.json")"
-  [[ "$code" == "$want" ]]
-}
-
-wl_denied() { # wl_denied METHOD PATH [BODY_FILE|-] : a LIVE workload token gets 403 "permission denied" (policy, not auth)
-  # A dead/invalid token is refused with 403 too, so prove the token still
-  # works (lookup-self 200) before reading a 403 as "the policy said no".
-  local code
-  [[ -s "$T/wl.hdr" && "$(wl GET auth/token/lookup-self)" == 200 ]] || { info "workload token not usable"; return 1; }
-  code=$(wl "$@")
-  info "$1 $2 -> HTTP $code $(vault_errors "$T/wl.json")"
-  [[ "$code" == 403 ]] && grep -qi 'permission denied' "$T/wl.json"
-}
-
-write_denied() { printf '{"data":{"password":"e2e-overwrite-attempt"}}' | wl_denied POST clinical/data/db -; }
-
-revoke_and_refused() {
-  [[ -s "$T/wl.hdr" ]] || return 1
-  local code
-  code=$(wl POST auth/token/revoke-self)
-  info "POST auth/token/revoke-self -> HTTP $code"
-  [[ "$code" == 204 ]] || return 1
-  wl_status_is 403 GET auth/token/lookup-self
+issuer_published() {
+  # What Entra fetches, fetched the same way (anonymous HTTPS), must be the
+  # API server's own documents byte for byte.
+  local p want got ok=0
+  for p in .well-known/openid-configuration openid/v1/jwks; do
+    want=$(k get --raw "/$p" | sha256_stdin) || return 1
+    got=$(curl -fsS --max-time 20 "$SA_ISSUER/$p" 2>/dev/null | sha256_stdin) || got=""
+    info "$SA_ISSUER/$p: public sha256 ${got:0:12}..., API server ${want:0:12}..."
+    [[ -n "$got" && "$got" == "$want" ]] || ok=1
+  done
+  return "$ok"
 }
 
 # --- binding helpers: namespace + object, not a name -------------------------------------
@@ -472,6 +529,57 @@ token_dies_with_sa() {
   [[ "$code" == 200 ]]
 }
 
+# A REAL pod, not a dry run: unapproved-job runs the approved image and names
+# nightly-report's SecretProviderClass. The CSI driver asks for a token for
+# THIS pod's service account, so Entra must refuse it and the kubelet never
+# starts the container. Created by the kind admin (the pipeline identity):
+# admission admits it (only nightly-report is bound to the launcher), which
+# is the point - naming the class is not enough.
+THIEF_POD=e2e-spc-borrow
+THIEF_UID=""
+thief_pod_up() {
+  k -n "$APP_NS" delete pod "$THIEF_POD" --ignore-not-found --wait=true >/dev/null 2>&1 || true
+  jq -n --arg n "$THIEF_POD" --arg img "$APP_IMAGE" --arg spc "$SPC_NAME" --arg ns "$APP_NS" '{
+    apiVersion: "v1", kind: "Pod",
+    metadata: {name: $n, namespace: $ns, labels: {"app.kubernetes.io/name": "e2e-spc-borrow"}},
+    spec: {serviceAccountName: "unapproved-job", automountServiceAccountToken: false, enableServiceLinks: false,
+      terminationGracePeriodSeconds: 0,
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: "RuntimeDefault"}},
+      containers: [{name: "probe", image: $img, command: ["sleep", "3600"],
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}},
+        volumeMounts: [{name: "secrets-store", mountPath: "/mnt/secrets-store", readOnly: true}]}],
+      volumes: [{name: "secrets-store", csi: {driver: "secrets-store.csi.k8s.io", readOnly: true,
+        volumeAttributes: {secretProviderClass: $spc}}}]}}' | k create -f - >/dev/null || return 1
+  # The pod name is reused on every run, so events are matched by THIS pod's
+  # UID: an older pod's refusal on a kept cluster must not count.
+  THIEF_UID=$(k -n "$APP_NS" get pod "$THIEF_POD" -o jsonpath='{.metadata.uid}' 2>/dev/null) || THIEF_UID=""
+  [[ -n "$THIEF_UID" ]]
+}
+
+thief_mount_failed() {
+  [[ -n "${THIEF_UID:-}" ]] || return 1
+  THIEF_EVENT=$(k -n "$APP_NS" get events --field-selector "involvedObject.uid=$THIEF_UID,reason=FailedMount" -o json 2>/dev/null \
+    | jq -r '[.items[].message | select(test("AADSTS"))] | last // empty | capture("(?<c>AADSTS[0-9]+)[^.]*\\.?").c // empty') || THIEF_EVENT=""
+  # Only the subject-mismatch refusal proves "this SA may not borrow the
+  # credential"; any other Entra error keeps waiting (and fails at 120 s).
+  [[ "$THIEF_EVENT" == "$AADSTS_SUBJECT" ]]
+}
+
+spc_borrow_refused() {
+  local phase ready
+  thief_pod_up || { info "could not create pod $THIEF_POD"; return 1; }
+  if ! wait_until 120 thief_mount_failed; then
+    info "no FailedMount event with an Entra error for $THIEF_POD within 120 s"
+    k -n "$APP_NS" delete pod "$THIEF_POD" --wait=false >/dev/null 2>&1 || true
+    return 1
+  fi
+  phase=$(k -n "$APP_NS" get pod "$THIEF_POD" -o jsonpath='{.status.phase}' 2>/dev/null) || phase=""
+  ready=$(k -n "$APP_NS" get pod "$THIEF_POD" -o json | jq -r '[.status.containerStatuses[]?.started // false] | any')
+  info "pod $THIEF_POD (SA unapproved-job, same image, same SecretProviderClass): phase=$phase started=$ready; FailedMount: Entra $THIEF_EVENT"
+  k -n "$APP_NS" delete pod "$THIEF_POD" --wait=true --timeout=60s >/dev/null 2>&1 || true
+  [[ "$phase" == Pending && "$ready" == false ]]
+}
+
 fixture_ns_down() {
   k delete namespace "$OTHER_NS" --wait=true --timeout=120s >/dev/null 2>&1 || return 1
   OTHER_NS_CREATED=0
@@ -481,7 +589,7 @@ fixture_ns_down() {
 
 # --- "no static secret" helpers ---------------------------------------------------------
 value_absent_everywhere() {
-  [[ -n "$DB_VALUE" ]] || { info "no value to search for (the workload's Vault read failed)"; return 1; }
+  [[ -n "$DB_VALUE" ]] || { info "no value to search for (the workload's Key Vault read failed)"; return 1; }
   local raw decoded b64 counts
   raw=$(k -n "$APP_NS" get secrets,configmaps,deployments,replicasets,pods -o json) || return 1
   # Secret data is base64: search the decoded values too, in case the value
@@ -660,7 +768,7 @@ vap_installed() {
   jq -e --arg ns "$APP_NS" '[.. | strings] | index($ns) != null' <<<"[$p,$b]" >/dev/null
 }
 
-pod_images_pinned() { # every image the RUNNING pod runs - the app and the injected agent - is digest-pinned
+pod_images_pinned() { # every image the RUNNING pod runs is digest-pinned
   info "$(jq -r '[(.spec.initContainers // [])[], .spec.containers[] | "\(.name): \(.image | split("@sha256:")
     | if length == 2 then "\(.[0])@sha256:\(.[1][0:12])..." else .[0] + "  (NO DIGEST)" end)"] | join("\n")' "$T/pod.json")"
   jq -e '[(.spec.initContainers // [])[], .spec.containers[] | .image | contains("@sha256:")] | all' "$T/pod.json" >/dev/null
@@ -696,7 +804,7 @@ deployer_patch_image() { deployer_patch_app image "$(jq -nc --arg i "$OTHER_IMAG
 
 # The SAME approved image, a different command: print the rendered file into
 # pods/log, which the deployer may read. Only the launcher rule can see this.
-deployer_patch_command() { deployer_patch_app args '["cat /vault/secrets/db; sleep 3600"]'; }
+deployer_patch_command() { deployer_patch_app args '["cat /mnt/secrets-store/db; sleep 3600"]'; }
 
 sa_move_patch() { # sa_move_patch SA -> JSON patch: nightly-report's pod template to SA, with a new command
   jq -nc --arg c "$WORKLOAD_CTR" --arg sa "$1" '[
@@ -730,11 +838,11 @@ no_cluster_bindings_for_groups() {
 ns_label() { k get namespace "$1" -o json | jq -r --arg l "pod-security.kubernetes.io/$2" '.metadata.labels[$l] // "unset"'; }
 
 psa_labels_ok() {
-  local a e w v
+  local a e w v x
   e=$(ns_label "$APP_NS" enforce); w=$(ns_label "$APP_NS" warn); a=$(ns_label "$APP_NS" audit)
-  v=$(ns_label "$VAULT_NS" enforce)
-  info "$APP_NS enforce=$e warn=$w audit=$a; $VAULT_NS enforce=$v"
-  [[ "$e" == restricted && "$w" == restricted && "$a" == restricted && "$v" == baseline ]]
+  v=$(ns_label "$CSI_NS" enforce); x=$(ns_label "$CSI_NS" warn)
+  info "$APP_NS enforce=$e warn=$w audit=$a; $CSI_NS enforce=$v warn=$x (CSI node plugin)"
+  [[ "$e" == restricted && "$w" == restricted && "$a" == restricted && "$v" == privileged && "$x" == baseline ]]
 }
 
 # --- audit helpers --------------------------------------------------------------------------
@@ -767,9 +875,11 @@ audit_sensitive_metadata_only() {
   # Every Secret, TokenRequest (serviceaccounts/token: the RESPONSE is a JWT)
   # and TokenReview (the REQUEST carries a bearer token) event in the log:
   # level must be Metadata and no event may carry a request/response body.
-  # Each kind must also occur at least once (the run made all three: the
-  # deployer's Secret probe, `kubectl create token`, Vault's TokenReviews),
-  # so "0 bodies" cannot come from an empty or unreadable log.
+  # Secrets and TokenRequests must each occur at least once (the run made
+  # both: the deployer's Secret probe, `kubectl create token` and the CSI
+  # driver's rotation tokens), so "0 bodies" cannot come from an empty or
+  # unreadable log. TokenReviews are counted but may be 0: nothing in this
+  # design calls TokenReview (Entra checks the JWKS instead).
   # jq -R + fromjson?: a line the API server is still writing is skipped.
   local s
   s=$(audit_lines | jq -nRr 'inputs | fromjson? | select(.objectRef != null)
@@ -781,7 +891,7 @@ audit_sensitive_metadata_only() {
                 n["secrets"], n["serviceaccounts/token"], n["tokenreviews"], bad }') || return 1
   info "events: $s"
   [[ "$s" =~ ^secrets=([0-9]+)\ serviceaccounts/token=([0-9]+)\ tokenreviews=([0-9]+)\ not-metadata-or-with-body=([0-9]+)$ ]] || return 1
-  [[ ${BASH_REMATCH[1]} -gt 0 && ${BASH_REMATCH[2]} -gt 0 && ${BASH_REMATCH[3]} -gt 0 && ${BASH_REMATCH[4]} -eq 0 ]]
+  [[ ${BASH_REMATCH[1]} -gt 0 && ${BASH_REMATCH[2]} -gt 0 && ${BASH_REMATCH[4]} -eq 0 ]]
 }
 
 drift_audit_events() { # -> $T/drift-audit.json: {drift, heal} one-line summaries ("" when not found)
@@ -847,18 +957,18 @@ audit_vap_write() {
 }
 
 # =============================================================================
-step "(a) platform: kind node, Vault, injector, Pod Security labels"
+step "(a) platform: kind node, CSI driver + Azure provider, public issuer, Pod Security labels"
 k version >/dev/null 2>&1 || abort "API server reachable through context $KUBE_CONTEXT"
 info "$(k get nodes -o jsonpath='{range .items[*]}{.metadata.name} kubelet={.status.nodeInfo.kubeletVersion}{"\n"}{end}')"
 check "node(s) Ready" nodes_ready
-check "Vault server pod Ready" pods_ready "$VAULT_NS" "app.kubernetes.io/name=vault,component=server"
-check "Vault API healthy at $VAULT_ADDR (initialized, unsealed)" vault_healthy_pinned
-check "Vault runs the pinned version 2.1.1" vault_version_pinned
-check "Vault Agent Injector (mutating webhook) Ready" pods_ready "$VAULT_NS" "app.kubernetes.io/name=vault-agent-injector"
-check "PSA: $APP_NS enforce/warn/audit=restricted, $VAULT_NS enforce=baseline" psa_labels_ok
+check "Secrets Store CSI Driver pods Ready" pods_ready "$CSI_NS" "app=secrets-store-csi-driver"
+check "Azure Key Vault provider pods Ready" pods_ready "$CSI_NS" "app=csi-secrets-store-provider-azure"
+check "CSIDriver requests tokens for exactly one audience: $EXCHANGE_AUDIENCE" csidriver_one_audience
+check "PSA: $APP_NS enforce/warn/audit=restricted, $CSI_NS enforce=privileged warn=baseline" psa_labels_ok
+check "the public issuer serves the API server's own discovery document and JWKS" issuer_published
 
 # =============================================================================
-step "(b) workload: nightly-report gets its credential from the injected agent"
+step "(b) workload: nightly-report gets its credential from a CSI volume"
 k -n "$APP_NS" get deployment "$APP_DEPLOYMENT" -o json > "$T/deploy.json" 2>/dev/null \
   || abort "deployment $APP_NS/$APP_DEPLOYMENT exists"
 APP_SELECTOR=$(jq -r '.spec.selector.matchLabels | to_entries | map("\(.key)=\(.value)") | join(",")' "$T/deploy.json")
@@ -868,44 +978,47 @@ POD=""
 wait_until 120 find_pod || abort "a Ready nightly-report pod ($APP_SELECTOR)"
 k -n "$APP_NS" get pod "$POD" -o json > "$T/pod.json"
 pass "nightly-report pod Ready: $POD"
-check "vault-agent sidecar injected (Vault Agent Injector webhook)" sidecar_injected
-check "/vault/secrets/db in '$WORKLOAD_CTR' hashes to the CURRENT value (seeded, then rotated)" rendered_file_matches
+check "nothing injected: the pod runs only the app container" nothing_injected
+check "the pod mounts SecretProviderClass $SPC_NAME through the CSI driver" csi_volume_mounted
+check "$MOUNTED_FILE in '$WORKLOAD_CTR' hashes to the CURRENT value (seeded, then rotated)" rendered_file_matches
 check "app container has no Kubernetes API token (automount off, nothing at the default path)" app_has_no_kube_token
-check "only vault-agent mounts the projected aud=vault token (<= 600s); the app container does not" only_agent_holds_vault_token
+check "the pod spec holds no projected service-account token at all" pod_holds_no_token
 check "Deployment: no env value, no secretKeyRef/envFrom Secret, no Secret volume, automount off" deployment_has_no_static_secret
+check "SecretProviderClass: Workload ID (this app's client id), no secretObjects (never a Kubernetes Secret)" spc_syncs_nothing
 
 # =============================================================================
-step "(c) Vault Kubernetes auth: who may log in, and what the login is worth"
-JWT_VAULT=$(mint_token nightly-report vault 2>/dev/null) || JWT_VAULT=""
-check "TokenRequest for clinical-apps/nightly-report: aud=[vault], <= 600s" claims_ok
-check "Vault login (auth/kubernetes, role nightly-report) with that token succeeds" login_ok
-JWT_VAULT=""
-wl_lookup || true
-check "the Vault token carries only the nightly-report-read policy (no root)" policies_minimal
-check "the Vault token's TTL is <= 900s" ttl_bounded
-check "it can read clinical/data/db (sha256 = current value)" read_db_ok
-check "it cannot read clinical/data/other (403)" wl_denied GET clinical/data/other
-check "it cannot write clinical/data/db (403)" write_denied
-JWT_OTHER=$(mint_token unapproved-job vault 2>/dev/null) || JWT_OTHER=""
-check "unapproved-job token (aud=vault) cannot log in as nightly-report" login_denied nightly-report "$JWT_OTHER" \
-  '.aud == ["vault"] and .sub == "system:serviceaccount:clinical-apps:unapproved-job"'
+step "(c) Entra Workload ID + Key Vault RBAC: who gets a token, and what it is worth"
+JWT_EX=$(mint_token nightly-report "$EXCHANGE_AUDIENCE" 2>/dev/null) || JWT_EX=""
+check "the CSI driver itself requests 600 s tokens (live CSIDriver spec.tokenRequests)" csidriver_token_lifetime
+check "a test TokenRequest for clinical-apps/nightly-report: iss=public issuer, aud=[$EXCHANGE_AUDIENCE], <= 600s" claims_ok
+check "Entra exchanges it for an access token (federated credential, no client secret)" exchange_ok
+JWT_EX=""
+check "the access token is for Key Vault, issued to this app, in this tenant" access_token_scoped
+check "it can read $SECRET_NAME (sha256 = current value)" read_db_ok
+check "it cannot read $DECOY_SECRET in the SAME vault (403, Azure RBAC)" kv_denied GET "secrets/$DECOY_SECRET"
+check "it cannot write $SECRET_NAME (403)" write_denied
+check "it cannot list the vault's secrets (403)" kv_denied GET secrets
+rm -f "$T/kv.hdr"
+JWT_OTHER=$(mint_token unapproved-job "$EXCHANGE_AUDIENCE" 2>/dev/null) || JWT_OTHER=""
+check "Entra refuses unapproved-job's token with $AADSTS_SUBJECT (same audience, no federated credential)" exchange_denied "$JWT_OTHER" \
+  '.aud == ["api://AzureADTokenExchange"] and .sub == "system:serviceaccount:clinical-apps:unapproved-job"' "$AADSTS_SUBJECT"
 JWT_OTHER=""
 JWT_DEFAULT=$(mint_token nightly-report 2>/dev/null) || JWT_DEFAULT=""
-check "nightly-report token WITHOUT aud=vault (API-server audience) is refused" login_denied nightly-report "$JWT_DEFAULT" \
-  '.sub == "system:serviceaccount:clinical-apps:nightly-report" and (.aud | index("vault")) == null'
+check "Entra refuses nightly-report's token WITHOUT the exchange audience, with $AADSTS_AUDIENCE" exchange_denied "$JWT_DEFAULT" \
+  '.sub == "system:serviceaccount:clinical-apps:nightly-report" and (.aud | index("api://AzureADTokenExchange")) == null' "$AADSTS_AUDIENCE"
 JWT_DEFAULT=""
-check "the Kubernetes API refuses the aud=vault token (401; a default-audience one for the SA: 200)" api_rejects_vault_audience
-check "after revoke-self the workload's Vault token is refused (403)" revoke_and_refused
+check "the Kubernetes API refuses the exchange-audience token (401; a default-audience one: 200)" api_rejects_exchange_audience
 
 # =============================================================================
-step "(d) identity = namespace + name + object, not just a name"
+step "(d) identity = namespace + name, not just a name"
 check "fixture: namespace $OTHER_NS with its own service account named nightly-report" fixture_ns_up
-JWT_TWIN=$(mint_token_ns "$OTHER_NS" nightly-report vault 2>/dev/null) || JWT_TWIN=""
-check "$OTHER_NS/nightly-report (same name, aud=vault) cannot log in to Vault role nightly-report" \
-  login_denied nightly-report "$JWT_TWIN" ".aud == [\"vault\"] and .sub == \"system:serviceaccount:$OTHER_NS:nightly-report\""
+JWT_TWIN=$(mint_token_ns "$OTHER_NS" nightly-report "$EXCHANGE_AUDIENCE" 2>/dev/null) || JWT_TWIN=""
+check "Entra refuses $OTHER_NS/nightly-report with $AADSTS_SUBJECT (same name, same audience, other namespace)" \
+  exchange_denied "$JWT_TWIN" ".aud == [\"api://AzureADTokenExchange\"] and .sub == \"system:serviceaccount:$OTHER_NS:nightly-report\"" "$AADSTS_SUBJECT"
 JWT_TWIN=""
 check "a token dies with its ServiceAccount: SA deleted + recreated (same name) -> old token 401" token_dies_with_sa
 check "fixture namespace $OTHER_NS deleted again" fixture_ns_down
+check "a real pod as unapproved-job naming $SPC_NAME never starts (Entra refuses the driver's token)" spc_borrow_refused
 
 # =============================================================================
 step "(e) no static secret anywhere in the namespace"
@@ -927,7 +1040,7 @@ expect_forbidden "deployer: cannot get Secrets in $APP_NS" 'cannot get resource 
 expect_forbidden "deployer: cannot list pods in kube-system" 'cannot list resource "pods"' \
   k -n kube-system get pods "${DEPLOYER[@]}"
 expect_forbidden "deployer: cannot mint a token for nightly-report (serviceaccounts/token)" 'serviceaccounts/token' \
-  k -n "$APP_NS" create token nightly-report --audience vault "${DEPLOYER[@]}"
+  k -n "$APP_NS" create token nightly-report --audience "$EXCHANGE_AUDIENCE" "${DEPLOYER[@]}"
 check "deployer: cannot create RoleBindings (no self-escalation)" cannot create rolebindings "${DEPLOYER[@]}"
 check "deployer: no exec / attach / port-forward / ephemeral containers on pods" no_shell_into_pods "${DEPLOYER[@]}"
 expect_ok "auditor: can list pods in $APP_NS" k -n "$APP_NS" get pods -o name "${AUDITOR[@]}"

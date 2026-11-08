@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T02:40:28Z",
+  "generatedAt": "2026-11-08T19:23:24Z",
   "org": "integrator-8288815.okta.com",
   "apps": [
     {
@@ -190,10 +190,22 @@
             ]
           }
         ],
-        "sso7d": 2,
+        "sso7d": 7,
         "entraPattern": "App registration (same client type and redirect URIs) + enterprise app"
       },
-      "entra": null,
+      "entra": {
+        "displayName": "Clinic Lab Results",
+        "appId": "b2710978-810a-4d4b-93f7-b4a7c0225107",
+        "servicePrincipalId": "7ca7e0ce-e62e-48e6-9cdc-46ec6a025830",
+        "assignmentRequired": true,
+        "assignedPrincipals": 1,
+        "assignedGroups": [
+          "App-ClinicResults-Users"
+        ],
+        "groupMembers": 0,
+        "ca": [],
+        "signins7d": 0
+      },
       "appTrusts": "okta"
     }
   ],

@@ -36,11 +36,24 @@
 #     same step O1a as okta-clinic-idp), so no clinic user meets a consent
 #     prompt.
 #
-# CONDITIONAL ACCESS: CA061 (modules/conditional-access clinical.tf) targets
-# this app: MFA and sign-in every 8 hours - the same rule the app had in
-# Okta ("Clinic clinical apps" authentication policy: two factors,
-# re-authenticate after 8 hours). The migration keeps the control; it does
-# not quietly weaken it.
+# CONDITIONAL ACCESS: CA061 (modules/conditional-access clinical.tf) - MFA
+# and sign-in every 8 hours, the rule the app had in Okta ("Clinic clinical
+# apps": two factors, re-authenticate after 8 hours).
+#   CA061 targets the app's API, "Clinic Lab Results API", NOT the client.
+#   Conditional Access cannot target a public client: Graph refused CA061 on
+#   the first apply (BadRequest 1034 "PublicClientsAreUnsupported", run
+#   42512070374), and Microsoft Learn ("Conditional Access: target resources")
+#   says a policy "isn't set directly on a client (public/native) application,
+#   but is applied when a client calls a service". So the app is split the
+#   way real apps are: the workstation client (public, PKCE, no secret) and
+#   the API it calls. The client asks for the API's Results.Read scope at
+#   sign-in, Entra issues a token for the API, and CA061 is evaluated for
+#   that resource. Rejected: making the client a web/confidential app - it
+#   would need a client secret or certificate on the workstation (a new
+#   credential to vault and rotate), or the implicit id_token flow, which
+#   Learn advises against.
+#   The API pre-authorizes the client for Results.Read (no consent prompt)
+#   and also requires assignment: a non-member gets no API token either.
 #
 # LICENSING: app registration Entra ID Free; group assignment and CA need P1
 # (envs/dev gates this module on enable_premium).
@@ -50,6 +63,10 @@
 
 locals {
   clinic_results_enabled = var.enable_clinic_results_app
+
+  # The API's one delegated scope (a fixed id: changing it breaks the
+  # client's declared permission and the pre-authorization).
+  clinic_results_read_scope_id = "5b7c3e1a-2d4f-4c8e-9a61-7f0b2c9d4e13"
 
   # openid, profile, email: what the app asks for at sign-in. No User.Read:
   # the app reads nothing from Graph; the ID token is all it needs.
@@ -111,6 +128,16 @@ resource "azuread_application" "clinic_results" {
       }
     }
   }
+
+  # The API it calls: the resource CA061 targets.
+  required_resource_access {
+    resource_app_id = azuread_application.clinic_results_api[0].client_id
+
+    resource_access {
+      id   = local.clinic_results_read_scope_id
+      type = "Scope"
+    }
+  }
 }
 
 resource "azuread_service_principal" "clinic_results" {
@@ -136,4 +163,82 @@ resource "azuread_app_role_assignment" "clinic_results_users" {
   app_role_id         = "00000000-0000-0000-0000-000000000000"
   principal_object_id = azuread_group.clinic_results_users[0].object_id
   resource_object_id  = azuread_service_principal.clinic_results[0].object_id
+}
+
+# ---- The API: the resource Conditional Access (CA061) targets ----------------
+
+resource "azuread_application" "clinic_results_api" {
+  count = local.clinic_results_enabled ? 1 : 0
+
+  display_name     = "${var.clinic_results_display_name} API"
+  sign_in_audience = "AzureADMyOrg"
+  owners           = local.app_owners
+
+  prevent_duplicate_names = true
+
+  service_management_reference = var.service_management_reference != "" ? var.service_management_reference : null
+  notes                        = "The API of Clinic Lab Results: the resource CA061 targets (CA cannot target the public client). One delegated scope, Results.Read, pre-authorized for the client. No credential. Managed by Terraform - modules/apps (clinic_results.tf)."
+
+  api {
+    requested_access_token_version = 2
+
+    oauth2_permission_scope {
+      id                         = local.clinic_results_read_scope_id
+      value                      = "Results.Read"
+      type                       = "User"
+      enabled                    = true
+      admin_consent_display_name = "Read clinic lab results"
+      admin_consent_description  = "Allows Clinic Lab Results to read lab results as the signed-in user."
+      user_consent_display_name  = "Read your clinic lab results"
+      user_consent_description   = "Allows Clinic Lab Results to read lab results on your behalf."
+    }
+  }
+
+  lifecycle {
+    # Managed by azuread_application_identifier_uri below (provider guidance).
+    ignore_changes = [identifier_uris]
+  }
+}
+
+# api://<client-id>: accepted by the tenant's identifier-URI policy without a
+# verified domain (same form as the Clinical Portal).
+resource "azuread_application_identifier_uri" "clinic_results_api" {
+  count = local.clinic_results_enabled ? 1 : 0
+
+  application_id = azuread_application.clinic_results_api[0].id
+  identifier_uri = "api://${azuread_application.clinic_results_api[0].client_id}"
+}
+
+resource "azuread_service_principal" "clinic_results_api" {
+  count = local.clinic_results_enabled ? 1 : 0
+
+  client_id = azuread_application.clinic_results_api[0].client_id
+
+  # No assignment, no API token: the same group gates the client and the API.
+  app_role_assignment_required = true
+
+  owners = local.app_owners
+  notes  = "Clinic Lab Results API (CA061 target). Access = App-ClinicResults-Users. Managed by Terraform - modules/apps."
+
+  feature_tags {
+    hide = true # not a tile in My Apps: users open the client, not the API
+  }
+}
+
+resource "azuread_app_role_assignment" "clinic_results_api_users" {
+  count = local.clinic_results_enabled ? 1 : 0
+
+  app_role_id         = "00000000-0000-0000-0000-000000000000"
+  principal_object_id = azuread_group.clinic_results_users[0].object_id
+  resource_object_id  = azuread_service_principal.clinic_results_api[0].object_id
+}
+
+# The client may ask for Results.Read with no consent prompt (an app the
+# tenant owns, calling its own API).
+resource "azuread_application_pre_authorized" "clinic_results_client" {
+  count = local.clinic_results_enabled ? 1 : 0
+
+  application_id       = azuread_application.clinic_results_api[0].id
+  authorized_client_id = azuread_application.clinic_results[0].client_id
+  permission_ids       = [local.clinic_results_read_scope_id]
 }

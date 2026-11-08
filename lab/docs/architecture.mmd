@@ -114,21 +114,19 @@ flowchart TB
     OKTA["Okta · acquired clinic<br/>Entra as IdP · staged cut-over<br/><b>stand-in:</b> Integrator Free org<br/><b>DESIGNED</b>"]
   end
 
-  subgraph PAM["PAM + IGA stand-ins · local Docker · owner: IAM Eng"]
+  subgraph PAM["PAM + IGA stand-ins · local Docker · owner: IAM Eng · PAM superseded by ADR-0036"]
     direction TB
-    VAULT["Vault · discover → onboard →<br/>dependency-gated rotate → reconcile<br/>check-out needs an approved change<br/><b>stand-in:</b> CyberArk Vault + CPM<br/><b>RAN · harness</b>: Samba AD for DC01,<br/>mock ServiceNow for the PDI · ADR-0007"]
-    GUAC["Guacamole · per-person operators<br/>recorded SSH · RDP needs DC01<br/>Vault SSH CA, 10-minute certificates<br/>Entra OIDC + CA022 sign-in: <b>BUILT</b><br/><b>stand-in:</b> CyberArk PSM / PSMP<br/><b>RAN · harness</b> · ADR-0007"]
-    HA["Vault Raft ×3 + auto-unseal<br/>failover · timed DR drill · upgrade<br/><b>stand-in:</b> CyberArk Vault HA / DR<br/><b>RAN · harness</b> · ADR-0019"]
-    DYN["Dynamic DB credentials<br/>a 1-hour Postgres login per request<br/><b>stand-in:</b> CyberArk ZSP database access<br/><b>RAN · harness</b> · ADR-0007"]
-    CONJUR["Conjur OSS · workload secrets<br/><b>stand-in:</b> CyberArk Secrets Manager<br/><b>RAN · harness</b> · ADR-0007"]
+    VAULT["Vault · discover → onboard →<br/>dependency-gated rotate → reconcile<br/>check-out needs an approved change<br/><b>target:</b> Key Vault + Windows LAPS<br/><b>RAN · harness</b>: Samba AD for DC01,<br/>mock ServiceNow for the PDI · ADR-0036"]
+    GUAC["Guacamole · per-person operators<br/>recorded SSH · RDP needs DC01<br/>Vault SSH CA, 10-minute certificates<br/>Entra OIDC + CA022 sign-in: <b>BUILT</b><br/><b>target:</b> Azure Bastion recording<br/><b>RAN · harness</b> · ADR-0036"]
+    HA["Vault Raft ×3 + auto-unseal<br/>failover · timed DR drill · upgrade<br/><b>retired:</b> Key Vault is managed<br/><b>RAN · harness</b> · ADR-0036"]
+    DYN["Dynamic DB credentials<br/>a 1-hour Postgres login per request<br/><b>target:</b> Entra auth to the database<br/><b>RAN · harness</b> · ADR-0036"]
     MID["midPoint · certification campaign<br/>detective SoD · remediation<br/><b>stand-in:</b> SailPoint / Saviynt<br/><b>RAN · harness</b> · ADR-0008"]
   end
   HA ~~~ DYN
-  MID ~~~ CONJUR
 
   subgraph ITDR["Identity threat detection + response · owner: SOC"]
     direction TB
-    FEED["Vault audit → VaultCheckout_CL<br/><b>stand-in:</b> CyberArk PTA syslog → AMA<br/><b>RAN · harness</b> · log not in repo"]
+    FEED["Vault audit → VaultCheckout_CL<br/><b>target:</b> Key Vault AuditEvent<br/><b>RAN · harness</b> · log not in repo"]
     LA["Sentinel + Log Analytics<br/>Entra logs + DC01 security events<br/>22 rules: 5 core + 17 ITDR<br/>(+2 written, not deployed)<br/>consent · app credential · CA tampering<br/>role outside PIM · device code<br/>Kerberoast · DCSync · unvaulted Tier 0<br/><b>stand-in:</b> these AD rules =<br/>Defender for Identity (MDI)<br/><b>BUILT</b>"]
     PB["Notify playbook<br/>Teams card + ServiceNow incident<br/><b>BUILT</b>"]
     CONTAIN["Containment on a High incident<br/>Teams approval by a listed approver<br/>revoke · confirm compromised<br/>cloud-only: disable (opt-in role)<br/>synced: flagged; a person disables in AD<br/><b>stand-in:</b> AD script = MDI response<br/><b>BUILT</b> · ADR-0017"]
@@ -170,10 +168,10 @@ flowchart TB
   classDef designed fill:#ffffff,stroke:#7a7a7a,stroke-width:2px,color:#1b1b1b;
   classDef standin stroke-dasharray:9 6,stroke-width:3px;
 
-  class K1,VAULT,GUAC,HA,DYN,CONJUR,MID,FEED,K8S ran;
+  class K1,VAULT,GUAC,HA,DYN,MID,FEED,K8S ran;
   class K2,HR,AD,ADCS,INTUNE,PR,APPLY,KV,LCW,BIRTH,AP,SOD,CABASE,CARISK,CAPR,CASESS,PIM,HDAU,BG,NHI,SSO,SNOW,LA,PB,CONTAIN,SPLUNK,EVID,KPI,WORM built;
   class K3,K4,AGENT,SYNC,OKTA designed;
-  class K4,HR,INTUNE,SNOW,OKTA,VAULT,GUAC,HA,DYN,CONJUR,MID,FEED,LA,CONTAIN,SPLUNK,K8S standin;
+  class K4,HR,INTUNE,SNOW,OKTA,VAULT,GUAC,HA,DYN,MID,FEED,LA,CONTAIN,SPLUNK,K8S standin;
 
   style ENTRA fill:#eaf3fc,stroke:#0f6cbd,stroke-width:5px,color:#0b3d73;
   style IGA fill:#f6fafe,stroke:#0f6cbd,stroke-width:1px;

@@ -22,7 +22,7 @@
       "label": "bg-admin-01 signs in interactively",
       "tables": {"SigninLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}]},
       "expect": [{"SignInType": "interactive", "UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com",
-                  "Country": "US", "ResultType": "0", "IPAddress": "198.51.100.20"}],
+                  "Country": "US", "ResultType": "0", "IPAddress": "198.51.100.20", "MatchedBy": "naming convention"}],
       "expectRows": 1
     },
     {
@@ -43,12 +43,22 @@
     {
       "id": "both-tables",
       "kind": "positive",
-      "label": "One interactive + one non-interactive sign-in: two rows from the union",
+      "label": "One interactive + one non-interactive sign-in by the same account: both legs of the union are read, and they come out as ONE row for the account (SignIns 2), so one alert (review of #230)",
       "tables": {
         "SigninLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}],
         "AADNonInteractiveUserSignInLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}]
       },
-      "expect": [{"SignInType": "interactive"}, {"SignInType": "non-interactive"}],
+      "expect": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "SignIns": 2}],
+      "expectRows": 1
+    },
+    {
+      "id": "two-accounts-same-minute",
+      "kind": "positive",
+      "label": "bg-admin-01 and bg-admin-02 in the same minute: two rows, so two alerts, each grouped into its own account's incident",
+      "tables": {
+        "SigninLogs": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com"}, {"UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com"}]
+      },
+      "expect": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "SignIns": 1}, {"UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "SignIns": 1}],
       "expectRows": 2
     },
     {
@@ -73,6 +83,44 @@
       "label": "A bg-admin sign-in generated 2 h ago and ingested only now STILL alerts: the Sentinel rule is NRT and judges rows by ingestion time, so the query carries no TimeGenerated or ingestion-time window a late row could fall out of (2026-11-05; formerly the negative 'older-than-lookback')",
       "tables": {"SigninLogs": [{"UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "TimeGenerated": "ago:2h"}]},
       "expect": [{"SignInType": "interactive", "UserPrincipalName": "bg-admin-02@contosohealthlab.onmicrosoft.com", "Country": "US", "ResultType": "0", "IPAddress": "198.51.100.20"}]
+    },
+    {
+      "id": "renamed-account-by-object-id",
+      "kind": "positive",
+      "label": "bg-admin-01 renamed to emergency-ops@ still alerts: its immutable object id is in the Terraform-rendered BreakGlassUserIds list (review finding D3, 2026-11-07)",
+      "lets": {"BreakGlassUserIds": ["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]},
+      "tables": {"SigninLogs": [{"UserPrincipalName": "emergency-ops@contosohealthlab.onmicrosoft.com", "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}]},
+      "expect": [{"UserPrincipalName": "emergency-ops@contosohealthlab.onmicrosoft.com", "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "MatchedBy": "object id"}],
+      "expectRows": 1
+    },
+    {
+      "id": "renamed-account-non-interactive",
+      "kind": "positive",
+      "label": "The renamed account's token refresh (non-interactive table) is matched by object id too",
+      "lets": {"BreakGlassUserIds": ["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]},
+      "tables": {"AADNonInteractiveUserSignInLogs": [{"UserPrincipalName": "emergency-ops@contosohealthlab.onmicrosoft.com", "UserId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}]},
+      "expect": [{"SignInType": "non-interactive", "MatchedBy": "object id"}],
+      "expectRows": 1
+    },
+    {
+      "id": "id-list-does-not-widen",
+      "kind": "negative",
+      "label": "With the id list filled, an ordinary user (another object id, an ordinary name) still does not match",
+      "lets": {"BreakGlassUserIds": ["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]},
+      "tables": {"SigninLogs": [{"UserPrincipalName": "dana.okafor@contosohealthlab.onmicrosoft.com", "UserId": "cccccccc-cccc-cccc-cccc-cccccccccccc"}]}
+    },
+    {
+      "id": "two-ips-one-row-keeps-both",
+      "kind": "positive",
+      "label": "bg-admin-01: an older SUCCESS from one IP and a newer FAILURE from another IP in the same window give ONE row (one alert per account). The row still carries both IPs, both results and both correlation ids (review of #230)",
+      "tables": {"SigninLogs": [
+        {"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "TimeGenerated": "ago:3m", "IPAddress": "198.51.100.20", "ResultType": "0", "CorrelationId": "33333333-3333-3333-3333-333333333333"},
+        {"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "TimeGenerated": "ago:1m", "IPAddress": "203.0.113.50", "ResultType": "50126", "CorrelationId": "44444444-4444-4444-4444-444444444444"}
+      ]},
+      "expect": [{"UserPrincipalName": "bg-admin-01@contosohealthlab.onmicrosoft.com", "IPAddress": "203.0.113.50", "ResultType": "50126", "SignIns": 2,
+                  "IPAddresses": ["198.51.100.20", "203.0.113.50"], "ResultTypes": ["0", "50126"],
+                  "CorrelationIds": ["33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"]}],
+      "expectRows": 1
     }
   ]
 }

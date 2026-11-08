@@ -88,9 +88,20 @@ once the account exists: Lifecycle Workflows, access packages, CA and PIM.
   sent is recorded in the `-StatePath` file (employee id -> UPN) after a
   send with no failed batch. A recorded UPN stays with its worker and stays
   reserved, also after a name change or after the worker leaves the file, so
-  `john.smith2` is never handed to someone else. On the GitHub runner that
-  file is rebuilt from the previous commit of `hr_feed.csv`, so there the
-  lasting record is the `upn` column only. A name that
+  `john.smith2` is never handed to someone else. The GitHub runner starts each run
+  with no `-StatePath` file, so it used to forget every derived UPN between
+  runs (Greptile, PR #229). Now `hr-feed.yml` passes
+  `-IssuedFromGitHistory`: the sender replays every committed version of
+  `hr_feed.csv`, oldest first, and a worker keeps the first UPN issued to
+  them. A later UPN for the same worker (an HR `upn` value that replaced the
+  derived name) stays reserved for that worker too. A feed with staged or
+  unstaged edits is refused: commit the HR change first. The committed, protected history of the file (no force push, no
+  deletion: the `hr-feed` ruleset) is the lasting register. A shallow
+  checkout or an uncommitted file stops the run before anything is sent. A
+  version the sender refused issued nothing and is skipped. A version that
+  was committed but never sent can reserve a name nobody holds: that only
+  adds a suffix digit, it never causes a clash. Accounts made outside the HR
+  feed (admin and test accounts) are not in this register. A name that
   leaves no usable ASCII is refused. Two settings in the provisioning app
   keep a name change from renaming anyone (tenant-time steps, verify on the
   app): the matching attribute is `externalId` (the employee id), and the
@@ -340,3 +351,44 @@ their core attributes and `accountEnabled`. Entra rejects cloud edits to those
 on synced users, so mover/leaver changes always start **here, in the feed** -
 the PowerShell lifecycle scripts only handle the cloud-side follow-through
 (access packages, sessions, app deprovisioning).
+
+## Three gaps from the first HR-form run (2026-11-07, E121, E122, E121b)
+
+1. **The manager had no mail, so the TAP email task failed.** For synced
+   users Entra's `mail` comes from AD, and the HR job wrote AD mail only on
+   create, with the AD domain. Fix: `lab/scripts/dc/configure-sync.py hrapp
+   --mail-domain <verified domain>`, then re-send the manager's row (any HR
+   save of that worker). `New-LifecycleWorkflows.ps1 -RunJoinerFor` now warns
+   when the joiner's manager has no mail. The address has no mailbox in the
+   lab, so nobody receives that email. Never say on camera that the manager
+   gets it.
+2. **A leaver kept the access package until IT acted.** HR's leaver disables
+   the account everywhere, but the package stayed until `04-Leaver.ps1` ran.
+   The automatic assignment policy removes it by itself only after its 3-day
+   grace period (ADR 0012, on purpose: it protects clinicians from a wrong HR
+   record). Fix: a second leaver workflow that runs by itself, triggered when
+   the user drops out of the dynamic group All-Workforce (enabled, synced
+   members). It has the same six tasks as the on-demand leaver. Turn it on:
+   `enable_lcw_leaver_trigger = true` (envs/dev, a reviewed PR), then
+   `post-apply/New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver -EnableJoinerSchedule`.
+   It runs at the next scheduled evaluation, every 3 hours by default (the
+   tenant's setting read 2026-11-07: 3). The on-demand leaver stays for
+   "terminate now".
+3. **Which mechanism really gives the nurse package on day one.** Measured:
+   the user joined the policy's dynamic group at +4:36, but the automatic
+   assignment policy had created no assignment by +25 min. The joiner
+   workflow's "Request user access package assignment" task did it
+   (audit: "Administrator directly assigns user to access package", initiated
+   by Lifecycle Workflows, 01:11:01Z), and it was delivered at +30:11. So in
+   this lab the **joiner workflow is the day-one mechanism**. Its timing
+   depends on the 3-hour schedule: E121's run came 25 minutes after the hire
+   only because a scheduled evaluation fell then; the worst case is about 3
+   hours. The automatic assignment policy is the **steady-state** mechanism:
+   it keeps the package in line with HR attributes (movers, and the 3-day
+   removal), with no measured day-one time. Microsoft documents only that its
+   evaluation "can take several minutes". Do not say on camera that the
+   package arrives by itself in minutes. All of this is for Nursing only:
+   the standard install creates one joiner (department Nursing, package
+   Nurse - Clinical Apps) and no ICU joiner. An ICU hire relies on the
+   automatic assignment policy alone, unless a second joiner is installed.
+
