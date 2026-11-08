@@ -1,0 +1,35 @@
+run command lab-e40c6397: /private/tmp/claude-501/-Users-michaelwilliams-GotchaBitch/7a6912bb-5f53-40c9-b93a-2f1b37472e5b/scratchpad/dc/probe-reg.ps1 on vm-dc01
+:31.412 Default ProxyAddress (used during registration, running as SYSTEM): NotSet
+2026-11-07 02:06:31.428 UploadLogFileFromDisk: InstallerUploadParameters Values: LogFileLocation=C:\ProgramData\ContosoAdfs\reg-probe.log;ProductName=Microsoft-Entra-Connect-Health-Agent;ProductVersion=4.5.2487.0;MachineName=DC01;Component=;ServiceUri=https://s1.adhybridhealth.azure.com/;Result=started;type=registration;activityId=28a214db-be9a-4966-9692-4e9b9b3c5521
+2026-11-07 02:06:31.428 UploadFile: SecurityProtocol: Tls, Tls11, Tls12
+2026-11-07 02:06:31.537 AadTokenIssuerUri: https://login.microsoftonline.com/common/, baseUrl: https://login.microsoftonline.com/
+2026-11-07 02:06:31.537 Obtaining token using credential, Authority: https://login.microsoftonline.com/organizations/oauth2/nativeclient, Scope: https://management.core.windows.net/.default, ClientId: cf6d7e68-f018-4e0a-a7b3-126e053fb88d
+2026-11-07 02:06:31.537 Original Resource URI: https://management.core.windows.net/
+Microsoft.Identity.Client.MsalUiRequiredException: AADSTS50034: The user account {EUII Hidden} does not exist in the contosohealthlab.onmicrosoft.com directory. To sign into this application, the account must be added to the directory. Trace ID: 6cb47869-1c6c-4590-9db0-71c362940100 Correlation ID: 3a8874b4-0008-44cc-878f-ac8355747b26 Timestamp: 2026-11-07 02:06:32Z
+	ResponseBody: {"error":"invalid_grant","error_description":"AADSTS50034: The user account {EUII Hidden} does not exist in the contosohealthlab.onmicrosoft.com directory. To sign into this application, the account must be added to the directory. Trace ID: 6cb47869-1c6c-4590-9db0-71c362940100 Correlation ID: 3a8874b4-0008-44cc-878f-ac8355747b26 Timestamp: 2026-11-07 02:06:32Z","error_codes":[50034],"timestamp":"2026-11-07 02:06:32Z","trace_id":"6cb47869-1c6c-4590-9db0-71c362940100","correlation_id":"3a8874b4-0008-44cc-878f-ac8355747b26","error_uri":"https://login.microsoftonline.com/error?code=50034","suberror":"bad_token"} 
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Content-Security-Policy-Report-Only: object-src 'none'; base-uri 'self'; script-src 'self' 'nonce-EOdUbAPQYXeEU2W6NL3k5w' 'unsafe-inline' 'unsafe-eval' https://*.msauth.net https://*.msftauth.net https://*.msftauthimages.net https://*.msauthimages.net https://*.msidentity.com https://*.microsoftonline-p.com https://*.microsoftazuread-sso.com https://*.azureedge.net https://*.outlook.com https://*.office.com https://*.office365.com https://*.microsoft.com https://*.bing.com 'report-sample'; report-uri https://cspv2.core.microsoft/report/7290fd99-e070-4ee6-abdf-b2158190ceff/ESTS-UX-All
+2026-11-07 02:06:32.225 UploadLogFileFromDisk: InstallerUploadParameters Values: LogFileLocation=C:\ProgramData\ContosoAdfs\reg-probe.log;ProductName=Microsoft-Entra-Connect-Health-Agent;ProductVersion=4.5.2487.0;MachineName=DC01;Component=;ServiceUri=https://s1.adhybridhealth.azure.com/;Result=failed;type=registration;activityId=28a214db-be9a-4966-9692-4e9b9b3c5521
+2026-11-07 02:06:32.225 UploadFile: SecurityProtocol: Tls, Tls11, Tls12
+2026-11-07 02:25:19.516 SecurityProtocol set to Tls, Tls11, Tls12
+2026-11-07 02:25:19.516 AdHealthServiceUri (ARM): https://management.azure.com/providers/Microsoft.ADHybridHealthService/
+2026-11-07 02:25:19.516 AdHybridHealthServiceUri: https://s1.adhybridhealth.azure.com/
+2026-11-07 02:25:19.516 AdHealthServiceUri (ARM): https://management.azure.com/providers/Microsoft.ADHybridHealthService/
+2026-11-07 02:25:19.516 AdHybridHealthServiceUri: https://s1.adhybridhealth.azure.com/
+2026-11-07 02:25:19.531 Default ProxyAddress (used during registration, running as SYSTEM): NotSet
+2026-11-07 02:25:19.531 UploadLogFileFromDisk: InstallerUploadParameters Values: LogFileLocation=C:\ProgramData\ContosoAdfs\reg-probe.log;ProductName=Microsoft-Entra-Connect-Health-Agent;ProductVersion=4.5.2487.0;MachineName=DC01;Component=;ServiceUri=https://s1.adhybridhealth.azure.com/;Result=started;type=registration;activityId=78457227-eb70-438b-9fef-63ffeb5a5f0d
+2026-11-07 02:25:19.531 UploadFile: SecurityProtocol: Tls, Tls11, Tls12
+--- stderr ---
+Configuration Failed
+
+To retry configuration, type:
+Register-MicrosoftEntraConnectHealthAgent
+
+Monitoring will not start until configuration is successful.
+
+To review installation steps and requirements, please visit:
+http://go.microsoft.com/fwlink/?LinkID=518643
+
+Detailed log file created in temporary directory:
+C:\ProgramData\ContosoAdfs\reg-probe.log
+state: Succeeded, exit code: 0
