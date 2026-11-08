@@ -280,6 +280,57 @@
     Package requested for the new role / removed from the old one. Defaults
     "ICU - Critical Care Apps" / "Nurse - Clinical Apps" (03-Mover.ps1's swap).
 
+.PARAMETER IncludeLeaveDateLeaver
+    Also create the SCHEDULED leaver "Contoso - Leaver (HR leave date,
+    scheduled)" (default off). It closes the leaver gap with no hand step:
+      HR terminates in OrangeHRM -> connector -> hr-feed -> HR-SYNC sends
+      active:false -> the HR job writes AD accountDisabled AND
+      msDS-cloudExtensionAttribute2 = the time the leaver arrived
+      (lab/scripts/dc/configure-sync.py leavedate) -> Cloud Sync carries both
+      up (accountEnabled false, employeeLeaveDateTime) -> this workflow runs
+      on the next tenant schedule run.
+    Trigger: time based, employeeLeaveDateTime, offset 0 days. Scope:
+    (accountEnabled eq false), so a rehired (enabled) worker is never
+    processed; Lifecycle Workflows checks the scope again just before it
+    runs (Learn, execution conditions). Scheduling ON. Tasks: revoke
+    refresh tokens, cancel pending package requests, remove all access
+    package assignments, remove from all groups, remove direct licenses.
+    No disable task: HR already disabled the AD account (the source of
+    authority). Worst case = Cloud Sync cycle (20 min) + the schedule
+    interval (-ScheduleIntervalHours).
+    LIMIT, measured 2026-11-08 (worker 100496): the task "Remove all access
+    package assignments for user" reported success but did NOT remove the
+    assignment an AUTOMATIC policy made (no entitlement audit event; the
+    assignment stayed AutoAssignmentInGracePeriod, 72 h). It does remove
+    request/admin assignments, and the other tasks ran. So for birthright
+    packages this workflow does not close the gap on its own; an
+    adminRemove request does (3 min 20 s in the lab tenant, 04-Leaver.ps1
+    step 3). Automating that adminRemove needs a new Graph permission on
+    an automated identity (owner decision; see the PR).
+
+.PARAMETER LeaverExtensionLogicAppName
+    ADR 0029. With -IncludeLeaveDateLeaver: the Logic App from
+    modules/leaver-extension (Terraform output leaver_extension_logic_app_name).
+    The script finds or creates the custom task extension "Contoso - Remove
+    birthright packages (leaver)" (Proof-of-Possession token, no callback:
+    fire and forget) and adds the task "Run a Custom Task Extension" right
+    after "Remove all access package assignments". The Logic App then
+    adminRemoves every delivered assignment made by an automatic policy,
+    which the built-in task skips. Needs LifecycleWorkflows-CustomExt.ReadWrite.All
+    (or LifecycleWorkflows.ReadWrite.All) and Logic App Contributor on the
+    Logic App (Learn, create customTaskExtension).
+
+.PARAMETER LeaverExtensionSubscriptionId / LeaverExtensionResourceGroup
+    Where that Logic App lives. Resource group default RG-IDENTITY-LAB.
+
+.PARAMETER LeaveDateLeaverWorkflowName
+    Default "Contoso - Leaver (HR leave date, scheduled)".
+
+.PARAMETER ScheduleIntervalHours
+    Tenant-wide Lifecycle Workflows schedule (workflowScheduleIntervalInHours,
+    1-24, default in Entra 3). 0 (the default) leaves it as it is. 1 is the
+    shortest the service supports; it also makes the joiner run hourly.
+
 .PARAMETER IncludeScheduledLeaver
     Also create the scheduled leaver (group membership change: removed from
     -LeaverTriggerGroupMailNickname). Off by default. Needs the All-Workforce
@@ -405,6 +456,29 @@ param(
     [Parameter()]
     [ValidateNotNullOrEmpty()]
     [string]$MoverFromPackage = 'Nurse - Clinical Apps',
+
+    [Parameter()]
+    [switch]$IncludeLeaveDateLeaver,
+
+    [Parameter()]
+    [ValidateNotNullOrEmpty()]
+    [string]$LeaveDateLeaverWorkflowName = 'Contoso - Leaver (HR leave date, scheduled)',
+
+    [Parameter()]
+    [ValidateRange(0, 24)]
+    [int]$ScheduleIntervalHours = 0,
+
+    [Parameter()]
+    [ValidatePattern('^[A-Za-z0-9-]{1,80}$', ErrorMessage = 'Logic App name: letters, digits and hyphens.')]
+    [string]$LeaverExtensionLogicAppName = '',
+
+    [Parameter()]
+    [ValidatePattern('^$|^[0-9a-fA-F-]{36}$', ErrorMessage = 'Subscription id must be a GUID.')]
+    [string]$LeaverExtensionSubscriptionId = '',
+
+    [Parameter()]
+    [ValidatePattern('^[A-Za-z0-9._()-]{1,90}$', ErrorMessage = 'Resource group name not valid.')]
+    [string]$LeaverExtensionResourceGroup = 'RG-IDENTITY-LAB',
 
     [Parameter()]
     [switch]$IncludeScheduledLeaver,
@@ -534,6 +608,8 @@ $taskCatalog = [ordered]@{
     # Mover (-IncludeMover only). verify: display names in the tenant.
     RemovePackage     = @{ Names = @('Remove access package assignment for user'); Params = @('accessPackageId') }
     MoverNotify       = @{ Names = @('Send email to notify manager of user move', "Send email to manager about user's job change"); Params = @() }
+    # Leaver extension (-LeaverExtensionLogicAppName only). Read from the tenant 2026-11-08.
+    RunExtension      = @{ Names = @('Run a Custom Task Extension'); Params = @('customTaskExtensionID') }
 }
 
 function Get-NormalizedName { param([string]$Name) return ($Name -replace '[^A-Za-z0-9]', '').ToLowerInvariant() }
@@ -587,6 +663,7 @@ $def = @{}
 foreach ($key in $taskCatalog.Keys) {
     if ($key -eq 'AddGroups' -and -not $JoinerGroupMailNicknames) { continue }
     if ($key -in 'RemovePackage', 'MoverNotify' -and -not $IncludeMover) { continue }
+    if ($key -eq 'RunExtension' -and -not $LeaverExtensionLogicAppName) { continue }
     $def[$key] = Resolve-TaskDefinition -Key $key
     Write-Verbose "Resolved $key -> $($def[$key]['displayName']) ($($def[$key]['id']))"
 }
@@ -728,6 +805,19 @@ foreach ($nick in $groupIds.Keys) {
                 -Description "Birthright cloud group $nick (not package-delivered)." -Arguments $gArgs))
 }
 
+# Joiner scope. HR creates synced accounts ENABLED (HR job accountDisabled
+# <- active; proven 2026-11-07: AD accountDisabled False at create, Entra
+# AccountEnabled true), so the joiner never needs to enable a disabled user.
+# It must not: on 2026-11-07 the scheduled joiner ran "Enable user account"
+# on a worker HR had terminated the same day (hire date still inside the
+# joiner's trigger window and its 3-day catch-up) and switched the leaver
+# back on 84 s after Cloud Sync disabled it. So the scope admits enabled
+# users only. With -ManageOnPremisesAccounts the workflow owns enablement
+# (pre-hires created disabled), so that guard cannot apply: do not combine
+# it with a same-week HR leaver.
+$joinerRule = "(department eq '$(ConvertTo-ODataLiteral $JoinerDepartment)')"
+if (-not $ManageOnPremisesAccounts) { $joinerRule += ' and (accountEnabled eq true)' }
+
 $joinerBody = [ordered]@{
     category            = 'joiner'
     displayName         = $JoinerWorkflowName
@@ -738,7 +828,7 @@ $joinerBody = [ordered]@{
         '@odata.type' = '#microsoft.graph.identityGovernance.triggerAndScopeBasedConditions'
         scope         = [ordered]@{
             '@odata.type' = '#microsoft.graph.identityGovernance.ruleBasedSubjectSet'
-            rule          = "(department eq '$(ConvertTo-ODataLiteral $JoinerDepartment)')"
+            rule          = $joinerRule
         }
         trigger       = [ordered]@{
             '@odata.type'      = '#microsoft.graph.identityGovernance.timeBasedAttributeTrigger'
@@ -787,6 +877,115 @@ $leaverBody = [ordered]@{
     isSchedulingEnabled = $false   # on-demand-only workflows are never scheduled
     executionConditions = [ordered]@{ '@odata.type' = '#microsoft.graph.identityGovernance.onDemandExecutionOnly' }
     tasks               = $leaverTasks
+}
+
+# ---- Scheduled leaver on employeeLeaveDateTime (-IncludeLeaveDateLeaver) -----
+if ($LeaverExtensionLogicAppName -and -not $IncludeLeaveDateLeaver) { throw '-LeaverExtensionLogicAppName needs -IncludeLeaveDateLeaver (the task goes into that workflow).' }
+if ($LeaverExtensionLogicAppName -and -not $OfflinePreview -and -not $LeaverExtensionSubscriptionId) { throw '-LeaverExtensionLogicAppName needs -LeaverExtensionSubscriptionId (where the Logic App lives).' }
+
+# ---- Custom task extension for the leaver (ADR 0029) --------------------------
+function Get-ExtensionDrift {
+    # Owned fields of an existing customTaskExtension that differ from the
+    # desired body: the Logic App it calls and the token type. Pure.
+    param([System.Collections.IDictionary]$Existing, [System.Collections.IDictionary]$Desired)
+    $e = $Existing['endpointConfiguration']; $d = $Desired['endpointConfiguration']
+    foreach ($k in 'subscriptionId', 'resourceGroupName', 'logicAppWorkflowName') {
+        if (-not $e -or [string]$e[$k] -ne [string]$d[$k]) { "$k '$(if ($e) { $e[$k] })' -> '$($d[$k])'" }
+    }
+    $ea = if ($Existing['authenticationConfiguration']) { [string]$Existing['authenticationConfiguration']['@odata.type'] } else { '' }
+    if ($ea -ne [string]$Desired['authenticationConfiguration']['@odata.type']) { "authentication '$ea' -> '$($Desired['authenticationConfiguration']['@odata.type'])'" }
+}
+
+# Find by display name, else create. PoP token (Learn: new extensions are PoP
+# only); NO callbackConfiguration = fire and forget, so the Logic App's
+# identity needs no Lifecycle Workflows permission.
+$extensionName = 'Contoso - Remove birthright packages (leaver)'
+$extensionId = $null
+if ($LeaverExtensionLogicAppName) {
+    $extBody = [ordered]@{
+        displayName                 = $extensionName
+        description                 = 'adminRemove of access packages assigned by an AUTOMATIC policy (the built-in task skips them). Logic App from lab/terraform/modules/leaver-extension; ADR 0029.'
+        endpointConfiguration       = [ordered]@{
+            '@odata.type'        = '#microsoft.graph.logicAppTriggerEndpointConfiguration'
+            subscriptionId       = $(if ($OfflinePreview -and -not $LeaverExtensionSubscriptionId) { '<subscription id>' } else { $LeaverExtensionSubscriptionId })
+            resourceGroupName    = $LeaverExtensionResourceGroup
+            logicAppWorkflowName = $LeaverExtensionLogicAppName
+        }
+        authenticationConfiguration = [ordered]@{ '@odata.type' = '#microsoft.graph.azureAdPopTokenAuthentication' }
+        clientConfiguration         = [ordered]@{ '@odata.type' = '#microsoft.graph.customExtensionClientConfiguration'; maximumRetries = 1; timeoutInMilliseconds = 1000 }
+    }
+    if ($OfflinePreview) {
+        Write-Console "POST $lcw/customTaskExtensions" -ForegroundColor DarkYellow
+        Write-Console ($extBody | ConvertTo-Json -Depth 8)
+        $extensionId = '<customTaskExtensionId>'
+    }
+    else {
+        $found = @(Get-GraphCollection -Uri "$lcw/customTaskExtensions" | Where-Object { [string]$_['displayName'] -eq $extensionName })
+        if ($found.Count -gt 1) { throw "$($found.Count) custom task extensions are named '$extensionName' - delete the extras first." }
+        if ($found.Count -eq 1) {
+            $extensionId = [string]$found[0]['id']
+            # Reuse only if it points at THIS Logic App with a PoP token; a
+            # renamed or moved app must not leave leavers calling the old one.
+            $have = Invoke-Graph -Method GET -Uri "$lcw/customTaskExtensions/$extensionId"
+            $drift = @(Get-ExtensionDrift -Existing $have -Desired $extBody)
+            if (-not $drift) { Add-Result $extensionName $extensionId 'up-to-date' 'existing extension reused' }
+            elseif (-not $UpdateExisting) {
+                Write-Warning "  '$extensionName' differs: $($drift -join '; '). Re-run with -UpdateExisting to point it at the new Logic App."
+                Add-Result $extensionName $extensionId 'FAILED' "drift: $($drift -join '; ')"
+                $failures++
+            }
+            elseif ($PSCmdlet.ShouldProcess($extensionName, "update custom task extension ($($drift -join '; '))")) {
+                Invoke-Graph -Method PATCH -Uri "$lcw/customTaskExtensions/$extensionId" -Body ([ordered]@{
+                        endpointConfiguration       = $extBody.endpointConfiguration
+                        authenticationConfiguration = $extBody.authenticationConfiguration
+                        clientConfiguration         = $extBody.clientConfiguration
+                    }) | Out-Null
+                Add-Result $extensionName $extensionId 'updated' ($drift -join '; ')
+            }
+            else { Add-Result $extensionName $extensionId 'whatif-update' ($drift -join '; ') }
+        }
+        elseif ($PSCmdlet.ShouldProcess($extensionName, 'create custom task extension')) {
+            $extensionId = [string](Invoke-Graph -Method POST -Uri "$lcw/customTaskExtensions" -Body $extBody)['id']
+            Add-Result $extensionName $extensionId 'created'
+        }
+        else { $extensionId = '<customTaskExtensionId>'; Add-Result $extensionName '' 'whatif-create' }
+    }
+}
+
+$leaveDateLeaverBody = $null
+if ($IncludeLeaveDateLeaver) {
+    # The on-demand leaver's tasks minus "Disable user account": HR has
+    # already disabled the AD account, and the scope only admits disabled users.
+    $leaveDateLeaverBody = [ordered]@{
+        category            = 'leaver'
+        displayName         = $LeaveDateLeaverWorkflowName
+        description         = 'HR leaver, no hand step: runs on employeeLeaveDateTime (set by HR inbound provisioning, carried by Cloud Sync) for disabled users. Managed by lab/scripts/powershell/post-apply/New-LifecycleWorkflows.ps1.'
+        isEnabled           = $true
+        isSchedulingEnabled = $true
+        executionConditions = [ordered]@{
+            '@odata.type' = '#microsoft.graph.identityGovernance.triggerAndScopeBasedConditions'
+            scope         = [ordered]@{
+                '@odata.type' = '#microsoft.graph.identityGovernance.ruleBasedSubjectSet'
+                rule          = '(accountEnabled eq false)'
+            }
+            trigger       = [ordered]@{
+                '@odata.type'      = '#microsoft.graph.identityGovernance.timeBasedAttributeTrigger'
+                timeBasedAttribute = 'employeeLeaveDateTime'
+                offsetInDays       = 0
+            }
+        }
+        tasks               = @(
+            $leaverTasks | Select-Object -Skip 1 | ForEach-Object {
+                $_
+                if ($extensionId -and [string]$_['displayName'] -eq 'Remove all access package assignments') {
+                    $extArgs = [ordered]@{}
+                    $extArgs[(Get-DefinitionParameterName -Definition $def.RunExtension -Pattern '^customTaskExtensionID$' -DocumentedName 'customTaskExtensionID')] = $extensionId
+                    ConvertTo-LcwTask -Definition $def.RunExtension -DisplayName 'Remove birthright packages (Logic App, adminRemove)' -ContinueOnError $true `
+                        -Description 'The built-in task above skips assignments made by an automatic policy (measured 2026-11-08); this adminRemoves them. ADR 0029.' -Arguments $extArgs
+                }
+            }
+        )
+    }
 }
 
 # ---- Scheduled leaver (-IncludeScheduledLeaver only) --------------------------
@@ -902,7 +1101,24 @@ $existing = @()
 if (-not $OfflinePreview) { $existing = @(Get-GraphCollection -Uri "$lcw/workflows") }
 
 $workflowIds = @{}
-foreach ($desired in @($joinerBody, $leaverBody, $scheduledLeaverBody, $moverBody | Where-Object { $null -ne $_ })) {
+# Tenant schedule (-ScheduleIntervalHours): one PATCH, only when it differs.
+if ($ScheduleIntervalHours -gt 0) {
+    if ($OfflinePreview) {
+        Write-Console "PATCH $lcw/settings { workflowScheduleIntervalInHours = $ScheduleIntervalHours }" -ForegroundColor DarkYellow
+    }
+    else {
+        $settings = Invoke-Graph -Method GET -Uri "$lcw/settings"
+        $have = [int]$settings['workflowScheduleIntervalInHours']
+        if ($have -eq $ScheduleIntervalHours) { Add-Result 'tenant schedule' '' 'up-to-date' "every $have h" }
+        elseif ($PSCmdlet.ShouldProcess('Lifecycle Workflows settings', "schedule every $have h -> $ScheduleIntervalHours h")) {
+            Invoke-Graph -Method PATCH -Uri "$lcw/settings" -Body @{ workflowScheduleIntervalInHours = $ScheduleIntervalHours } | Out-Null
+            Add-Result 'tenant schedule' '' 'settings-patched' "every $have h -> $ScheduleIntervalHours h"
+        }
+        else { Add-Result 'tenant schedule' '' 'whatif-patch' "every $have h -> $ScheduleIntervalHours h" }
+    }
+}
+
+foreach ($desired in @($joinerBody, $leaverBody, $leaveDateLeaverBody, $scheduledLeaverBody, $moverBody | Where-Object { $null -ne $_ })) {
     $name = $desired.displayName
     Write-Console "`n=== $name ===" -ForegroundColor Cyan
     $json = $desired | ConvertTo-Json -Depth 12
@@ -1045,6 +1261,15 @@ function Get-OnDemandSubject {
         }
         if ($Kind -eq 'joiner' -and [string]$u['department'] -ne $JoinerDepartment -and -not $SkipGuards) {
             Write-Warning "  ${upn}: department '$($u['department'])' is outside the joiner scope ('$JoinerDepartment'). Skipped (use -Force to override)."
+            $rejected++
+            continue
+        }
+        # Same guard as the joiner's scope rule (accountEnabled eq true): an
+        # on-demand run ignores the scope, and its "Enable user account" task
+        # would switch a terminated worker back on (seen 2026-11-07 on the
+        # scheduled path). Off only where the workflow owns enablement.
+        if ($Kind -eq 'joiner' -and $u['accountEnabled'] -ne $true -and -not $SkipGuards -and -not $ManageOnPremisesAccounts) {
+            Write-Warning "  ${upn}: account is DISABLED - a joiner run would enable it again (HR may have terminated them). Skipped (use -Force to override)."
             $rejected++
             continue
         }

@@ -1,0 +1,6 @@
+new password generated and stored in Keychain item contoso-lab-ad-t0-adm-01 (not shown)
+run command lab-ae393b4e: lab/scripts/dc/Reset-TierAdminPassword.ps1 on vm-dc01
+RESET: DONE t0-adm-01 pwdLastSet 2026-11-07 00:57:51Z -> 2026-11-07 03:58:07Z
+KERBEROS: PASS ticket for ldap/DC01.corp.contosohealthlab.com issued to CORP\t0-adm-01, valid to 2026-11-07 07:58:07Z
+state: Succeeded, exit code: 0
+ROTATED: t0-adm-01 has a new password (Keychain contoso-lab-ad-t0-adm-01); Kerberos sign-in with it works

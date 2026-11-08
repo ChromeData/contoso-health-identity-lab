@@ -1,17 +1,17 @@
 // =============================================================================
-// store.mjs - where the HR app keeps its roster, and how it hears back.
+// store.mjs - the connector's outbox (the feed file), and how it hears back.
 // -----------------------------------------------------------------------------
-// GitHubStore (the lab): the roster file on the hr-feed branch, read and
-// written through the GitHub contents API with the `gh` CLI. Each HR save
-// is one commit. That commit is the HR app's outbound integration event:
-// hr-feed.yml runs on it, signs in as HR-SYNC over GitHub OIDC (no secret)
-// and sends only the changed worker to Entra's API-driven inbound
-// provisioning API (bulkUpload). Why this route and not the lab operator or
-// an Azure Function: ADR 0027.
+// GitHubStore (the lab): the feed file on the hr-feed branch, read and
+// written through the GitHub contents API with the `gh` CLI. Each sync that
+// changes a worker is one commit. That commit is the outbound integration
+// event: hr-feed.yml runs on it, signs in as HR-SYNC over GitHub OIDC (no
+// secret) and sends only the changed workers to Entra's API-driven inbound
+// provisioning API (bulkUpload). Why this route and not a direct call with
+// a stored secret: ADR 0028, "Decision 3".
 //
-// Optimistic concurrency: the write carries the file's blob sha, so two HR
-// saves at once cannot overwrite each other (GitHub answers 409; we re-read
-// and re-apply once).
+// Optimistic concurrency: the write carries the file's blob sha, so a write
+// made on an old read cannot overwrite a newer file (GitHub answers 409; the
+// connector re-reads on its next cycle).
 //
 // No token passes through this process's argv or environment: `gh` uses
 // its own stored sign-in. The request body goes over stdin.
@@ -38,8 +38,8 @@ function gh(args, input) {
 }
 
 export class GitHubStore {
-  constructor({ repo, branch = 'hr-feed', path = ROSTER_PATH, run = gh }) {
-    Object.assign(this, { repo, branch, path, run });
+  constructor({ repo, branch = 'hr-feed', path = ROSTER_PATH, run = gh, trailer = 'Entered in OrangeHRM; written by the HR connector (lab/hris/connector).' }) {
+    Object.assign(this, { repo, branch, path, run, trailer });
   }
 
   async read() {
@@ -50,7 +50,7 @@ export class GitHubStore {
 
   async write(text, version, message) {
     const body = JSON.stringify({
-      message: `${message}\n\nEntered in the Contoso HR app (lab/hr-app).`,
+      message: `${message}\n\n${this.trailer}`,
       content: Buffer.from(text, 'utf8').toString('base64'),
       sha: version,
       branch: this.branch,
@@ -65,9 +65,9 @@ export class GitHubStore {
     }
   }
 
-  // The integration's delivery status for one HR save: the hr-feed run on
-  // that commit (push runs only: a manual dry run on the same commit sends
-  // nothing and must never read as delivered). HR sees "sending / delivered / failed", not GitHub.
+  // The delivery status of one outbox commit: the hr-feed run on that
+  // commit (push runs only: a manual dry run on the same commit sends
+  // nothing and must never read as delivered).
   async delivery(commit) {
     const out = await this.run(['api', `repos/${this.repo}/actions/workflows/hr-feed.yml/runs?head_sha=${commit}&event=push&per_page=1`]);
     const r = JSON.parse(out).workflow_runs?.[0];

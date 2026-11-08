@@ -400,3 +400,57 @@ run "intune_write_time_box_warns_after_the_trial" {
   }
   expect_failures = [check.intune_write_time_box]
 }
+
+# ---- karen-review round 2, R4: no standing Tier-0 reach ---------------------
+
+run "standing_kv_read_excludes_tier0_secrets" {
+  command = plan
+
+  assert {
+    condition = (
+      azurerm_role_assignment.operator["Key Vault Secrets User"].condition_version == "2.0" &&
+      strcontains(azurerm_role_assignment.operator["Key Vault Secrets User"].condition, "!(ActionMatches{'Microsoft.KeyVault/vaults/secrets/getSecret/action'})") &&
+      strcontains(azurerm_role_assignment.operator["Key Vault Secrets User"].condition, "@Resource[Microsoft.KeyVault/vaults/secrets:name] StringNotEquals 'dc01-admin-password'") &&
+      strcontains(azurerm_role_assignment.operator["Key Vault Secrets User"].condition, "@Resource[Microsoft.KeyVault/vaults/secrets:name] StringNotEquals 'dc01-dsrm-password'")
+    )
+    error_message = "R4: standing Key Vault Secrets User must not read the Domain Admin or DSRM secret (ABAC condition)"
+  }
+}
+
+run "standing_blob_role_cannot_write_state" {
+  command = plan
+
+  assert {
+    condition = (
+      azurerm_role_assignment.operator["Storage Blob Data Contributor"].condition_version == "2.0" &&
+      alltrue([for a in ["blobs/write'}", "blobs/add/action'}", "blobs/delete'}", "blobs/move/action'}"] : strcontains(azurerm_role_assignment.operator["Storage Blob Data Contributor"].condition, a)]) &&
+      strcontains(azurerm_role_assignment.operator["Storage Blob Data Contributor"].condition, "containers:name] StringNotEquals 'tfstate'") &&
+      strcontains(azurerm_role_assignment.operator["Storage Blob Data Contributor"].condition, "containers:name] StringNotEquals 'tfstate-bootstrap'")
+    )
+    error_message = "R4: standing Storage Blob Data Contributor must not write the Terraform state containers (ABAC condition)"
+  }
+  assert {
+    condition     = azurerm_role_assignment.operator["Reader"].condition == null
+    error_message = "Reader carries no condition"
+  }
+}
+
+run "tier0_secret_list_cannot_drop_the_domain_admin" {
+  command = plan
+
+  variables {
+    tier0_secret_names = ["dc01-dsrm-password"]
+  }
+
+  expect_failures = [var.tier0_secret_names]
+}
+
+run "state_container_list_cannot_drop_dev_state" {
+  command = plan
+
+  variables {
+    terraform_state_containers = ["tfstate-bootstrap"]
+  }
+
+  expect_failures = [var.terraform_state_containers]
+}
