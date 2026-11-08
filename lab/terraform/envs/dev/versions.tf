@@ -29,5 +29,11 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+
+    # time_sleep: replication waits (modules/apps servicenow_fulfilment.tf).
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.13"
+    }
   }
 }

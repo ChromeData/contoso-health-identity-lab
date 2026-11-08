@@ -413,6 +413,11 @@ access package after the manager approved in ServiceNow. The app:
 | Credential | certificate, public half in [`files/servicenow-fulfilment.pem`](files/servicenow-fulfilment.pem) | no client secret anywhere; the private key exists only in the instance's key store |
 | Sign-in | assignment required, hidden | an app-only client: no user gets a token for it |
 
+**Replication wait.** The catalog role assignment waits 90 s after the
+service principal is created (`time_sleep`, keyed to the SP's object id):
+entitlement management refused it with *SubjectNotFound* when it came right
+after the SP (catch-up apply run 42512070374, 2026-11-08).
+
 Residual risk: the role spans the whole Clinical catalog (Pharmacy included).
 Entra still enforces incompatible packages (seen live: an ICU nurse was
 refused Pharmacy), every request carries the ServiceNow ticket number, and

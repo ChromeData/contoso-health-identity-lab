@@ -10,6 +10,9 @@
 #     Access package assignment manager (e2182095-...) on the given catalog;
 #   * the flag without a catalog id fails the plan.
 
+# time_sleep is mocked too: a mocked apply never waits 90 s.
+mock_provider "time" {}
+
 mock_provider "azuread" {
   mock_data "azuread_client_config" {
     defaults = {
@@ -79,6 +82,7 @@ run "fulfilment_absent_by_default" {
       && length(azuread_application_certificate.servicenow_fulfilment) == 0
       && length(azuread_service_principal.servicenow_fulfilment) == 0
       && length(azuread_access_package_catalog_role_assignment.servicenow_fulfilment) == 0
+      && length(time_sleep.servicenow_fulfilment_sp_replication) == 0
       && output.servicenow_fulfilment == null
     )
     error_message = "with enable_servicenow_fulfilment = false nothing may be planned"
@@ -113,6 +117,10 @@ run "fulfilment_least_privilege" {
     error_message = "nobody signs in to the fulfilment app: assignment required, hidden from My Apps"
   }
   assert {
+    condition     = time_sleep.servicenow_fulfilment_sp_replication[0].create_duration == "90s"
+    error_message = "the catalog role must wait for the new service principal to replicate (SubjectNotFound, run 42512070374)"
+  }
+  assert {
     condition     = azuread_application.servicenow_fulfilment[0].display_name == "ServiceNow - Access Fulfilment"
     error_message = "lab/servicenow/apply.py finds the client id by this display name"
   }
@@ -126,4 +134,27 @@ run "fulfilment_needs_a_catalog" {
   }
 
   expect_failures = [azuread_application.servicenow_fulfilment]
+}
+
+# Mocked APPLY: the role assignment gets the SP's object id THROUGH the sleep.
+run "fulfilment_role_waits_for_the_sp" {
+  command = apply
+
+  variables {
+    enable_servicenow_fulfilment     = true
+    servicenow_fulfilment_catalog_id = "abababab-abab-abab-abab-abababababab"
+  }
+
+  override_resource {
+    target = azuread_service_principal.servicenow_fulfilment
+    values = {
+      id        = "/servicePrincipals/1d3a3fc9-36db-4c40-b65d-1482dee35da6"
+      object_id = "1d3a3fc9-36db-4c40-b65d-1482dee35da6"
+    }
+  }
+
+  assert {
+    condition     = azuread_access_package_catalog_role_assignment.servicenow_fulfilment[0].principal_object_id == "1d3a3fc9-36db-4c40-b65d-1482dee35da6" && time_sleep.servicenow_fulfilment_sp_replication[0].triggers["service_principal_object_id"] == "1d3a3fc9-36db-4c40-b65d-1482dee35da6"
+    error_message = "the assignment must name the SP, read through the replication wait"
+  }
 }
