@@ -83,14 +83,22 @@ def quote(value):
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+ITEM_NOT_FOUND = 44  # security's exit code for errSecItemNotFound
+
+
 def keychain_read(service, missing_ok=False):
+    # Only "item not found" counts as missing. Any other error (locked
+    # Keychain, access denied) stops the run: treating it as missing would
+    # skip the half-done-run guard or fake a delete (Greptile #251).
     r = subprocess.run(["security", "find-generic-password", "-s", service, "-w"],
                        capture_output=True, text=True)
-    if r.returncode != 0:
+    if r.returncode == 0:
+        return r.stdout.rstrip("\n")
+    if r.returncode == ITEM_NOT_FOUND:
         if missing_ok:
             return None
         raise SystemExit(f"Keychain item {service} not found")
-    return r.stdout.rstrip("\n")
+    raise SystemExit(f"Keychain read of {service} failed (exit {r.returncode}): stopping")
 
 
 def keychain_write(service, account, value):
@@ -104,7 +112,9 @@ def keychain_write(service, account, value):
 
 
 def keychain_delete(service):
-    subprocess.run(["security", "delete-generic-password", "-s", service], capture_output=True, text=True)
+    r = subprocess.run(["security", "delete-generic-password", "-s", service], capture_output=True, text=True)
+    if r.returncode not in (0, ITEM_NOT_FOUND):
+        raise SystemExit(f"Keychain delete of {service} failed (exit {r.returncode})")
     if keychain_read(service, missing_ok=True) is not None:
         raise SystemExit(f"Keychain item {service} could not be deleted")
 

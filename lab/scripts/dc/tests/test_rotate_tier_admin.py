@@ -173,6 +173,45 @@ class Lock(Harness):
             held.close()
 
 
+class KeychainErrors(unittest.TestCase):
+    """Real keychain_read/keychain_delete with a fake `security` exit code."""
+
+    def fake(self, rc):
+        return mock.patch.object(self.mod.subprocess, "run",
+                                 return_value=types.SimpleNamespace(returncode=rc, stdout="", stderr=""))
+
+    def setUp(self):
+        self.mod = load()
+
+    def test_not_found_is_missing(self):
+        with self.fake(44):
+            self.assertIsNone(self.mod.keychain_read(PREV, missing_ok=True))
+
+    def test_other_read_error_stops_not_missing(self):
+        # Greptile #251: a locked Keychain must not look like "no -previous item".
+        with self.fake(51):
+            with self.assertRaises(SystemExit) as e:
+                self.mod.keychain_read(PREV, missing_ok=True)
+        self.assertIn("failed", str(e.exception.code))
+
+    def test_failed_delete_stops(self):
+        with self.fake(51):
+            with self.assertRaises(SystemExit):
+                self.mod.keychain_delete(PREV)
+
+    def test_read_error_on_previous_stops_rotation_before_any_write(self):
+        calls = []
+        def run(argv, **kw):
+            calls.append(argv)
+            return types.SimpleNamespace(returncode=51 if PREV in argv else 0, stdout="fake\n", stderr="")
+        with tempfile.TemporaryDirectory() as d:
+            self.mod.LOCK_DIR = d
+            with mock.patch.object(self.mod.subprocess, "run", side_effect=run), mock.patch("builtins.print"):
+                with self.assertRaises(SystemExit):
+                    self.mod.main([SAM])
+        self.assertFalse([a for a in calls if a[:2] == ["security", "-i"]])
+
+
 class Quote(unittest.TestCase):
     def test_round_trip(self):
         mod = load()
