@@ -1,0 +1,10 @@
+before: Key Vault kv-idlab-20f1/dc01-admin-password matches Keychain contoso-lab-dc01-admin
+new password generated and stored in Keychain item contoso-lab-dc01-admin (not shown)
+run command lab-b219aa75: lab/scripts/dc/Reset-BuildAdminPassword.ps1 on vm-dc01
+DEPENDENTS: NONE (no Windows service or stored-password scheduled task on DC01 runs as contosoadmin)
+RESET: DONE contosoadmin pwdLastSet 2026-10-27 17:29:13Z -> 2026-11-08 18:09:40Z
+KERBEROS: PASS ticket for ldap/DC01.corp.contosohealthlab.com issued to CORP\contosoadmin, valid to 2026-11-09 04:09:41Z
+KERBEROS-OLD: REFUSED (the KDC no longer accepts the old password)
+state: Succeeded, exit code: 0
+Key Vault kv-idlab-20f1/dc01-admin-password: new version written and read back (matches the Keychain)
+ROTATED: contosoadmin has a new password (Keychain contoso-lab-dc01-admin, Key Vault kv-idlab-20f1/dc01-admin-password); Kerberos works with the new one and refuses the old one

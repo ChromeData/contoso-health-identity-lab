@@ -94,10 +94,33 @@ resource "azuread_service_principal" "servicenow_fulfilment" {
   notes                        = "ServiceNow -> Entra ID Governance (assignment requests). See modules/apps/servicenow_fulfilment.tf."
 }
 
+# WAIT FOR THE NEW SERVICE PRINCIPAL TO REPLICATE. Entitlement management
+# reads principals from its own replica of the directory. Right after the SP
+# is created it does not know it yet and refuses the role assignment with
+# "SubjectNotFound: The subject was not found" (400). Seen twice:
+#   * 2026-11-07, the throwaway twin, by hand: refused 10 s after the SP was
+#     created, accepted on the retry ~15 s later;
+#   * 2026-11-08, the catch-up apply (run 42512070374): the SP was created in
+#     the same run and the assignment failed with SubjectNotFound.
+# The azuread provider does not retry this error, so the assignment waits
+# here. 90 s is about six times the gap seen by hand. The sleep is keyed to
+# the SP's object id: it runs again only when the SP is replaced, never on
+# routine applies. If replication is slower than that, the apply fails as
+# before and a re-run succeeds (nothing is created half-way).
+resource "time_sleep" "servicenow_fulfilment_sp_replication" {
+  count = local.servicenow_fulfilment_enabled ? 1 : 0
+
+  create_duration = "90s"
+  triggers = {
+    service_principal_object_id = azuread_service_principal.servicenow_fulfilment[0].object_id
+  }
+}
+
 resource "azuread_access_package_catalog_role_assignment" "servicenow_fulfilment" {
   count = local.servicenow_fulfilment_enabled ? 1 : 0
 
-  role_id             = local.access_package_assignment_manager_role_id
-  principal_object_id = azuread_service_principal.servicenow_fulfilment[0].object_id
+  role_id = local.access_package_assignment_manager_role_id
+  # Read through the sleep, so the assignment cannot start before it ends.
+  principal_object_id = time_sleep.servicenow_fulfilment_sp_replication[0].triggers["service_principal_object_id"]
   catalog_id          = var.servicenow_fulfilment_catalog_id
 }
