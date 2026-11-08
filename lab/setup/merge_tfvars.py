@@ -15,6 +15,10 @@ Rules (one top-level assignment = one key, multi-line lists/maps included):
   * --refuse-change KEY: if both files set KEY to different values, stop
     (exit 3, nothing written). Used for pipeline_config_vault_name: a new
     name would make the next apply REPLACE the vault.
+FAIL CLOSED on anything this line parser does not understand: an indented
+assignment, a /* block comment */ (its body could look like a setting) or a
+<<HEREDOC value stops the run (exit 4, nothing written), because step B
+applies the result with -auto-approve. Fix the file by hand, then re-run.
 Stdlib only; values are copied as text, never printed elsewhere.
 """
 import re
@@ -23,10 +27,15 @@ import sys
 KEY = re.compile(r'^([A-Za-z_][A-Za-z0-9_-]*)\s*=')
 
 
-def depth_change(line):
-    """Bracket depth change of one line, ignoring strings and # comments."""
+class Unsupported(ValueError):
+    pass
+
+
+def scan(line, lineno):
+    """Bracket depth change of one line, ignoring strings and # / // comments.
+    Refuses /* (block comment) and << (heredoc) outside strings."""
     d, in_str, esc = 0, False, False
-    for ch in line:
+    for i, ch in enumerate(line):
         if in_str:
             if esc:
                 esc = False
@@ -37,8 +46,12 @@ def depth_change(line):
             continue
         if ch == '"':
             in_str = True
-        elif ch == '#':
+        elif ch == '#' or line.startswith('//', i):
             break
+        elif line.startswith('/*', i):
+            raise Unsupported(f'line {lineno}: /* block comments are not supported here')
+        elif line.startswith('<<', i):
+            raise Unsupported(f'line {lineno}: heredoc values are not supported here')
         elif ch in '[{(':
             d += 1
         elif ch in ']})':
@@ -47,30 +60,38 @@ def depth_change(line):
 
 
 def parse(text):
-    """Return [(key, block_text)] in file order; blocks keep their comments."""
+    """Return [(key, block_text)] in file order; blocks keep their comments.
+    Raises Unsupported on any top-level line that is not a column-0
+    `key = value`, a # or // comment, or blank."""
     out, pending, cur, depth = [], [], None, 0
-    for line in text.splitlines(keepends=True):
+    for n, line in enumerate(text.splitlines(keepends=True), 1):
         if cur is None:
             m = KEY.match(line)
             if m:
                 cur = [m.group(1), pending + [line]]
                 pending = []
-                depth = depth_change(line)
+                depth = scan(line, n)
                 if depth <= 0:
                     out.append((cur[0], ''.join(cur[1])))
                     cur = None
             elif line.lstrip().startswith(('#', '//')):
+                if '/*' in line.split('#', 1)[0].split('//', 1)[0]:
+                    raise Unsupported(f'line {n}: /* block comments are not supported here')
                 pending.append(line)
             elif not line.strip():
                 pending = []
+            elif line.lstrip().startswith('/*'):
+                raise Unsupported(f'line {n}: /* block comments are not supported here')
+            else:
+                raise Unsupported(f'line {n}: not a top-level "key = value" at column 0 (indented, or not a setting): {line.strip()[:40]!r}')
         else:
             cur[1].append(line)
-            depth += depth_change(line)
+            depth += scan(line, n)
             if depth <= 0:
                 out.append((cur[0], ''.join(cur[1])))
                 cur, depth = None, 0
     if cur is not None:
-        raise ValueError(f'unclosed value for {cur[0]}')
+        raise Unsupported(f'unclosed value for {cur[0]}')
     return out
 
 
@@ -146,6 +167,9 @@ def main(argv):
     except Refused as e:
         print(f'refused: {e}', file=sys.stderr)
         return 3
+    except Unsupported as e:
+        print(f'refused: the existing terraform.tfvars has a form this merge does not parse ({e}). Nothing written. Make it plain "key = value" lines, then re-run.', file=sys.stderr)
+        return 4
     sys.stdout.write(merged)
     return 0
 

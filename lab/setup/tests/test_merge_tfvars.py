@@ -109,8 +109,37 @@ lab_map = {
         self.assertEqual(len(keys), len(set(keys)))
 
     def test_unclosed_value_fails(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(m.Unsupported):
             m.parse('x = [\n  "a",\n')
+
+    def test_block_comment_is_refused_not_activated(self):
+        old = OLD + '/*\nenable_hr_sync = true\n*/\n'
+        r = run(old, NEW)
+        self.assertEqual(r.returncode, 4)
+        self.assertEqual(r.stdout, '')
+        self.assertIn('block comment', r.stderr)
+
+    def test_block_comment_after_a_value_is_refused(self):
+        r = run(OLD + 'x = 1 /* old: 2 */\n', NEW)
+        self.assertEqual(r.returncode, 4)
+
+    def test_indented_assignment_is_refused_not_dropped(self):
+        r = run(OLD + '  enable_hr_sync = true\n', NEW)
+        self.assertEqual(r.returncode, 4)
+        self.assertIn('column 0', r.stderr)
+
+    def test_heredoc_is_refused(self):
+        r = run(OLD + 'note = <<EOT\nhello\nEOT\n', NEW)
+        self.assertEqual(r.returncode, 4)
+
+    def test_slash_slash_comment_is_still_fine(self):
+        r = run('// a comment\n' + OLD, NEW)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_slashes_inside_a_string_are_data(self):
+        r = run(OLD + 'url = "https://x/*y*/"\n', NEW)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('url = "https://x/*y*/"', r.stdout)
 
     def test_bad_flag_is_usage_error(self):
         r = run(OLD, NEW, '--nope', 'x')
