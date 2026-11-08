@@ -166,10 +166,11 @@ az vm run-command invoke -g $RG -n $VM --command-id RunPowerShellScript --script
   accounts, so `svc-vault-rotator` is granted on AdminSDHolder. That makes it
   Tier 0, the same position as any PAM reconcile account. Its password
   lives only in Key Vault and should be rotated by Vault (`ldap/rotate-root`).
-- **The DC's identity can write only its two build secrets.** An ABAC
+- **The DC's identity can write only its build secrets.** An ABAC
   condition on its Key Vault Secrets Officer grant
   (`lab/terraform/modules/dc-vm/main.tf`) limits it to `dc01-dsrm-password`
-  and `svc-vault-rotator`; it cannot read or change any other secret's value
+  and `svc-vault-rotator` (plus the retired name `svc-pam-discovery`, which no
+  longer exists; see below); it cannot read or change any other secret's value
   in the vault (secret names stay visible through ARM).
 - **Single-DC lab shortcut.** The DC points DNS at itself and forwards to
   168.63.129.16. Add the DC IP to the VNet's DNS servers once member servers
@@ -183,7 +184,10 @@ stand-in, so the account had no user. Its 30-day password would have expired
 on 2026-11-26. `Remove-PamDiscoveryAccount.ps1` (through `run-on-dc.py`)
 disabled and deleted the account, then deleted its Key Vault secret with the
 DC's own identity. It refuses any account that is not the plain bind at
-`OU=ServiceAccounts`. `02-Configure-Domain.ps1` no longer creates it, and the
-DC's Key Vault grant no longer names it. The local samba test harness
+`OU=ServiceAccounts`. `02-Configure-Domain.ps1` no longer creates it. The
+DC's Key Vault grant **still names it**: changing the condition replaces the
+role assignment, and the vault's CanNotDelete lock (#246) refused the delete
+in round-2 apply (409 ScopeLocked, run 42519889983). Narrowing it needs the
+owner to lift the lock in a write session, apply, and put the lock back. The local samba test harness
 (`lab/pam/test/samba-ad`) still seeds its own `svc-pam-discovery` in a
 throwaway container; that is not DC01.
