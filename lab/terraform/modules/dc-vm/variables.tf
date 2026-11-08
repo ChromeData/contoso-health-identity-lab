@@ -100,7 +100,7 @@ variable "allowed_ip_ranges" {
 
 variable "key_vault_id" {
   type        = string
-  description = "Key Vault the DC's identity may write its three build secrets to (dc01-dsrm-password, svc-vault-rotator, svc-pam-discovery; ABAC-limited to those names in main.tf)."
+  description = "Key Vault the DC's identity may write its two build secrets to (dc01-dsrm-password, svc-vault-rotator; ABAC-limited to those names in main.tf)."
 }
 
 variable "auto_shutdown_time" {

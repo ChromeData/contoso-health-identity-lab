@@ -235,10 +235,11 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "dc" {
 # verify: Key Vault ABAC is preview (learn.microsoft.com/azure/key-vault/general/rbac-abac).
 # If the condition is rejected, the apply fails - it never silently widens.
 locals {
-  # svc-pam-discovery: the read-only discovery bind (02-Configure-Domain.ps1,
-  # lab/pam/discover.sh) - a plain Domain User, but its password is still
-  # generated on the DC and handed over only through the vault.
-  dc_kv_secret_names = ["dc01-dsrm-password", "svc-vault-rotator", "svc-pam-discovery"]
+  # svc-pam-discovery was the third name until 2026-11-07: the read-only
+  # discovery bind for the Vault stand-in, retired with it (ADR 0036). Its
+  # account and secret were deleted on DC01 by Remove-PamDiscoveryAccount.ps1
+  # BEFORE this change, while the DC still had the right to delete the secret.
+  dc_kv_secret_names = ["dc01-dsrm-password", "svc-vault-rotator"]
 
   dc_kv_request_name  = join(" OR ", [for n in local.dc_kv_secret_names : "@Request[Microsoft.KeyVault/vaults/secrets:name] StringEquals '${n}'"])
   dc_kv_resource_name = join(" OR ", [for n in local.dc_kv_secret_names : "@Resource[Microsoft.KeyVault/vaults/secrets:name] StringEquals '${n}'"])
