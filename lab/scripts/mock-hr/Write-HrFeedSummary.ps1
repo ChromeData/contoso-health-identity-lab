@@ -283,6 +283,7 @@ function Get-RefusalText {
         'missing-column' { return 'The header row (the first line) is missing a column.' }
         'no-rows' { return 'The file has no worker rows.' }
         'unknown-employee' { return 'An employee ID that was asked for is not in the HR file.' }
+        'upn-history' { return 'The run could not read the full history of the HR file, so it cannot tell which account names were already given out. Nothing was sent, so no one gets a name that is already taken.' }
         default { return 'The HR file could not be sent as it is.' }
     }
 }

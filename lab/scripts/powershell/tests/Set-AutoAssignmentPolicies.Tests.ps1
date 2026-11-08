@@ -141,6 +141,18 @@ Describe 'Membership rule rendering' {
             Should -BeExactly '(user.accountEnabled -eq true) -and (user.userType -eq "Member") -and (user.employeeHireDate -le system.now) -and ((user.department -eq "Nursing" -and user.jobTitle -in ["Nurse Manager","Registered Nurse"]))'
     }
 
+    It 'every rendered automatic-assignment rule starts with the accountEnabled gate (<MatchOn> mode)' -ForEach @(@{ MatchOn = 'jobTitle' }, @{ MatchOn = 'jobCode' }) {
+        # Top-level AND clause, not nested in an -or: a disabled user must never
+        # match any birthright package. A Graph read of the live ICU policy
+        # (2026-11-07, PR #256) shows the same clause.
+        $all = @(Get-DesiredAutoPolicy -Rules $script:Rules -MatchOn $MatchOn)
+        $all.Count | Should -BeGreaterThan 0
+        foreach ($d in $all) {
+            $d.MembershipRule.StartsWith('(user.accountEnabled -eq true) -and ', [System.StringComparison]::Ordinal) |
+                Should -BeTrue -Because "'$($d.Package)' renders: $($d.MembershipRule)"
+        }
+    }
+
     It 'uses the job-code attribute in jobCode mode' {
         $d = Get-DesiredAutoPolicy -Rules $script:Rules -MatchOn jobCode | Where-Object Package -eq 'ICU - Critical Care Apps'
         $d.MembershipRule | Should -Match 'user\.extensionAttribute1 -in \["NUR-MGR","NUR-RN"\]'

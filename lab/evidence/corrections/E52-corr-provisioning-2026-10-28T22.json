@@ -1,0 +1,130 @@
+[
+ {
+  "activityDateTime": "2026-10-28T22:29:35Z",
+  "job": "API2AD",
+  "action": "other",
+  "status": "skipped",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:34Z",
+  "job": "API2AD",
+  "action": "update",
+  "status": "success",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:34Z",
+  "job": "API2AD",
+  "action": "other",
+  "status": "skipped",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:34Z",
+  "job": "API2AD",
+  "action": "update",
+  "status": "success",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:33Z",
+  "job": "API2AD",
+  "action": "other",
+  "status": "skipped",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:33Z",
+  "job": "API2AD",
+  "action": "update",
+  "status": "success",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:32Z",
+  "job": "API2AD",
+  "action": "update",
+  "status": "success",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:32Z",
+  "job": "API2AD",
+  "action": "other",
+  "status": "skipped",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:32Z",
+  "job": "API2AD",
+  "action": "update",
+  "status": "success",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:30Z",
+  "job": "API2AD",
+  "action": "update",
+  "status": "success",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:29Z",
+  "job": "API2AD",
+  "action": "other",
+  "status": "skipped",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:29Z",
+  "job": "API2AD",
+  "action": "update",
+  "status": "success",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:28Z",
+  "job": "API2AD",
+  "action": "other",
+  "status": "skipped",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:27Z",
+  "job": "API2AD",
+  "action": "update",
+  "status": "success",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:26Z",
+  "job": "API2AD",
+  "action": "other",
+  "status": "skipped",
+  "target": "",
+  "source": ""
+ },
+ {
+  "activityDateTime": "2026-10-28T22:29:26Z",
+  "job": "API2AD",
+  "action": "update",
+  "status": "success",
+  "target": "",
+  "source": ""
+ }
+]

@@ -5,7 +5,7 @@ out/
 itsm/data/
 
 # Runtime secrets: the repo-root .gitignore already ignores lab/pam/.env and
-# lab/pam/.secrets/ (Vault unseal key + root token, Guacamole / ITSM / Conjur
+# lab/pam/.secrets/ (Vault unseal key + root token, Guacamole / ITSM
 # credentials, operator lab passwords, the test harnesses' Samba passwords in
 # .secrets/test/ and .secrets/vault-anomaly/). Repeated here as a second line
 # of defence, with the dynamic-db segment's own secrets folder (also ignored

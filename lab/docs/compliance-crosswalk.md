@@ -85,7 +85,7 @@ Each row names a control the lab implements in code, where in the repo it lives,
 
 ---
 
-## 5. Privileged session recording (Guacamole / CyberArk PSM stand-in)
+## 5. Privileged session recording (Guacamole harness; target: Azure Bastion session recording, ADR 0036)
 
 **Lab:** `lab/pam/guacamole/` with session recording to disk, replay via guacenc; `lab/pam/psm-session.sh` (RDP) and `lab/pam/psm-ssh.sh` (SSH), one Guacamole user per operator (`lab/pam/operators.json`), check-out gated on a ServiceNow change (`lab/pam/itsm-ticket.sh`). Ran in the Samba AD harness (`lab/pam/test/e2e.sh`), not yet against DC01.
 
@@ -102,7 +102,7 @@ Each row names a control the lab implements in code, where in the repo it lives,
 
 ## 6. Secrets rotation + checked-out credentials (Vault)
 
-**Lab:** `lab/pam/vault/` — LDAP engine rotates `svc-backup`; library mode for `tier0-admin-01/02`; `lab/pam/discover.sh`, `onboard.sh`, `reconcile.sh`; Conjur OSS for workload secrets (`lab/pam/conjur-demo.sh`). Per-request database credentials are section 16.
+**Lab:** `lab/pam/vault/` — LDAP engine rotates `svc-backup`; library mode for `tier0-admin-01/02`; `lab/pam/discover.sh`, `onboard.sh`, `reconcile.sh`. Per-request database credentials are section 16.
 
 | Framework | Control |
 |---|---|
@@ -287,40 +287,6 @@ Each row names a control the lab implements in code, where in the repo it lives,
 | CIS v8.1 | 6.3 Require MFA for Externally-Exposed Applications (IG1); 6.4 Require MFA for Remote Network Access (IG1); 6.5 Require MFA for Administrative Access (IG1) |
 
 **Lab proof:** the graduation evidence for CA002, CA008 and CA021 (E30–E38b in `evidence-capture-plan.md`) and the passkey rollout metrics (`07-Passwordless-Rollout.ps1`, KPI `phishing_resistant_pct` and `phishing_resistant_device_bound_pct`). Until then, the strengths and profiles are code only.
-
----
-
-## NIST SP 800-171 Rev 2 / CMMC Level 2 index
-
-The same rows, read by requirement number, for a defense-contractor reviewer. Requirement text is NIST's, shortened; CMMC IDs prefix the family (`AC.L2-`, `AU.L2-`, `CM.L2-`, `IA.L2-`, `IR.L2-`, `PS.L2-`, `SC.L2-`, `SI.L2-`). Numbers and text checked 2026-10-20 against NIST's published Rev 2 requirements CSV (csrc.nist.gov, SP 800-171 Rev 2, 110 requirements).
-
-| Requirement | Text (NIST, shortened) | Lab section | Lab artifact |
-|---|---|---|---|
-| 3.1.1 | Limit system access to authorized users, processes acting on their behalf, and devices | 1 | `02-Joiner.ps1`, `04-Leaver.ps1`, `modules/groups` |
-| 3.1.2 | Limit system access to the types of transactions and functions authorized users are permitted to execute | 1, 15, 16 | `modules/entitlement` (role-scoped access package, 180-day expiry); `post-apply/Set-AutoAssignmentPolicies.ps1`; `lab/pam/dynamic-db/` (SELECT on one schema) |
-| 3.1.4 | Separate the duties of individuals to reduce the risk of malevolent activity without collusion | 7, 15 | `post-apply/Set-IncompatibleAccessPackages.ps1`, `09-SoD-Report.ps1`, `sod-violation-granted.kql` |
-| 3.1.5 | Employ least privilege, including for specific security functions and privileged accounts | 2, 16 | `modules/pim`, `Set-PimGroupEligibility.ps1`; `lab/pam/dynamic-db/` |
-| 3.1.6 | Use non-privileged accounts or roles when accessing nonsecurity functions | 2 | `modules/pim` (eligible, not active) |
-| 3.1.7 | Prevent non-privileged users from executing privileged functions; capture their execution in audit logs | 2 | `modules/pim`, `lab/kql/pim-activation.kql` |
-| 3.1.12 | Monitor and control remote access sessions | 5 | `lab/pam/guacamole/`, `psm-session.sh` |
-| 3.1.15 | Authorize remote execution of privileged commands and remote access to security-relevant information | 5 | `psm-session.sh`, `vault-onboard-ad.sh` (tier0-checkout policy) |
-| 3.3.1 | Create and retain system audit logs and records | 8 | `modules/entra-diagnostics`; 30-day lab retention on the workspace (`envs/dev/main.tf`) |
-| 3.3.2 | Ensure the actions of individual users can be uniquely traced to them | 8 (partial in 5) | Entra sign-in and audit logs; gap 10 |
-| 3.3.5 | Correlate audit record review, analysis, and reporting processes | 8 | `lab/kql/`, `lab/splunk/detections/` |
-| 3.3.8 | Protect audit information and audit logging tools from unauthorized access, modification, and deletion | 10 (partial) | `Export-EvidencePack.ps1` → `manifest.json` |
-| 3.4.3 | Track, review, approve or disapprove, and log changes to organizational systems | 9 | `.github/workflows/terraform-plan.yml`, `terraform-apply.yml` |
-| 3.4.5 | Define, document, approve, and enforce access restrictions associated with changes | 9 | `modules/pipeline-identity` (apply subject = `environment:prod`) |
-| 3.5.1 | Identify system users, processes acting on behalf of users, and devices | 13 | `06-NHI-Inventory.ps1`, `lab/docs/standards/nhi-standard.md` |
-| 3.5.2 | Authenticate users, processes, or devices as a prerequisite to access | 3, 13 | `modules/conditional-access`; `modules/pipeline-identity` (federated credentials) |
-| 3.5.3 | MFA for local and network access to privileged accounts and network access to non-privileged accounts | 3, 12 (partial) | CA001, CA002, CA008; gap 9 |
-| 3.5.4 | Employ replay-resistant authentication mechanisms for network access to privileged and non-privileged accounts | 12 | CA002, CA008, CA009, CA021 (`modules/conditional-access`) |
-| 3.5.10 | Store and transmit only cryptographically-protected passwords | 4, 6 | `vault-onboard-ad.sh` (`ldaps://`), `lab/pam/vault/vault.hcl` |
-| 3.6.1 | Establish an operational incident-handling capability that includes preparation, detection, analysis, containment, recovery, and user response activities | 14 | `lab/monitoring/playbook-contain.json`, `runbooks/compromised-identity.md` |
-| 3.6.2 | Track, document, and report incidents to designated officials and/or authorities both internal and external to the organization | 14 | Sentinel incident comments and the ServiceNow ticket the playbooks write |
-| 3.9.2 | Protect systems containing CUI during and after personnel actions such as terminations and transfers | 1 | `03-Mover.ps1`, `04-Leaver.ps1` |
-| 3.13.8 | Cryptographic mechanisms to prevent unauthorized disclosure of CUI during transmission | 4 | LDAPS via AD CS (`lab/scripts/dc/`) |
-| 3.14.6 | Monitor systems, including inbound and outbound traffic, to detect attacks | 8 (partial: identity signals only, no traffic monitoring) | `lab/kql/`, `modules/monitoring` (Sentinel rules) |
-| 3.14.7 | Identify unauthorized use of organizational systems | 8, 11 | `break-glass-signin.kql`, `blocked-country-signin.kql`, `identity-risk.kql` |
 
 ---
 

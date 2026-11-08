@@ -639,6 +639,9 @@ module "monitoring" {
   iac_principal_ids     = var.iac_principal_ids
   privileged_group_ids  = local.itdr_privileged_group_ids
   break_glass_group_ids = var.enable_premium ? [module.groups[0].break_glass_group_object_id] : []
+  # The break-glass USERS by object id: break-glass-signin.kql matches on
+  # them, so renaming an account does not blind it (review finding D3).
+  break_glass_user_ids = var.enable_premium ? module.groups[0].break_glass_user_object_ids : []
   # PIM-Azure-RG-Contributors: standing members are its intended path (the
   # group is eligible for the Azure role) - reported on its own, Medium path.
   azure_pim_group_ids = var.enable_premium ? [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null] : []
@@ -750,6 +753,13 @@ module "apps" {
   enable_servicenow_provisioning      = var.enable_servicenow_provisioning
   servicenow_provisioning_job_enabled = var.servicenow_provisioning_job_enabled
   servicenow_provisioning_credentials = var.servicenow_provisioning_credentials
+
+  # ServiceNow access fulfilment (default false): the app ServiceNow uses to
+  # add/remove people on Clinical access packages after a manager approves in
+  # ServiceNow. No Graph permission; one catalog role on the Clinical catalog.
+  # Without governance there is no catalog, so the flag needs both.
+  enable_servicenow_fulfilment     = var.enable_servicenow_fulfilment && var.enable_governance
+  servicenow_fulfilment_catalog_id = var.enable_servicenow_fulfilment && var.enable_governance ? module.entitlement[0].catalog_id : ""
 
   # okta-clinic-idp (default false): Entra as the OIDC identity provider for
   # the acquired clinic's Okta org (runbook Phase 1, ADR 0022). The ONE
