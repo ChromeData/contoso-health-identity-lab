@@ -496,3 +496,107 @@ Describe 'Rehire after a leave (review C7): the payload switches the account on 
         $dc | Should -Match 'apply Always'
     }
 }
+
+Describe 'Issued UPNs survive between runs: rebuilt from the git history of the feed (-IssuedFromGitHistory, Greptile on PR #229)' {
+    # A runner starts every run with an EMPTY -StatePath. These tests commit
+    # feed versions to a throwaway git repo in TestDrive and run the sender
+    # with a fresh state file each time, exactly like the runner.
+    BeforeEach {
+        $global:InboundOut = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Host { $global:InboundOut.Add([string]$Object) }
+        Mock Invoke-MgGraphRequest { throw 'tests must never call Graph' }
+        Mock Connect-MgGraph { throw 'tests must never connect' }
+        $script:H = 'employeeId,givenName,surname,dept,jobTitle,manager,status,startDate,endDate'
+        $script:Repo = Join-Path $TestDrive ('repo-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:Repo | Out-Null
+        git -C $script:Repo init -q 2>$null | Out-Null
+        git -C $script:Repo config user.email 'test@example.invalid'
+        git -C $script:Repo config user.name 'test'
+        git -C $script:Repo config commit.gpgsign false
+        $script:Feed = Join-Path $script:Repo 'hr_feed.csv'
+        function Save-Version([string[]]$Lines) {
+            Set-Content -LiteralPath $script:Feed -Value $Lines -Encoding utf8NoBOM
+            git -C $script:Repo add hr_feed.csv
+            git -C $script:Repo commit -q -m 'hr change' | Out-Null
+        }
+        function Get-RunnerUserNames([switch]$NoHistory) {
+            $global:InboundOut.Clear()
+            $p = @{ CsvPath = $script:Feed; StatePath = (Get-StatePath); UpnDomain = 'contosohealthlab.com'; WhatIf = $true; WarningAction = 'SilentlyContinue' }
+            if (-not $NoHistory) { $p.IssuedFromGitHistory = $true }
+            & $script:Inbound @p
+            $raw = @($global:InboundOut | Where-Object { $_ -match '^\s*\{' }) -join "`n"
+            $m = [ordered]@{}
+            foreach ($op in @(($raw | ConvertFrom-Json -AsHashtable)['Operations'])) { $m[$op['bulkId']] = $op['data']['userName'] }
+            return $m
+        }
+    }
+
+    It 'without the history a restart forgets: the renamed worker''s UPN is handed to a new John Smith (the bug)' {
+        Save-Version @($script:H, '100400,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        Save-Version @($script:H, '100400,John,Jones,Nursing,Registered Nurse,200015,active,2020-01-01,', '100600,John,Smith,Nursing,Registered Nurse,200015,joiner,2026-11-09,')
+        (Get-RunnerUserNames -NoHistory)['100600'] | Should -Be 'john.smith@contosohealthlab.com'
+    }
+
+    It 'with the history: the renamed worker keeps john.smith, the new John Smith gets john.smith2' {
+        Save-Version @($script:H, '100400,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        Save-Version @($script:H, '100400,John,Jones,Nursing,Registered Nurse,200015,active,2020-01-01,', '100600,John,Smith,Nursing,Registered Nurse,200015,joiner,2026-11-09,')
+        $u = Get-RunnerUserNames
+        $u['100400'] | Should -Be 'john.smith@contosohealthlab.com'
+        $u['100600'] | Should -Be 'john.smith2@contosohealthlab.com'
+    }
+
+    It 'a UPN stays reserved after the row is removed from the file (no reuse for a new hire)' {
+        Save-Version @($script:H, '100400,Ana,Silva,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        Save-Version @($script:H, '100700,Ana,Silva,Nursing,Registered Nurse,200015,joiner,2026-11-09,')
+        (Get-RunnerUserNames)['100700'] | Should -Be 'ana.silva2@contosohealthlab.com'
+    }
+
+    It 'the same worker keeps the same UPN across many runs and renames (stable, not re-derived)' {
+        Save-Version @($script:H, '100400,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,', '100500,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        Save-Version @($script:H, '100400,John,Jones,Nursing,Registered Nurse,200015,active,2020-01-01,', '100500,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        Save-Version @($script:H, '100400,John,Jones,Nursing,Registered Nurse,200015,active,2020-01-01,', '100500,Johnny,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,', '100600,John,Smith,Nursing,Registered Nurse,200015,joiner,2026-11-09,')
+        $a = Get-RunnerUserNames
+        $b = Get-RunnerUserNames
+        foreach ($u in $a, $b) {
+            $u['100400'] | Should -Be 'john.smith@contosohealthlab.com'
+            $u['100500'] | Should -Be 'john.smith2@contosohealthlab.com'
+            $u['100600'] | Should -Be 'john.smith3@contosohealthlab.com'
+        }
+    }
+
+    It 'a version the sender refused (no usable ASCII) issued nothing and is skipped' {
+        Save-Version @($script:H, "100400,$([char]0x674E),$([char]0x660E),Nursing,Registered Nurse,200015,active,2020-01-01,")
+        Save-Version @($script:H, '100400,Li,Ming,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        (Get-RunnerUserNames)['100400'] | Should -Be 'li.ming@contosohealthlab.com'
+        ($global:InboundOut -join "`n") | Should -Match '1 refused version'
+    }
+
+    It 'the log shows counts only, never a UPN or an employee id' {
+        Save-Version @($script:H, '100400,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        $null = Get-RunnerUserNames
+        $line = @($global:InboundOut | Where-Object { $_ -match '^Issued UPNs' })
+        $line.Count | Should -Be 1
+        $line[0] | Should -Not -Match '@|100400'
+    }
+
+    It 'a shallow checkout stops the run before anything is sent (the record would be incomplete)' {
+        Save-Version @($script:H, '100400,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        Save-Version @($script:H, '100400,John,Jones,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        $shallow = Join-Path $TestDrive ('shallow-' + [guid]::NewGuid().ToString('N'))
+        git clone -q --depth 1 "file://$($script:Repo)" $shallow 2>$null
+        $result = Join-Path $TestDrive 'shallow-result.json'
+        { & $script:Inbound -CsvPath (Join-Path $shallow 'hr_feed.csv') -StatePath (Get-StatePath) -UpnDomain 'contosohealthlab.com' -IssuedFromGitHistory -ResultPath $result -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*shallow*'
+        (Get-Content -LiteralPath $result -Raw | ConvertFrom-Json).refusal.kind | Should -Be 'upn-history'
+    }
+
+    It 'a feed that is not committed stops the run' {
+        Set-Content -LiteralPath $script:Feed -Value @($script:H, '100400,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        { & $script:Inbound -CsvPath $script:Feed -StatePath (Get-StatePath) -IssuedFromGitHistory -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*not committed*'
+    }
+
+    It 'hr-feed.yml sends with -IssuedFromGitHistory and checks out the full history' {
+        $wf = Get-Content -Raw -LiteralPath ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' '..' '..' '.github' 'workflows' 'hr-feed.yml')))
+        $wf | Should -Match 'IssuedFromGitHistory = \$true'
+        $wf | Should -Match 'fetch-depth: 0'
+    }
+}
