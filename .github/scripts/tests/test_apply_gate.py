@@ -56,7 +56,12 @@ STUB_GH = textwrap.dedent(r"""
     case "$2" in
       repos/o/r/compare/*)
         [ -f "$STUB_DIR/range.fail" ] && exit 1
-        cat "$STUB_DIR/range.txt"; exit 0 ;;
+        case "$*" in
+          *total_commits*)
+            if [ -f "$STUB_DIR/range_total.txt" ]; then cat "$STUB_DIR/range_total.txt"; else grep -c . "$STUB_DIR/range.txt"; fi ;;
+          *) cat "$STUB_DIR/range.txt" ;;
+        esac
+        exit 0 ;;
       repos/o/r/commits/*/pulls)
         c="${2#repos/o/r/commits/}"; c="${c%/pulls}"
         cat "$STUB_DIR/pulls_$c.json"; exit 0 ;;
@@ -356,6 +361,22 @@ class SeparationTest(GateTest):
                           GATE_MODE="check", APPLY_RANGE_BASE="1234567")
         self.assertEqual(r.returncode, 1)
         self.assertIn("could not read the commits", r.stdout)
+
+    def test_dispatch_incomplete_range_is_refused(self):
+        # Greptile on #274: compare returns at most 250 commits per page; a
+        # list shorter than total_commits must refuse, not pass silently.
+        self.range_fixture()
+        self.write("range_total.txt", "300\n")
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="repository_dispatch",
+                          GATE_MODE="check", APPLY_RANGE_BASE="1234567")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("read 2 of 300 commits", r.stdout)
+
+    def test_dispatch_reads_every_compare_page(self):
+        self.range_fixture()
+        self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="repository_dispatch",
+                      GATE_MODE="check", APPLY_RANGE_BASE="1234567")
+        self.assertIn("--paginate", self.read("calls.log"))
 
     def test_dispatch_unknown_range_strict_refuses(self):
         self.bot_pr()

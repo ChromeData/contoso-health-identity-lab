@@ -161,8 +161,17 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] || [ "${GITHUB_EVENT_NAME:
   range_base="${APPLY_RANGE_BASE:-}"
   if [ -n "$range_base" ]; then
     printf '%s' "$range_base" | grep -Eq '^[0-9a-f]{7,40}$' || { echo "Refused: APPLY_RANGE_BASE is not a commit sha"; exit 1; }
-    range_shas=$(gh api "repos/$REPO/compare/$range_base...$GITHUB_SHA" --jq '.commits[].sha') \
+    # One compare page holds at most 250 commits (Greptile on #274): read
+    # every page, then refuse unless the count equals total_commits.
+    range_shas=$(gh api "repos/$REPO/compare/$range_base...$GITHUB_SHA?per_page=100" --paginate --jq '.commits[].sha') \
       || { echo "Refused: could not read the commits between $range_base and $GITHUB_SHA"; exit 1; }
+    range_total=$(gh api "repos/$REPO/compare/$range_base...$GITHUB_SHA?per_page=1" --jq '.total_commits') \
+      || { echo "Refused: could not read the commit count between $range_base and $GITHUB_SHA"; exit 1; }
+    range_read=$(printf '%s\n' "$range_shas" | grep -c . || true)
+    if [ "$range_read" != "$range_total" ]; then
+      echo "Refused: read $range_read of $range_total commits between ${range_base:0:7} and $short; the PR list would be incomplete"
+      exit 1
+    fi
     range_rows=""; range_flagged=0; seen=" "
     for c in $range_shas; do
       cpulls=$(gh api "repos/$REPO/commits/$c/pulls") || { echo "Refused: could not read the PR for commit $c"; exit 1; }

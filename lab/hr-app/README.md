@@ -12,9 +12,13 @@ node lab/hr-app/server.mjs                         # the lab: saves are sent to 
 node lab/hr-app/server.mjs --store file:/tmp/r.csv # rehearsal on a copy: sends nothing
 ```
 
-Open http://127.0.0.1:8484. It listens on this Mac only. It needs `gh`
-signed in with push access to the lab repo (it uses `gh`'s own sign-in; no
-token is passed to it).
+Open http://127.0.0.1:8484. It listens on this Mac only. It writes as the lab
+bot, through `lab/scripts/operator/github-bot/bot-gh` (a 1-hour GitHub App
+token for this repo only). It needs the bot set up once on this Mac:
+`~/.contoso-operator/bot.env` and the App key in the Keychain
+(`new-bot-app.sh`, see `lab/scripts/operator/README.md`). It never uses a
+personal `gh` login, and there is no fallback to one: if the bot cannot sign
+in, a save fails and says so.
 
 ## What one save does
 
