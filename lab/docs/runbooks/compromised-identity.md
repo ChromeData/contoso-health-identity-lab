@@ -66,6 +66,12 @@ Revoking kills refresh tokens and session cookies. Access tokens already issued 
 - **Portal:** Entra admin center → Users → *user* → **Revoke sessions**.
 - **PowerShell:** `Revoke-MgUserSignInSession -UserId <objectId>`, using the `User.RevokeSessions.All` scope. `lab/scripts/powershell/04-Leaver.ps1` uses the same call.
 - **Graph:** `POST /users/{id}/revokeSignInSessions`.
+- **AWS (IAM Identity Center), if the user had AWS access:** the Entra revoke and the SCIM disable do not end AWS sessions that already exist.
+  1. In the IAM Identity Center console (us-east-1), open **Users**, then the user, then **Active sessions**. Select every session. Choose **End sessions**. Type `confirm`.
+  2. This ends the access-portal session. Application sessions end within about 30 minutes.
+  3. It does NOT end IAM role sessions that a permission set already issued (console or CLI). They live until their permission-set session duration ends, up to 12 hours. `LabAdministrator` uses 1 hour by default (`lab_admin_session_duration`, at most 2 hours).
+  4. For a confirmed compromise of an AWS admin, also deny the role's old credentials: add an inline deny on the permission set with condition `aws:TokenIssueTime` earlier than now, and re-provision it (verify: the exact policy and that the reserved role accepts it, before you rely on it). Remove the deny after the session duration has passed.
+  verify: AWS IAM Identity Center User Guide, "View and end active sessions" and "Understanding authentication sessions" (checked 2026-11-07).
 
 **Don't count on CA006 to evict the attacker.** *Contain* marks the user
 confirmed compromised, so user risk becomes High and CA006 (MFA plus a

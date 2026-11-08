@@ -88,9 +88,20 @@ once the account exists: Lifecycle Workflows, access packages, CA and PIM.
   sent is recorded in the `-StatePath` file (employee id -> UPN) after a
   send with no failed batch. A recorded UPN stays with its worker and stays
   reserved, also after a name change or after the worker leaves the file, so
-  `john.smith2` is never handed to someone else. On the GitHub runner that
-  file is rebuilt from the previous commit of `hr_feed.csv`, so there the
-  lasting record is the `upn` column only. A name that
+  `john.smith2` is never handed to someone else. The GitHub runner starts each run
+  with no `-StatePath` file, so it used to forget every derived UPN between
+  runs (Greptile, PR #229). Now `hr-feed.yml` passes
+  `-IssuedFromGitHistory`: the sender replays every committed version of
+  `hr_feed.csv`, oldest first, and a worker keeps the first UPN issued to
+  them. A later UPN for the same worker (an HR `upn` value that replaced the
+  derived name) stays reserved for that worker too. A feed with staged or
+  unstaged edits is refused: commit the HR change first. The committed, protected history of the file (no force push, no
+  deletion: the `hr-feed` ruleset) is the lasting register. A shallow
+  checkout or an uncommitted file stops the run before anything is sent. A
+  version the sender refused issued nothing and is skipped. A version that
+  was committed but never sent can reserve a name nobody holds: that only
+  adds a suffix digit, it never causes a clash. Accounts made outside the HR
+  feed (admin and test accounts) are not in this register. A name that
   leaves no usable ASCII is refused. Two settings in the provisioning app
   keep a name change from renaming anyone (tenant-time steps, verify on the
   app): the matching attribute is `externalId` (the employee id), and the

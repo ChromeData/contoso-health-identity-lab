@@ -172,6 +172,17 @@
     batch - never under -WhatIf. Missing = first run: nothing to compare, so
     the access-changing count is 0 (stated in the output).
 
+.PARAMETER IssuedFromGitHistory
+    Rebuild the record of issued UPNs from the git history of -CsvPath before
+    the UPNs are resolved (Get-IssuedUpnFromGitHistory). Every committed
+    version of the feed, oldest first, goes through Resolve-UserName with the
+    UPNs issued by the versions before it. A UPN once derived for a worker
+    stays with that worker and stays reserved, after a name change, and after
+    the row is gone. The pipeline (hr-feed.yml) passes it, because a runner
+    keeps no -StatePath between runs. It stops (nothing sent) when the
+    checkout is shallow or the feed is not committed: the record would be
+    incomplete. Accounts made outside the HR feed are not in this record.
+
 .PARAMETER Force
     Push even when the mass-change guard trips (nothing is quarantined). The
     manual emergency override for an administrator at a console; a planned
@@ -334,7 +345,13 @@ param(
 
     # One line per batch instead of the SCIM JSON (pipeline logs).
     [Parameter()]
-    [switch]$HidePayload
+    [switch]$HidePayload,
+
+    # Rebuild the record of issued UPNs from every committed version of
+    # -CsvPath (git history), not only from -StatePath. The pipeline passes
+    # it: a runner keeps no -StatePath between runs (Greptile, PR #229).
+    [Parameter()]
+    [switch]$IssuedFromGitHistory
 )
 
 # --- Fail fast, surface every error, no silent $null property access. --------
@@ -593,7 +610,10 @@ function Resolve-UserName {
     # mapping: Only during object creation" (lab/scripts/mock-hr/README.md,
     # "UPNs: issued once"). The engine matches on externalId (employeeId),
     # never on the name.
-    param([Parameter(Mandatory)][object[]]$Rows, [Parameter(Mandatory)][string]$Domain, [System.Collections.IDictionary]$Issued = @{})
+    # -Reserved (upn -> employeeId): more UPNs a worker was issued at some
+    # point (for example an HR upn column value that replaced the first
+    # derived name). Nobody else may get them either.
+    param([Parameter(Mandatory)][object[]]$Rows, [Parameter(Mandatory)][string]$Domain, [System.Collections.IDictionary]$Issued = @{}, [System.Collections.IDictionary]$Reserved = @{})
     $map = [ordered]@{}
     # upn -> the employeeId that holds it (column, issued or derived).
     $owner = [System.Collections.Generic.Dictionary[string, string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -620,6 +640,16 @@ function Resolve-UserName {
         $owner[$u] = [string]$id
         if ($inFeed.Contains([string]$id) -and -not $map.Contains([string]$id)) { $map[[string]$id] = $u }
     }
+    foreach ($ru in @($Reserved.Keys)) {
+        $u = ([string]$ru).Trim().ToLowerInvariant(); $rid = [string]$Reserved[$ru]
+        if (-not $u) { continue }
+        $held = ''
+        if ($owner.TryGetValue($u, [ref]$held)) {
+            if ($held -ne $rid) { throw "upn '$u' was issued to worker $rid, but row $held now carries it. A UPN belongs to one worker for good." }
+            continue
+        }
+        $owner[$u] = $rid
+    }
     $pending = @($Rows | Where-Object { -not $map.Contains([string]$_.employeeId) } | Sort-Object { [long]$_.employeeId })
     foreach ($r in $pending) {
         $g = ConvertTo-UpnLocalPart $r.givenName; $f = ConvertTo-UpnLocalPart $r.surname
@@ -630,6 +660,69 @@ function Resolve-UserName {
         $map[[string]$r.employeeId] = $cand
     }
     return $map
+}
+
+function Get-IssuedUpnFromGitHistory {
+    # employeeId -> UPN for every UPN this feed has EVER issued, rebuilt from
+    # git. WHY: on the GitHub runner -StatePath starts empty each run, so
+    # Resolve-UserName forgot what earlier runs issued (Greptile, PR #229).
+    # Then John Smith (100400) renamed to Jones freed john.smith for the next
+    # John Smith, who would clash with, or be matched to, the existing
+    # account. The lasting record is the committed history of the feed
+    # itself: the hr-feed ruleset blocks force pushes and deletion, and a
+    # runner only ever derived UPNs from a committed version.
+    # How: every commit that touched the file, oldest first (--topo-order), is
+    # resolved with the UPNs issued before it; a worker keeps the first UPN
+    # issued to them. A version the sender refused (Resolve-UserName throws:
+    # no usable ASCII, a bad or stolen upn column, a missing column) issued
+    # nothing, so it is skipped. A version that was committed but never sent
+    # may reserve a UPN that was never used: that only adds a suffix digit,
+    # it never causes a clash.
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Domain, [System.Collections.IDictionary]$Issued = @{})
+    $full = (Resolve-Path -LiteralPath $Path).Path
+    $dir = Split-Path -Parent $full
+    $leaf = Split-Path -Leaf $full
+    $global:LASTEXITCODE = 0
+    $shallow = & git -C $dir rev-parse --is-shallow-repository 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "'$Path' is not in a git checkout, so the issued UPNs cannot be read from its history." }
+    if ("$shallow".Trim() -eq 'true') { throw 'The checkout is shallow, so the history of issued UPNs is incomplete. Check out with fetch-depth 0.' }
+    $rel = "$(& git -C $dir ls-files --full-name -- $leaf)".Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $rel) { throw "'$Path' is not committed, so it has no history of issued UPNs." }
+    $top = "$(& git -C $dir rev-parse --show-toplevel)".Trim()
+    # Tracked is not enough: the replay reads only committed versions, so a
+    # feed with staged or unstaged edits would send names the record never
+    # sees (Greptile, PR #261). Refuse any difference from HEAD.
+    & git -C $top diff --quiet HEAD -- $rel 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "'$Path' differs from the last commit (staged or unstaged changes). Commit the HR change first: only committed versions are in the record of issued UPNs." }
+    $shas = @(& git -C $top rev-list --topo-order --reverse HEAD -- $rel)
+    if ($LASTEXITCODE -ne 0) { throw "git rev-list failed for '$rel'." }
+    $acc = [ordered]@{}
+    foreach ($k in @($Issued.Keys)) { $acc[[string]$k] = ([string]$Issued[$k]).Trim().ToLowerInvariant() }
+    # Every LATER UPN a worker got (an upn column value that replaced the
+    # first derived name, Greptile on PR #261): upn -> employeeId.
+    $reserved = [ordered]@{}
+    $versions = 0; $skipped = 0
+    $enc = [Console]::OutputEncoding
+    try {
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)   # accents in names
+        foreach ($sha in $shas) {
+            $text = @(& git -C $top show "${sha}:$rel" 2>$null)
+            if ($LASTEXITCODE -ne 0) { continue }   # the commit deleted the file
+            $lines = @($text | Where-Object { $_ -notmatch '^\s*#' -and $_ -ne '' })
+            if ($lines.Count -lt 2) { continue }
+            try { $m = Resolve-UserName -Rows @($lines | ConvertFrom-Csv) -Domain $Domain -Issued $acc -Reserved $reserved }
+            catch { $skipped++; continue }
+            foreach ($id in @($m.Keys)) {
+                $u = [string]$m[$id]
+                if (-not $acc.Contains([string]$id)) { $acc[[string]$id] = $u }
+                elseif ($acc[[string]$id] -ne $u -and -not $reserved.Contains($u)) { $reserved[$u] = [string]$id }
+            }
+            $versions++
+        }
+    }
+    finally { [Console]::OutputEncoding = $enc }
+    $global:LASTEXITCODE = 0
+    [pscustomobject]@{ Issued = $acc; Reserved = $reserved; Versions = $versions; Skipped = $skipped }
 }
 
 # =============================================================================
@@ -687,7 +780,16 @@ else { Write-Host "Access-change guard: no baseline yet ($StatePath) - first pus
 # rows a push happened to change.
 $issuedUpns = @{}
 foreach ($k in @($baseline.Keys)) { $v = $baseline[$k]; if ($v -is [System.Collections.IDictionary] -and $v['upn']) { $issuedUpns[[string]$k] = [string]$v['upn'] } }
-try { $script:UserNames = Resolve-UserName -Rows $roster -Domain $UpnDomain -Issued $issuedUpns }
+$reservedUpns = @{}
+if ($IssuedFromGitHistory) {
+    try { $hist = Get-IssuedUpnFromGitHistory -Path $CsvPath -Domain $UpnDomain -Issued $issuedUpns }
+    catch { Stop-InvalidFeed 'upn-history' $_.Exception.Message }
+    $issuedUpns = $hist.Issued
+    $reservedUpns = $hist.Reserved
+    # Counts only: never a UPN or an employee id in the log.
+    Write-Host "Issued UPNs: $($issuedUpns.Count) (+$($reservedUpns.Count) later) from $($hist.Versions) committed version(s) of the feed ($($hist.Skipped) refused version(s) skipped)." -ForegroundColor DarkGray
+}
+try { $script:UserNames = Resolve-UserName -Rows $roster -Domain $UpnDomain -Issued $issuedUpns -Reserved $reservedUpns }
 catch { Stop-InvalidFeed 'bad-upn' $_.Exception.Message }
 # Population for the percentage threshold: everyone not leaving, whole feed.
 $population = @($roster | Where-Object { $_.status -ne 'leaver' }).Count
