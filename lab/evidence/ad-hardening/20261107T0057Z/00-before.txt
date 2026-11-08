@@ -1,0 +1,34 @@
+Before the change (2026-11-07, read as the lab operator; nothing changed by these reads)
+
+DC01 discovery (run-on-dc.py, read-only), 00:53Z:
+  DFL Windows2016Domain, FFL Windows2016Forest, Windows Server 2022 Azure Edition 20348.5773
+  Computers in AD: DC01 only (no member servers; vm-win11-01 is not domain-joined)
+  Protected Users: empty. Domain Admins: contosoadmin, tier0-admin-01, tier0-admin-02
+  GPOs: Default Domain Policy, Default Domain Controllers Policy only
+  Windows LAPS schema: absent. Legacy LAPS schema: absent
+  Cloud Sync agent service (AADConnectProvisioningAgent): Running
+
+PingCastle 4.0.0.31 "before" (report-before, generated 2026-11-07T00:48:04Z):
+  global=58 stale=30 privileged=50 trusts=0 anomalies=58
+  RULE PrivilegedAccounts P-Delegated 20
+  RULE StaleObjects S-OldNtlm 15
+  RULE Anomalies A-LAPS-Not-Installed 15
+  RULE Anomalies A-AuditDC 10
+  RULE PrivilegedAccounts P-ProtectedUsers 10
+  RULE StaleObjects S-ADRegistration 10
+  RULE PrivilegedAccounts P-RecycleBin 10
+  RULE Anomalies A-MinPwdLen 10
+  RULE PrivilegedAccounts P-SchemaAdmin 10
+  RULE Anomalies A-DC-Spooler 10
+  RULE Anomalies A-NotEnoughDC 5
+  RULE StaleObjects S-DC-SubnetMissing 5
+  RULE Anomalies A-HardenedPaths 5
+  RULE Anomalies A-PreWin2000Other 2
+  RULE Anomalies A-WeakRSARootCert2 1
+
+Cloud Sync jobs (Graph synchronization/jobs on SP 4c0d0455-...), 00:53Z:
+  AD2AADProvisioning code=Active lastExecution=2026-11-07T00:53:03Z Succeeded
+  AD2AADPasswordHash code=Quarantine since 2026-11-06T04:05:26Z (HybridIdentityServiceNoActiveAgents,
+    NoActiveConnector), last success 2026-11-06T00:29:44Z. Already broken before this change.
+
+Restore point: rpc-vm-dc01-adhardening / before-ad-hardening-20261107 (2026-11-07T00:42:47Z, ApplicationConsistent)

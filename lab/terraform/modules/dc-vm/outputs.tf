@@ -13,13 +13,18 @@ output "vm_name" {
 }
 
 output "private_ip" {
-  description = "Static private IP of the DC (LDAPS target for Vault, DNS for future member servers)."
+  description = "Static private IP of the DC (reached from inside the VNet only: Bastion, member servers)."
   value       = azurerm_network_interface.dc.private_ip_address
 }
 
 output "public_ip" {
-  description = "Static public IP (RDP / LDAPS from the operator's allowed IPs only)."
-  value       = azurerm_public_ip.dc.ip_address
+  description = "The DC's public IP: null except during the AD FS exercise (adfs_https_enabled; 443 from allowed_ip_ranges only). RDP and LDAPS are never reachable from the internet."
+  value       = one(azurerm_public_ip.adfs_https[*].ip_address)
+}
+
+output "nat_gateway_public_ip" {
+  description = "Outbound-only address the DC's traffic leaves from (NAT gateway). Nothing can connect in through it."
+  value       = one(azurerm_public_ip.nat[*].ip_address)
 }
 
 output "admin_username" {

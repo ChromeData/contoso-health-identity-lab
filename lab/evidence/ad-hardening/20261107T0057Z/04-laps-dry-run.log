@@ -1,0 +1,5 @@
+run command lab-a6ec51b9: lab/scripts/dc/hardening/Enable-WindowsLaps.ps1 on vm-dc01
+Enable-WindowsLaps DRY RUN at 2026-11-07 00:59:24Z
+Schema has msLAPS attributes: False
+Dry run: would set permissions, create and link both GPOs.
+state: Succeeded, exit code: 0
