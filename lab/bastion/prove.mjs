@@ -64,6 +64,12 @@ const REASON = 'CHG: Bastion capture - Tier-0 session on DC01, recorded (lab/bas
 
 const T0 = Date.now();
 const proof = { started: new Date().toISOString(), steps: [] };
+// The session start time lives in its OWN file (session.json), which mark()
+// never rewrites: proof.json is rewritten from the first mark() of every run,
+// so a later --step playback could not find it there (Greptile). Read it now,
+// before any mark(), and carry it into this run's proof.
+const SESSION_FILE = path.join(OUT, 'session.json');
+try { const prev = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8')).session_started_utc; if (prev) proof.session_started_utc = prev; } catch { /* no earlier session */ }
 const mark = (step, what, extra = {}) => {
   const r = { step, what, utc: new Date().toISOString(), t_s: Math.round((Date.now() - T0) / 1000), ...extra };
   proof.steps.push(r); console.log(JSON.stringify(r));
@@ -195,6 +201,7 @@ try {
     // When THIS run's session began: playback must open a recording created
     // after it, never an older one (recordings survive `down`).
     proof.session_started_utc = new Date(tConn).toISOString();
+    fs.writeFileSync(SESSION_FILE, JSON.stringify({ session_started_utc: proof.session_started_utc }, null, 1));
     await sess.waitForLoadState('domcontentloaded');
     // The RDP desktop is a canvas; give Windows time to log on and draw.
     await sleep(45000);
@@ -237,8 +244,8 @@ try {
     for (const role of REVIEWER_ROLES) await activateAzureRole(p, role, SANDBOX, 'playback', '07r-pim');
     // This run's session start: from this run's connect step, or (playback
     // alone) from --since or an earlier proof.json in the same --out folder.
-    let since = proof.session_started_utc || opt('--since', '');
-    if (!since) { try { since = JSON.parse(fs.readFileSync(path.join(OUT, 'proof.json'), 'utf8')).session_started_utc || ''; } catch { since = ''; } }
+    // --since wins (explicit); else this run's or session.json's start time.
+    const since = opt('--since', '') || proof.session_started_utc || '';
     if (!since || Number.isNaN(Date.parse(since))) throw new Error('playback needs this run\'s session start time (run the connect step first, or pass --since <ISO time>)');
     const sinceMs = Date.parse(since) - 120000;   // 2 min for clock skew
     // The row for THIS session: a vm-dc01 recording whose "Date Created" is at
