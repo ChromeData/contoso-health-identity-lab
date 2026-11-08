@@ -210,6 +210,8 @@ jobs:
           python3 -I -m unittest discover -s lab/scripts/monitoring/tests -p 'test_feed_splunk_live.py' -v
           # configure-sync.py hrapp --mail-domain: the AD mail mapping (E121 follow-up; fake az).
           python3 -I -m unittest discover -s lab/scripts/dc/tests -p 'test_configure_sync.py' -v
+          # rotate-build-admin.py: rollback only on proven no-change, lock, stdin hand-off, security -i quoting (PR #262; fakes only).
+          python3 -I -m unittest discover -s lab/scripts/dc/tests -p 'test_rotate_build_admin.py' -v
           # Pure parts of the lab passkey tool (no browser, Graph or Keychain);
           # node is preinstalled on ubuntu-latest, node:test needs no package.
           node --test lab/scripts/demo/tests/passkey.test.mjs
