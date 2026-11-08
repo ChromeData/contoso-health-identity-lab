@@ -13,7 +13,9 @@
        if it still is): EPM proves nothing for an admin.
     2. Adds it to Remote Desktop Users, so it can sign in through Bastion.
     3. Downloads Sysinternals Process Explorer (procexp64.exe) from
-       live.sysinternals.com to C:\Users\Public\EPM\ and prints its SHA-256.
+       live.sysinternals.com to C:\Program Files\EPM-Proof\ (a folder standard
+       users cannot modify, as Learn recommends for elevation rules) and
+       prints its SHA-256.
        That hash goes into the EPM rule (New-IntuneEpmAndLaps.ps1 -FileHash).
     4. Reports whether the EPM agent is installed yet (service
        'Microsoft EPM Agent Service'; it arrives with the settings policy).
@@ -25,7 +27,7 @@
     contoso-lab-epm-standard).
 
 .PARAMETER Remove
-    'yes' removes the account and C:\Users\Public\EPM instead.
+    'yes' removes the account and C:\Program Files\EPM-Proof instead.
 #>
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'Only way to turn a protected run-command parameter into a local account password (same pattern as dc/tier-test/New-TierTestAccounts.ps1).')]
 [CmdletBinding()]
@@ -37,7 +39,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $name = 'epm-standard'
-$dir = 'C:\Users\Public\EPM'
+$dir = 'C:\Program Files\EPM-Proof'
 $adminsSid = 'S-1-5-32-544'
 $rduSid = 'S-1-5-32-555'
 
