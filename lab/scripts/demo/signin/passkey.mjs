@@ -448,6 +448,16 @@ async function step(page, upn, s) {
     if (sw) { await sw.click(); return 'other ways to sign in'; }
     throw new Error(`Entra asked for a password and offers no other way. On screen: ${await ui(page)}`);
   }
+  // The passkey page itself ("Face, fingerprint, PIN or security key" + Next),
+  // reached straight from login_hint (seen 2026-11-07 on an OAuth authorize
+  // URL): Next starts WebAuthn, which the virtual authenticator answers.
+  if (s.mode === 'passkey' && /Face, fingerprint, PIN or security key/i.test(text)) {
+    const nx = await onScreen(page, '#idSIButton9, button:has-text("Next"), input[value="Next"]');
+    if (nx) {
+      if ((s.passkeyNext = (s.passkeyNext || 0) + 1) > 4) throw new Error(`Entra keeps showing the passkey page. On screen: ${await ui(page)}`);
+      await nx.click(); return 'passkey page: next';
+    }
+  }
   // Credential picker / "Sign-in options": choose the passkey or the pass.
   const want = s.mode === 'tap' ? /Temporary Access Pass/i : PASSKEY_CHOICE;
   for (const sel of ['div[role=button]', '[role=listitem] [role=button]', 'button', '[data-test-cred-id]', 'a']) {
@@ -833,6 +843,56 @@ async function proveRecord(upn, rec, { startUrl = DEFAULT_PROOF_URL, headless = 
     e.message += ` [screenshot: ${f}]`;
     throw e;
   } finally { await browser.close().catch(() => {}); }
+}
+
+// ---- authorize (OAuth code for a native client) -------------------------------------------
+// A passkey-only sign-in that ENDS at an OAuth redirect instead of an app page:
+// e.g. a Microsoft native client's .../oauth2/nativeclient?code=... . The
+// redirect is caught in the browser (context.route) and answered locally, so
+// nothing is followed and the code is redeemed only by the caller (PKCE: the
+// code is useless without the caller's code_verifier). Returns the redirect URL.
+// Used by lab/adfs/connect-health/get-agent-token.mjs (ADR 0031).
+export async function authorize(upn, authorizeUrl, redirectPrefix, { headless = true, timeoutMs = 180000 } = {}) {
+  upn = checkUpn(upn);
+  if (!/^https:\/\/login\.microsoftonline\.com\//.test(authorizeUrl)) throw new Error('authorizeUrl must be on https://login.microsoftonline.com/');
+  const raw = keychainRead(keychainService(upn));
+  if (!raw) throw new Error(`no Keychain item ${keychainService(upn)}: run register first`);
+  const rec = decodeRecord(raw);
+  if (rec.upn && rec.upn.toLowerCase() !== upn) throw new Error(`Keychain item ${keychainService(upn)} belongs to ${rec.upn}`);
+  const browser = await playwright().chromium.launch({ headless });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US' });
+  // A 302 to the redirect URI is followed by the browser itself, which
+  // context.route does not see (seen 2026-11-07: the page landed on Entra's
+  // "This is not the right page" at .../nativeclient?code=...). So watch every
+  // request and every navigation for the redirect URI instead.
+  let captured = null;
+  const catchUrl = (u) => { if (!captured && typeof u === 'string' && u.startsWith(redirectPrefix)) captured = u; };
+  context.on('request', (r) => catchUrl(r.url()));
+  const { page, credentials } = await withAuthenticators(context, {
+    credential: { credentialId: rec.credentialId, isResidentCredential: true, rpId: rec.rpId, privateKey: rec.privateKey, userHandle: rec.userHandle, signCount: rec.signCount },
+  });
+  try {
+    await page.goto(authorizeUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const s = { mode: 'passkey' };
+    const got = new Promise((resolve, reject) => {
+      const t0 = Date.now();
+      const tick = () => { catchUrl(page.url()); if (captured) resolve(captured); else if (Date.now() - t0 > timeoutMs) reject(new Error('no redirect')); else setTimeout(tick, 300); };
+      tick();
+    });
+    return await Promise.race([got, drive(page, upn, s, async () => !!captured, { timeoutMs }).then(() => got)]);
+  } catch (e) {
+    const f = await shot(page, `authorize-fail-${localPart(upn)}`);
+    e.message += ` [screenshot: ${f}]`;
+    throw e;
+  } finally {
+    // Save the counter on success AND failure: a failed run may still have
+    // used the passkey, and Entra refuses a counter that goes backwards
+    // (seen 2026-11-07: "Something went wrong when trying to sign in with a
+    // passkey" on the run after one that did not save it).
+    const now = (await credentials().catch(() => [])).find((c) => c.credentialId === rec.credentialId);
+    if (now && now.signCount > rec.signCount) saveRecord(upn, { ...rec, signCount: now.signCount, lastProvedUtc: new Date().toISOString() });
+    await browser.close().catch(() => {});
+  }
 }
 
 // ---- status (read-only) --------------------------------------------------------------------
