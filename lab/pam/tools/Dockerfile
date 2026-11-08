@@ -10,7 +10,7 @@
 #                       test DC) exactly the way Vault does.
 #   mock_servicenow.py  the itsm-mock service: a ServiceNow Table API v2
 #                       stand-in that psm-session.sh validates tickets against
-#                       (CyberArk's "ticketing integration" moment).
+#                       (the PAM "ticketing integration" moment).
 #   ldapwhoami / ssh    reconcile.sh's CPM-style "verify" bind and the
 #                       SSH certificate checks in test/e2e.sh.
 #

@@ -95,7 +95,7 @@ LINKS={'build':{
   'INTUNE':L_(('Intune','intune'),('Code',T+'lab/scripts/intune')),'BG':L_(('Break-glass drill',B+'lab/scripts/powershell/Invoke-BreakGlassDrill.ps1')),
   'PIM':L_(('Admin power (PIM)','pim'),('Code',T+'lab/terraform/modules/pim')),'HDAU':L_(('Code',B+'lab/terraform/modules/pim/helpdesk.tf')),
   'KV':L_(('Key Vault','kv'),('Code',T+'lab/terraform/modules/keyvault')),'VAULT':L_(('Code',T+'lab/pam')),'GUAC':L_(('Code',B+'lab/pam/psm-session.sh')),
-  'HA':L_(('Code',T+'lab/pam/ha')),'DYN':L_(('Code',T+'lab/pam/dynamic-db')),'CONJUR':L_(('Code',B+'lab/pam/conjur-demo.sh')),'K8S':L_(('Code',T+'lab/k8s')),
+  'HA':L_(('Code',T+'lab/pam/ha')),'DYN':L_(('Code',T+'lab/pam/dynamic-db')),'K8S':L_(('Code',T+'lab/k8s')),
   'LA':L_(('Sentinel rules','sentinel'),('Rule code',T+'lab/kql')),'PB':L_(('Code',B+'lab/monitoring/playbook-notify.json')),'CONTAIN':L_(('Code',B+'lab/monitoring/playbook-contain.json')),
   'FEED':L_(('Code',B+'lab/scripts/monitoring/ingest-vault-audit.sh')),'SPLUNK':L_(('Splunk (this Mac)','splunk'),('Code',T+'lab/splunk')),
   'LEAVER':L_(('Dana in Entra','dana'),('Leaver script',B+'lab/scripts/powershell/04-Leaver.ps1')),'NHI':L_(('Apps in Entra','apps'),('Inventory script',B+'lab/scripts/powershell/06-NHI-Inventory.ps1')),

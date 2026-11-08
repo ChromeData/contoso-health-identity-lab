@@ -15,7 +15,7 @@
 #
 # Usage: ./pam-up.sh              everything above (the full stand-in stack)
 #        ./pam-up.sh --midpoint   only steps 1 + 6 and midPoint with its
-#                                 database (no Vault, Guacamole or Conjur),
+#                                 database (no Vault or Guacamole),
 #                                 then WAIT until midPoint's REST API accepts
 #                                 the administrator - ready for
 #                                 midpoint/run-campaign.sh and
@@ -47,8 +47,6 @@ if [[ ! -f .env ]]; then
   log "Generating .env (random credentials)"
   cat > .env <<ENV
 GUAC_DB_PASSWORD=$(openssl rand -hex 24)
-CONJUR_DB_PASSWORD=$(openssl rand -hex 24)
-CONJUR_DATA_KEY=$(openssl rand -base64 32)
 MIDPOINT_DB_PASSWORD=$(openssl rand -hex 24)
 MIDPOINT_ADMIN_PASSWORD=Mp-$(openssl rand -hex 12)-9a
 DC_FQDN=
@@ -111,6 +109,26 @@ if [[ ! -s guacamole/initdb.sql ]]; then
 fi
 
 # 3. up -------------------------------------------------------------------------
+# Conjur was removed from docker-compose.yml (ADR 0036). `docker compose up`
+# does not stop containers of services that are no longer in the file, so a
+# stack started before that change would keep Conjur running. Remove exactly
+# those containers by their compose labels. NOT `--remove-orphans`: that
+# would also remove containers from the overlay files (ha, oidc, dynamic-db)
+# when this base file runs alone. The conjur-db volume is left in place
+# (data is never deleted silently); the command to drop it is printed.
+project="$(docker compose config --format json 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("name",""))' 2>/dev/null || true)"
+project="${project:-contoso-pam}"
+for svc in conjur conjur-cli conjur-db; do
+  ids="$(docker ps -aq --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=$svc")"
+  if [[ -n "$ids" ]]; then
+    log "Retiring the old $svc container (Conjur left the lab, ADR 0036)"
+    # shellcheck disable=SC2086  # one id per word, on purpose
+    docker rm -f $ids >/dev/null
+  fi
+done
+if docker volume inspect "${project}_conjur-db" >/dev/null 2>&1; then
+  log "Kept volume ${project}_conjur-db (old Conjur data). Remove it with: docker volume rm ${project}_conjur-db"
+fi
 log "Starting containers"
 docker compose up -d
 
@@ -119,7 +137,7 @@ vault_wait
 if [[ "$(vault_cli status -format=json 2>/dev/null | jq -r '.initialized' || true)" != "true" ]]; then
   # ONE key share is a lab shortcut. Production: Shamir 3-of-5 held by
   # different custodians, or auto-unseal via `seal "azurekeyvault"` - the
-  # equivalent of protecting CyberArk's master key.
+  # equivalent of protecting a vault's master key.
   log "Initialising Vault (lab: 1 key share)"
   # Write to a temp file and only keep it if it is valid JSON with a root
   # token - an empty/partial init file would break every later script.
@@ -199,7 +217,6 @@ PAM / IGA stand-ins are up (loopback only):
               lab password in .secrets/operators/NAME-password
   ITSM mock   http://127.0.0.1:8084   ServiceNow Table API v2 stand-in (./itsm-ticket.sh add CHG... --operator NAME --approver A --approver B:
               Tier 0 needs two distinct approvers, neither the requester; Tier 1 one)
-  Conjur      http://127.0.0.1:8083   (./conjur-demo.sh)
   midPoint    http://127.0.0.1:8082/midpoint   administrator / \$MIDPOINT_ADMIN_PASSWORD in .env
               (first start: allow a few minutes before it answers)
 

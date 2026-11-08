@@ -140,7 +140,7 @@ tier0-logon-without-checkout.kql: logon NOT inside
   2026 (verify: retirement notice). The Logs Ingestion API authenticates with
   Entra, so there's no workspace key to leak.
 * **Stand-in.** This replaces the agent-based path production would use
-  (CyberArk Vault / PTA syslog → AMA (CEF) → Sentinel). The STAND-INS row
+  (Azure Key Vault diagnostic logs → Log Analytics → Sentinel, ADR 0036). The STAND-INS row
   exists (`lab/docs/STAND-INS.md`); only the spoken line in the verbatim
   script is pending.
 
