@@ -262,9 +262,15 @@
     No disable task: HR already disabled the AD account (the source of
     authority). Worst case = Cloud Sync cycle (20 min) + the schedule
     interval (-ScheduleIntervalHours).
-    This replaces the automatic policy's 72 h grace for leavers: the policy
-    removes a package 72 h after the user stops matching; this workflow
-    removes it at its next run.
+    LIMIT, measured 2026-11-08 (worker 100496): the task "Remove all access
+    package assignments for user" reported success but did NOT remove the
+    assignment an AUTOMATIC policy made (no entitlement audit event; the
+    assignment stayed AutoAssignmentInGracePeriod, 72 h). It does remove
+    request/admin assignments, and the other tasks ran. So for birthright
+    packages this workflow does not close the gap on its own; an
+    adminRemove request does (3 min 20 s in the lab tenant, 04-Leaver.ps1
+    step 3). Automating that adminRemove needs a new Graph permission on
+    an automated identity (owner decision; see the PR).
 
 .PARAMETER LeaveDateLeaverWorkflowName
     Default "Contoso - Leaver (HR leave date, scheduled)".
