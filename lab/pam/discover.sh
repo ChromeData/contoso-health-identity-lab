@@ -13,6 +13,9 @@
 # (service accounts) or exception (with the reason). Read-only: nothing in
 # AD or Vault changes.
 #
+# DC01 MODE RETIRED 2026-11-07: svc-pam-discovery no longer exists on DC01
+# (ADR 0036, lab/scripts/dc/Remove-PamDiscoveryAccount.ps1). This script now
+# runs only against the local samba harness, which seeds its own account.
 # Binds as a READ-ONLY account (default svc-pam-discovery, a plain Domain
 # User), never the Tier-0 rotator. Its password comes on stdin:
 #   az keyvault secret show --vault-name <kv> -n svc-pam-discovery --query value -o tsv \

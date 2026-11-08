@@ -108,7 +108,11 @@ cd lab/pam
 ./vault-onboard-ad.sh -k <key-vault> -d corp.<domain>   # LDAP engine, svc-backup static role, tier0 library
 
 # PAM operations pack (section below): discovery -> onboarding -> reconciliation
-az keyvault secret show --vault-name <key-vault> -n svc-pam-discovery --query value -o tsv | ./discover.sh
+# DC01 discovery and onboarding are RETIRED (2026-11-07, ADR 0036):
+# svc-pam-discovery and its Key Vault secret were deleted. Not available in a
+# live run. The Samba harness (test/e2e.sh) is a SEPARATE, offline exercise:
+# never run it against a stack pointed at a real DC (its --force bypass deletes
+# Vault's ldap/ mount).
 ./onboard.sh --dry-run && ./onboard.sh
 ./reconcile.sh --verify
 
@@ -255,10 +259,14 @@ Output (gitignored): `out/discovery-<UTC>.{json,csv}` and
 `out/discovery-latest.*`. "Stale" uses `lastLogonTimestamp`, which replicates
 (about every 14 days), not the per-DC `lastLogon`.
 
-**Tenant time (DC01):** `lab/scripts/dc/02-Configure-Domain.ps1` creates
-`svc-pam-discovery` as a plain user in `OU=ServiceAccounts` and stores its
-password in Key Vault as `svc-pam-discovery` (never on a command line); it is
-already in the policy exclusions here, so Vault never onboards or rotates it.
+**Tenant time (DC01): retired.** Until 2026-11-07,
+`lab/scripts/dc/02-Configure-Domain.ps1` created `svc-pam-discovery` on DC01
+and stored its password in Key Vault. With the Vault stand-in retired
+(ADR 0036), `lab/scripts/dc/Remove-PamDiscoveryAccount.ps1` deleted the
+account and the secret (capture log E157), and the domain build no longer
+creates it. DC01 discovery is therefore not available. The Samba
+harness (`test/e2e.sh`) seeds its own copy and stays as a separate, offline
+exercise (never against a real DC); the policy exclusion here stays for it.
 
 ### 2. Bulk onboarding — `onboard.sh`
 
@@ -942,7 +950,7 @@ onboarding would skip its first rotation.
 - [x] `./pam-up.sh` ends with the endpoint list and no `ERROR` (2026-10-20, upgraded in place from the 2026-10-19 stack)
 - [x] Vault HA: failover, DR drill (RTO/RPO report, latest `../evidence/pam-dr/20261020T220031Z/`: RTO 42.1 s, target 300 s), rolling-upgrade rehearsal (2026-10-20, in the harness, on the separate rehearsal cluster; restoring the credential vault and reconciling drift after a restore is not drilled)
 - [x] Recorded SSH session through Guacamole with a Vault SSH certificate; its recording passes the same format check (2026-10-20, in the harness)
-- [ ] **Tenant time:** `svc-pam-discovery` created on DC01 + Key Vault secret; `./discover.sh` against DC01; `./onboard.sh` and `./reconcile.sh --verify --strict` pass
+- [x] ~~**Tenant time:** `svc-pam-discovery` created on DC01 + Key Vault secret; `./discover.sh` against DC01;~~ **retired 2026-11-07** (ADR 0036; account and secret deleted, capture log E157). Remaining: `./onboard.sh` and `./reconcile.sh --verify --strict` pass
 - [ ] **Tenant time:** `Get-AccountDependencies.ps1` run on DC01 through `az vm run-command`; findings merged into `accounts-dependencies.json`
 - [ ] Vault UI: `ldap/` engine, static roles `svc-backup` + `svc/*`, libraries `tier0-admins`, `tier1-admins`
 - [ ] Audit log records each check-out (with `token-psm-<operator>` and the ticket), check-in and rotation. Vault's UI has no audit view, so read the file device `pam-up.sh` enables (values are HMAC'd):
