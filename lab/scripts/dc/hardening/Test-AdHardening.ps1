@@ -68,7 +68,10 @@ function Test-GpoLinks {
     # paths (domain/OU/OU) and every one of them is enabled. A missing,
     # extra or disabled link fails. Returns @{ Ok; Detail }.
     param([xml]$Report, [string[]]$Expected)
-    $links = @($Report.GPO.LinksTo | Where-Object { $_ })
+    # LocalName, not $Report.GPO.LinksTo: under StrictMode a GPO with no
+    # links has no LinksTo property (that would throw, not FAIL), and the
+    # real report carries a default namespace, which XPath would miss.
+    $links = @($Report.DocumentElement.ChildNodes | Where-Object { $_.LocalName -eq 'LinksTo' })
     $have = @($links | ForEach-Object { "$($_.SOMPath)" })
     $off = @($links | Where-Object { "$($_.Enabled)" -ne 'true' } | ForEach-Object { "$($_.SOMPath)" })
     $missing = @($Expected | Where-Object { $have -notcontains $_ })

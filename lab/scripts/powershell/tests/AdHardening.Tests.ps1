@@ -199,8 +199,17 @@ Describe 'GPO link read-back (Test-AdHardening.ps1)' {
         $res.Detail | Should -Match 'missing: corp.example/Tier2/Devices'
     }
 
-    It 'fails when there is no link at all' {
-        (Test-GpoLinks -Report ([xml]'<GPO></GPO>') -Expected $script:Want).Ok | Should -BeFalse
+    It 'fails (does not throw) when there is no link at all, under StrictMode' {
+        Set-StrictMode -Version Latest
+        (Test-GpoLinks -Report ([xml]'<GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings"></GPO>') -Expected $script:Want).Ok | Should -BeFalse
+    }
+
+    It 'reads a real-shaped report with the Group Policy namespace' {
+        Set-StrictMode -Version Latest
+        $r = [xml]('<GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings"><Name>x</Name>' +
+            '<LinksTo><SOMName>Servers</SOMName><SOMPath>corp.example/Tier1/Servers</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride></LinksTo>' +
+            '<LinksTo><SOMName>Devices</SOMName><SOMPath>corp.example/Tier2/Devices</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride></LinksTo></GPO>')
+        (Test-GpoLinks -Report $r -Expected $script:Want).Ok | Should -BeTrue
     }
 
     It 'fails on an extra link (for example the domain root)' {
