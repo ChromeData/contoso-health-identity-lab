@@ -192,6 +192,9 @@ try {
     const connect = await visible(page, (f) => f.getByRole('button', { name: /^Connect$/ }));
     const [sess] = await Promise.all([ava.waitForEvent('page', { timeout: 60000 }), connect.click()]);
     const tConn = Date.now();
+    // When THIS run's session began: playback must open a recording created
+    // after it, never an older one (recordings survive `down`).
+    proof.session_started_utc = new Date(tConn).toISOString();
     await sess.waitForLoadState('domcontentloaded');
     // The RDP desktop is a canvas; give Windows time to log on and draw.
     await sleep(45000);
@@ -232,7 +235,29 @@ try {
     const p = r.page;
     // The reviewer's own activations (owner-made eligibilities, ADR 0030).
     for (const role of REVIEWER_ROLES) await activateAzureRole(p, role, SANDBOX, 'playback', '07r-pim');
-    let link = null; const tList = Date.now();
+    // This run's session start: from this run's connect step, or (playback
+    // alone) from --since or an earlier proof.json in the same --out folder.
+    let since = proof.session_started_utc || opt('--since', '');
+    if (!since) { try { since = JSON.parse(fs.readFileSync(path.join(OUT, 'proof.json'), 'utf8')).session_started_utc || ''; } catch { since = ''; } }
+    if (!since || Number.isNaN(Date.parse(since))) throw new Error('playback needs this run\'s session start time (run the connect step first, or pass --since <ISO time>)');
+    const sinceMs = Date.parse(since) - 120000;   // 2 min for clock skew
+    // The row for THIS session: a vm-dc01 recording whose "Date Created" is at
+    // or after the session start. Older rows are ignored, so a repeat capture
+    // waits for its own upload instead of playing an earlier one (Greptile).
+    const thisRunLink = async (pg) => inFrames(pg, async (f) => {
+      const rows = f.getByRole('row').filter({ hasText: 'vm-dc01' });
+      const n = await rows.count();
+      for (let k = 0; k < n; k++) {
+        const r = rows.nth(k);
+        const t = (await r.innerText().catch(() => '')).replace(/\s+/g, ' ');
+        const m = t.match(/[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{4} \d{2}:\d{2}:\d{2} GMT[+-]\d{4}/);
+        if (!m || Date.parse(m[0]) < sinceMs) continue;
+        const l = r.getByRole('button', { name: /View recording/i }).or(r.getByRole('link', { name: /View recording/i })).first();
+        if (await l.isVisible()) return { link: l, created: new Date(Date.parse(m[0])).toISOString(), row: t.slice(0, 120) };
+      }
+      return null;
+    });
+    let link = null, found = null; const tList = Date.now();
     for (let i = 0; i < 30 && !link; i++) {
       // No deep link: '/sessionRecordings' falls back to Overview (seen live
       // 2026-11-07). Open Settings in the resource menu, then the blade.
@@ -245,10 +270,11 @@ try {
       }
       const item = menu || await visible(p, (f) => f.getByRole('treeitem', { name: /^Session recordings/i }).or(f.getByText('Session recordings', { exact: true })));
       if (item) { await item.click(); await sleep(12000); }
-      link = await visible(p, (f) => f.getByRole('button', { name: /View recording/i }).or(f.getByRole('link', { name: /View recording/i })));
+      found = await thisRunLink(p);
+      link = found ? found.link : null;
     }
-    mark('playback', link ? 'Session recordings lists the DC01 session' : 'NO recording listed', { ok: !!link, list_wait_s: Math.round((Date.now() - tList) / 1000), shot: await snap(p, '08-recordings-list') });
-    if (!link) throw new Error('no recording listed');
+    mark('playback', link ? `Session recordings lists THIS run's DC01 session (created ${found.created}, session began ${since})` : 'NO recording of this run listed', { ok: !!link, list_wait_s: Math.round((Date.now() - tList) / 1000), shot: await snap(p, '08-recordings-list') });
+    if (!link) throw new Error(`no vm-dc01 recording created after ${since} (an older one does not count)`);
     // "View recording" opens the player in a NEW TAB (seen live 2026-11-07:
     // the list page itself does not change). Fall back to the same page.
     const [pop] = await Promise.all([mei.waitForEvent('page', { timeout: 20000 }).catch(() => null), link.click()]);
