@@ -23,13 +23,17 @@
       4. Ask the KDC for a Kerberos service ticket to DC01's LDAP service AS
          contosoadmin with the new password (KerberosSecurityTokenProvider:
          SSPI Kerberos package only, no NTLM fallback).
-      5. Ask again with the OLD password. The KDC must refuse it.
+      5. Ask again with the OLD password. The KDC must refuse it with a
+         bad-password answer (SEC_E_LOGON_DENIED, 0x8009030C, anywhere in the
+         exception chain). Any other error (timeout, KDC unreachable) is NOT
+         a refusal: it prints KERBEROS-OLD: ERROR and the check fails.
 
     Output markers (rotate-build-admin.py reads them):
       DEPENDENTS: NONE | FOUND   services or tasks that run as contosoadmin
       RESET: DONE                the AD password has changed
       KERBEROS: PASS             a ticket was issued with the new password
-      KERBEROS-OLD: REFUSED      the old password no longer works
+      KERBEROS-OLD: REFUSED      the KDC answered "bad password" for the old one
+      KERBEROS-OLD: ERROR        the check could not tell (fails the run)
 
 .PARAMETER SamAccountName
     Must be contosoadmin.
@@ -87,6 +91,29 @@ function Get-Ticket([string]$pw) {
     $p = New-Object System.IdentityModel.Selectors.KerberosSecurityTokenProvider ($spn, [System.Security.Principal.TokenImpersonationLevel]::Identification, $cred)
     $p.GetToken([TimeSpan]::FromSeconds(30))
 }
+function Test-LogonDenied {
+    # True only when SSPI said "bad user name or password" (SEC_E_LOGON_DENIED).
+    param([System.Exception]$Exception)
+    $logonDenied = -2146893044   # 0x8009030C
+    for ($e = $Exception; $null -ne $e; $e = $e.InnerException) {
+        if ($e.HResult -eq $logonDenied) { return $true }
+        if ($e -is [System.ComponentModel.Win32Exception] -and $e.NativeErrorCode -eq $logonDenied) { return $true }
+    }
+    return $false
+}
+function Get-OldPasswordVerdict {
+    # REFUSED | ACCEPTED | ERROR: <message>. $Probe is the ticket request.
+    param([scriptblock]$Probe)
+    try {
+        $null = & $Probe
+        return 'ACCEPTED'
+    } catch {
+        $ex = $_.Exception
+        if ($ex -is [System.Management.Automation.MethodInvocationException] -and $ex.InnerException) { $ex = $ex.InnerException }
+        if (Test-LogonDenied -Exception $ex) { return 'REFUSED' }
+        return 'ERROR: ' + $ex.Message.Trim()
+    }
+}
 $rc = 0
 try {
     $t = Get-Ticket $NewPassword
@@ -95,12 +122,11 @@ try {
     Write-Output ('KERBEROS: FAIL {0}' -f $_.Exception.Message.Trim())
     $rc = 2
 }
-try {
-    $null = Get-Ticket $OldPassword
-    Write-Output 'KERBEROS-OLD: ACCEPTED (the old password still works)'
-    $rc = 2
-} catch {
-    Write-Output 'KERBEROS-OLD: REFUSED (the KDC no longer accepts the old password)'
+$verdict = Get-OldPasswordVerdict -Probe { Get-Ticket $OldPassword }
+switch -Wildcard ($verdict) {
+    'REFUSED' { Write-Output 'KERBEROS-OLD: REFUSED (the KDC answered bad password, SEC_E_LOGON_DENIED, for the old one)' }
+    'ACCEPTED' { Write-Output 'KERBEROS-OLD: ACCEPTED (the old password still works)'; $rc = 2 }
+    default { Write-Output ('KERBEROS-OLD: {0} (not proof the old password is refused)' -f $verdict); $rc = 2 }
 }
 $NewPassword = $null; $OldPassword = $null
 exit $rc

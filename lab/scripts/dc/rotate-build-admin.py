@@ -18,17 +18,28 @@ Where the password lives (names only):
     is a dead value.
 
 Order (nothing is printed, nothing is in argv, nothing is in a file):
+  0. One rotation at a time: an exclusive lock (~/.contoso-operator/
+     rotate-build-admin.lock, no secret in it) is held for the whole run.
   1. The current password is read from the Keychain into this process only.
   2. A new 32-character password is made here (secrets module) and written
-     into the SAME Keychain item through `security -i` on stdin.
-  3. run-on-dc.py sends it to DC01 as a PROTECTED run-command parameter (the
-     old one too, on run-on-dc.py's stdin). Reset-BuildAdminPassword.ps1
-     stops if a service or task runs as contosoadmin, resets the account,
-     and checks Kerberos with the new and the old password.
-  4. If DC01 did not report "RESET: DONE", the old Keychain value goes back.
+     into the SAME Keychain item through `security -i` on stdin (values are
+     double-quoted with backslash and " escaped, so an old value with spaces or
+     quotes round-trips).
+  3. run-on-dc.py gets BOTH passwords from this process on its stdin (never
+     re-read from the Keychain) and sends them to DC01 as PROTECTED
+     run-command parameters. Reset-BuildAdminPassword.ps1 stops if a service
+     or task runs as contosoadmin, resets the account, and checks Kerberos
+     with the new and the old password.
+  4. The old Keychain value goes back ONLY when DC01 proves AD was not
+     touched (REFUSED, DEPENDENTS: FOUND, or the run command was never
+     created). In every other case without "RESET: DONE" (an error after the
+     reset started, a timeout, Ctrl+C) both values are kept: the NEW one in
+     the Keychain, the OLD one in Key Vault (not touched), so the active
+     password is never lost.
   5. The Key Vault secret gets a new version with the new value (REST, body
      in memory), read back and compared.
 """
+import fcntl
 import json
 import os
 import secrets
@@ -50,6 +61,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # 32 characters from 66 is about 193 bits.
 SYMBOLS = "-_.+"
 ALPHABET = string.ascii_letters + string.digits + SYMBOLS
+LOCK = os.path.expanduser("~/.contoso-operator/rotate-build-admin.lock")
 HIDE = []
 
 
@@ -73,9 +85,17 @@ def keychain_read():
                           capture_output=True, text=True, check=True).stdout.rstrip("\n")
 
 
+def quote(value):
+    # security -i splits its line like a shell: inside double quotes, \ and "
+    # are escaped with a backslash. A newline cannot be carried at all.
+    if "\n" in value or "\r" in value:
+        raise SystemExit("a password with a line break cannot go through security -i")
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def keychain_write(value):
     # -U updates the existing item. The value goes in on stdin only.
-    line = f"add-generic-password -U -s {SERVICE} -a {SAM} -w {value}\n"
+    line = f"add-generic-password -U -s {SERVICE} -a {SAM} -w {quote(value)}\n"
     r = subprocess.run(["security", "-i"], input=line, capture_output=True, text=True)
     if r.returncode != 0:
         raise SystemExit(f"Keychain write failed for {SERVICE} (exit {r.returncode})")
@@ -104,13 +124,61 @@ def kv(method, token, body=None):
         raise SystemExit(scrub(f"Key Vault {method} {KV_SECRET}: HTTP {e.code}"))
 
 
+def run_on_dc(new, old):
+    # Both values go to run-on-dc.py on its stdin, from this process's memory.
+    return subprocess.run([sys.executable, "-I", os.path.join(HERE, "run-on-dc.py"),
+                           os.path.join(HERE, "Reset-BuildAdminPassword.ps1"),
+                           "--param", f"SamAccountName={SAM}",
+                           "--secret", "NewPassword=stdin:NewPassword",
+                           "--secret", "OldPassword=stdin:OldPassword", "--timeout", "600"],
+                          input=json.dumps({"NewPassword": new, "OldPassword": old}), capture_output=True, text=True)
+
+
+def ad_state(out):
+    """done | unchanged (proven) | unknown (keep both values)."""
+    lines = [l.strip() for l in out.splitlines()]
+    if any(l.startswith("RESET: DONE") for l in lines):
+        return "done"
+    if any(l.startswith(("REFUSED:", "DEPENDENTS: FOUND")) for l in lines) or "PUT failed:" in out:
+        return "unchanged"
+    return "unknown"
+
+
+def get_token():
+    return subprocess.run(["az", "account", "get-access-token", "--resource", "https://vault.azure.net",
+                           "--query", "accessToken", "-o", "tsv"], capture_output=True, text=True, check=True).stdout.strip()
+
+
+def take_lock():
+    os.makedirs(os.path.dirname(LOCK), exist_ok=True)
+    fh = open(LOCK, "w")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        raise SystemExit("another rotate-build-admin.py run holds the lock: stopping, nothing changed")
+    return fh
+
+
+def keep_both_message():
+    return (f"UNKNOWN: DC01 did not report the result. Keychain {SERVICE} holds the NEW password, "
+            f"Key Vault {VAULT}/{KV_SECRET} still holds the OLD one. Check which one AD accepts before anything else.")
+
+
 def main():
+    lock = take_lock()
+    try:
+        rotate()
+    finally:
+        lock.close()
+
+
+def rotate():
     old = keychain_read()
     if not old:
         raise SystemExit(f"Keychain item {SERVICE} is empty: nothing to roll back to, stopping")
     HIDE.append(old)
-    token = subprocess.run(["az", "account", "get-access-token", "--resource", "https://vault.azure.net",
-                            "--query", "accessToken", "-o", "tsv"], capture_output=True, text=True, check=True).stdout.strip()
+    token = get_token()
     cur = kv("GET", token)
     print(f"before: Key Vault {VAULT}/{KV_SECRET} {'matches' if cur.get('value') == old else 'DIFFERS FROM'} Keychain {SERVICE}")
     tags = dict(cur.get("tags") or {})
@@ -121,28 +189,21 @@ def main():
     print(f"new password generated and stored in Keychain item {SERVICE} (not shown)", flush=True)
 
     try:
-        r = subprocess.run([sys.executable, "-I", os.path.join(HERE, "run-on-dc.py"),
-                            os.path.join(HERE, "Reset-BuildAdminPassword.ps1"),
-                            "--param", f"SamAccountName={SAM}",
-                            "--secret", f"NewPassword=keychain:{SERVICE}",
-                            "--secret", "OldPassword=stdin:OldPassword", "--timeout", "600"],
-                           input=json.dumps({"OldPassword": old}), capture_output=True, text=True)
+        r = run_on_dc(new, old)
     except BaseException:
-        keychain_write(old)
-        print(f"run-on-dc did not finish: the old password is back in {SERVICE}")
+        # Ctrl+C or any failure while DC01 may already be resetting: never
+        # roll back on a guess.
+        print(keep_both_message())
         raise
     out = scrub(r.stdout + r.stderr)
     print(out.strip())
-    if "RESET: DONE" not in out:
-        if "DEPENDENTS: " in out or "REFUSED: " in out or "RESET: FAILED" in out:
-            keychain_write(old)
-            print(f"AD was not changed: the old password is back in {SERVICE}")
-        else:
-            # The run never reported, so AD may or may not have changed. Keep
-            # one copy of each: the new one in the Keychain, the old one in
-            # Key Vault (not touched). Try both with Kerberos before anything else.
-            print(f"UNKNOWN: DC01 did not report. Keychain {SERVICE} holds the NEW password, "
-                  f"Key Vault {VAULT}/{KV_SECRET} still holds the OLD one. Check which works.")
+    state = ad_state(out)
+    if state == "unchanged":
+        keychain_write(old)
+        print(f"AD was not changed: the old password is back in {SERVICE}")
+        sys.exit(1)
+    if state == "unknown":
+        print(keep_both_message())
         sys.exit(1)
 
     tags["rotated-utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

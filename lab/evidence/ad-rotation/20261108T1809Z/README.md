@@ -13,3 +13,13 @@ Who: the lab operator (certificate, `lab/scripts/operator/op`), no person, no RD
 | `preflight-after.txt` | `preflight.sh --check` READY after the rotation |
 
 No password is in any file here. DC01 was started by preflight.sh and deallocated afterwards.
+
+## Limit of this run (found in review, PR #262)
+
+This run used the first version of `Reset-BuildAdminPassword.ps1`. In that version,
+`KERBEROS-OLD: REFUSED` meant "the ticket request with the old password failed" for
+ANY error. It did not check that the error was the KDC's bad-password answer
+(SEC_E_LOGON_DENIED). One second earlier, the same KDC issued a ticket for the new
+password, so an outage is unlikely. But this run does not prove the reason. The
+script now prints REFUSED only for SEC_E_LOGON_DENIED and fails on any other error.
+The new-password result (ticket issued) is not affected.
