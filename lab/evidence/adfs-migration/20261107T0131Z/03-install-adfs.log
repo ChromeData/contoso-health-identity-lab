@@ -1,0 +1,27 @@
+run command lab-efb32bcd: lab/adfs/scripts/10-Install-Adfs.ps1 on vm-dc01
+[adfs-install] LAB SHORTCUT: AD FS goes on this domain controller only because the Azure trial has no room for another VM. Production uses a dedicated AD FS server (a farm of two or more) behind a Web Application Proxy, never a domain controller.
+[adfs-install] installing the ADFS-Federation role
+WARNING: To finish configuring this server for the federation server role using Windows PowerShell, see 
+http://go.microsoft.com/fwlink/?LinkId=224868.
+[adfs-install] DNS A sts.corp.contosohealthlab.com -> 10.42.2.4
+[adfs-install] self-signed TLS certificate for sts.corp.contosohealthlab.com (90 days)
+[adfs-install] Install-AdfsFarm sts.corp.contosohealthlab.com (gMSA gmsa-adfs, WID)
+WARNING: A machine restart is required to complete ADFS service configuration. For more information, see: 
+https://go.microsoft.com/fwlink/?LinkId=798725
+WARNING: The SSL certificate subject alternative names do not support host name 
+'certauth.sts.corp.contosohealthlab.com'. Configuring certificate authentication binding on port '49443' and hostname 
+'sts.corp.contosohealthlab.com'.
+WARNING: The SSL certificate does not contain all UPN suffix values that exist in the enterprise.  Users with UPN 
+suffix values not represented in the certificate will not be able to Workplace-Join their devices.  For more 
+information, see http://go.microsoft.com/fwlink/?LinkId=311954.
+{
+    "federationService":  "sts.corp.contosohealthlab.com",
+    "identifier":  "http://sts.corp.contosohealthlab.com/adfs/services/trust",
+    "serviceState":  "Running",
+    "tlsThumbprint":  "02A90ECFA659A24CAEA1D7E312C42B63787F02B6",
+    "auditLevel":  "System.String[]",
+    "gmsaHasSeAudit":  false,
+    "metadataUrl":  "https://sts.corp.contosohealthlab.com/FederationMetadata/2007-06/FederationMetadata.xml"
+}
+[adfs-install] WARNING: gmsa-adfs$ does not hold 'Generate security audits'. AD FS will not write sign-in audits, so Connect Health and the migration report see nothing. Do README step 3b.
+state: Succeeded, exit code: 0
