@@ -3,11 +3,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   oktaElToEntra, protocolOf, isClinicApp, statusOf, buildRow, toCsv, toMarkdown, toHtml,
-  systemLogFilter, entraSigninKql, okta, graphAll, checkSwitchTarget, latestTest,
+  systemLogFilter, entraSigninKql, okta, graphAll, checkSwitchTarget, latestTest, entraApiFields,
 } from '../lib.mjs';
-import { verifyIdToken, authorizeUrl, pkcePair, signinRecord, page, checkCallback, browserLoginId, loginCookieHeader, loginCookies, LEGACY_LOGIN_COOKIE_CLEAR } from '../clinic-results/app.mjs';
+import { verifyIdToken, authorizeUrl, pkcePair, signinRecord, page, checkCallback, browserLoginId, loginCookieHeader, loginCookies, LEGACY_LOGIN_COOKIE_CLEAR, checkIdpBlock, readConf } from '../clinic-results/app.mjs';
 
 test('the clinic login-domain rule translates to an endsWith on the UPN', () => {
   assert.deepEqual(oktaElToEntra('String.substringAfter(user.login, "@") == "contosohealthlab.com"'), { rule: '(user.userPrincipalName -endsWith "@contosohealthlab.com")' });
@@ -202,4 +205,38 @@ test('an old Path=/callback cookie sent first does not block the callback', () =
   assert.ok(checkCallback(p, chosen, 'okta').ok);
   assert.deepEqual(loginCookies(''), []);
   assert.match(LEGACY_LOGIN_COOKIE_CLEAR, /Path=\/callback; Max-Age=0/);
+});
+
+test('the Entra sign-in asks for the API scope, the resource CA061 targets', () => {
+  const f = entraApiFields({ appId: '28282828-2828-2828-2828-282828282828' });
+  assert.equal(f.scope, 'openid profile email api://28282828-2828-2828-2828-282828282828/Results.Read');
+  assert.equal(f.api_audience, '28282828-2828-2828-2828-282828282828');
+  assert.throws(() => entraApiFields(null), /CA061 would not be evaluated/);
+  const u = new URL(authorizeUrl({ authorization_endpoint: 'https://idp/authorize', client_id: 'c', scope: f.scope }, { state: 's', nonce: 'n', challenge: 'x' }));
+  assert.equal(u.searchParams.get('scope'), f.scope);
+  const o = new URL(authorizeUrl({ authorization_endpoint: 'https://idp/authorize', client_id: 'c' }, { state: 's', nonce: 'n', challenge: 'x' }));
+  assert.equal(o.searchParams.get('scope'), 'openid profile email');
+});
+
+test('the API token check: right audience accepted, the client id as audience refused', () => {
+  const api = sign({ iss: good.iss, aud: 'api-1', exp: now + 600, scp: 'Results.Read' });
+  assert.equal(verifyIdToken(api, { jwks, issuer: good.iss, audience: 'api-1', now }).scp, 'Results.Read');
+  assert.throws(() => verifyIdToken(api, { jwks, issuer: good.iss, audience: 'client-1', now }), /audience/);
+});
+
+test('an Entra config written before the API fix is refused, so CA061 cannot be skipped', () => {
+  const old = { issuer: 'i', client_id: 'c' };
+  assert.throws(() => checkIdpBlock('entra', old), /no API scope.*prestage/);
+  assert.throws(() => checkIdpBlock('entra', { ...old, api_audience: 'a', scope: 'openid profile email' }), /no API scope/);
+  assert.doesNotThrow(() => checkIdpBlock('entra', { ...old, ...entraApiFields({ appId: 'a' }) }));
+  assert.doesNotThrow(() => checkIdpBlock('okta', old));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cr-')); const f = path.join(dir, 'idp.json');
+  fs.writeFileSync(f, JSON.stringify({ app: 'Clinic Lab Results', active: 'entra', okta: old, entra: old }));
+  assert.throws(() => readConf(f), /no API scope/);
+  fs.writeFileSync(f, JSON.stringify({ app: 'Clinic Lab Results', active: 'okta', okta: old, entra: old }));
+  assert.equal(readConf(f).active, 'okta');
+  // A rollback reads the file raw: a stale Entra block, even ACTIVE, must not block restoring Okta.
+  fs.writeFileSync(f, JSON.stringify({ app: 'Clinic Lab Results', active: 'entra', okta: old, entra: old }));
+  assert.equal(readConf(f, { checkActive: false }).okta.client_id, 'c');
+  fs.rmSync(dir, { recursive: true });
 });

@@ -129,8 +129,11 @@ resource "azuread_conditional_access_policy" "shared_clinical_workstation" {
 # session bound on this app, and that the control is named after the app a
 # reviewer looks for.
 #
-# SCOPE: the app only (its client id), the app group only, break-glass
-# excluded. Never All users, never All resources.
+# SCOPE: the app's API (Clinic Lab Results API: Conditional Access cannot
+# target the public client itself - Graph error 1034
+# PublicClientsAreUnsupported; the client requests the API's scope at every
+# sign-in, so the policy is evaluated there), the app group only,
+# break-glass excluded. Never All users, never All resources.
 #
 # STATE: enforced from the start in the lab (lab.tfvars CA061 = "enabled"),
 # against this module's report-only-first default, on purpose: report-only

@@ -132,7 +132,10 @@ function entraFor(name) {
   const asg = graph('GET', `servicePrincipals/${sp.id}/appRoleAssignedTo?$select=principalId,principalType,principalDisplayName`).value;
   let members = 0;
   for (const g of asg.filter((x) => x.principalType === 'Group')) members += graphAll(graph, `groups/${g.principalId}/members?$select=id&$top=999`).length;
-  const ca = caPolicies.filter((p) => (p.conditions?.applications?.includeApplications || []).includes(appId)).map((p) => `${p.displayName.split(' - ')[0]} (${p.state === 'enabled' ? 'on' : p.state === 'disabled' ? 'off' : 'report-only'})`);
+  // The app's API ("<name> API"), if it has one: CA061 targets the API,
+  // because Conditional Access cannot target a public client.
+  const apiIds = graph('GET', `applications?$filter=displayName eq '${`${name} API`.replace(/'/g, "''")}'&$select=appId`).value.map((x) => x.appId);
+  const ca = caPolicies.filter((p) => (p.conditions?.applications?.includeApplications || []).some((id) => id === appId || apiIds.includes(id))).map((p) => `${p.displayName.split(' - ')[0]} (${p.state === 'enabled' ? 'on' : p.state === 'disabled' ? 'off' : 'report-only'})`);
   let signins = null;
   try { signins = graphAll(graph, `auditLogs/signIns?$filter=appId eq '${appId}' and createdDateTime ge ${since.replace(/\.\d+Z$/, 'Z')}&$top=200&$select=id`).length; } catch { signins = null; }
   return { displayName: sp.displayName, appId, servicePrincipalId: sp.id, assignmentRequired: sp.appRoleAssignmentRequired, assignedPrincipals: asg.length, assignedGroups: asg.map((x) => x.principalDisplayName), groupMembers: members, ca, signins7d: signins };
