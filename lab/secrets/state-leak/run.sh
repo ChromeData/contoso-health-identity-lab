@@ -14,9 +14,11 @@
 #
 # What it does (about 4-6 min, almost all of it Azure create/delete time;
 # cost well under $0.01: Key Vault Standard bills $0.03 per 10,000 operations):
-#   1. Creates a throwaway resource group and a Key Vault in the lab
-#      subscription. The vault uses Azure RBAC (no access policies), purge
-#      protection OFF so it can be purged at the end.
+#   1. Creates a throwaway Key Vault in the SANDBOX resource group
+#      rg-lab-sandbox (envs/operator sandbox.tf). Since ADR 0030 that needs an
+#      owner-opened write session; preflight stops with the reason otherwise.
+#      The vault uses Azure RBAC (no access policies), purge protection OFF so
+#      it can be purged at the end.
 #   2. Grants the operator "Key Vault Secrets Officer" on THAT vault only,
 #      waits for RBAC to take effect, and stores a RANDOM 40-character value
 #      (never a real credential).
@@ -26,8 +28,9 @@
 #   4. ephemeral/: first a plan that expects the wrong length, which must
 #      fail on the precondition (so the check can fail); then the same steps
 #      as 3. Its precondition proves the value really was read.
-#   5. Deletes the resource group, PURGES the vault (soft delete would keep
-#      it for 7 days), and reads back that both are gone. KEEP=1 skips this.
+#   5. Removes the operator's grant, deletes and PURGES the vault (soft
+#      delete would keep it for 7 days), and reads back that it is gone. The
+#      sandbox group stays. KEEP=1 skips this.
 #
 # Exit: 0 = the result the README states; 1 = a different result (read the
 # table); 2 = could not run (wrong subscription, missing tool, Azure error).
@@ -55,7 +58,10 @@ LAB_TENANT="86a2e327-4951-4348-a3c4-6f4b79ffd8f2"
 LOCATION="${STATE_LEAK_LOCATION:-eastus2}"
 SECRET_NAME="state-leak-db-password"
 SUFFIX="$(openssl rand -hex 4)"
-RG="rg-stateleak-$SUFFIX"
+# The sandbox resource group (envs/operator sandbox.tf, ADR 0030): since
+# ADR 0030 the operator cannot create a resource group or a role assignment
+# anywhere else, and here only during an owner-opened write session.
+RG="${STATE_LEAK_SANDBOX_RG:-rg-lab-sandbox}"
 KV="kv-stateleak-$SUFFIX"
 
 T0=$(date +%s)
@@ -78,6 +84,14 @@ read -r sub tenant caller <<<"$acct"
   || die "not the lab subscription/tenant (got $sub / $tenant)"
 caller_oid="$(az ad sp show --id "$caller" --query id -o tsv 2>/dev/null)" \
   || die "cannot resolve the caller's object id (run as the lab operator)"
+# Both session grants on the sandbox must be active BEFORE anything is
+# created: Contributor (the vault) and the constrained RBAC Administrator
+# (the operator's Secrets Officer on that vault).
+sb_id="$(az group show -n "$RG" --query id -o tsv 2>/dev/null)" \
+  || die "sandbox resource group $RG not found: the owner applies envs/operator (sandbox.tf, ADR 0030)"
+sb_roles="$(az role assignment list --assignee "$caller_oid" --scope "$sb_id" --query '[].roleDefinitionName' -o tsv 2>/dev/null | sort -u | tr '\n' ',')"
+[[ "$sb_roles" == *"Contributor,"* && "$sb_roles" == *"Role Based Access Control Administrator,"* ]] \
+  || die "the operator has no write on $RG (roles: ${sb_roles:-none}): the owner opens a write session (envs/operator operator_write_session, ADR 0030)"
 export ARM_SUBSCRIPTION_ID="$LAB_SUB"
 # az 2.91 on Python 3.14 prints a SyntaxWarning from one of its own modules; it is noise.
 export PYTHONWARNINGS=ignore
@@ -87,25 +101,30 @@ created=0
 cleanup() {
   local rc=$?
   if [[ "${KEEP:-0}" == 1 ]]; then
-    log "KEEP=1: left $RG / $KV and $WORK (delete the group and purge the vault yourself)"
+    log "KEEP=1: left $KV in $RG and $WORK (delete and purge the vault yourself)"
     return
   fi
   rm -rf "$WORK"
   if [[ $created == 1 ]]; then
     local c0; c0=$(date +%s)
-    log "Cleanup: deleting $RG, then purging $KV"
-    az group delete -n "$RG" --yes -o none 2>/dev/null || echo "WARNING: group delete failed: delete $RG by hand" >&2
+    log "Cleanup: removing the operator's grant on $KV, deleting and purging $KV (the sandbox group stays)"
+    local ra
+    for ra in $(az role assignment list --scope "${kv_id:-/none}" --query "[?principalId=='$caller_oid'].id" -o tsv 2>/dev/null); do
+      az role assignment delete --ids "$ra" -o none 2>/dev/null || echo "WARNING: could not delete role assignment $ra" >&2
+    done
+    az keyvault delete -n "$KV" -g "$RG" -o none 2>/dev/null || echo "WARNING: vault delete failed: delete $KV by hand" >&2
     az keyvault purge -n "$KV" --location "$LOCATION" -o none 2>/dev/null || echo "WARNING: purge failed: purge $KV by hand" >&2
-    # Read back: the group is gone and the vault is not in the deleted list.
+    # Read back: the vault is in neither the active nor the deleted list.
     # Only an explicit "not found" counts as purged: any other error from
     # show-deleted (network, token, throttling) proves nothing, so it fails.
     local exists deleted_out deleted_rc=0
-    exists="$(az group exists -n "$RG" 2>/dev/null || echo unknown)"
+    exists="$(az keyvault list -g "$RG" --query "[?name=='$KV'] | length(@)" -o tsv 2>/dev/null || echo unknown)"
+    [[ "$exists" == 0 ]] && exists=false
     deleted_out="$(az keyvault show-deleted -n "$KV" -o none 2>&1)" || deleted_rc=$?
     if [[ "$exists" == "false" && $deleted_rc -ne 0 ]] && grep -qiE 'No deleted Vault|not ?found|DeletedVaultNotFound' <<<"$deleted_out"; then
-      log "Cleanup read back: $RG gone, $KV purged ($(( $(date +%s) - c0 )) s)"
+      log "Cleanup read back: $KV gone from $RG and purged ($(( $(date +%s) - c0 )) s)"
     else
-      echo "WARNING: read back failed (group exists: $exists; show-deleted rc $deleted_rc: ${deleted_out:0:160}): check $RG and the deleted vault $KV by hand" >&2
+      echo "WARNING: read back failed (vault still listed: $exists; show-deleted rc $deleted_rc: ${deleted_out:0:160}): check $KV in $RG and the deleted vaults by hand" >&2
       rc=2
     fi
   fi
@@ -115,13 +134,11 @@ trap cleanup EXIT
 
 # --- 1. Throwaway vault ------------------------------------------------------
 s=$(date +%s)
-log "Creating $RG and $KV in $LOCATION (RBAC, purge protection off)"
-az group create -n "$RG" -l "$LOCATION" -o none \
-  --tags purpose=state-leak-experiment owner=lab-operator delete-after=this-run \
-  || die "could not create $RG"
+log "Creating $KV in the sandbox $RG ($LOCATION; RBAC, purge protection off)"
 created=1
 az keyvault create -n "$KV" -g "$RG" -l "$LOCATION" --sku standard \
   --enable-rbac-authorization true --retention-days 7 -o none \
+  --tags purpose=state-leak-experiment owner=lab-operator delete-after=this-run \
   || die "could not create $KV"
 kv_id="$(az keyvault show -n "$KV" --query id -o tsv)"
 log "Vault created ($(( $(date +%s) - s )) s)"

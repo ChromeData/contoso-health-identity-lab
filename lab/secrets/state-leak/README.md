@@ -55,6 +55,15 @@ Times the random 40-character value appears in each file (2026-11-07 run):
 
 ## Run it
 
+**Needs an operator write session (since ADR 0030, 2026-11-08).** Between
+sessions the operator is read-only. The vault and the operator's grant on it
+are created in the sandbox resource group `rg-lab-sandbox`, where a session
+gives the operator Contributor plus an RBAC Administrator limited to data
+roles (`envs/operator/sandbox.tf`, PR #249). Without a session, the script
+stops before creating anything. The 2026-11-07 run below predates ADR 0030:
+it used its own throwaway resource group under the operator's then Owner
+role.
+
 ```bash
 lab/scripts/operator/op bash lab/secrets/state-leak/run.sh
 TF_BIN=/path/to/terraform lab/scripts/operator/op bash lab/secrets/state-leak/run.sh
@@ -70,9 +79,10 @@ not run.
 
 What it does:
 
-1. It creates a throwaway resource group `rg-stateleak-<random>` and a vault
-   `kv-stateleak-<random>`. The vault uses **Azure RBAC** for access (no
-   access policies). Purge protection is off, so the script can purge it.
+1. It checks that the session's two sandbox grants are active, then creates
+   a vault `kv-stateleak-<random>` in `rg-lab-sandbox`, tagged. The vault uses
+   **Azure RBAC** for access (no access policies). Purge protection is off,
+   so the script can purge it.
 2. It gives the operator **Key Vault Secrets Officer** on that one vault. It
    waits until RBAC takes effect, then stores a random value from a 0600
    file (`--file`, never a command-line argument). Every `az` call that
@@ -81,15 +91,16 @@ What it does:
    apply with a change (so a backup is written), and plan to a file. Then it
    counts the value in every file Terraform wrote
    ([`count_secret.py`](count_secret.py)).
-4. It deletes the group, purges the vault, and reads back that both are
-   gone. A soft-deleted vault would otherwise stay for 7 days.
+4. It removes the operator's grant, deletes and purges the vault, and reads
+   back that it is gone (neither listed nor soft-deleted). A soft-deleted
+   vault would otherwise stay for 7 days. The sandbox group stays.
 
 Cost: well under $0.01 per run (Key Vault Standard: $0.03 per 10,000
 operations, Azure retail price list, 2026-11-07).
 
 CI runs the static half only: `terraform fmt`, `terraform validate` and the
 counter's tests. The measurement creates Azure objects, and CI holds no
-identity that may create a resource group.
+identity that may write to the sandbox.
 
 ## Lessons for policy and pipelines
 
