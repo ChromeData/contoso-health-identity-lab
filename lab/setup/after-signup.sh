@@ -180,7 +180,9 @@ EOF
 # Every key the old file has and this script does not write is copied over
 # (apply_azure_scope, enable_lab_vm_operator, cannot_delete_lock_resource_ids,
 # EVIDENCE / HR-SYNC / PIM-Demo-Readers switches...). The writer list keeps
-# its old value: a re-run by another admin must not swap the writer.
+# its old value: a re-run by another admin must not swap the writer. A file
+# the merge cannot parse safely (indented line, /* */ block, heredoc) stops
+# here (exit 4) BEFORE the -auto-approve apply below.
 python3 -I "$ROOT/lab/setup/merge_tfvars.py" "$BOOT/terraform.tfvars" "$GEN" \
   --keep-old pipeline_config_writer_object_ids \
   --refuse-change pipeline_config_vault_name > "$GEN.merged" || { rm -f "$GEN.merged"; exit 1; }
