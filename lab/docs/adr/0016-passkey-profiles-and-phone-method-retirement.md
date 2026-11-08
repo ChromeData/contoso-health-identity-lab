@@ -96,6 +96,31 @@
     an attack.
   - BUILT: the issuing script, with offline tests. DESIGNED: the handover
     and the issuer split in the measures below.
+- **Exception: the joiner's day-one TAP is emailed to the manager.**
+  The rule above ("never by email") covers registration-wave TAPs. The
+  joiner Lifecycle Workflow uses Microsoft's built-in task "Generate TAP
+  and send email", and that task has one channel only: an email to the
+  joiner's manager. A hostile review (2026-11-06, finding C10) pointed out
+  that the docs said "never by email" while the running config emails an
+  8-hour TAP. We record it here as an accepted exception, with the reason.
+  - **Why 480 minutes, not 1-2 hours.** The workflow's trigger is
+    `employeeHireDate` with offset 0, and HR sends the date as midnight UTC
+    (`Invoke-InboundProvisioning.ps1`, `ConvertTo-HireDate`). The tenant
+    schedule runs every 3 hours. So the email can arrive at any time from
+    about 00:00 to 03:00 UTC on the start day, hours before the manager
+    meets the new hire on the morning shift. A 1-2 hour pass would expire
+    unread. 480 minutes is the shortest value that still reaches a day
+    shift. It also stays inside the default TAP policy maximum.
+  - **What limits the risk.** The pass is one-time use
+    (`-TapIsUsableOnce $true`). The manager's mailbox is behind CA001 (MFA).
+    CA009 accepts a TAP only to register a stronger method, so the joiner's
+    first act is to register a passkey in that session. Every TAP issue and
+    use is in the Entra audit log.
+  - **What would change it.** If HR sends a real start time (the shift start)
+    in `employeeHireDate`, the pass can drop to 2 hours. If Microsoft adds a
+    delivery channel other than email, we use it.
+  - **Demo note.** The joiner in the demo should register a passkey during
+    the TAP session, not skip the prompt.
 - **SMS and voice** are turned off by Contoso before Microsoft's date, not
   by the forced prompt. `-DisableSmsVoice` runs only when no in-scope user
   depends on a phone alone (fail closed). Break-glass is always excluded.
