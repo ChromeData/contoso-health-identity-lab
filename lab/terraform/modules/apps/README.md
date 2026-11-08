@@ -569,6 +569,7 @@ tracker and the cut-over tools are in [`lab/okta-migration/`](../../../okta-migr
 | Group | `App-ClinicResults-Users`, **assigned**, member drift ignored | Not a copy of Okta's `Clinic-Staff`: its rule (login domain) means every hospital user after the acquisition |
 | Assignment | the group, default access role, the only one | One principal per app, as everywhere in this module |
 | Conditional Access | CA061 (modules/conditional-access `clinical.tf`): MFA strength + sign-in every 8 h, the group only, break-glass excluded; **enforced** (lab.tfvars) | The Okta policy it replaces was "two factors, re-authenticate after 8 hours", already enforced |
+| API (the CA061 target) | `Clinic Lab Results API`: `api://<client id>`, one delegated scope `Results.Read`, v2 tokens, assignment required (same group), the client pre-authorized; hidden from My Apps | Conditional Access cannot target a public client (Graph 1034 `PublicClientsAreUnsupported`, run 42512070374). Learn: CA "is applied when a client calls a service". The client requests `Results.Read` at sign-in, so CA061 is evaluated on the API token |
 
 Post-apply, as the operator (`lab/okta-migration/cutover.mjs prestage` does
 both and reads them back): admin consent on the three delegated scopes

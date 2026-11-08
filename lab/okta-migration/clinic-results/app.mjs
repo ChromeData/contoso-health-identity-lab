@@ -54,7 +54,7 @@ export function authorizeUrl(idp, { state, nonce, challenge, redirect = REDIRECT
   const u = new URL(idp.authorization_endpoint);
   u.search = new URLSearchParams({
     client_id: idp.client_id, response_type: 'code', redirect_uri: redirect,
-    scope: 'openid profile email', state, nonce,
+    scope: idp.scope || 'openid profile email', state, nonce,
     code_challenge: challenge, code_challenge_method: 'S256',
   }).toString();
   return u.toString();
@@ -196,11 +196,19 @@ export function serve({ port = PORT, conf = CONF } = {}) {
         const idp = c[p.idp];
         const tok = await getJson(idp.token_endpoint, {
           method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
-          body: new URLSearchParams({ grant_type: 'authorization_code', client_id: idp.client_id, code: url.searchParams.get('code'), redirect_uri: `http://localhost:${port}/callback`, code_verifier: p.verifier, scope: 'openid profile email' }).toString(),
+          body: new URLSearchParams({ grant_type: 'authorization_code', client_id: idp.client_id, code: url.searchParams.get('code'), redirect_uri: `http://localhost:${port}/callback`, code_verifier: p.verifier, scope: idp.scope || 'openid profile email' }).toString(),
         });
         const jwks = await getJson(idp.jwks_uri);
         const claims = verifyIdToken(tok.id_token, { jwks, issuer: idp.issuer, audience: idp.client_id, nonce: p.nonce });
         const rec = signinRecord(p.idp, claims);
+        // Entra: the sign-in also asks for the app's API (the resource
+        // Conditional Access CA061 targets). Check that token too: issued by
+        // the same issuer, for the API, signed by the same keys.
+        if (idp.api_audience) {
+          if (!tok.access_token) throw new Error('no API token: the sign-in did not reach Clinic Lab Results API (the CA061 resource)');
+          const at = verifyIdToken(tok.access_token, { jwks, issuer: idp.issuer, audience: idp.api_audience });
+          rec.api_token = { audience: Array.isArray(at.aud) ? at.aud[0] : at.aud, scp: at.scp || null };
+        }
         fs.mkdirSync(path.dirname(conf), { recursive: true, mode: 0o700 });
         fs.appendFileSync(path.join(path.dirname(conf), 'signins.jsonl'), JSON.stringify(rec) + '\n', { mode: 0o600 });
         const id = b64u(crypto.randomBytes(18)); sessions.set(id, rec);

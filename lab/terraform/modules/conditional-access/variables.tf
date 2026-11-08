@@ -853,7 +853,7 @@ variable "enable_clinic_results_ca" {
 
 variable "ca061_app_ids" {
   type        = list(string)
-  description = "The ONE application CA061 targets: [Clinic Lab Results client id] (modules/apps output clinic_results_client_id)."
+  description = "The ONE application CA061 targets: [Clinic Lab Results API client id] (modules/apps output clinic_results_api_client_id). Not the client: Conditional Access cannot target a public client."
   default     = []
 }
 

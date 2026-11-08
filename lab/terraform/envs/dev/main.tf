@@ -441,8 +441,10 @@ module "conditional_access" {
   # CA061 Clinic Lab Results (Okta -> Entra wave 1): the same flag as the app
   # itself - no app, no CA061. One app, its one group.
   enable_clinic_results_ca = var.enable_clinic_results_app && var.enable_sso_apps
-  ca061_app_ids            = var.enable_clinic_results_app && var.enable_sso_apps ? [module.apps[0].clinic_results_client_id] : []
-  ca061_group_object_ids   = var.enable_clinic_results_app && var.enable_sso_apps ? [module.apps[0].clinic_results_users_group_object_id] : []
+  # The API, not the client: CA cannot target a public client (Graph 1034
+  # PublicClientsAreUnsupported, run 42512070374; modules/apps clinic_results.tf).
+  ca061_app_ids          = var.enable_clinic_results_app && var.enable_sso_apps ? [module.apps[0].clinic_results_api_client_id] : []
+  ca061_group_object_ids = var.enable_clinic_results_app && var.enable_sso_apps ? [module.apps[0].clinic_results_users_group_object_id] : []
 }
 
 # -----------------------------------------------------------------------------
