@@ -158,6 +158,8 @@ Postings use PAM vendor words. The lab does the same jobs with Microsoft product
   the git push stand in for Workday's outbound integration. In production HR never
   touches git." The branch ruleset that limits pushes is a setup step; it has no
   evidence row yet.
-- **An AI coding assistant built this lab with the owner.** It writes the code and
-  opens the pull requests with the owner's GitHub login. Only the owner approves an
-  apply (README, "How this lab was built").
+- **An AI coding assistant built this lab with the owner.** It writes the code.
+  Earlier it opened pull requests with the owner's GitHub login. AI changes
+  now come from the separate bot account `contoso-health-lab-bot[bot]`, and only the
+  owner approves an apply (README, "How this lab was built"). Say: "The bot plays
+  the junior engineer. I approve as the senior."
