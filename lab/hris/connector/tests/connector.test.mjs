@@ -175,3 +175,29 @@ test('the connector view has exactly the eight feed fields, and the code reads o
   assert.match(sh, /GRANT SELECT ON hr_feed\.v_worker_feed TO 'hr_connector'/);
   assert.ok(!/GRANT [^\n]*orangehrm\.[^\n]*hr_connector/.test(sh), 'no grant on OrangeHRM tables');
 });
+
+test('a due leaver goes out even when a hold would stop them (their supervisor left too, or a field was cleared)', () => {
+  const { feed, view } = live();
+  const nurse = feed.workers.find((w) => w.status !== 'leaver' && w.manager && feed.workers.some((m) => m.employeeId === w.manager && m.status !== 'leaver'));
+  const rows = view.map((r) => (r.employee_id === nurse.employeeId || r.employee_id === nurse.manager ? { ...r, termination_date: TODAY } : r));
+  const out = reconcile(feed, rows, TODAY);
+  const mine = out.changes.find((c) => c.worker.employeeId === nurse.employeeId);
+  assert.equal(mine?.kind, 'left');
+  assert.equal(mine.worker.status, 'leaver');
+  assert.equal(mine.worker.endDate, TODAY);
+  assert.equal(mine.worker.dept, nurse.dept, 'sent from the last valid feed row');
+  const cleared = reconcile(feed, view.map((r) => (r.employee_id === nurse.employeeId ? { ...r, department: null, termination_date: TODAY } : r)), TODAY);
+  assert.equal(cleared.changes.find((c) => c.worker.employeeId === nurse.employeeId)?.kind, 'left');
+  // Sent once: the next sync, with the feed now saying leaver, finds nothing.
+  assert.deepEqual(reconcile(out.feed, rows, TODAY).changes.filter((c) => c.worker.employeeId === nurse.employeeId), []);
+});
+
+test('a finished hire with OrangeHRM\'s own number (not 6 digits) is held and named, never silently dropped; the admin record stays silent', () => {
+  const { feed, view } = live();
+  const out = reconcile(feed, [...view, { ...SAM, employee_id: '0015' }], TODAY);
+  assert.equal(out.changes.length, 0);
+  assert.equal(out.held.length, 1);
+  assert.match(out.held[0].why, /6-digit hospital number/);
+  assert.deepEqual(reconcile(feed, view, TODAY).held, [], 'the unfinished admin record (0001) is not reported');
+});
+

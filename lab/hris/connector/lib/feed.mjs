@@ -107,7 +107,17 @@ export function reconcile(feed, hrisRows, today) {
   const changes = [];
   const workers = feed.workers.map((w) => ({ ...w }));
   const byId = new Map(workers.map((w) => [w.employeeId, w]));
-  const hris = hrisRows.map(fromHris).filter((h) => EMPLOYEE_ID.test(h.employeeId));
+  const all = hrisRows.map(fromHris);
+  // A FINISHED record (Job tab done) whose Employee Id is not the hospital's
+  // 6-digit number would otherwise vanish: OrangeHRM proposes numbers such
+  // as 0015. Report it as held. An unfinished one (OrangeHRM's own admin
+  // record, a hire still being typed) stays silent.
+  for (const h of all) {
+    if (!EMPLOYEE_ID.test(h.employeeId) && h.dept && h.jobTitle && h.startDate) {
+      held.push({ employeeId: h.employeeId, who: `${h.givenName} ${h.surname}`.trim(), why: `the Employee Id "${h.employeeId}" is not the 6-digit hospital number (OrangeHRM proposes its own; HR types the hospital's)` });
+    }
+  }
+  const hris = all.filter((h) => EMPLOYEE_ID.test(h.employeeId));
   const hrisById = new Map(hris.map((h) => [h.employeeId, h]));
   const current = (id) => { const h = hrisById.get(id); return h && !(h.terminationDate && h.terminationDate <= today); };
 
@@ -115,6 +125,17 @@ export function reconcile(feed, hrisRows, today) {
     const who = `${h.givenName} ${h.surname}`.trim();
     const hold = (why) => held.push({ employeeId: h.employeeId, who, why });
     const before = byId.get(h.employeeId);
+    // A worker already in the feed whose termination is due goes out as a
+    // leaver FIRST, from their last valid feed row: no hold below (supervisor
+    // left too, a field cleared, a name clash) may keep a departed worker's
+    // account enabled.
+    if (before && h.terminationDate && h.terminationDate <= today) {
+      if (before.status === 'leaver' && (before.endDate ?? '') === h.terminationDate) continue;
+      const orig = { ...feed.workers.find((w) => w.employeeId === h.employeeId) };
+      Object.assign(before, { status: 'leaver', endDate: h.terminationDate });
+      changes.push({ kind: orig.status === 'leaver' ? 'updated' : 'left', worker: before, before: orig, write: true });
+      continue;
+    }
     if (!h.dept || !h.jobTitle || !h.startDate) {
       // A new record HR is still filling in. An existing worker whose job
       // fields were cleared by mistake is held too: never blank a feed row.
