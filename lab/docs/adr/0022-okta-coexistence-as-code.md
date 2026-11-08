@@ -48,8 +48,12 @@ free Okta Integrator org makes that possible at lab scale.
 ## Consequences
 
 - A third provider (`okta/okta`) enters the repository with its own lock
-  file and its own API token, held only by the human who applies the root.
-  The token is never in CI.
+  file and its own API token, kept in the operator Mac's Keychain and used
+  only for applies outside CI. The token is never in CI. "Human-applied"
+  means applied outside CI from the operator workstation. Until 2026-11-07
+  an AI helper running as the operator also ran some of these applies
+  (progress log, okta-depth, 2026-11-07T00:54Z). From now on the owner
+  starts or approves each one.
 - `Clinic-Staff` membership in Okta is a stand-in for an HR-driven group;
   the decision that clinic users come from HR → AD → Cloud Sync, not from an
   Okta export, is unchanged.

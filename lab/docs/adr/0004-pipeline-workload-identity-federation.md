@@ -1,6 +1,6 @@
 # ADR 0004: Workload identity federation (OIDC) for the pipeline, with PLAN and APPLY split by subject
 
-- **Status:** Accepted (lab). Code and workflows validated offline; no pipeline run yet (the repo isn't pushed).
+- **Status:** Accepted (lab). RAN · tenant: the PLAN identity planned PR #6 (E01), the APPLY identity applied it (E02), and a branch outside `environment:prod` was refused (E03, AADSTS700213). More than 30 pipeline applies since.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
