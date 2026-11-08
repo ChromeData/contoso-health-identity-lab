@@ -196,6 +196,25 @@ DC01 has no public IP. Its NSG has no inbound allow rule from the internet
 | Who | Path | Recorded? | Notes |
 |---|---|---|---|
 | Scripts (build, rotation, agent installs) | `az vm run-command` through `run-on-dc.py` | No video. The capture log row and the script in git are the record; Azure writes an activity-log event and the `ala-vm-dc01-runcommand-*` alert fires | Runs as SYSTEM on a DC: a Tier-0 action. Only from an owner-opened operator session |
-| A person | Azure Bastion, from inside the VNet, created for the session and deleted after (`lab/bastion`, PR #247) | Yes with Bastion Premium (session recording); not with Basic | Sign in with a named Tier-0 account, not the built-in `contosoadmin` |
+| A person | Azure Bastion, from inside the VNet, created for the session and deleted after (steps below; the scripted, recorded path is `lab/bastion/capture.sh` in PR #247, open) | Yes with Bastion Premium (session recording); not with Basic | Sign in with a named Tier-0 account, not the built-in `contosoadmin` |
 | Anything on the internet | none | - | A NAT gateway carries DC01's outbound traffic; it admits no inbound connection |
+
+### A person's session through Bastion (until PR #247 merges)
+
+Off camera, signed in to the Azure portal as yourself (Owner or Contributor
+on `rg-identity-lab`):
+
+1. Open **vm-dc01**. Click **Connect**, then **Connect via Bastion**.
+2. If no Bastion exists, click **Deploy Bastion**. Pick SKU **Basic**
+   (about $0.19/h; Premium adds session recording, about $0.45/h). Azure
+   creates `AzureBastionSubnet` (10.42.250.0/26) in `vnet-identity-lab`.
+   Wait about 10 minutes.
+3. Sign in with a named Tier-0 account. The password comes from the Keychain
+   to the clipboard, never the screen.
+4. When you finish, sign out, then delete the Bastion host **and** its
+   public IP (`az network bastion delete`, `az network public-ip delete`).
+   A Bastion left running costs about $4.50 a day (Basic).
+
+Your RDP logon arrives from the Bastion subnet, so
+`dc-logon-outside-operator-allowlist` alerts on it by design.
 

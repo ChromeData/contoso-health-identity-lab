@@ -82,20 +82,31 @@ resource "azurerm_network_security_group" "dc" {
   # DC01 (lab/adfs), so the operator's test browser can sign in to it. Same
   # /32 allowlist; switch it off again when AD FS is decommissioned. RDP and
   # LDAPS are never opened to the internet any more, whatever the flags.
-  dynamic "security_rule" {
-    for_each = local.adfs_window ? { adfs-https = { priority = 120, port = "443" } } : {}
-    content {
-      name                       = "allow-${security_rule.key}-operator"
-      priority                   = security_rule.value.priority
-      direction                  = "Inbound"
-      access                     = "Allow"
-      protocol                   = "Tcp"
-      source_port_range          = "*"
-      destination_port_range     = security_rule.value.port
-      source_address_prefixes    = var.allowed_ip_ranges
-      destination_address_prefix = var.private_ip
-    }
-  }
+  # ATTRIBUTE syntax, not a dynamic block (Greptile on #272, P1):
+  # security_rule is Optional + Computed in azurerm, so ZERO dynamic blocks
+  # means "keep whatever rules exist" and the live RDP/LDAPS rules would
+  # stay. An explicit list, empty when the window is closed, makes Terraform
+  # remove them (azurerm r/network_security_group docs: "security_rule = []"
+  # removes all inline rules). Attribute syntax needs every field of the
+  # object, hence the empty lists and the description.
+  security_rule = local.adfs_window ? [{
+    name                                       = "allow-adfs-https-operator"
+    description                                = "AD FS exercise only (adfs_https_enabled): HTTPS 443 from the operator /32 (ADR 0013 amendment 2026-11-08)."
+    priority                                   = 120
+    direction                                  = "Inbound"
+    access                                     = "Allow"
+    protocol                                   = "Tcp"
+    source_port_range                          = "*"
+    source_port_ranges                         = []
+    destination_port_range                     = "443"
+    destination_port_ranges                    = []
+    source_address_prefix                      = null
+    source_address_prefixes                    = var.allowed_ip_ranges
+    source_application_security_group_ids      = []
+    destination_address_prefix                 = var.private_ip
+    destination_address_prefixes               = []
+    destination_application_security_group_ids = []
+  }] : []
 }
 
 locals {
@@ -155,6 +166,7 @@ resource "azurerm_public_ip" "adfs_https" {
 }
 
 resource "azurerm_network_interface" "dc" {
+  #checkov:skip=CKV2_AZURE_39:Public IP only during the time-boxed AD FS exercise (adfs_https_enabled, 443 from one /32); boot diagnostics keep the serial console for a DC with no other console path.
   #checkov:skip=CKV_AZURE_119:The NIC has a public IP only during the time-boxed AD FS exercise (adfs_https_enabled, 443 from one /32; ADR 0013 amendment 2026-11-08). By default it has none.
   name                = "nic-${var.vm_name}"
   location            = var.location

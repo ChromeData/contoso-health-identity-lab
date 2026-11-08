@@ -175,6 +175,39 @@ run "run_command_alerts_on_both_operations" {
   }
 }
 
+# The live transition (Greptile on #272): the SAME state first holds rules,
+# then the window closes. With a dynamic block the old rules stayed
+# (Optional + Computed); the explicit empty list must remove them.
+run "transition_window_open" {
+  command   = apply
+  state_key = "transition"
+
+  variables {
+    allowed_ip_ranges  = ["203.0.113.7/32"]
+    adfs_https_enabled = true
+  }
+
+  assert {
+    condition     = length(azurerm_network_security_group.dc.security_rule) == 1
+    error_message = "setup: the AD FS window has one rule"
+  }
+}
+
+run "transition_window_closed_removes_rules" {
+  command   = apply
+  state_key = "transition"
+
+  variables {
+    allowed_ip_ranges  = ["203.0.113.7/32"]
+    adfs_https_enabled = false
+  }
+
+  assert {
+    condition     = length(azurerm_network_security_group.dc.security_rule) == 0
+    error_message = "R5 / Greptile P1: closing the window must REMOVE existing rules from the same state, not keep them"
+  }
+}
+
 # ---- rejected -----------------------------------------------------------------
 
 run "slash24_is_rejected" {
