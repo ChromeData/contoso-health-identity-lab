@@ -1,0 +1,101 @@
+{
+ "cleanup": [
+  "deleted sc_req_item RITM0010003",
+  "deleted sc_request REQ0010003",
+  "deleted sc_task SCTASK0010003",
+  "deleted sc_req_item RITM0010004",
+  "deleted sc_request REQ0010004",
+  "deleted incident INC0010081"
+ ],
+ "instance": "https://dev459905.service-now.com",
+ "run": "20261107T180451Z",
+ "steps": {
+  "leaver": {
+   "clicked": "2026-11-07T18:10:34Z",
+   "closed": "2026-11-07T18:15:49Z",
+   "entra_request": {
+    "completedDateTime": "2026-11-07T18:15:09.593Z",
+    "id": "e8e5192a-2538-4a39-87c1-276c3523f414",
+    "justification": "SCTASK0010003 (ServiceNow): leaver access removal",
+    "requestType": "adminRemove",
+    "state": "delivered",
+    "status": "Fulfilled"
+   },
+   "final": {
+    "calendar_duration": "1970-01-01 00:05:06",
+    "closed_at": "2026-11-07 18:15:39",
+    "correlation_display": "Entra ID Governance - delivered",
+    "correlation_id": "4fc06a50-5185-4e4a-892e-5a325ac9887b/e8e5192a-2538-4a39-87c1-276c3523f414",
+    "opened_at": "2026-11-07 18:10:33",
+    "state": "3"
+   },
+   "request": "REQ0010004",
+   "ritm": "RITM0010004",
+   "setup_request": "0f535753-a033-4328-8d0b-0e9b19633064",
+   "task": "SCTASK0010003",
+   "task_short_description": "Leaver: remove requested app access for Test User A (last day 2026-11-07)",
+   "testa_icu_float_left": 0,
+   "work_notes": [
+    "Sent to Microsoft Entra ID Governance: remove ICU - Float Access.\nEntra request id(s): 4fc06a50-5185-4e4a-892e-5a325ac9887b/e8e5192a-2538-4a39-87c1-276c3523f414",
+    "Microsoft Entra ID Governance reports Delivered (request e8e5192a-2538-4a39-87c1-276c3523f414). Closed automatically."
+   ]
+  },
+  "mfa": {
+   "incident": "INC0010081",
+   "justification": "INC0010081: Marcus Bello lost phone, identity verified by call-back; issue a one-time pass to re-register MFA",
+   "pim_activated": "2026-11-07T18:15:53Z",
+   "pim_audit": [
+    {
+     "activity": "Add member to role completed (PIM activation)",
+     "at": "2026-11-07T18:16:20.370762Z",
+     "by": "adm-raj.patel@contosohealthlab.onmicrosoft.com",
+     "reason": "INC0010081: Marcus Bello lost phone, identity verified by call-back; issue a one-time pass to re-register MFA",
+     "result": "success"
+    },
+    {
+     "activity": "Add member to role requested (PIM activation)",
+     "at": "2026-11-07T18:16:13.45798Z",
+     "by": "adm-raj.patel@contosohealthlab.onmicrosoft.com",
+     "reason": "INC0010081: Marcus Bello lost phone, identity verified by call-back; issue a one-time pass to re-register MFA",
+     "result": "success"
+    }
+   ]
+  },
+  "report": {
+   "shots": [
+    "01-nurse-request-form.png",
+    "02-nurse-request-submitted.png",
+    "03-manager-my-approvals.png",
+    "04-manager-approved.png",
+    "10-iam-leaver-task.png",
+    "11-iam-leaver-task-sent.png",
+    "20-iam-queue.png",
+    "21-report.png",
+    "22-report.png"
+   ]
+  },
+  "uc1b": {
+   "after_submit": {
+    "approval": "requested",
+    "approvals": 1,
+    "stage": "waiting_for_approval"
+   },
+   "approved": "2026-11-07T18:06:10Z",
+   "approver": "grace.mwangi@contosohealthlab.com",
+   "final": {
+    "approval": "approved",
+    "assignment_group": "de2dc8eb93d41f5025167bfdfaba1091",
+    "correlation_display": "",
+    "state": "2"
+   },
+   "marcus_pharmacy_assignments": 0,
+   "request": "REQ0010003",
+   "ritm": "RITM0010003",
+   "submitted": "2026-11-07T18:04:51Z",
+   "work_notes": [
+    "Approved by Grace Mwangi (manager). Sending to Microsoft Entra ID Governance.",
+    "Automatic fulfilment stopped: Graph POST /identityGovernance/entitlementManagement/assignmentRequests -> 400 InvalidRequest: {\"groupMemberships\":[\"All-ICU\"],\"accessPackageAssignments\":[\"ICU - Critical Care Apps\"]}\nAssigned to IAM Operations for a person to finish."
+   ]
+  }
+ }
+}

@@ -56,7 +56,8 @@
 #      APPLY_APPROVERS            comma-separated logins (default: repo owner)
 #      APPLY_TWO_PERSON           "true" = the change author may NOT approve
 #      APPLY_BOT_LOGIN            the GitHub App / bot login AI agents push and
-#                                 merge as (unset today). Set = real
+#                                 merge as (set 2026-11-08 to
+#                                 contoso-health-lab-bot[bot]). Set = real
 #                                 two-identity separation: the gate refuses
 #                                 unless the PR author AND merger are that bot
 #                                 and the approver is in APPLY_APPROVERS and is

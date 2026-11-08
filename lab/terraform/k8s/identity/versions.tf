@@ -14,8 +14,8 @@
 # The secret VALUE is not here: the pipeline seeds it, so it never enters
 # Terraform state.
 #
-# STAND-IN: Vault Kubernetes auth stands in for CyberArk Conjur authn-k8s
-# (or Entra Workload ID + Key Vault on AKS); the impersonated groups stand in
+# STAND-IN: Vault Kubernetes auth stands in for Entra Workload ID + Azure
+# Key Vault on AKS (ADR 0036); the impersonated groups stand in
 # for Entra groups surfaced through AKS Entra integration.
 # lab/docs/STAND-INS.md has the on-camera lines.
 #

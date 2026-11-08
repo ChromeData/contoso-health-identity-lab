@@ -1,0 +1,4 @@
+run command lab-6ffa8528: lab/scripts/dc/tier-test/Remove-Tier2DeviceObject.ps1 on vm-dc01
+Removed CN=T2DEV01,OU=Devices,OU=Tier2,DC=corp,DC=contosohealthlab,DC=com.
+Computers in Tier2 now: 0
+state: Succeeded, exit code: 0

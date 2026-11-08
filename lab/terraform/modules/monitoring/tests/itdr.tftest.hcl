@@ -142,8 +142,17 @@ run "sentinel_with_itdr_columns_match_kql" {
     error_message = "ITDR rules need dynamic severity, one alert per row, per-identity+severity grouping and MITRE techniques."
   }
   assert {
-    condition     = azurerm_sentinel_alert_rule_scheduled.this["pim_activation"].incident[0].grouping[0].entity_matching_method == "AllEntities"
-    error_message = "Core rules keep their original AllEntities grouping."
+    condition     = azurerm_sentinel_alert_rule_scheduled.this["blocked_country_signin"].incident[0].grouping[0].entity_matching_method == "AllEntities"
+    error_message = "Core rules keep their original AllEntities grouping (pim_activation moved to per-account + severity, 2026-11-07)."
+  }
+  assert {
+    condition = (
+      azurerm_sentinel_alert_rule_scheduled.this["pim_activation"].incident[0].grouping[0].entity_matching_method == "Selected" &&
+      contains(azurerm_sentinel_alert_rule_scheduled.this["pim_activation"].incident[0].grouping[0].by_alert_details, "Severity") &&
+      azurerm_sentinel_alert_rule_scheduled.this["pim_activation"].alert_details_override[0].severity_column_name == "Severity" &&
+      azurerm_sentinel_alert_rule_scheduled.this["pim_activation"].event_grouping[0].aggregation_method == "AlertPerResult"
+    )
+    error_message = "pim_activation: severity from the query, one alert per activation, grouped per account and severity (review finding B5)."
   }
   assert {
     condition = alltrue([
@@ -352,6 +361,9 @@ run "id_lists_rendered" {
     break_glass_group_ids  = ["44444444-4444-4444-4444-444444444444"]
     privileged_user_ids    = ["55555555-5555-5555-5555-555555555555"]
     azure_pim_group_ids    = ["66666666-6666-6666-6666-666666666666"]
+    # Core-rule lists (2026-11-07): set too, so "no empty placeholder" holds.
+    tier0_group_ids       = ["77777777-7777-7777-7777-777777777777"]
+    trusted_egress_ranges = ["198.51.100.0/24"]
   }
 
   assert {

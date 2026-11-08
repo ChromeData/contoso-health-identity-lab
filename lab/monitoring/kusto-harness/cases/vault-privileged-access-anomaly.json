@@ -18,7 +18,7 @@
                                        "TokenPolicies": "tier0-cred-reader", "RequestId": "req-0001"}]},
       "expect": [{"Signal": "Tier0CredReadUncovered", "Severity": "High", "Actor": "ops-mallory",
                   "VaultPath": "ldap/static-cred/tier0/svc-legacy-da", "Events": 1,
-                  "CyberArkAnalogue": "PTA-style: retrieval outside a ticketed request"}],
+                  "PamTerm": "retrieval outside a ticketed request"}],
       "expectRows": 1
     },
     {
@@ -33,7 +33,7 @@
          "Ticket": "none", "TokenPolicies": "tier0-cred-reader", "RequestId": "req-0003", "TimeGenerated": "ago:20m"}
       ]},
       "expect": [{"Signal": "Tier0CheckoutWithoutTicket", "Severity": "High", "Operator": "ops-bob", "Account": "tier0-admin-01",
-                  "Ticket": "none", "CyberArkAnalogue": "Master Policy dual control / ticketing bypassed"}],
+                  "Ticket": "none", "PamTerm": "dual control / ticketing bypassed"}],
       "expectNone": [{"Signal": "Tier0CredReadUncovered"}],
       "expectRows": 1
     },
@@ -56,7 +56,7 @@
       "tables": {"VaultCheckout_CL": [{"Operation": "rotation-failed", "VaultPath": "ldap/rotate-role/tier0/svc-legacy-da",
                                        "VaultActor": "token-pam-rotate", "TokenPolicies": "pam-rotate", "RequestId": "req-0010",
                                        "ErrorText": "LDAP Result Code 200 \"Network Error\": dial tcp: connection refused"}]},
-      "expect": [{"Signal": "RotationFailed", "Severity": "High", "CyberArkAnalogue": "CPM change failed",
+      "expect": [{"Signal": "RotationFailed", "Severity": "High", "PamTerm": "password rotation failed",
                   "Errors": ["LDAP Result Code 200 \"Network Error\": dial tcp: connection refused"]}]
     },
     {
@@ -74,7 +74,7 @@
       "tables": {"VaultCheckout_CL": [{"Operation": "root-token", "VaultPath": "sys/audit/file", "VaultActor": "root",
                                        "TokenPolicies": "root", "RequestId": "req-0020"}]},
       "expect": [{"Signal": "RootTokenUse", "Severity": "High", "AuditTamper": 1, "Actor": "root",
-                  "CyberArkAnalogue": "Built-in Vault Administrator used"}]
+                  "PamTerm": "built-in vault administrator used"}]
     },
     {
       "id": "root-token-lab-automation-only",
@@ -103,7 +103,7 @@
                                        "Operator": "ops-carol", "TokenPolicies": "tier1-cred-reader", "RequestId": "req-0040",
                                        "ErrorText": "permission denied"}]},
       "expect": [{"Signal": "Tier0AccessDenied", "Severity": "Medium", "Actor": "ops-carol",
-                  "CyberArkAnalogue": "Safe permission violation"}]
+                  "PamTerm": "vault permission violation"}]
     },
     {
       "id": "ticketed-checkout-read-checkin",

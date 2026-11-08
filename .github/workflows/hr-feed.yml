@@ -266,6 +266,9 @@ jobs:
             StatePath   = (Join-Path $work 'baseline.json')
             ResultPath  = (Join-Path $work 'sent.json')
             HidePayload = $true
+            # The runner keeps no state between runs: rebuild the issued
+            # UPNs from the committed history of hr_feed.csv (fetch-depth 0).
+            IssuedFromGitHistory = $true
           }
           if ($env:HR_PROV_SP_ID) { $p.ServicePrincipalId = $env:HR_PROV_SP_ID }
           if ($env:HR_PROV_JOB_ID) { $p.JobId = $env:HR_PROV_JOB_ID }

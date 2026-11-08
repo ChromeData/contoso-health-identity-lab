@@ -52,7 +52,10 @@ BeforeDiscovery {
         'tier0-logon-without-checkout', 'ad-privileged-group-change', 'kerberoast-rc4-service-ticket',
         'dcsync-replication-request',
         # Third set (itdr_v3.tf, 2026-11-06): same structural checks.
-        'dormant-privileged-account-reactivation', 'keyvault-bulk-secret-read'
+        'dormant-privileged-account-reactivation', 'keyvault-bulk-secret-read',
+        # Fourth set (itdr_v4.tf, 2026-11-07, review findings B1, B2, C5, D1).
+        'operator-signin-outside-allowlist', 'operator-permissions-changed', 'break-glass-auth-method-added',
+        'hr-leaver-lag', 'failed-signin-spray-by-asn'
     )
     $script:IacAwareRules = @('app-credential-added', 'app-consent-granted', 'ca-policy-changed',
         'role-assigned-outside-pim', 'pim-group-member-added-outside-pim')
@@ -250,7 +253,7 @@ Describe 'Containment playbook (lab/monitoring/playbook-contain.json)' {
         $if = $nwf.properties.definition.actions.If_Teams_configured
         ($if.expression | ConvertTo-Json -Depth 10 -Compress) | Should -Match 'teamsGroupId'
         ($if.expression | ConvertTo-Json -Depth 10 -Compress) | Should -Match 'teamsChannelId'
-        $post = $if.actions.Post_card_to_SOC_channel
+        $post = $if.actions.If_no_card_yet.actions.Post_card_to_SOC_channel
         $post.type | Should -Be 'ApiConnection'
         $post.inputs.host.connection.name | Should -Be "@parameters('`$connections')['teams']['connectionId']"
         $post.inputs.path | Should -Match '^/v1\.0/teams/conversation/adaptivecard/poster/Flow bot/location/'
@@ -265,8 +268,91 @@ Describe 'Containment playbook (lab/monitoring/playbook-contain.json)' {
         $find = @($actions | Where-Object Name -EQ 'Find_ticket_by_correlation_id')[0]
         $find.Action.inputs.queries.sysparm_query | Should -Match "correlation_id=@\{triggerBody\(\)\?\['object'\]\?\['name'\]\}"
         $nwf = @($notify.resources | Where-Object { $_.type -eq 'Microsoft.Logic/workflows' })[0]
-        $body = $nwf.properties.definition.actions.If_ServiceNow_configured.actions.Create_ServiceNow_incident.inputs.body
+        $body = $nwf.properties.definition.actions.If_ServiceNow_configured.actions.If_open_ticket_exists.else.actions.Create_ServiceNow_incident.inputs.body
         $body.correlation_id | Should -Be "@{triggerBody()?['object']?['name']}"
+    }
+}
+
+Describe 'Notify playbook: one ticket and one card per incident (review finding D2)' {
+    BeforeAll {
+        $nwf = @($notify.resources | Where-Object { $_.type -eq 'Microsoft.Logic/workflows' })[0]
+        $na = $nwf.properties.definition.actions
+        $nAll = @(Get-WorkflowAction -Actions $na)
+        $sev = "@triggerBody()?['object']?['properties']?['severity']"
+    }
+
+    It 'looks for the OPEN ticket of this incident (correlation_id + active) before anything else in the ServiceNow branch' {
+        $sn = $na.If_ServiceNow_configured.actions
+        @($sn.Keys)[0] | Should -Be 'Find_open_ticket'
+        $sn.Find_open_ticket.inputs.method | Should -Be 'GET'
+        $sn.Find_open_ticket.inputs.queries.sysparm_query | Should -Be "correlation_id=@{triggerBody()?['object']?['name']}^active=true"
+        $sn.Find_open_ticket.runtimeConfiguration.secureData.properties | Should -Contain 'inputs'
+    }
+
+    It 'creates a ticket ONLY when none is open, and only after a successful lookup (a failed read never doubles tickets)' {
+        $creates = @($nAll | Where-Object { $_.Action.type -eq 'Http' -and $_.Action.inputs.method -eq 'POST' })
+        $creates.Count | Should -Be 1
+        $creates[0].Name | Should -Be 'Create_ServiceNow_incident'
+        $creates[0].Scope | Should -Be 'If_open_ticket_exists/else'
+        $na.If_ServiceNow_configured.actions.If_open_ticket_exists.runAfter.Find_open_ticket | Should -Be @('Succeeded')
+    }
+
+    It 'a joined alert is a work note on the existing ticket and a comment on the incident' {
+        $yes = $na.If_ServiceNow_configured.actions.If_open_ticket_exists.actions
+        $yes.Add_work_note_for_joined_alert.inputs.method | Should -Be 'PATCH'
+        $yes.Add_work_note_for_joined_alert.inputs.uri | Should -Match "first\(body\('Find_open_ticket'\)\?\['result'\]\)\?\['sys_id'\]"
+        $yes.Add_work_note_for_joined_alert.inputs.body.work_notes | Should -Match 'No new ticket was opened'
+        $yes.Comment_joined_alert_on_Sentinel_incident.inputs.path | Should -Be '/Incidents/Comment'
+    }
+
+    It 'runs one at a time, so two runs can never both miss the ticket or the card marker' {
+        $trig = $nwf.properties.definition.triggers.Microsoft_Sentinel_incident
+        $trig.runTimeConfiguration.concurrency.runs | Should -Be 1
+        $trig.runTimeConfiguration.concurrency.maximumWaitingRuns | Should -BeGreaterThan 0
+    }
+
+    It 'posts the card only while the incident (read now, not the trigger copy) lacks the teams-card-posted label, and writes the label only after a delivered card' {
+        $t = $na.If_Teams_configured
+        # Parallel with ServiceNow (PR #230 review): a slow ServiceNow never holds the card.
+        @($t.runAfter.Keys) | Should -Be @('Map_severity_to_priority')
+        $t.runAfter.Map_severity_to_priority | Should -Be @('Succeeded')
+        @($na.If_ServiceNow_configured.runAfter.Keys) | Should -Be @('Map_severity_to_priority')
+        ($t | ConvertTo-Json -Depth 50) | Should -Not -Match "(body|outputs|actions)\\('(Find_open_ticket|Create_ServiceNow_incident|Add_work_note_for_joined_alert)'\\)"
+        $t.actions.Read_incident_now.inputs.method | Should -Be 'GET'
+        $t.actions.Read_incident_now.inputs.authentication.type | Should -Be 'ManagedServiceIdentity'
+        $t.actions.If_no_card_yet.runAfter.Read_incident_now | Should -Be @('Succeeded')
+        ($t.actions.If_no_card_yet.expression | ConvertTo-Json -Depth 6 -Compress) | Should -Match 'teams-card-posted'
+        $card = $t.actions.If_no_card_yet.actions
+        $card.Mark_card_posted.runAfter.Post_card_to_SOC_channel | Should -Be @('Succeeded')
+        $card.Mark_card_posted.actions.Write_card_marker.inputs.method | Should -Be 'PUT'
+        $card.Mark_card_posted.actions.Write_card_marker.inputs.body.properties | Should -Match 'teams-card-posted'
+        @($nAll | Where-Object { $_.Action.type -eq 'ApiConnection' -and $_.Action.inputs.path -like '/v1.0/teams/*' }).Count | Should -Be 1
+        @($nAll | Where-Object { $_.Name -eq 'Post_card_to_SOC_channel' })[0].Scope | Should -Be 'If_no_card_yet'
+    }
+
+    It 'retries the card marker with a FRESH incident read (new etag) and never re-posts the card (PR #230 review)' {
+        $loop = $na.If_Teams_configured.actions.If_no_card_yet.actions.Mark_card_posted
+        $loop.type | Should -Be 'Until'
+        [int]$loop.limit.count | Should -BeGreaterThan 1
+        $loop.limit.timeout | Should -Not -BeNullOrEmpty
+        $loop.expression | Should -Match "outputs\('Write_card_marker'\)\?\['statusCode'\]"
+        $inner = $loop.actions
+        $inner.Read_incident_for_marker.inputs.method | Should -Be 'GET'
+        $inner.Read_incident_for_marker.inputs.authentication.type | Should -Be 'ManagedServiceIdentity'
+        $inner.Write_card_marker.runAfter.Read_incident_for_marker | Should -Be @('Succeeded')
+        # The etag and properties come from the read INSIDE the loop, never the pre-post copy.
+        $inner.Write_card_marker.inputs.body.etag | Should -Be "@body('Read_incident_for_marker')?['etag']"
+        $inner.Write_card_marker.inputs.body.properties | Should -Not -Match 'Read_incident_now'
+        $inner.Write_card_marker.inputs.body.properties | Should -Match "body\('Read_incident_for_marker'\)"
+        # The Teams post is outside the loop: a retry writes the label only.
+        @($nAll | Where-Object { $_.Scope -eq 'Mark_card_posted' -and $_.Action.type -eq 'ApiConnection' }).Count | Should -Be 0
+        @($nAll | Where-Object { $_.Name -eq 'Post_card_to_SOC_channel' })[0].Scope | Should -Be 'If_no_card_yet'
+    }
+
+    It 'Informational incidents open no ticket and post no card (review finding B5)' {
+        foreach ($b in 'If_ServiceNow_configured', 'If_Teams_configured') {
+            ($na[$b].expression.and | ConvertTo-Json -Depth 5 -Compress) | Should -Match ([regex]::Escape('{"not":{"equals":["' + $sev + '","Informational"]}}')) -Because $b
+        }
     }
 }
 
@@ -365,6 +451,13 @@ Describe 'ITDR detection <_> (KQL + SPL twin)' -ForEach $ItdrRules {
         ($splText -split "`n")[0] | Should -Match '^index=entra '
         ([regex]::Matches($splText, '@stanza ')).Count | Should -Be 1
         $splText | Should -Match ([regex]::Escape("lab/kql/$_.kql"))
+    }
+
+    It 'SPL twin: the pipeline is real SPL, not commented out (review of #233)' {
+        $lines = $splText -split "`n"
+        @($lines | Where-Object { $_ -match '^\| (where|eval|stats|table|lookup|spath)\b' }).Count | Should -BeGreaterThan 1
+        @($lines | Where-Object { $_ -match '^``` \| ' }).Count | Should -Be 0
+        @($lines | Select-Object -Skip 1 | Where-Object { $_ -and $_ -notmatch '^```' -and $_ -notmatch '^\|' }).Count | Should -Be 0
     }
 }
 
@@ -575,5 +668,121 @@ Describe 'PowerShell script <_>' -ForEach $Scripts {
 
     It 'supports -WhatIf' {
         (Get-Command $path).Parameters.Keys | Should -Contain 'WhatIf'
+    }
+}
+
+Describe 'Splunk break-glass search: one result per throttle key (PR #230 review)' {
+    BeforeAll {
+        $bgSpl = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'splunk' 'detections' 'break-glass-signin.spl')
+    }
+
+    It 'every alert.suppress field is a stats BY field, so a new IP is never folded into a throttled row' {
+        $suppress = ([regex]::Match($bgSpl, 'alert\.suppress\.fields = ([A-Za-z,]+)')).Groups[1].Value -split ','
+        $suppress | Should -Contain 'IPAddress'
+        $statsLine = @($bgSpl -split "`n" | Where-Object { $_ -match '^\|\s*stats\s' })[-1]
+        $by = ([regex]::Match($statsLine, '\sBY\s+(.+)$')).Groups[1].Value -split '[,\s]+' | Where-Object { $_ }
+        foreach ($f in $suppress) { $by | Should -Contain $f -Because "throttle key $f must split results" }
+        $statsLine | Should -Not -Match 'latest\(IPAddress\)'
+    }
+
+    It 'a missing IPAddress is kept as empty, not dropped by stats BY' {
+        $bgSpl | Should -Match 'IPAddress=coalesce\(IPAddress, ""\)'
+    }
+}
+
+Describe 'HR leaver lag: only a SUCCESSFUL cloud write counts as a disable (PR #233 review)' {
+    BeforeAll {
+        $llKql = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'kql' 'hr-leaver-lag.kql')
+        $llSpl = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'splunk' 'detections' 'hr-leaver-lag.spl')
+        $llCases = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'monitoring' 'kusto-harness' 'cases' 'hr-leaver-lag.json') | ConvertFrom-Json
+    }
+
+    It 'KQL CloudDisabled requires ProvisioningStatusInfo.Status == success' {
+        $block = ([regex]::Match($llKql, '(?s)let CloudDisabled = .*?;')).Value
+        $block | Should -Match ([regex]::Escape('where tostring(parse_json(ProvisioningStatusInfo).Status) =~ "success"'))
+    }
+
+    It 'SPL drops a cloud row whose status is not success (null-safe) and keeps InboundStatus from inbound rows only' {
+        $llSpl | Should -Match ([regex]::Escape('eval Kind=if(Kind=="cloud" AND coalesce(lower(RowStatus), "")!="success", null(), Kind)'))
+        $llSpl | Should -Match ([regex]::Escape('eval InboundStatus=if(Kind=="inbound", RowStatus, null())'))
+    }
+
+    It 'judges each leaver in overlapping runs (45-minute look-back), so a skipped run or a late row still alerts (PR #233 review)' {
+        $llKql | Should -Match 'let LookBack = 45m;'
+        $llKql | Should -Match ([regex]::Escape('where TimeGenerated between (ago(Lag + LookBack) .. ago(Lag))'))
+        $llKql | Should -Not -Match 'JudgeWindow'
+        # The Sentinel rule's query period must cover Lag + LookBack (15m + 45m), and repeats group per account.
+        $v4 = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'terraform' 'modules' 'monitoring' 'itdr_v4.tf')
+        $block = ([regex]::Match($v4, '(?s)hr_leaver_lag = \{.*?\n    \}')).Value
+        $block | Should -Match 'period\s+= "PT1H"'
+        $block | Should -Match 'group_by\s+= local.actor_group_by'
+        # SPL twin: the same 60-minute window, one alert per leaver by suppression on AdObjectGuid.
+        $llSpl | Should -Match 'earliest=-60m'
+        $llSpl | Should -Match ([regex]::Escape('@conf dispatch.earliest_time = -60m'))
+        $llSpl | Should -Match ([regex]::Escape('@conf alert.suppress.fields = AdObjectGuid'))
+        $c = @($llCases.cases | Where-Object id -EQ 'skipped-run-or-late-row-still-alerts')
+        $c.Count | Should -Be 1
+        $c[0].kind | Should -Be 'positive'
+    }
+
+    It 'the engine cases include a failed cloud export that still alerts' {
+        $c = @($llCases.cases | Where-Object id -EQ 'cloud-export-failed')
+        $c.Count | Should -Be 1
+        $c[0].kind | Should -Be 'positive'
+        ($c[0].tables.AADProvisioningLogs | Where-Object { $_.ServicePrincipal -match 'corp\.contosohealthlab\.com' }).ProvisioningStatusInfo | Should -Match 'failure'
+    }
+}
+
+Describe 'KQL break-glass-signin: one row per account keeps every sign-in IP, result and correlation id (PR #230 review)' {
+    BeforeAll {
+        $bgKql = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'kql' 'break-glass-signin.kql')
+        $bgCases = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'monitoring' 'kusto-harness' 'cases' 'break-glass-signin.json') | ConvertFrom-Json
+    }
+
+    It 'summarizes by account only, and collects IPAddresses, ResultTypes and CorrelationIds next to arg_max' {
+        $bgKql | Should -Match 'by UserPrincipalName, UserId'
+        $bgKql | Should -Match 'IPAddresses = make_set\(IPAddress, \d+\)'
+        $bgKql | Should -Match 'ResultTypes = make_set\(tostring\(ResultType\), \d+\)'
+        $bgKql | Should -Match 'CorrelationIds = make_set\(CorrelationId, \d+\)'
+        $project = ([regex]::Match($bgKql, '(?ms)^\| project (.+?)^\| sort')).Groups[1].Value
+        foreach ($c in 'IPAddresses', 'ResultTypes', 'CorrelationIds') { $project | Should -Match "\b$c\b" -Because "$c must reach the alert" }
+    }
+
+    It 'has an engine case where an older success from another IP survives in the one row' {
+        $c = @($bgCases.cases | Where-Object id -EQ 'two-ips-one-row-keeps-both')[0]
+        $c | Should -Not -BeNullOrEmpty
+        $c.expectRows | Should -Be 1
+        @($c.tables.SigninLogs).Count | Should -Be 2
+        @($c.expect[0].IPAddresses).Count | Should -Be 2
+        $c.expect[0].ResultTypes | Should -Contain '0'
+    }
+}
+
+Describe 'Spray by ASN: a hit is a success AFTER the first sprayed failure (PR #233 review)' {
+    BeforeAll {
+        $spKql = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'kql' 'failed-signin-spray-by-asn.kql')
+        $spSpl = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'splunk' 'detections' 'failed-signin-spray-by-asn.spl')
+        $spCases = Get-Content -Raw -LiteralPath (Join-Path $LabRoot 'monitoring' 'kusto-harness' 'cases' 'failed-signin-spray-by-asn.json') | ConvertFrom-Json
+    }
+
+    It 'KQL keeps FirstFail and LastOk per user and counts a hit only when LastOk > FirstFail' {
+        $spKql | Should -Match ([regex]::Escape('FirstFail = minif(TimeGenerated, ResultType in (CredentialFailureCodes))'))
+        $spKql | Should -Match ([regex]::Escape('LastOk = maxif(TimeGenerated, ResultType == "0")'))
+        $spKql | Should -Match ([regex]::Escape('Hit = isnotnull(FirstFail) and isnotnull(LastOk) and LastOk > FirstFail'))
+        $spKql | Should -Match ([regex]::Escape('CompromisedCount = countif(Hit)'))
+        $spKql | Should -Not -Match 'Oks'
+    }
+
+    It 'SPL twin applies the same order check' {
+        $spSpl | Should -Match ([regex]::Escape('min(eval(if(Fail==1, _time, null()))) AS FirstFail'))
+        $spSpl | Should -Match ([regex]::Escape('max(eval(if(Ok==1, _time, null()))) AS LastOk'))
+        $spSpl | Should -Match ([regex]::Escape('LastOk>FirstFail'))
+        $spSpl | Should -Not -Match 'Oks'
+    }
+
+    It 'has an engine case where a success BEFORE the spray stays Medium' {
+        $c = @($spCases.cases | Where-Object id -EQ 'success-before-the-spray')
+        $c.Count | Should -Be 1
+        $c[0].expect[0].Severity | Should -Be 'Medium'
     }
 }

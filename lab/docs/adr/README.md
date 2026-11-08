@@ -27,7 +27,7 @@ incidents.
 | [0004](0004-pipeline-workload-identity-federation.md) | Workload identity federation (OIDC) vs. client secrets for the pipeline; PLAN/APPLY split by subject | Delivery / NHI |
 | [0005](0005-risk-acceptance-apply-identity-tier0.md) | Risk acceptance: the APPLY identity holds `RoleManagement.ReadWrite.Directory` (Tier 0) | Risk |
 | [0006](0006-api-driven-inbound-provisioning-vs-workday-connector.md) | API-driven inbound provisioning vs. the Workday connector (source line partly superseded by 0027, then 0028) | Lifecycle (JML) |
-| [0007](0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md) | PAM stand-ins (Vault + Guacamole + Conjur) vs. CyberArk. Production unseal partly superseded by 0019 | PAM |
+| [0007](0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md) | **Superseded by 0036.** PAM stand-ins (Vault + Guacamole + Conjur) vs. CyberArk. Production unseal partly superseded by 0019 | PAM |
 | [0008](0008-iga-entra-id-governance-midpoint-vs-sailpoint-saviynt.md) | IGA: Entra ID Governance + midPoint stand-in vs. SailPoint / Saviynt | Governance |
 | [0009](0009-adfs-to-entra-id-retirement-path.md) | AD FS → Entra ID retirement path | Federation |
 | [0010](0010-kubernetes-workload-identity-scope.md) | Kubernetes workload identity scope (kept small; local kind; AKS mapping plan-only) | Workload identity |
@@ -39,7 +39,7 @@ incidents.
 | [0016](0016-passkey-profiles-and-phone-method-retirement.md) | Two passkey profiles (attested device-bound for admins, synced allowed for staff), protected registration with rollout TAPs handed over in person, SMS and voice retired before Microsoft's date | Authentication |
 | [0017](0017-approval-gated-identity-containment.md) | Identity containment runs only after a person approves in Teams. A confirmed compromise is a block, not a remediation; the cloud disable role stays off; AD-mastered accounts are flagged for an AD disable; restricted-management AU members are escalated to a person | Detection and response |
 | [0018](0018-nhi-ownership-and-agent-identity-sponsorship.md) | Two owners per non-human identity, platform credential and consent rules, a monthly inventory and a leaver hand-off; agents get Entra Agent ID with a named sponsor | NHI / governance |
-| [0019](0019-pam-vault-high-availability-and-dr.md) | PAM vault: Raft (3 voters in the lab, 5 across three zones in production), auto-unseal from a key outside the cluster, a timed snapshot-restore drill | PAM / resilience |
+| [0019](0019-pam-vault-high-availability-and-dr.md) | **Superseded by 0036.** PAM vault: Raft (3 voters in the lab, 5 across three zones in production), auto-unseal from a key outside the cluster, a timed snapshot-restore drill | PAM / resilience |
 | [0020](0020-pim-activation-design.md) | PIM activation: approver groups, eligibility expiry, activation caps (Tier 0 4 h, GA and PAA 2 h, Tier 1 8 h), Tier-1 approval only for Intune, User Administrator and the IGA group, authentication-context step-up in three separate changes, direct GA eligibility, AU-scoped service desk | Privileged access |
 | [0021](0021-configuration-drift-detection.md) | Configuration drift: a nightly read-only reconcile of the tenant against the committed baseline and the declared intent, findings as an issue (never an automatic revert), exceptions with an owner and an expiry | Delivery / detection |
 | [0022](0022-okta-coexistence-as-code.md) | Okta coexistence (acquired clinic) built as code: Okta trusts Entra as its OIDC IdP, a routing rule with the Okta fallback kept, a separate human-applied Okta root, the client secret never in state | Federation / M&A |
@@ -50,6 +50,11 @@ incidents.
 | [0027](0027-hr-form-as-the-hr-system.md) | **Superseded by 0028 (decisions 1 and 3).** HR changes start in a small HR web form ("Contoso HR", the Workday stand-in) that issues the employee number; each save goes through Entra API-driven inbound provisioning to on-prem AD as HR-SYNC (not the lab operator, which bulkUpload refuses and which should not carry HR authority); a hosted Function App with a managed identity is the DESIGNED next step | Lifecycle (JML) |
 | [0028](0028-orangehrm-as-the-hris.md) | OrangeHRM Open Source (self-hosted, $0) is the HR system: HR hires, moves and terminates in its own screens; a connector polls one least-data database view every minute and sends each change through the hr-feed outbox as HR-SYNC (GitHub OIDC, no stored secret) to Entra API-driven inbound provisioning and on to AD; Workday's free personal tenant (7-day deletion, owner sign-up) is the revisit, an Azure Function with a managed identity the DESIGNED production shape | Lifecycle (JML) |
 | [0030](0030-lab-operator-residual-risk.md) | The lab operator is read-only by default: no Owner, no standing Graph write; writes exist only in an owner-opened session of at most 8 hours (Azure part time-bound by PIM, Graph part removed by the closing apply); only the owner applies `envs/operator`; workload-identity CA (CA090) DESIGNED, blocked by licence. States the honest count of standing Tier-0 principals | Identity platform / Tier 0 |
+| [0032](0032-vendor-and-medical-device-remote-access.md) | Vendor and medical-device remote access: named B2B guests with a sponsor, 30-day packages, PIM activation with approval, a brokered and recorded session to the imaging segment | Privileged access / third party |
+| [0033](0033-clinical-break-the-glass-and-epcs.md) | Clinical break-the-glass (EHR emergency chart access) reviewed by the Privacy Office within 24 h; EPCS signing with a FIDO2 or certificate strength and a two-person grant (21 CFR 1311) | Clinical / compliance |
+| [0034](0034-contractors-and-agency-staff.md) | Contractors and agency staff: worker type and sponsor from HR, end date at most 90 days, sponsor re-attestation every 30 days, no admin roles | Lifecycle (JML) |
+| [0035](0035-log-retention.md) | Log retention: 30 days in the lab as a cost choice; production 90 days interactive, 2 years long-term, 6-year immutable export of audit logs | Detection / audit |
+| [0036](0036-microsoft-native-pam.md) | Microsoft-native PAM: Azure Key Vault for secrets (RBAC, PIM-eligible), Azure Bastion session recording (Premium, only while capturing), Windows LAPS for rotation, Intune EPM for one-app elevation, PIM as the just-in-time core. CyberArk, Conjur and psPAS removed. Supersedes 0007 and 0019 | PAM |
 
 ## Format
 
@@ -84,7 +89,7 @@ by URL and check date in a **Sources** section.
    onward the words are fixed, and they are the same words the rest of the
    repository uses:
    - **RAN · tenant:** exercised against a real Microsoft tenant, with
-     evidence. Nothing yet.
+     evidence: an E-row in `lab/evidence/capture-log.csv`
    - **RAN · harness:** exercised end to end in a local harness (the PAM
      stack against Samba AD, the midPoint campaign, dynamic database
      credentials, the Kubernetes segment)
@@ -92,9 +97,12 @@ by URL and check date in a **Sources** section.
      mocked tests), never applied
    - **DESIGNED:** documented only
 
-   Today, nothing has been applied to a tenant. A decision records a
-   measured result only after a real run; until then the result is a
-   placeholder (`<measured: …>` or "fill after running").
+   The lab has run in a real tenant since 2026-10-27 (E01 onwards). Each
+   status line names the E-rows behind it. A decision records a measured
+   result only after a real run; until then the result is a placeholder
+   (`<measured: …>` or "fill after running"). `.github/scripts/check-adr-status.py`
+   fails CI when an ADR says a script "never ran" but the capture log has a
+   row for it.
 4. **Decisions are superseded, not edited.** A changed decision gets a new
    ADR, and the old one's status becomes "Superseded by 00NN", or "Partly
    superseded by 00NN" when only part of it changed.

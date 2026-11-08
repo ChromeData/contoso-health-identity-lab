@@ -1,6 +1,6 @@
 # ADR 0003: Conditional Access exclusions and break-glass strategy
 
-- **Status:** Accepted (lab). Code validated offline; no policy has been applied and no drill has been run.
+- **Status:** Accepted (lab). RAN · tenant: the 11 CA policies exclude `Break-Glass-Admins` (E12, E13); the first lab drill ran on 2026-11-05 (E49). Lab deviations, recorded: one software passkey per account, kept on the operator Mac, not two hardware keys in separate safes (E11d); the seeded passwords were not rotated (E11f, PR #226). Not run: `Convert-BuildAccountToEligible.ps1`.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
@@ -40,7 +40,9 @@ during an incident affects patient care. The design needs:
   domain.
 - Both are members of the role-assignable `Break-Glass-Admins` group, which
   holds **standing Global Administrator**. This is the only standing
-  privileged assignment in the design.
+  privileged assignment for people in the design. Two workload
+  identities also hold standing Tier-0 rights: APPLY (ADR 0005) and the
+  lab operator (ADR 0024).
 - Their credential is **FIDO2 security keys**: two per account, kept in
   separate safes. The seeded password is rotated after apply and kept only
   as sealed backup material. Microsoft's mandatory MFA for admin portals
@@ -98,9 +100,15 @@ non-interactive, triggers an alert. The threshold is 1.
   break-glass, the CA exclusion, alerting and the Global Administrator
   activation policy all check out first. It has never run; until it does,
   `01-Verify-Baseline.ps1` flags the account.
-- **Risk: the detection matches the naming pattern** (`bg-admin-NN@`), so
-  renaming an account blinds it. The production fix is matching on object
-  IDs from a Sentinel watchlist.
+- **The detection matches the accounts' object IDs** (since 2026-11-07,
+  BUILT; live after the merge's apply). `break-glass-signin.kql` matches
+  `UserId` against the break-glass users' immutable object IDs, which
+  Terraform renders from `modules/groups`. Renaming an account no longer
+  blinds it (harness case `renamed-account-by-object-id`). The `bg-admin-NN@`
+  name pattern stays as a second match, for a new account before its ID is
+  applied. One sign-in now gives one incident, one Teams card and one
+  ServiceNow ticket per account per day: later alerts become work notes on
+  that ticket.
 - **Drills.** The design calls for one sign-in drill per key every 90
   days (`lab/docs/runbooks/break-glass-drill.md`). `Invoke-BreakGlassDrill.ps1`
   automates the checks around it: a read-only preflight, then reading the
@@ -140,9 +148,9 @@ non-interactive, triggers an alert. The threshold is 1.
   `lab/kql/ca-policy-changed.kql`
 - `lab/scripts/powershell/01-Verify-Baseline.ps1` (checks 2–5)
 - `lab/terraform/README.md` (human step 6)
-- `lab/docs/runbooks/break-glass-drill.md` (drill procedure, not yet run)
-- `lab/scripts/powershell/Invoke-BreakGlassDrill.ps1` (drill checks, never
-  run)
+- `lab/docs/runbooks/break-glass-drill.md` (drill procedure; first lab drill 2026-11-05, E49)
+- `lab/scripts/powershell/Invoke-BreakGlassDrill.ps1` (drill checks; ran
+  2026-11-05, E49)
 - `lab/scripts/powershell/post-apply/Convert-BuildAccountToEligible.ps1`
   (never run)
-- `lab/evidence/drills/README.md` (drill log template, empty)
+- `lab/evidence/drills/README.md` (drill log; first entry 2026-11-05, E49)

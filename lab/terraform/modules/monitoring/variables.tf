@@ -137,8 +137,10 @@ variable "itdr_exclude_rules" {
       "device_code_signin", "security_info_registered_risky", "dc_logon_outside_operator_allowlist",
       "vault_privileged_access_anomaly", "sod_violation_granted", "pim_activation_without_auth_context",
       "dormant_privileged_account_reactivation", "keyvault_bulk_secret_read",
+      "operator_signin_outside_allowlist", "operator_permissions_changed", "break_glass_auth_method_added",
+      "hr_leaver_lag", "failed_signin_spray_by_asn",
     ], k)])
-    error_message = "itdr_exclude_rules: unknown rule key (see local.itdr_rules in itdr.tf, local.itdr_v2_rules in itdr_v2.tf and local.itdr_v3_rules in itdr_v3.tf)."
+    error_message = "itdr_exclude_rules: unknown rule key (see local.itdr_rules in itdr.tf, local.itdr_v2_rules in itdr_v2.tf, local.itdr_v3_rules in itdr_v3.tf and local.itdr_v4_rules in itdr_v4.tf)."
   }
 }
 
@@ -186,15 +188,17 @@ variable "containment_rule_keys" {
       "device_code_signin", "security_info_registered_risky", "dc_logon_outside_operator_allowlist",
       "vault_privileged_access_anomaly", "sod_violation_granted", "pim_activation_without_auth_context",
       "dormant_privileged_account_reactivation", "keyvault_bulk_secret_read",
+      "operator_signin_outside_allowlist", "operator_permissions_changed", "break_glass_auth_method_added",
+      "hr_leaver_lag", "failed_signin_spray_by_asn",
     ], k)])
-    error_message = "containment_rule_keys: unknown rule key (see local.itdr_rules in itdr.tf, local.itdr_v2_rules in itdr_v2.tf and local.itdr_v3_rules in itdr_v3.tf)."
+    error_message = "containment_rule_keys: unknown rule key (see local.itdr_rules in itdr.tf, local.itdr_v2_rules in itdr_v2.tf, local.itdr_v3_rules in itdr_v3.tf and local.itdr_v4_rules in itdr_v4.tf)."
   }
 
   # local.itdr_never_contain (itdr_v2.tf), refused by name so the plan says
   # why instead of silently dropping the key.
   validation {
-    condition     = var.containment_rule_keys == null ? true : !anytrue([for k in var.containment_rule_keys : contains(["sod_violation_granted", "vault_privileged_access_anomaly", "keyvault_bulk_secret_read"], k)])
-    error_message = "containment_rule_keys: sod_violation_granted, vault_privileged_access_anomaly and keyvault_bulk_secret_read never trigger containment - disabling a clinician over an SoD conflict is a patient-safety event (ADR 0012), the vault rule's Account is a Vault identity the playbook cannot act on, and the Key Vault rule's caller is usually a managed identity, which the playbook (it acts on Entra users) cannot disable."
+    condition     = var.containment_rule_keys == null ? true : !anytrue([for k in var.containment_rule_keys : contains(["sod_violation_granted", "vault_privileged_access_anomaly", "keyvault_bulk_secret_read", "operator_signin_outside_allowlist", "operator_permissions_changed", "break_glass_auth_method_added", "hr_leaver_lag", "failed_signin_spray_by_asn"], k)])
+    error_message = "containment_rule_keys: sod_violation_granted, vault_privileged_access_anomaly, keyvault_bulk_secret_read and the five v4 rules (their subjects are a workload identity, break-glass accounts, an already-disabled AD account or a network) never trigger containment - disabling a clinician over an SoD conflict is a patient-safety event (ADR 0012), the vault rule's Account is a Vault identity the playbook cannot act on, and the Key Vault rule's caller is usually a managed identity, which the playbook (it acts on Entra users) cannot disable."
   }
 }
 
@@ -255,6 +259,120 @@ variable "break_glass_group_ids" {
   validation {
     condition     = alltrue([for id in var.break_glass_group_ids : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))])
     error_message = "break_glass_group_ids: group object ids (GUIDs) only."
+  }
+}
+
+variable "break_glass_user_ids" {
+  type        = list(string)
+  description = "Object ids of the break-glass USER accounts (modules/groups output break_glass_user_object_ids). break-glass-signin.kql matches a sign-in by these immutable ids, so a renamed account still alerts; the bg-admin-NN naming convention stays as a second match (review finding D3, 2026-11-07)."
+  default     = []
+
+  validation {
+    condition     = alltrue([for id in var.break_glass_user_ids : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))])
+    error_message = "break_glass_user_ids: user object ids (GUIDs) only."
+  }
+}
+
+variable "break_glass_grouping_lookback" {
+  type        = string
+  description = "How long a break-glass incident keeps absorbing new alerts for the same account (NRT incident grouping, ISO 8601). Default 24 h: one incident, one Teams card and one ServiceNow ticket per account per day; each joined alert is a work note on that ticket (review finding D2)."
+  default     = "P1D"
+
+  validation {
+    condition     = contains(["PT1H", "PT5H", "PT12H", "P1D", "P2D", "P7D"], var.break_glass_grouping_lookback)
+    error_message = "break_glass_grouping_lookback: one of PT1H, PT5H, PT12H, P1D, P2D, P7D."
+  }
+}
+
+variable "drill_account_prefixes" {
+  type        = list(string)
+  description = "Account-name prefixes of drill-only accounts. An incident whose Account entity starts with one is labelled \"drill\" at creation, so close-build-noise.sh can close drill noise by label (review finding D2). Empty = no labelling rule."
+  default     = ["itdr-drill-"]
+
+  validation {
+    condition     = alltrue([for p in var.drill_account_prefixes : can(regex("^[a-z0-9][a-z0-9.-]{3,}$", p))])
+    error_message = "drill_account_prefixes: lower-case name prefixes of 4+ characters (a short prefix such as \"a\" would label real people's incidents)."
+  }
+}
+
+variable "tier0_group_ids" {
+  type        = list(string)
+  description = "Object ids of the Tier-0 PIM groups (PIM-Tier0-*, PIM-AWS-Lab-Admins, the Azure PIM group, Privileged-IAM-Admins). pim-activation.kql marks an activation into one of them HighValue (Tier 0) by id; Medium, or High off-hours / from a new IP (review findings B5, B6)."
+  default     = []
+
+  validation {
+    condition     = alltrue([for id in var.tier0_group_ids : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))])
+    error_message = "tier0_group_ids: group object ids (GUIDs) only."
+  }
+}
+
+variable "pim_work_hours_local" {
+  type        = list(number)
+  description = "Local working hours (America/New_York, 0-23) for pim-activation.kql; an activation outside them is 'off-hours'. Empty = the query's default, 7-18."
+  default     = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+
+  validation {
+    condition     = alltrue([for h in var.pim_work_hours_local : h >= 0 && h <= 23 && floor(h) == h])
+    error_message = "pim_work_hours_local: whole hours 0-23."
+  }
+}
+
+variable "pim_work_days_local" {
+  type        = list(number)
+  description = "Local working days for pim-activation.kql (KQL dayofweek: 0 = Sunday ... 6 = Saturday). Empty = the query's default, Monday-Friday."
+  default     = [1, 2, 3, 4, 5]
+
+  validation {
+    condition     = alltrue([for d in var.pim_work_days_local : d >= 0 && d <= 6 && floor(d) == d])
+    error_message = "pim_work_days_local: whole days 0-6 (0 = Sunday)."
+  }
+}
+
+variable "operator_principal_ids" {
+  type        = list(string)
+  description = "The lab operator workload identity's immutable ids (service principal object id, application object id, appId; ADR 0024). The fourth ITDR set's operator rules match on them. Required (non-empty) when enable_itdr_detections_v4 is on: an empty list would match nothing."
+  default     = []
+
+  validation {
+    condition     = alltrue([for id in var.operator_principal_ids : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))])
+    error_message = "operator_principal_ids: GUIDs only."
+  }
+}
+
+variable "trusted_egress_ranges" {
+  type        = list(string)
+  description = "The hospital's own internet egress ranges (IPv4 CIDR; NAT, VPN). failed-signin-spike.kql drops them from the brute-force shape only (one user's retries behind the NAT are normal); a spray from them still alerts. Empty in the lab (no hospital network)."
+  default     = []
+
+  validation {
+    condition     = alltrue([for c in var.trusted_egress_ranges : can(cidrhost(c, 0)) && !strcontains(c, ":")])
+    error_message = "trusted_egress_ranges: IPv4 CIDR ranges only."
+  }
+}
+
+variable "trusted_asns" {
+  type        = list(string)
+  description = "Autonomous system numbers to ignore in failed-signin-spray-by-asn.kql (the hospital's own ISP). Digits only. Empty in the lab."
+  default     = []
+
+  validation {
+    condition     = alltrue([for a in var.trusted_asns : can(regex("^[0-9]{1,10}$", a))])
+    error_message = "trusted_asns: ASNs as digit strings only."
+  }
+}
+
+variable "enable_itdr_detections_v4" {
+  type        = bool
+  description = "Fourth ITDR set (itdr_v4.tf, review findings B1, B2, C5, D1): operator sign-in outside its allowlist, operator permission changes, any auth method added to a break-glass account, HR leaver still enabled in Entra after 15 min, password spray by ASN. Needs enable_itdr_detections; the operator rules need operator_principal_ids. Off by default: turn on in its own reviewed change."
+  default     = false
+
+  validation {
+    condition     = !var.enable_itdr_detections_v4 || var.enable_itdr_detections
+    error_message = "enable_itdr_detections_v4 needs enable_itdr_detections = true (the v4 rules join the ITDR pack)."
+  }
+  validation {
+    condition     = !var.enable_itdr_detections_v4 || length(var.operator_principal_ids) > 0 || contains(var.itdr_exclude_rules, "operator_signin_outside_allowlist") && contains(var.itdr_exclude_rules, "operator_permissions_changed")
+    error_message = "enable_itdr_detections_v4 needs operator_principal_ids (the operator's service principal object id, application object id and appId); with an empty list the two operator rules would match nothing. Or hold both back in itdr_exclude_rules."
   }
 }
 

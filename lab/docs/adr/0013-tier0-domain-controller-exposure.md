@@ -1,6 +1,6 @@
 # ADR 0013: Tier-0 domain controller exposure (lab public IP vs. production)
 
-- **Status:** Accepted, as a time-boxed risk acceptance for the lab. Not acceptable for production. Code validated offline. `enable_dc = false` in `lab.tfvars`, so no DC has been deployed.
+- **Status:** Accepted, as a time-boxed risk acceptance for the lab. Not acceptable for production. RAN · tenant: `enable_dc = true` in `lab.tfvars`; DC01 runs in `rg-identity-lab`, its NSG limited to the operator's IP, and its security events reach Sentinel (E15b, E52).
 - **Date:** 2026-10-20
 - **Risk owner:** PAM Lead (in the lab, the repository maintainer)
 - **Next review:** 2027-01-20, or earlier on any revisit trigger
@@ -34,8 +34,9 @@ When `enable_dc = true`, `modules/dc-vm` builds the following:
   uses Trusted Launch. The forest is built through `az vm run-command`; RDP
   is used by hand only to rotate the admin password and install the
   provisioning agent. Its managed identity can read and write only its own
-  three Key Vault secrets (`dc01-dsrm-password`, `svc-vault-rotator`,
-  `svc-pam-discovery`; ABAC).
+  two Key Vault secrets (`dc01-dsrm-password`, `svc-vault-rotator`; ABAC).
+  A third, `svc-pam-discovery`, was retired on 2026-11-07 with the Vault
+  stand-in (ADR 0036).
 
 **Why the public IP exists.** The PAM stand-in runs in Docker on the
 operator's laptop. Guacamole brokers recorded RDP sessions to DC01, and

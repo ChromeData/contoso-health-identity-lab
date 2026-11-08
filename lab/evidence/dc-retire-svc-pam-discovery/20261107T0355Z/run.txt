@@ -1,0 +1,26 @@
+Retire svc-pam-discovery on DC01 (2026-11-07), as the lab operator.
+DC01 started through lab/scripts/demo/preflight.sh (READY 03:5xZ), deallocated afterwards.
+
+Run 1  lab/scripts/dc/run-on-dc.py lab/scripts/dc/Remove-PamDiscoveryAccount.ps1 --param KeyVaultName=kv-idlab-20f1
+       (meant as a DRY RUN; it ACTED because of a script bug: $apply and the [string]
+       parameter $Apply are the same PowerShell variable, and $false stored in a
+       [string] becomes "False", which is truthy. Fixed: $doApply, -ceq 'yes'.)
+  DISABLED: svc-pam-discovery
+  DELETED: svc-pam-discovery (read back: no account of that name)
+  KEY VAULT: secret 'svc-pam-discovery' in kv-idlab-20f1 is present
+  (DELETE sent; the script's read-back then said "still present" and exited 1:
+   a second bug - the versions list of a SOFT-DELETED secret answers 200 with an
+   empty list. Fixed: present = at least one version listed.)
+  state: Failed, exit code: 1
+
+ARM read-back as the operator (names and dates only):
+  az keyvault secret list         -> svc-pam-discovery not listed
+  az keyvault secret list-deleted -> svc-pam-discovery  deletedDate 2026-11-07T03:55:13+00:00
+
+Run 3 (fixed script, real dry run)
+  ABSENT: no AD account svc-pam-discovery (already retired)
+  KEY VAULT: secret 'svc-pam-discovery' in kv-idlab-20f1 is absent
+  RESULT: dry run only
+  state: Succeeded, exit code: 0
+
+Entra: users starting with svc-pam-discovery = 0 (the ServiceAccounts OU is not synced).

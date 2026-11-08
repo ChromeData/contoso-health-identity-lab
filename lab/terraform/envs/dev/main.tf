@@ -263,6 +263,13 @@ check "nhi_governance_requires_premium" {
   }
 }
 
+check "lcw_leaver_trigger_requires_premium" {
+  assert {
+    condition     = !var.enable_lcw_leaver_trigger || var.enable_premium
+    error_message = "enable_lcw_leaver_trigger = true has no effect unless enable_premium = true (the All-Workforce trigger group lives in the premium-tier modules/groups; dynamic groups are P1). New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver will then refuse to run because the group does not exist."
+  }
+}
+
 # Containment is a Sentinel automation rule: on the Log Analytics path it can
 # never fire. modules/monitoring refuses the plan; this states why up front.
 check "itdr_containment_requires_sentinel" {
@@ -346,8 +353,8 @@ module "groups" {
   break_glass_domain = var.onmicrosoft_domain
 
   # Optional groups, each behind the flag of the feature that consumes it.
-  enable_nhi_governance  = var.enable_nhi_governance               # App-Consent-Reviewers
-  enable_workforce_group = var.enable_phishing_resistant_all_users # All-Workforce (passkey rollout)
+  enable_nhi_governance  = var.enable_nhi_governance                                                # App-Consent-Reviewers
+  enable_workforce_group = var.enable_phishing_resistant_all_users || var.enable_lcw_leaver_trigger # All-Workforce (passkey rollout; scheduled leaver trigger)
 }
 
 # -----------------------------------------------------------------------------
@@ -611,6 +618,7 @@ module "monitoring" {
   # own flag).
   enable_itdr_detections_v2 = var.enable_itdr_detections_v2
   enable_itdr_detections_v3 = var.enable_itdr_detections_v3
+  enable_itdr_detections_v4 = var.enable_itdr_detections_v4
   vault_feed_v2_columns     = var.vault_feed_v2_columns
 
   # Defender for Identity (ADR 0023): the native AD-attack detector. The flag
@@ -618,11 +626,15 @@ module "monitoring" {
   # workspace; the sensor on DC01 and the licence are human steps (runbook).
   enable_defender_for_identity = var.enable_defender_for_identity
 
-  # operator_ips watchlist (Sentinel + v2): the hosts DC01's NSG admits, so
-  # only while enable_dc - otherwise the list (which may then hold a /24 for
-  # the vault firewall) means nothing for DC01. Sensitive end to end; rows
-  # expire on ADR 0013's review date.
-  operator_ip_ranges      = var.enable_dc ? var.operator_ip_ranges : []
+  # operator_ips watchlist (Sentinel + v2 or v4): the hosts DC01's NSG admits
+  # (v2's DC01 logon rule) and the operator's allowed sign-in IPs (v4's
+  # operator-signin-outside-allowlist, which needs them with or without the
+  # DC: an empty list makes every operator sign-in alert High). So passed
+  # while enable_dc OR enable_itdr_detections_v4; the root then admits /32
+  # only (validation on operator_ip_ranges). Without either, the list (which
+  # may then hold a /24 for the vault firewall) stays out. Sensitive end to
+  # end; rows expire on ADR 0013's review date.
+  operator_ip_ranges      = var.enable_dc || var.enable_itdr_detections_v4 ? var.operator_ip_ranges : []
   operator_ips_expires_on = var.operator_ips_expires_on
 
   # Identities the ITDR rules judge by IMMUTABLE id (rendered into the KQL):
@@ -632,6 +644,17 @@ module "monitoring" {
   iac_principal_ids     = var.iac_principal_ids
   privileged_group_ids  = local.itdr_privileged_group_ids
   break_glass_group_ids = var.enable_premium ? [module.groups[0].break_glass_group_object_id] : []
+  # The break-glass USERS by object id: break-glass-signin.kql matches on
+  # them, so renaming an account does not blind it (review finding D3).
+  break_glass_user_ids = var.enable_premium ? module.groups[0].break_glass_user_object_ids : []
+  # Tier-0 PIM groups by object id: pim-activation.kql's HighValue (review
+  # finding B6; the old name list matched none of them).
+  tier0_group_ids = local.itdr_tier0_group_ids
+  # The lab operator's ids (ADR 0024) for the fourth ITDR set; the hospital's
+  # egress ranges and ASNs (none in the lab).
+  operator_principal_ids = var.operator_principal_ids
+  trusted_egress_ranges  = var.trusted_egress_ranges
+  trusted_asns           = var.trusted_asns
   # PIM-Azure-RG-Contributors: standing members are its intended path (the
   # group is eligible for the Azure role) - reported on its own, Medium path.
   azure_pim_group_ids = var.enable_premium ? [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null] : []
@@ -664,6 +687,16 @@ locals {
     # included) without the MFA + reason activation. Watched, not in CA scope.
     var.enable_pim_demo_readers ? [module.pim[0].demo_readers_group_object_id] : [],
     values(module.pim[0].approver_group_object_ids),
+  ) : []
+
+  # The Tier-0 subset of the PIM groups (pim-activation.kql HighValue):
+  # every PIM-Tier0-* group, AWS admin (ADR 0025), the Azure PIM group
+  # (Contributor on the RG that holds DC01) and Privileged-IAM-Admins.
+  itdr_tier0_group_ids = var.enable_premium ? concat(
+    [module.groups[0].priv_iam_admins_group_object_id],
+    [for name, id in module.pim[0].tier_group_object_ids : id if startswith(name, "PIM-Tier0-")],
+    [for g in [module.pim[0].azure_pim_group_object_id] : g if g != null],
+    var.enable_pim_aws_admin ? [module.pim[0].aws_admin_group_object_id] : [],
   ) : []
 
   # ---- Access reviews (ADR 0012) -------------------------------------------
@@ -743,6 +776,13 @@ module "apps" {
   enable_servicenow_provisioning      = var.enable_servicenow_provisioning
   servicenow_provisioning_job_enabled = var.servicenow_provisioning_job_enabled
   servicenow_provisioning_credentials = var.servicenow_provisioning_credentials
+
+  # ServiceNow access fulfilment (default false): the app ServiceNow uses to
+  # add/remove people on Clinical access packages after a manager approves in
+  # ServiceNow. No Graph permission; one catalog role on the Clinical catalog.
+  # Without governance there is no catalog, so the flag needs both.
+  enable_servicenow_fulfilment     = var.enable_servicenow_fulfilment && var.enable_governance
+  servicenow_fulfilment_catalog_id = var.enable_servicenow_fulfilment && var.enable_governance ? module.entitlement[0].catalog_id : ""
 
   # okta-clinic-idp (default false): Entra as the OIDC identity provider for
   # the acquired clinic's Okta org (runbook Phase 1, ADR 0022). The ONE

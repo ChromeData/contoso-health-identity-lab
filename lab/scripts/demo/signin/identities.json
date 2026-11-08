@@ -79,6 +79,46 @@
       "secrets": {},
       "home": "https://myapps.microsoft.com/"
     },
+    "sofia.reyes": {
+      "kind": "entra",
+      "upn": "sofia.reyes@contosohealthlab.com",
+      "use": "Registered Nurse (HR persona): ServiceNow self-service, asks for ICU float access. No authenticator on the account: each sign-in uses a one-time pass the operator issues and deletes",
+      "method": "tap",
+      "secrets": {},
+      "home": "https://myapps.microsoft.com/"
+    },
+    "grace.mwangi": {
+      "kind": "entra",
+      "upn": "grace.mwangi@contosohealthlab.com",
+      "use": "Nurse Manager (HR persona): approves her nurses' ServiceNow access requests. No authenticator on the account: each sign-in uses a one-time pass the operator issues and deletes",
+      "method": "tap",
+      "secrets": {},
+      "home": "https://myapps.microsoft.com/"
+    },
+    "marcus.bello": {
+      "kind": "entra",
+      "upn": "marcus.bello@contosohealthlab.com",
+      "use": "Registered Nurse, ICU (HR persona; the mover): ServiceNow self-service, the separation-of-duties refusal and the lost-phone ticket. No authenticator on the account: each sign-in uses a one-time pass the operator issues and deletes",
+      "method": "tap",
+      "secrets": {},
+      "home": "https://myapps.microsoft.com/"
+    },
+    "ava.lin": {
+      "kind": "entra",
+      "upn": "ava.lin@contosohealthlab.com",
+      "use": "IAM Engineer, workforce account (HR persona): works the IAM Operations queue in ServiceNow; admin work stays on adm-ava.lin. No authenticator on the account: each sign-in uses a one-time pass the operator issues and deletes",
+      "method": "tap",
+      "secrets": {},
+      "home": "https://myapps.microsoft.com/"
+    },
+    "raj.patel": {
+      "kind": "entra",
+      "upn": "raj.patel@contosohealthlab.com",
+      "use": "Service Desk Analyst, workforce account (HR persona): takes sign-in and MFA tickets in ServiceNow; admin work stays on adm-raj.patel. No authenticator on the account: each sign-in uses a one-time pass the operator issues and deletes",
+      "method": "tap",
+      "secrets": {},
+      "home": "https://myapps.microsoft.com/"
+    },
     "svc-soc-automation": {
       "kind": "entra",
       "upn": "svc-soc-automation@contosohealthlab.onmicrosoft.com",

@@ -23,7 +23,7 @@ fill repeats it, so the map can't claim more than the repo proves:
 
 | Label | Fill | Means | Boxes |
 |---|---|---|---|
-| **RAN · harness** | green | Executed end to end on a local harness. The hashed run record is in [`../evidence/`](../evidence/) (index: [`../evidence/README.md`](../evidence/README.md)), except for the Vault audit feed box ("log not in repo"), whose count is self-reported in its README. The Kubernetes box still reads "log not in repo" in this rendering; its run record has since been committed in [`../evidence/k8s/`](../evidence/k8s/). No GitHub Actions run yet: the repo isn't published | Vault lifecycle, Guacamole, Vault HA/DR, dynamic database credentials, Conjur, midPoint campaign, the Vault audit feed, the Kubernetes segment |
+| **RAN · harness** | green | Executed end to end on a local harness. The hashed run record is in [`../evidence/`](../evidence/) (index: [`../evidence/README.md`](../evidence/README.md)), except for the Vault audit feed box ("log not in repo"), whose count is self-reported in its README. The Kubernetes box still reads "log not in repo" in this rendering; its run record has since been committed in [`../evidence/k8s/`](../evidence/k8s/). No GitHub Actions run yet: the repo isn't published | Vault lifecycle, Guacamole, Vault HA/DR, dynamic database credentials, midPoint campaign, the Vault audit feed, the Kubernetes segment |
 | **BUILT** | amber | Code plus offline tests (mocked `terraform test`, Pester, fixture runs); **never applied to a tenant**. Three boxes say "untested": the DC01 scripts behind AD DS and AD CS, and Intune's compliance script, have no tests (the Intune VM module itself now has its own mocked `terraform test` suite) | Everything in Entra except Cloud Sync, HR feed, AD DS and AD CS, Intune, pipeline, Key Vault, detections, both playbooks, evidence pack, KPIs, WORM store, SSO + SCIM, ServiceNow (tickets and SAML SSO) |
 | **DESIGNED** | white | Portal steps or a runbook only | Provisioning agent, Cloud Sync, Okta cut-over |
 | **RAN · tenant** | blue | Run in the Entra tenant, with captured evidence | **Most of the map since 2026-10-28**: directory, joiner and leaver runs, nine enforced sign-in policies, PIM, Sentinel rules, SSO and SCIM for AWS, ServiceNow and Okta, evidence pack, drift baseline |
@@ -122,13 +122,14 @@ each Conditional Access graduation.
    checked out against an approved change ticket (two distinct approvers
    for Tier 0, neither the requester) into a per-person, recorded
    Guacamole session, with 10-minute SSH certificates for Linux
-   ([ADR 0007](adr/0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md)).
+   ([ADR 0007](adr/0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md),
+   superseded by [ADR 0036](adr/0036-microsoft-native-pam.md): the target is
+   Azure Key Vault, Azure Bastion session recording, Windows LAPS and PIM).
    HA and DR are rehearsed on a separate three-node Vault cluster with a
    timed DR drill on test data; the vault that holds the AD credentials is
    still one node
    ([ADR 0019](adr/0019-pam-vault-high-availability-and-dr.md)), database
-   access is a one-hour login Vault creates on request, and Conjur serves
-   workload secrets.
+   access is a one-hour login Vault creates on request.
 6. **Non-human identities** ([ADR 0018](adr/0018-nhi-ownership-and-agent-identity-sponsorship.md)).
    An inventory with owners and credential expiry, an app management policy
    (no new secrets), admin consent only through a workflow, a leaver step
