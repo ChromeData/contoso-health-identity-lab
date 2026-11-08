@@ -15,8 +15,8 @@ Runbook: [`lab/docs/okta-migration-runbook.md`](../docs/okta-migration-runbook.m
 | The clinic's three apps in Okta, the *Clinic clinical apps* authentication policy, the *Clinic billing by department* group rule | **RAN · tenant** (Okta org, 2026-11-07) | capture-log E115; `lab/terraform/okta` `clinic-apps.tf` |
 | Inventory and tracker from the Okta API and Graph | **RAN · tenant** | `tracker.csv`, `tracker.md`, `status.html`, `inventory.json` |
 | Wave 1 *before*: a clinic user opens Clinic Lab Results through Okta | **RAN · tenant** | `results/2026-11-07T005908Z-clinic-lab-results-okta.json` |
-| Wave 1 Entra side: app, group, CA061 | **BUILT** (PR #219, applied by CI after merge) | `lab/terraform/modules/apps/clinic_results.tf`, CA061 |
-| Wave 1 cut-over, test through Entra, timed rollback | **BUILT**: runs after PR #219 is applied | `cutover.mjs` |
+| Wave 1 Entra side: app, its API, group, CA061 | **RAN · tenant** (PRs #219, #264, #277) | `lab/terraform/modules/apps/clinic_results.tf`, CA061 |
+| Wave 1 cut-over, test through Entra with CA061, timed rollback, cut-over back | **RAN · tenant** (2026-11-08): cut-over 30 s, rollback 34 s, back 26 s | capture-log E182 |
 | Okta Admin Console demands a phishing-resistant factor | **BUILT, off** (the owner's switch) | `admin_console_phishing_resistant` |
 | Okta Workflows / event hook | **Not built** | See "Not built" below |
 
