@@ -127,10 +127,20 @@ export function loginCookies(cookieHeader) {
 // shadowing the current one.
 export const LEGACY_LOGIN_COOKIE_CLEAR = 'cr_login=; Path=/callback; Max-Age=0';
 
+// An Entra block without the API (configs written before the CA061 fix)
+// would sign people in with no API token - so CA061 would never run. Such a
+// block is refused: re-run cutover.mjs prestage. Pure: unit-tested.
+export function checkIdpBlock(name, idp) {
+  if (name === 'entra' && !(idp && idp.api_audience && /\/Results\.Read(\s|$)/.test(idp.scope || ''))) {
+    throw new Error('the Entra config has no API scope (written before CA061 moved to the API): run node lab/okta-migration/cutover.mjs prestage');
+  }
+}
+
 export function readConf(file = CONF) {
   if (!fs.existsSync(file)) throw new Error(`no IdP config at ${file}: run node lab/okta-migration/cutover.mjs prestage`);
   const c = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (!c[c.active]) throw new Error(`config names "${c.active}" active but has no such IdP`);
+  checkIdpBlock(c.active, c[c.active]);
   return c;
 }
 
@@ -194,6 +204,7 @@ export function serve({ port = PORT, conf = CONF } = {}) {
         if (p && !/another browser/.test(chk.why || '')) pending.delete(url.searchParams.get('state'));
         if (!chk.ok) return send(chk.code, `<p>Sign-in refused: ${esc(chk.why)}. <a href="/login">Sign in again</a>.</p>`);
         const idp = c[p.idp];
+        checkIdpBlock(p.idp, idp);
         const tok = await getJson(idp.token_endpoint, {
           method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
           body: new URLSearchParams({ grant_type: 'authorization_code', client_id: idp.client_id, code: url.searchParams.get('code'), redirect_uri: `http://localhost:${port}/callback`, code_verifier: p.verifier, scope: idp.scope || 'openid profile email' }).toString(),

@@ -41,7 +41,7 @@ import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { HERE, REPO, OKTA_ROOT, okta, nowIso, graphAll, checkSwitchTarget, entraApiFields } from './lib.mjs';
-import { CONF, CONF_DIR, readConf, serve } from './clinic-results/app.mjs';
+import { CONF, CONF_DIR, readConf, serve, checkIdpBlock } from './clinic-results/app.mjs';
 import { graph } from '../scripts/demo/signin/lib.mjs';
 
 const WAVES = path.join(HERE, 'waves.json');
@@ -176,6 +176,7 @@ async function test({ idp, as }) {
   checkSwitchTarget(appLabel, conf);
   const want = idp || conf.active;
   if (!conf[want]) throw new Error(`no ${want} block in the config: run prestage`);
+  checkIdpBlock(want, conf[want]);
   const upn = as || plan().pilot[0];
   if (!upn) throw new Error('no pilot user in waves.json and no --as');
   // A staging run (--idp differs from production) uses a temporary config
@@ -242,6 +243,7 @@ async function switchTo(target) {
   const conf = readConf();
   checkSwitchTarget(appLabel, conf);
   if (!conf.entra) throw new Error('no Entra block in the config: run prestage after the Entra PR is applied');
+  checkIdpBlock('entra', conf.entra); // before ANY change: an old config would skip CA061
   if (!(await portFree())) throw new Error('port 8471 is in use (app.mjs running?): stop it first - nothing was changed');
   if (conf.active === target) log(`the app already trusts ${target}`);
   // Order matters. Cut-over: app to Entra FIRST, then hide the Okta tile -
