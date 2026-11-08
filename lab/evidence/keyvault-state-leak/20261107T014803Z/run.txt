@@ -1,0 +1,27 @@
+Key Vault state-leak experiment (tenant: lab subscription de0b2a93, throwaway objects deleted after)
+command: lab/scripts/operator/op bash lab/secrets/state-leak/run.sh   (TF_BIN = HashiCorp Terraform 1.16.5 darwin_arm64)
+identity: the lab operator (certificate service principal), Owner on the subscription; Key Vault Secrets Officer on the throwaway vault only
+host: the lab Mac
+verdict: AS STATED; cleanup read back: group gone, vault purged
+
+[01:48:05Z +  2s] Creating rg-stateleak-0fe13da4 and kv-stateleak-0fe13da4 in eastus2 (RBAC, purge protection off)
+[01:48:43Z + 40s] Vault created (38 s)
+[01:48:48Z + 45s] RBAC took effect and a random 40-character value is stored (5 s; value never printed)
+[01:48:48Z + 45s] [datasource] terraform init / apply / apply again / plan -out
+[01:49:47Z +104s] [datasource] done (59 s)
+[01:49:47Z +104s] [ephemeral] negative control: a plan expecting the wrong length must fail
+[01:49:57Z +114s] [ephemeral] negative control failed on the precondition, as it must
+[01:49:57Z +114s] [ephemeral] terraform init / apply / apply again / plan -out
+[01:50:47Z +164s] [ephemeral] done (50 s)
+[01:50:47Z +164s] Terraform: Terraform v1.16.5; provider hashicorp/azurerm 4.81.0 (lock file)
+
+path         terraform.tfstate  terraform.tfstate.backup   saved plan   terraform output
+datasource   1                  1                          2            0
+ephemeral    0                  0                          0            0
+(times the 40-character value appears in each file)
+
+AS STATED: the data source wrote the secret into state, its backup and the saved plan in
+plaintext; the ephemeral resource read it (precondition passed) and left it in no state,
+backup, plan or output file.
+[01:50:47Z +164s] Cleanup: deleting rg-stateleak-0fe13da4, then purging kv-stateleak-0fe13da4
+[01:52:02Z +239s] Cleanup read back: rg-stateleak-0fe13da4 gone, kv-stateleak-0fe13da4 purged (75 s)

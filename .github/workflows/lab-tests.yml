@@ -57,6 +57,21 @@ jobs:
       - name: terraform fmt -check
         run: terraform fmt -check -recursive lab/terraform
 
+      - name: Key Vault secret in Terraform state, static checks (lab/secrets/state-leak)
+        # The measurement itself (run.sh) creates a throwaway vault in the lab
+        # subscription, so it runs as the lab operator on the Mac, not here:
+        # CI holds no identity that may create resource groups. CI checks the
+        # two configurations still format and validate against the committed
+        # lock files, and runs the counter's offline tests.
+        run: |
+          set -euo pipefail
+          terraform fmt -check -recursive lab/secrets/state-leak
+          for d in datasource ephemeral; do
+            terraform -chdir=lab/secrets/state-leak/$d init -backend=false -lockfile=readonly -no-color >/dev/null
+            terraform -chdir=lab/secrets/state-leak/$d validate -no-color
+          done
+          python3 -I -m unittest discover -s lab/secrets/state-leak/tests -v
+
       - name: validate + test every root and module
         # Roots verify providers against their committed lock file
         # (-lockfile=readonly); child modules have none (gitignored).
