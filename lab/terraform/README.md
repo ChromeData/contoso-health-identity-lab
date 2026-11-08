@@ -207,6 +207,7 @@ combinations that cannot work.
 | `pim_require_approval` | **`true`** | Approval on Privileged-IAM-Admins activation (pim) | Tier-1 approvers |
 | `enable_identity_protection_ca` | `false` | CA006 user risk High, CA007 sign-in risk High (conditional-access) | `enable_premium`, P2 licences **assigned**; Microsoft's managed risk policy set off by hand first |
 | `enable_phishing_resistant_all_users` | `false` | CA008, the workforce authentication strength, CA008 pilot group, dynamic All-Workforce group | `enable_premium`; `admin_fido2_allowed_aaguids` or `accept_admin_synced_passkey_risk` |
+| `enable_lcw_leaver_trigger` | `false` | dynamic All-Workforce group alone, the scheduled leaver workflow's trigger (a leaver drops out when HR disables the account) | `enable_premium` |
 | `ca008_allow_all_users_enforcement` | `false` | Second key: CA008 enforced on all users | registration report shows full coverage; pilot ran enforced |
 | `accept_admin_synced_passkey_risk` | `false` | Second key: allow the rollout with no admin AAGUID allow-list (record it in the risk register) | a reviewed risk acceptance |
 | `enable_registration_ca` | `false` | CA009: register security info with a one-time TAP or a phishing-resistant method | `enable_premium` |
@@ -418,7 +419,11 @@ done
     credentials (their subjects are pinned to the immutable owner@id/repo@id
     form, which the check's pattern does not recognise);
   - `evidence-store` (CKV_AZURE_33, CKV_AZURE_59) and `keyvault`
-    (CKV_AZURE_189), with the reasons in their `main.tf`.
+    (CKV_AZURE_189), with the reasons in their `main.tf`;
+  - `envs/operator`: CKV_AZURE_39 on the write-session role (ADR 0030). The
+    check flags any custom role with `actions = ["*"]`; this one removes
+    every `Microsoft.Authorization` write and delete, so it cannot assign
+    roles or remove locks (pinned by `tests/operator.tftest.hcl`).
 
   Until 2026-10-20 the first seven were a documented baseline of 8 failed
   checks. The eighth, CKV_AZURE_251, is fixed rather than skipped: the NTDS

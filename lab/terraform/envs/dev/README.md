@@ -64,6 +64,7 @@ when its prerequisite is off):
 |---|---|---|
 | `enable_identity_protection_ca` | CA006 (user risk High → MFA + secure password change), CA007 (sign-in risk High → block), report-only; `ca_policy_states` must then hold CA006/CA007 | **Entra ID P2**; set Microsoft's managed risk policy to report-only/off first |
 | `enable_phishing_resistant_all_users` | CA008 (workforce phishing-resistant strength, report-only, `ca008_scope` all_users → pilot), CA008-Pilot-PhishingResistant, dynamic All-Workforce | P1; all-users enforcement also needs `ca008_allow_all_users_enforcement` |
+| `enable_lcw_leaver_trigger` | dynamic All-Workforce only (no CA008): the trigger group of the scheduled leaver workflow (`New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver`, E122 follow-up) | P1 |
 | `enable_pim_tiers` | PIM-Tier0-Security-Admins, PIM-Tier0-CA-Admins (approval, 4h), PIM-Tier1-Intune-Admins, PIM-Tier1-Helpdesk (8h) | P2 |
 | `enable_pim_azure_resources` | PIM-Azure-RG-Contributors eligible for Contributor on the RG | P2; **human** applier with Owner/UAA |
 | `enable_pim_aws_admin` | PIM-AWS-Lab-Admins (eligible-only, 2h MFA + justification activation) assigned to the AWS IAM Identity Center app as its second principal: AWS admin without root, ADR 0025 | P2; `enable_sso_apps`; eligibility post-apply; `lab/terraform/aws` permission set |

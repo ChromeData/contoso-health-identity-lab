@@ -1,0 +1,38 @@
+{
+    "source":  "adfs",
+    "capturedAtUtc":  "2026-11-07T01:43:57.1479658Z",
+    "issuer":  "http://sts.corp.contosohealthlab.com/adfs/services/trust",
+    "audience":  "urn:contoso:claims-viewer",
+    "signatureValid":  true,
+    "nameId":  {
+                   "value":  "adfs-pilot@contosohealthlab.com",
+                   "format":  "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"
+               },
+    "attributes":  {
+                       "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn":  [
+                                                                                         "adfs-pilot@contosohealthlab.com"
+                                                                                     ],
+                       "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress":  [
+                                                                                                  "adfs-pilot@contosohealthlab.com"
+                                                                                              ],
+                       "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname":  [
+                                                                                               "Pilot"
+                                                                                           ],
+                       "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname":  [
+                                                                                             "AdfsTest"
+                                                                                         ],
+                       "urn:contoso:claims:department":  [
+                                                             "Nursing"
+                                                         ],
+                       "urn:contoso:claims:employeeid":  [
+                                                             "ADFS-PILOT-1"
+                                                         ],
+                       "http://schemas.microsoft.com/ws/2008/06/identity/claims/role":  [
+                                                                                            "ClaimsViewer.Clinician"
+                                                                                        ],
+                       "urn:contoso:claims:shortname":  [
+                                                            "adfs-pilot"
+                                                        ]
+                   },
+    "signIns":  5
+}

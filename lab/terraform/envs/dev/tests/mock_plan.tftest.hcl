@@ -815,6 +815,62 @@ run "no_dc_keeps_slash24_out_of_the_watchlist" {
   }
 }
 
+# Connect Health registration window (ADR 0031). Off in lab.tfvars: no
+# account, no role, no output. On with a future end time: exactly one cloud
+# account on the onmicrosoft domain with Hybrid Identity Administrator (the
+# window touches no Conditional Access code at all: modules/conditional-access
+# is unchanged in its PR). On with a past or missing end time: the plan FAILS (the time
+# box), so a forgotten window blocks the next apply instead of lingering.
+run "connect_health_registration_off_by_default" {
+  command = plan
+  assert {
+    condition     = length(azuread_user.connect_health_registration) == 0 && length(azuread_directory_role_assignment.connect_health_registration) == 0 && output.connect_health_registration_upn == null
+    error_message = "lab.tfvars keeps the Connect Health registration window OFF: no account, no role."
+  }
+}
+
+run "connect_health_registration_window_open" {
+  command = plan
+  variables {
+    enable_connect_health_registration    = true
+    connect_health_registration_until_utc = "2099-01-01T00:00:00Z"
+  }
+  assert {
+    condition     = length(azuread_user.connect_health_registration) == 1 && azuread_user.connect_health_registration[0].user_principal_name == "adm-connecthealth-reg@${var.onmicrosoft_domain}"
+    error_message = "the window creates exactly adm-connecthealth-reg on the onmicrosoft domain"
+  }
+  assert {
+    # ignore_changes = [account_enabled] (so a later apply cannot undo
+    # register.sh close) must not change the create: the account starts
+    # enabled, or the passkey enrollment cannot sign in. The ignore_changes
+    # line itself is held by lab/adfs/connect-health/tests/
+    # registration-lifecycle.test.mjs (terraform test cannot see lifecycle).
+    condition     = azuread_user.connect_health_registration[0].account_enabled == true
+    error_message = "the window creates adm-connecthealth-reg enabled"
+  }
+  assert {
+    condition     = length(azuread_directory_role_assignment.connect_health_registration) == 1 && azuread_directory_role_assignment.connect_health_registration[0].role_id == "8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2"
+    error_message = "the window grants Hybrid Identity Administrator (8ac3fc64-...) and nothing else"
+  }
+}
+
+run "connect_health_registration_window_over_fails" {
+  command = plan
+  variables {
+    enable_connect_health_registration    = true
+    connect_health_registration_until_utc = "2020-01-01T00:00:00Z"
+  }
+  expect_failures = [azuread_user.connect_health_registration]
+}
+
+run "connect_health_registration_without_end_time_fails" {
+  command = plan
+  variables {
+    enable_connect_health_registration = true
+  }
+  expect_failures = [azuread_user.connect_health_registration]
+}
+
 # A flag switched on without its prerequisite plans NOTHING for that feature
 # (count = 0) - the root checks turn that silent no-op into a visible warning.
 run "flags_without_premium_warn" {
@@ -848,6 +904,7 @@ run "flags_without_premium_warn" {
     enable_pim_demo_readers             = true
     enable_b2b_governance               = true
     enable_nhi_governance               = true
+    enable_lcw_leaver_trigger           = true
     enable_access_reviews_privileged    = true
     vault_feed_v2_columns               = true
   }
@@ -867,6 +924,7 @@ run "flags_without_premium_warn" {
     check.pim_aws_admin_requires_sso_apps,
     check.b2b_requires_governance,
     check.nhi_governance_requires_premium,
+    check.lcw_leaver_trigger_requires_premium,
     check.access_reviews_require_governance,
     check.vault_feed_v2_requires_itdr,
   ]
@@ -882,3 +940,50 @@ run "flags_without_premium_warn" {
 # a root test cannot expect a failure inside a child module's variable).
 # The same holds for enable_itdr_detections_v2 without enable_itdr_detections
 # (modules/monitoring/tests/itdr_v2.tftest.hcl).
+
+# The scheduled leaver's trigger group (E122 follow-up): enable_lcw_leaver_trigger
+# alone creates All-Workforce, without CA008's flag; off, nothing is planned.
+run "lcw_leaver_trigger_creates_all_workforce_without_ca008" {
+  command = plan
+
+  variables {
+    enable_premium                      = true
+    enable_phishing_resistant_all_users = false
+    enable_lcw_leaver_trigger           = true
+  }
+
+  # Mock ids stay unknown at plan (see the header); give the group a known id
+  # so the output can be compared.
+  override_resource {
+    target          = module.groups[0].azuread_group.all_workforce
+    override_during = plan
+    values = {
+      object_id = "00000000-0000-0000-0000-00000000a11f"
+    }
+  }
+
+  assert {
+    condition     = output.all_workforce_group_object_id == "00000000-0000-0000-0000-00000000a11f"
+    error_message = "enable_lcw_leaver_trigger alone must create All-Workforce (the scheduled leaver's trigger group), without enable_phishing_resistant_all_users"
+  }
+
+  assert {
+    condition     = output.staff_passkey_rollout_enabled == false
+    error_message = "the leaver trigger alone must not switch on the staff passkey rollout (Invoke-PostApply.ps1 reads staff_passkey_rollout_enabled, not the shared group)"
+  }
+}
+
+run "lcw_leaver_trigger_off_plans_no_all_workforce" {
+  command = plan
+
+  variables {
+    enable_premium                      = true
+    enable_phishing_resistant_all_users = false
+    enable_lcw_leaver_trigger           = false
+  }
+
+  assert {
+    condition     = output.all_workforce_group_object_id == null
+    error_message = "with both flags off, All-Workforce must not be planned"
+  }
+}
