@@ -302,10 +302,15 @@ Written down on purpose. A reviewer will find these in ten minutes; better they 
 - Until 2026-11-06 the assistant also typed some apply approvals on the owner's behalf. That stopped:
   only the owner approves an apply, by hand, from his own GitHub session. The gate refuses an
   approval that mentions an assistant or a delegation (PR #228, merged).
-- AI changes now come from a separate bot account, `contoso-health-lab-bot[bot]`. The gate
-  (`APPLY_BOT_LOGIN`) refuses a run whose pull request the bot did not both author and merge. The
-  `prod` environment has "Prevent self-review" on, so the bot cannot approve its own work. In a
-  real team the bot plays the junior engineer, and the owner approves as the senior.
+- AI changes come from a separate bot account, `contoso-health-lab-bot[bot]`. From 2026-11-08 the
+  agents' Mac uses only the bot for GitHub; before that, most PRs were authored with the owner's
+  own login (ChromeData), and the bot only merged them. The gate (`APPLY_BOT_LOGIN`) refuses a push
+  run whose pull request the bot did not both author and merge; a manual (dispatch) run lists every
+  PR it carries, with author and merger. The `prod` environment has "Prevent self-review" on.
+- Code review: until 2026-11-08 the ruleset required **0** approvals, so scripts that run on DC01,
+  the HR connector and the cockpit merged on automated checks and an AI review only. The fix is a
+  required code-owner approval by the owner on every PR (`.github/CODEOWNERS`,
+  `lab/pipelines/README.md` section F). It is live only once the owner changes the ruleset.
 
 ## After the trials end (2026-11-26)
 

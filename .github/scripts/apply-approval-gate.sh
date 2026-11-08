@@ -64,6 +64,11 @@
 #                                 neither of them. Unset = the gate still works
 #                                 and says, in the issue and the run summary,
 #                                 that separation is by procedure only.
+#      APPLY_RANGE_BASE           dispatch runs only: head sha of the last
+#                                 successful apply; every PR since then is
+#                                 listed with author and merger (R3)
+#      APPLY_RANGE_STRICT         true = refuse a dispatch whose range holds a
+#                                 change the bot did not author and merge
 #      APPROVAL_TIMEOUT_MINUTES   default 30
 #      APPROVAL_POLL_SECONDS      default 15
 # Exit: 0 approved | 1 denied, refused, timed out, or could not check
@@ -146,6 +151,52 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] || [ "${GITHUB_EVENT_NAME:
   from_pr=""
   [ -z "$pr_number" ] || from_pr=" (the commit came from PR #$pr_number; its plan comment is not compared)"
   compare_line="**Not compared:** this is a manual ${GITHUB_EVENT_NAME} run$from_pr. Read the saved plan below; it is what will be applied."
+  # karen-review round 2, R3: a dispatch applies EVERYTHING merged since the
+  # last successful apply, not just the head commit's PR, so the bot check on
+  # the head PR alone proves nothing about the rest. List every PR in the
+  # range (APPLY_RANGE_BASE = head sha of the last successful apply, found by
+  # the workflow), with author and merger, and flag each one the bot did not
+  # both author and merge. APPLY_RANGE_STRICT=true refuses the run instead.
+  # Fail closed: a range or PR lookup that cannot be read stops the gate.
+  range_base="${APPLY_RANGE_BASE:-}"
+  if [ -n "$range_base" ]; then
+    printf '%s' "$range_base" | grep -Eq '^[0-9a-f]{7,40}$' || { echo "Refused: APPLY_RANGE_BASE is not a commit sha"; exit 1; }
+    range_shas=$(gh api "repos/$REPO/compare/$range_base...$GITHUB_SHA" --jq '.commits[].sha') \
+      || { echo "Refused: could not read the commits between $range_base and $GITHUB_SHA"; exit 1; }
+    range_rows=""; range_flagged=0; seen=" "
+    for c in $range_shas; do
+      cpulls=$(gh api "repos/$REPO/commits/$c/pulls") || { echo "Refused: could not read the PR for commit $c"; exit 1; }
+      n=$(printf '%s' "$cpulls" | jq -r '.[0].number // empty')
+      if [ -z "$n" ]; then
+        range_rows="$range_rows"$'\n'"| ${c:0:7} | (no PR: a direct commit) | - | - | **check** |"
+        range_flagged=$((range_flagged + 1)); continue
+      fi
+      case "$seen" in *" $n "*) continue ;; esac
+      seen="$seen$n "
+      a=$(printf '%s' "$cpulls" | jq -r '.[0].user.login // empty')
+      m=$(gh api "repos/$REPO/pulls/$n" --jq '.merged_by.login // empty') || { echo "Refused: could not read who merged PR #$n"; exit 1; }
+      flag="ok"
+      if [ -n "$BOT" ]; then
+        a_lc=$(printf '%s' "$a" | tr '[:upper:]' '[:lower:]'); m_lc=$(printf '%s' "$m" | tr '[:upper:]' '[:lower:]')
+        if [ "$a_lc" != "$bot_lc" ] || [ "$m_lc" != "$bot_lc" ]; then flag="**not bot**"; range_flagged=$((range_flagged + 1)); fi
+      fi
+      range_rows="$range_rows"$'\n'"| ${c:0:7} | #$n | @${a:-unknown} | @${m:-unknown} | $flag |"
+    done
+    compare_line="$compare_line"$'\n\n'"**Every PR this run applies** (merged since the last successful apply, \`${range_base:0:7}\`):"$'\n\n'"| Commit | PR | Author | Merger | Check |"$'\n'"|---|---|---|---|---|$range_rows"
+    if [ "$range_flagged" -gt 0 ]; then
+      compare_line="$compare_line"$'\n\n'"**$range_flagged change(s) in this range were not authored and merged by the bot.** Read each one's diff before you approve."
+      if [ "${APPLY_RANGE_STRICT:-false}" = "true" ]; then
+        echo "Refused: APPLY_RANGE_STRICT=true and $range_flagged change(s) between ${range_base:0:7} and $short were not authored and merged by the bot"
+        exit 1
+      fi
+    fi
+  else
+    compare_line="$compare_line"$'\n\n'"**Range unknown:** no successful apply on record (APPLY_RANGE_BASE unset), so the PRs this run carries are not listed."
+    if [ "${APPLY_RANGE_STRICT:-false}" = "true" ]; then
+      echo "Refused: APPLY_RANGE_STRICT=true and the range of this dispatch is unknown (APPLY_RANGE_BASE unset)"
+      exit 1
+    fi
+  fi
 elif [ -n "$pr_number" ]; then
   comments_json=$(gh api "repos/$REPO/issues/$pr_number/comments" --paginate | jq -s 'add // []') \
     || { echo "Refused: could not read the comments of PR #$pr_number"; exit 1; }

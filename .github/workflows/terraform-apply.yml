@@ -215,6 +215,7 @@ jobs:
       id-token: write          # OIDC token for Entra federation (PLAN app)
       contents: read
       pull-requests: read      # find the merged PR, its merger and plan comment
+      actions: read            # last successful apply = the dispatch range base (R3)
     outputs:
       fingerprint: ${{ steps.fingerprint.outputs.fingerprint }}
       planned_at: ${{ steps.fingerprint.outputs.planned_at }}
@@ -286,8 +287,23 @@ jobs:
       # merger, bot separation (APPLY_BOT_LOGIN), change set vs the PR plan
       # comment (refuses on a mismatch). It writes the plan to this job's
       # summary for the reviewer. It opens no issue and waits for nothing.
+      # karen-review round 2, R3: a dispatch applies everything merged since
+      # the last successful apply. The gate lists every PR in that range.
+      # Fails closed: an unreadable run list stops the job.
+      - name: Last successful apply (range for a dispatch)
+        id: range
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          base=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/terraform-apply.yml/runs?status=success&branch=main&per_page=1" --jq '.workflow_runs[0].head_sha // empty') \
+            || { echo "::error::could not read the last successful apply"; exit 1; }
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
       - name: Checks and the plan for the reviewer
         env:
+          APPLY_RANGE_BASE: ${{ steps.range.outputs.base }}
+          APPLY_RANGE_STRICT: ${{ vars.APPLY_RANGE_STRICT }}
           GATE_MODE: check
           PLAN_LABEL: Plan fingerprint (resources, actions and values)
           GH_TOKEN: ${{ github.token }}

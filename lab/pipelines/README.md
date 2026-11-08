@@ -522,11 +522,31 @@ with no PR and no review, lock the WORM store irreversibly.
       docs do not say).
 
 ### F. GitHub — branch protection / ruleset on `main`
-- [ ] Require a pull request before merging. **Solo repo: 0 required
-      approvals** — GitHub never lets you approve your own PR, so ≥ 1 would
-      deadlock. The real human gate is the `prod` environment reviewer (you
-      *can* approve your own deployment unless "Prevent self-review" is on).
-      With a second maintainer, raise this to 1.
+- [ ] **One human code review on every PR (karen-review round 2, R1).** Since
+      2026-11-08 AI agents author and merge only as the bot
+      (`contoso-health-lab-bot[bot]`, through `bot-gh`), and `gh` on the
+      agents' Mac signs in only as the bot. So the owner (ChromeData) is no
+      longer the author, and can approve. `.github/CODEOWNERS` makes
+      ChromeData the code owner of every path. In ruleset `main-protection`,
+      under *Require a pull request before merging*:
+      - Required approvals: **1**
+      - **Require review from Code Owners**: on
+      - **Require approval of the most recent reviewable push**: on (a push
+        after the approval needs a new one)
+      - Dismiss stale pull request approvals when new commits are pushed: on
+      - Bypass list: **empty** (no app, no role, not the owner)
+      Then *Settings -> Actions -> General -> Workflow permissions*: **off**
+      "Allow GitHub Actions to create and approve pull requests", so no
+      workflow token can be the approval. The bot's App can submit a review,
+      but it is not a code owner, so its approval never counts.
+      On GitHub Free this works because the repo is public (rulesets and
+      code owner review are free for public repos). A PR that ChromeData
+      authored itself (older PRs) cannot be approved by ChromeData: re-open
+      it as the bot (`bot-gh`), or close it.
+      Merge order: the agent opens the PR as the bot -> checks go green ->
+      the owner reads the diff and clicks **Approve** in the browser -> the
+      merge captain merges as the bot -> for Terraform, the apply waits on
+      **Review deployments** for the owner again.
 - [ ] Require status checks to pass: `terraform plan`, `checkov (IaC scan)`,
       `trufflehog (secret scan)`, `terraform validate + test (mocked)` and
       `Pester + PSScriptAnalyzer + shell tests` (`lab-tests.yml`, no path

@@ -9,7 +9,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { parseRoster, serialiseRoster, hire, change, describe, nextEmployeeId, jobCatalogue, accountName, HEADER } from '../lib/roster.mjs';
-import { FileStore, GitHubStore } from '../lib/store.mjs';
+import { FileStore, GitHubStore, BOT_GH } from '../lib/store.mjs';
+import { existsSync, readFileSync } from 'node:fs';
 import { makeApp } from '../server.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -229,4 +230,11 @@ test('GitHubStore.delivery: a failed run recovered by a later successful send re
   assert.equal((await mk('other', 'diverged').delivery('save1')).state, 'failed', 'a later send without this save');
   assert.equal((await mk('old', 'behind').delivery('save1')).state, 'failed', 'an older send');
   assert.equal((await mk(null).delivery('save1')).state, 'failed');
+});
+
+test('R10: the roster is written as the lab bot (bot-gh), never a plain gh login', () => {
+  assert.ok(BOT_GH.endsWith('/lab/scripts/operator/github-bot/bot-gh'), BOT_GH);
+  assert.ok(existsSync(BOT_GH), 'bot-gh must exist at the path the store calls');
+  const src = readFileSync(new URL('../lib/store.mjs', import.meta.url), 'utf8');
+  assert.ok(!/execFile\('gh'/.test(src), 'no direct gh call: it would use the owner login');
 });
