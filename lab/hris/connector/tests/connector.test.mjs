@@ -10,6 +10,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseFeed, serialiseFeed, reconcile, describe, hospitalToday, MAX_ACCESS_CHANGES, FeedError } from '../lib/feed.mjs';
 import { GitHubStore } from '../lib/store.mjs';
+import { runSerially } from '../lib/schedule.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CSV = join(here, '..', '..', '..', 'scripts', 'mock-hr', 'hr_feed.csv');
@@ -210,3 +211,21 @@ test('a name with no usable ASCII is held (the sender would stop every send on i
   assert.match(accented.held[0]?.why ?? '', /dana\.okafor already belongs to employee 100492/);
 });
 
+
+test('the schedule never overlaps two syncs: a slow cycle delays the next, it does not run beside it', async () => {
+  let running = 0, most = 0, runs = 0;
+  const timers = [];
+  const slow = async () => { running += 1; most = Math.max(most, running); runs += 1; await new Promise((r) => setTimeout(r, 30)); running -= 1; };
+  // A fake timer: record each scheduling, fire it by hand.
+  const s = runSerially(slow, 1, { setTimer: (fn) => { timers.push(fn); return 0; } });
+  assert.equal(timers.length, 0, 'nothing is scheduled while the first cycle runs');
+  await s.first;
+  assert.equal(timers.length, 1, 'the next cycle is scheduled only after the first ended');
+  const second = timers[0]();
+  assert.equal(timers.length, 1);
+  await second;
+  assert.equal(timers.length, 2);
+  s.stop();
+  assert.equal(most, 1, 'never two cycles at once');
+  assert.equal(runs, 2);
+});

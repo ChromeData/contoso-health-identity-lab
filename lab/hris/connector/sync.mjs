@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { parseFeed, serialiseFeed, reconcile, describe, hospitalToday, MAX_ACCESS_CHANGES } from './lib/feed.mjs';
 import { GitHubStore, FileStore } from './lib/store.mjs';
 import { readHris } from './lib/hris.mjs';
+import { runSerially } from './lib/schedule.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -99,5 +100,6 @@ async function cycle() {
 }
 
 say(`HR connector: OrangeHRM -> ${storeArg || `${store.repo}@${store.branch}`}${dryRun ? ' (dry run)' : ''}${watch ? `, every ${watch} s` : ''}. Limit: ${MAX_ACCESS_CHANGES} leavers or job changes per sync.`);
-await cycle();
-if (watch) setInterval(cycle, watch * 1000);
+// One cycle at a time: the next starts only after this one ends (lib/schedule.mjs).
+if (watch) await runSerially(cycle, watch * 1000).first;
+else await cycle();
