@@ -44,6 +44,7 @@ mock_provider "azuread" {
         "SecurityEvents.Read.All"                              = "bf394140-e372-4bf9-a898-299cfc7564e5"
         "AccessReview.ReadWrite.All"                           = "ef5f7d5c-338f-44b0-86c3-351f46c8bb5f"
         "Reports.Read.All"                                     = "230c1aed-a721-4c5d-9cb4-a90514e508ef"
+        "DeviceManagementConfiguration.ReadWrite.All"          = "9241abd9-d0e6-425a-bd4f-47ba86e767a4"
       }
     }
   }
@@ -74,6 +75,9 @@ mock_provider "azurerm" {
   }
   mock_data "azurerm_role_definition" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000001/providers/Microsoft.Authorization/roleDefinitions/b86a8fe4-44ce-4948-aee5-eccb2c155cd7" }
+  }
+  mock_resource "azurerm_resource_group" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-lab-sandbox" }
   }
   mock_resource "azurerm_role_definition" {
     defaults = { role_definition_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000001/providers/Microsoft.Authorization/roleDefinitions/99999999-9999-9999-9999-999999999999" }
@@ -118,6 +122,12 @@ run "grants_are_exactly_the_reviewed_lists" {
     # No session open (the default): only the standing, read-only set.
     condition     = toset(keys(azuread_app_role_assignment.operator)) == toset(var.operator_graph_roles) && length(azuread_app_role_assignment.operator_session) == 0
     error_message = "without a write session, exactly the standing Graph roles are granted"
+  }
+  assert {
+    # The sandbox resource group exists standing, but the operator gets NO
+    # write on it between sessions.
+    condition     = azurerm_resource_group.sandbox.name == "rg-lab-sandbox" && length(azurerm_pim_active_role_assignment.operator_sandbox) == 0
+    error_message = "without a write session, the operator has no role on rg-lab-sandbox"
   }
   assert {
     condition     = length([for r in keys(azuread_app_role_assignment.operator) : r if can(regex("ReadWrite|DeleteRestore|Create$", r))]) == 0
@@ -234,6 +244,19 @@ run "session_open_adds_writes_time_bound" {
   assert {
     condition     = !contains(keys(azurerm_role_assignment.operator), "Owner")
     error_message = "a session never brings back Owner"
+  }
+  assert {
+    # The sandbox write path: Contributor + RBAC Administrator at the SANDBOX
+    # resource group only, time-bound to the session like the others.
+    condition = toset(keys(azurerm_pim_active_role_assignment.operator_sandbox)) == toset(["Contributor", "Role Based Access Control Administrator"]) && alltrue([
+      for a in azurerm_pim_active_role_assignment.operator_sandbox :
+      a.scope == azurerm_resource_group.sandbox.id && one(one(a.schedule).expiration).end_date_time == var.operator_write_session.expires_utc
+    ])
+    error_message = "a session adds Contributor and RBAC Administrator on rg-lab-sandbox only, ending at expires_utc"
+  }
+  assert {
+    condition     = contains(var.operator_session_graph_roles, "DeviceManagementConfiguration.ReadWrite.All") && contains(var.operator_graph_roles, "DeviceManagementConfiguration.Read.All") && !contains(var.operator_graph_roles, "DeviceManagementConfiguration.ReadWrite.All")
+    error_message = "Intune write is a SESSION grant (time-boxed to the E5 trial); the standing list keeps Read.All"
   }
 }
 

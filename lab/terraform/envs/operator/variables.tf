@@ -118,6 +118,22 @@ variable "operator_session_graph_roles" {
       Team.Create, TeamMember.ReadWrite.All  the SOC team for the playbooks
       DelegatedPermissionGrant.ReadWrite.All  admin consent for the lab's apps
       AccessReview.ReadWrite.All          create the rendered review series
+      DeviceManagementConfiguration.ReadWrite.All  (added 2026-11-08, TIME-BOXED
+                                          to the E5 trial, which ends 2026-11-26)
+                                          create and assign the Intune Endpoint
+                                          Privilege Management policies and the
+                                          Windows LAPS policy for CH-WIN11-01
+                                          (lab/scripts/intune/New-IntuneEpmAndLaps.ps1,
+                                          ADR 0036). EPM is licensed only by the
+                                          trial. App role id 9241abd9-d0e6-425a-
+                                          bd4f-47ba86e767a4, read live from the
+                                          Microsoft Graph SP. The STANDING list keeps
+                                          DeviceManagementConfiguration.Read.All.
+                                          Approving an elevation request stays with
+                                          a person (PIM-Tier1-Intune-Admins). The
+                                          check "intune_write_time_box" warns on
+                                          every plan after 2026-11-26 until a PR
+                                          removes it from this list.
     Graph application permissions cannot be eligible or expire on their own.
     So the time box is the session window plus the plan check in
     write-session.tf, and the owner's closing apply. ADR 0030 records this gap.
@@ -140,6 +156,7 @@ variable "operator_session_graph_roles" {
     "TeamMember.ReadWrite.All",
     "DelegatedPermissionGrant.ReadWrite.All",
     "AccessReview.ReadWrite.All",
+    "DeviceManagementConfiguration.ReadWrite.All", # time-boxed to the E5 trial (2026-11-26): see above
   ]
 }
 
