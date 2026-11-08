@@ -33,7 +33,7 @@ incidents.
 | [0010](0010-kubernetes-workload-identity-scope.md) | Kubernetes workload identity scope (kept small; local kind; AKS mapping plan-only) | Workload identity |
 | [0011](0011-out-of-scope-global-secure-access-verified-id-ciem.md) | Out of scope: Global Secure Access, Verified ID, CIEM | Scope |
 | [0012](0012-access-review-no-response-and-clinical-lockout.md) | Risk-tiered certification. Unanswered privileged and requestable access is removed; birthright clinical access is never removed on silence | Governance |
-| [0013](0013-tier0-domain-controller-exposure.md) | Risk acceptance: DC01's public IP, limited by NSG to the operator, for the lab only. Production uses no public IP and PAM-brokered sessions | Risk / Tier 0 |
+| [0013](0013-tier0-domain-controller-exposure.md) | Risk acceptance: DC01's public IP, limited by NSG to the operator. **Amended 2026-11-08:** no public IP and no RDP/LDAPS from the internet; Bastion for people, Run Command (alerted) for scripts, NAT gateway for outbound | Risk / Tier 0 |
 | [0014](0014-shared-clinical-workstation-authentication.md) | Shared clinical workstations: a FIDO2 key per clinician, plus a device-filtered CA policy and a session lock | Authentication |
 | [0015](0015-risk-based-conditional-access-thresholds.md) | Risk-based CA at High only: user risk → MFA plus secure password change, sign-in risk → block; Medium goes to the SOC; a confirmed compromise gets a block, not CA006 | Access policy |
 | [0016](0016-passkey-profiles-and-phone-method-retirement.md) | Two passkey profiles (attested device-bound for admins, synced allowed for staff), protected registration with rollout TAPs handed over in person, SMS and voice retired before Microsoft's date | Authentication |

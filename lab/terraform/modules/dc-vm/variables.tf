@@ -77,12 +77,13 @@ variable "ntds_disk_size_gb" {
 variable "allowed_ip_ranges" {
   type        = list(string)
   description = <<-EOT
-    Operator egress IPs allowed to RDP (3389) and LDAPS (636) to the DC, each
-    a single IPv4 host written as a /32, e.g. "203.0.113.7/32". Empty = no
-    inbound at all. This allowlist is the only barrier between the internet
-    and a Tier-0 asset (ADR 0013), so nothing wider than one address is
-    accepted: a /24 mistyped or kept "for convenience" would open RDP and
-    LDAPS on a domain controller to 256 addresses (risk register R13).
+    Operator egress IPs admitted to HTTPS (443) on the DC during the AD FS
+    exercise ONLY (adfs_https_enabled). Each a single IPv4 host written as a
+    /32, e.g. "203.0.113.7/32". RDP and LDAPS are never opened to the
+    internet, whatever this holds (R5, ADR 0013 amendment 2026-11-08).
+    Nothing wider than one address is accepted: a /24 mistyped or kept "for
+    convenience" would open a Tier-0 listener to 256 addresses (risk
+    register R13).
   EOT
   default     = []
 
@@ -94,7 +95,7 @@ variable "allowed_ip_ranges" {
       for c in var.allowed_ip_ranges :
       try(endswith(c, "/32") && cidrnetmask(c) == "255.255.255.255", false)
     ])
-    error_message = "modules/dc-vm: each allowed_ip_ranges entry must be a single IPv4 address written as a /32, e.g. \"203.0.113.7/32\". Ranges such as /24 or /31, bare addresses without /32, and IPv6 are rejected: this NSG allowlist is the only barrier between the internet and RDP/LDAPS on a domain controller (ADR 0013)."
+    error_message = "modules/dc-vm: each allowed_ip_ranges entry must be a single IPv4 address written as a /32, e.g. \"203.0.113.7/32\". Ranges such as /24 or /31, bare addresses without /32, and IPv6 are rejected: this NSG allowlist is the only barrier between the internet and the AD FS listener on a domain controller (ADR 0013)."
   }
 }
 
@@ -136,4 +137,28 @@ variable "adfs_https_enabled" {
     off when 19-Remove-Adfs.ps1 has run.
   EOT
   default     = false
+}
+
+variable "nat_gateway_enabled" {
+  type        = bool
+  description = <<-EOT
+    Give snet-identity a NAT gateway for the DC's outbound traffic (Entra
+    provisioning agent, Windows Update, activation, Defender for Identity).
+    The DC has no public IP of its own, so without this it falls back to
+    Azure's implicit default outbound access, which Microsoft is retiring.
+    About $1.10/day whether the DC runs or not (main.tf COST).
+  EOT
+  default     = true
+}
+
+variable "run_command_alert_enabled" {
+  type        = bool
+  description = "Activity log alert on every Run Command against the DC (Tier-0 action, R5). Free."
+  default     = true
+}
+
+variable "run_command_alert_action_group_ids" {
+  type        = list(string)
+  description = "Action groups the Run Command alert notifies. Empty = the alert shows in Azure Monitor only."
+  default     = []
 }
