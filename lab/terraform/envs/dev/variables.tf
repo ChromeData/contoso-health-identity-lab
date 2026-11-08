@@ -1144,3 +1144,16 @@ variable "claims_viewer_saml_signing_cert_end_date" {
   description = "Expiry of the Claims Viewer SAML signing certificate (RFC 3339); null = Entra's default."
   default     = null
 }
+
+variable "enable_servicenow_fulfilment" {
+  type        = bool
+  description = <<-EOT
+    Create "ServiceNow - Access Fulfilment" (modules/apps
+    servicenow_fulfilment.tf): the app ServiceNow uses to add or remove people
+    on Clinical access packages after a manager approves in ServiceNow.
+    Certificate credential only, no Graph API permission, one catalog role
+    (Access package assignment manager). Needs enable_governance (the
+    catalog). ServiceNow side: lab/servicenow/apply.py.
+  EOT
+  default     = false
+}

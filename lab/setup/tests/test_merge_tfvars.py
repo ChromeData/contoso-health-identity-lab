@@ -108,6 +108,29 @@ lab_map = {
         keys = [k for k, _ in m.parse(out)]
         self.assertEqual(len(keys), len(set(keys)))
 
+    def test_least_privilege_settings_survive_a_rerun(self):
+        # PR #246 (senior gap 8): step B does not write these, so the merge
+        # must keep them, or the next bootstrap apply would widen APPLY back
+        # to the subscription, delete the VM operator role and its PIM
+        # eligibility, and remove the Key Vault delete locks.
+        old = OLD + '''
+apply_azure_scope                   = "resource_group"
+enable_lab_vm_operator              = true
+lab_vm_operator_eligible_object_ids = ["79feedc9-0000-4000-8000-000000000000"]
+lab_vm_operator_eligibility_duration = "P180D"
+cannot_delete_lock_resource_ids = {
+  "kv-idlab"      = "/subscriptions/1/resourceGroups/rg-identity-lab/providers/Microsoft.KeyVault/vaults/kv-a"
+  "kv-idlab-cicd" = "/subscriptions/1/resourceGroups/rg-identity-lab-cicd/providers/Microsoft.KeyVault/vaults/kv-b"
+}
+'''
+        out = m.merge(old, NEW, keep_old=['pipeline_config_writer_object_ids'])
+        merged = dict(m.parse(out))
+        self.assertEqual(m.value_of(merged['apply_azure_scope']), '"resource_group"')
+        self.assertEqual(m.value_of(merged['enable_lab_vm_operator']), 'true')
+        self.assertIn('79feedc9-0000-4000-8000-000000000000', merged['lab_vm_operator_eligible_object_ids'])
+        self.assertIn('"kv-idlab-cicd"', merged['cannot_delete_lock_resource_ids'])
+        self.assertIn('kv-b', merged['cannot_delete_lock_resource_ids'])
+
     def test_unclosed_value_fails(self):
         with self.assertRaises(m.Unsupported):
             m.parse('x = [\n  "a",\n')
