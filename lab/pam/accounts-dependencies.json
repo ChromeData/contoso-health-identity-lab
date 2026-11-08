@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Who USES each vaulted service account (CyberArk: 'usages' / dependencies). Read by onboard.sh and",
+    "Who USES each vaulted service account ('usages' / dependencies). Read by onboard.sh and",
     "rotate.sh: rotation is refused while any dependency is unresolved, and for an account with NO record",
     "(unknown is not 'none'), unless --force with a justification that names a change (CHG#######).",
     "resolved=true means the consumer reads the password from Vault at run time (Vault Agent / API), or",

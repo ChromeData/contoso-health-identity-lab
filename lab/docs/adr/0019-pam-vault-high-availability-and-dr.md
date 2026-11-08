@@ -1,6 +1,6 @@
 # ADR 0019: PAM vault high availability and disaster recovery
 
-- **Status:** Accepted (lab). **RAN · harness** (local Docker) on 2026-10-20: a separate 3-node rehearsal cluster holding test markers, leader failover, a timed snapshot-restore drill and a rolling-upgrade rehearsal. It is not the single-node vault that holds the PAM flow's AD credentials. Not built on Azure: no Key Vault seal, no snapshot schedule and no second site. **Partly supersedes ADR 0007** on the production unseal: auto-unseal only, because Shamir is rejected below.
+- **Status:** **Superseded by [ADR 0036](0036-microsoft-native-pam.md)** (2026-11-06): Azure Key Vault is a managed service with built-in replication, so the lab needs no self-run vault cluster. Kept as the record of the rehearsal. Was: Accepted (lab). **RAN · harness** (local Docker) on 2026-10-20: a separate 3-node rehearsal cluster holding test markers, leader failover, a timed snapshot-restore drill and a rolling-upgrade rehearsal. It is not the single-node vault that holds the PAM flow's AD credentials. Not built on Azure: no Key Vault seal, no snapshot schedule and no second site. **Partly supersedes ADR 0007** on the production unseal: auto-unseal only, because Shamir is rejected below.
 - **Date:** 2026-10-20
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
 
@@ -17,7 +17,7 @@ and the only way in is the RID-500 break-glass account. If the vault's data
 is lost, every password it rotated is lost with it.
 
 The lab vault is a single node with one unseal key (risk R09). ADR 0007
-chose Vault as the CyberArk stand-in and left the production unseal open
+chose Vault as the PAM vault stand-in and left the production unseal open
 (Shamir or auto-unseal). This ADR
 decides how a self-run vault survives losing a node, a disk or the whole
 cluster. Whether to buy a SaaS PAM instead is a separate question, in

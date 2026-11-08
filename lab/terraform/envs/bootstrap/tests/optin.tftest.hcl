@@ -64,7 +64,14 @@ mock_provider "azurerm" {
     defaults = {
       id              = "/subscriptions/22222222-2222-2222-2222-222222222222"
       subscription_id = "22222222-2222-2222-2222-222222222222"
+      tenant_id       = "33333333-3333-3333-3333-333333333333"
     }
+  }
+  mock_resource "azurerm_key_vault" {
+    defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab-cicd/providers/Microsoft.KeyVault/vaults/kv-idlab-cicd-test" }
+  }
+  mock_resource "azurerm_role_definition" {
+    defaults = { role_definition_resource_id = "/subscriptions/22222222-2222-2222-2222-222222222222/providers/Microsoft.Authorization/roleDefinitions/6c1f3d2e-8a47-4b9e-9c35-2f6a0e7b4d91" }
   }
   mock_data "azurerm_storage_account" {
     defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab-tfstate/providers/Microsoft.Storage/storageAccounts/stidlabtfstate" }
@@ -109,6 +116,20 @@ run "defaults_add_nothing" {
   assert {
     condition     = length(module.azure_guardrails) == 0 && output.azure_guardrails == null
     error_message = "no Azure Policy guardrail is assigned by default"
+  }
+  assert {
+    condition     = length(azurerm_key_vault.pipeline_config) == 0 && length(azurerm_role_assignment.pipeline_config_reader) == 0 && output.pipeline_config_vault_name == null
+    error_message = "the pipeline config vault must not exist by default"
+  }
+  # Least privilege (least-privilege.tf): default keeps the first-deploy
+  # subscription scope; nothing else is created.
+  assert {
+    condition     = azurerm_role_assignment.apply_contributor.scope == "/subscriptions/22222222-2222-2222-2222-222222222222" && azurerm_role_assignment.apply_rbac_admin_constrained.scope == "/subscriptions/22222222-2222-2222-2222-222222222222"
+    error_message = "APPLY keeps subscription scope by default (first deployment)"
+  }
+  assert {
+    condition     = length(azurerm_role_definition.lab_vm_operator) == 0 && length(azurerm_pim_eligible_role_assignment.lab_vm_operator) == 0 && length(azurerm_management_lock.cannot_delete) == 0
+    error_message = "no custom role, eligibility or lock by default"
   }
   # config-drift.yml (schedule on main) signs in as PLAN: the main-ref
   # subject must be in every bootstrap apply, or it fails with AADSTS700213.
@@ -398,4 +419,177 @@ run "evidence_delete_lock_needs_the_storage_account" {
   }
 
   expect_failures = [data.azurerm_storage_account.evidence]
+}
+
+# Pipeline config vault (pipeline-config.tf): the five privacy values the
+# workflows read over OIDC instead of from GitHub secrets.
+run "pipeline_config_vault_opt_in" {
+  command = plan
+
+  variables {
+    enable_pipeline_config_vault = true
+    pipeline_config_vault_name   = "kv-idlab-cicd-test"
+    log_analytics_workspace_id   = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.OperationalInsights/workspaces/loga-idlab"
+  }
+
+  assert {
+    condition     = azurerm_key_vault.pipeline_config[0].rbac_authorization_enabled && azurerm_key_vault.pipeline_config[0].purge_protection_enabled
+    error_message = "the pipeline config vault is RBAC-only and purge-protected"
+  }
+  assert {
+    condition     = azurerm_resource_group.pipeline_config[0].name == "rg-identity-lab-cicd"
+    error_message = "the vault lives in its own RG, not in rg-identity-lab (APPLY's) or the locked tfstate RG"
+  }
+  # Exactly PLAN and APPLY, read-only (Key Vault Secrets User by id), nobody else.
+  assert {
+    condition = (
+      length(azurerm_role_assignment.pipeline_config_reader) == 2
+      && alltrue([for a in azurerm_role_assignment.pipeline_config_reader : endswith(a.role_definition_id, "/4633458b-17de-408a-b874-0445c86b69e6")])
+    )
+    error_message = "only PLAN and APPLY may read the vault, with Key Vault Secrets User"
+  }
+  assert {
+    condition     = length(azurerm_role_assignment.pipeline_config_writer) == 0
+    error_message = "no writer grant unless one is named"
+  }
+  assert {
+    condition     = length(azurerm_monitor_diagnostic_setting.pipeline_config) == 1
+    error_message = "every read is logged to loga-idlab when the workspace is known"
+  }
+}
+
+run "pipeline_config_vault_needs_a_valid_name" {
+  command = plan
+
+  variables {
+    enable_pipeline_config_vault = true
+    pipeline_config_vault_name   = ""
+  }
+
+  expect_failures = [azurerm_key_vault.pipeline_config]
+}
+
+run "pipeline_config_writer_is_a_named_human" {
+  command = plan
+
+  variables {
+    enable_pipeline_config_vault      = true
+    pipeline_config_vault_name        = "kv-idlab-cicd-test"
+    pipeline_config_writer_object_ids = ["a0a0a0a0-0000-4000-8000-0000000000ab"]
+  }
+
+  assert {
+    condition     = length(azurerm_role_assignment.pipeline_config_writer) == 1 && endswith(azurerm_role_assignment.pipeline_config_writer["a0a0a0a0-0000-4000-8000-0000000000ab"].role_definition_id, "/b86a8fe4-44ce-4948-aee5-eccb2c155cd7")
+    error_message = "the named writer gets Key Vault Secrets Officer on the vault"
+  }
+}
+
+# ---- Least privilege on Azure (least-privilege.tf) ----------------------------
+run "apply_scope_resource_group_narrows_both_roles" {
+  command = plan
+
+  variables {
+    apply_azure_scope = "resource_group"
+  }
+
+  assert {
+    condition     = azurerm_role_assignment.apply_contributor.scope == "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab"
+    error_message = "APPLY's Contributor is on rg-identity-lab only"
+  }
+  assert {
+    condition     = azurerm_role_assignment.apply_rbac_admin_constrained.scope == "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab" && azurerm_role_assignment.apply_rbac_admin_constrained.condition != ""
+    error_message = "APPLY's RBAC Administrator is on rg-identity-lab only and keeps its ABAC condition"
+  }
+}
+
+run "apply_scope_typo_is_refused" {
+  command = plan
+
+  variables {
+    apply_azure_scope = "rg"
+  }
+
+  expect_failures = [var.apply_azure_scope]
+}
+
+run "lab_vm_operator_is_eligible_only_and_read_start_stop" {
+  command = plan
+
+  variables {
+    enable_lab_vm_operator              = true
+    lab_vm_operator_eligible_object_ids = ["a0a0a0a0-0000-4000-8000-0000000000aa"]
+  }
+
+  # No write and nothing on Microsoft.Network or Microsoft.Authorization.
+  assert {
+    condition = alltrue([
+      for a in one(azurerm_role_definition.lab_vm_operator[0].permissions).actions :
+      (endswith(a, "/read") || endswith(a, "/action")) && !startswith(a, "Microsoft.Network/") && !startswith(a, "Microsoft.Authorization/") && !strcontains(a, "runCommand") && !strcontains(a, "extensions")
+    ])
+    error_message = "Contoso Lab VM Operator may only read and run start/restart/deallocate/query actions"
+  }
+  assert {
+    condition     = contains(one(azurerm_role_definition.lab_vm_operator[0].permissions).actions, "Microsoft.Compute/virtualMachines/start/action") && contains(one(azurerm_role_definition.lab_vm_operator[0].permissions).actions, "Microsoft.Compute/virtualMachines/deallocate/action")
+    error_message = "the operations task is start and deallocate"
+  }
+  assert {
+    condition     = azurerm_role_definition.lab_vm_operator[0].assignable_scopes == tolist(["/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab"])
+    error_message = "the custom role is assignable only on the lab RG"
+  }
+  assert {
+    condition     = length(azurerm_pim_eligible_role_assignment.lab_vm_operator) == 1 && one(azurerm_role_management_policy.lab_vm_operator[0].activation_rules).require_multifactor_authentication && one(azurerm_role_management_policy.lab_vm_operator[0].activation_rules).require_justification
+    error_message = "one ELIGIBLE assignment, activation needs MFA and a reason"
+  }
+  assert {
+    condition     = one(azurerm_role_management_policy.lab_vm_operator[0].active_assignment_rules).expiration_required
+    error_message = "a direct active assignment of the role must expire"
+  }
+  # No access review covers named eligibility: it expires instead (Greptile P2).
+  assert {
+    condition     = one(azurerm_role_management_policy.lab_vm_operator[0].eligible_assignment_rules).expiration_required && one(azurerm_role_management_policy.lab_vm_operator[0].eligible_assignment_rules).expire_after == "P180D"
+    error_message = "eligibility for the VM operator role must expire (default 180 days)"
+  }
+  assert {
+    condition     = one(one(azurerm_pim_eligible_role_assignment.lab_vm_operator["a0a0a0a0-0000-4000-8000-0000000000aa"].schedule).expiration).duration_days == 180
+    error_message = "each eligible assignment carries the same 180-day expiry"
+  }
+}
+
+run "lab_vm_operator_activation_cap" {
+  command = plan
+
+  variables {
+    enable_lab_vm_operator                  = true
+    lab_vm_operator_eligible_object_ids     = ["a0a0a0a0-0000-4000-8000-0000000000aa"]
+    lab_vm_operator_activation_max_duration = "PT8H"
+  }
+
+  expect_failures = [var.lab_vm_operator_activation_max_duration]
+}
+
+run "locks_cannot_delete_on_named_resources" {
+  command = plan
+
+  variables {
+    cannot_delete_lock_resource_ids = {
+      "kv-idlab" = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.KeyVault/vaults/kv-idlab-test"
+    }
+  }
+
+  assert {
+    condition     = azurerm_management_lock.cannot_delete["kv-idlab"].lock_level == "CanNotDelete" && azurerm_management_lock.cannot_delete["kv-idlab"].name == "lock-kv-idlab-cannot-delete"
+    error_message = "a CanNotDelete lock on each named resource"
+  }
+}
+
+run "no_lock_on_the_log_workspace" {
+  command = plan
+
+  variables {
+    cannot_delete_lock_resource_ids = {
+      "loga" = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.OperationalInsights/workspaces/loga-idlab"
+    }
+  }
+
+  expect_failures = [var.cannot_delete_lock_resource_ids]
 }

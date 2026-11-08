@@ -14,7 +14,7 @@ Plain reading of the table: **Yes** means the lab did it in a real tenant and ha
 | PIM, just-in-time admin, break-glass, Tier-0 | 7 | Yes | `modules/pim`, 8 Tier-0 and 8 Tier-1 groups, break-glass drill script |
 | Identity governance: reviews, entitlements, lifecycle, separation of duties | 7 | Yes | `modules/entitlement`, 9 SoD rules, access reviews, midPoint campaign |
 | Runbooks, SOPs, documentation | 7 | Yes | `lab/docs/runbooks`, `your-turn` run sheets |
-| Commercial PAM (CyberArk, Delinea, BeyondTrust) | 6 | Partly | Vault and Guacamole stand in for CyberArk; vocabulary map in `STAND-INS.md` |
+| Commercial PAM (postings name CyberArk, Delinea, BeyondTrust) | 6 | Partly | The lab chose Microsoft-native PAM instead (ADR 0036): Key Vault, Bastion session recording, Windows LAPS, Intune EPM, PIM. No PAM vendor product is in the lab; the general PAM vocabulary map is in `lab/pam/README.md` |
 | Detection, SIEM, incident response | 6 | Yes | 24 detections as code, 17 scheduled in Sentinel, containment playbook; Splunk twins of the first 22 proven on a synthetic replay (22 of 22 fire, E61); Defender for Identity staged as the native AD-attack detector (ADR 0023), with the SecurityEvent rules as its portable twins |
 | Joiner, mover, leaver automation | 6 | Yes | Leaver gone from AD in 7 s, Entra under 3 min, AWS in 9 min (E52) |
 | Audit evidence for HIPAA, SOX, HITRUST | 6 | Yes | Evidence pack with SHA-256 manifest in write-once storage (lab policy Unlocked by rule; an account delete lock is BUILT, not applied; production locks the policy), compliance crosswalk |
@@ -27,7 +27,7 @@ Plain reading of the table: **Yes** means the lab did it in a real tenant and ha
 
 ## Gaps, in the order postings care about them
 
-1. **Commercial PAM vocabulary.** Postings say CyberArk, Delinea, BeyondTrust. The lab's vault does the same jobs. Fix: the term map in `STAND-INS.md` (Safe, CPM, PSM, PVWA) and, when time allows, Delinea Secret Server Free vaulting one DC01 account.
+1. **Commercial PAM vocabulary.** Postings name CyberArk, Delinea and BeyondTrust. The lab decided against a PAM vendor (ADR 0036, 2026-11-06) and does the same jobs with Microsoft products: Key Vault holds secrets, Bastion records admin sessions, Windows LAPS rotates local admin passwords, Intune EPM gives one app admin rights for a short time, and PIM makes roles just-in-time. The general PAM term map (safe, rotation, recorded session) is in `lab/pam/README.md`.
 2. **Passwordless enforced, not just written.** Fix: register two passkeys per admin account, run the passwordless rollout script, graduate CA002 and CA021.
 3. **Clinical single sign-on.** Hospital postings mention Epic and Imprivata. Fix: a FIDO2 key with fast user switching on the Intune VM as the stand-in, documented as such.
 4. **Cross-tenant and multi-tenant.** Two postings. Fix: a second free developer tenant with cross-tenant access settings as Terraform.

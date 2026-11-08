@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # dr-drill.sh - timed disaster-recovery drill for the Vault HA cluster
-# (CyberArk: DR Vault failover / "restore the Vault from backup" test).
+# (a "restore the vault from backup" test).
 # Measures the two numbers a DR plan is judged on, by doing it:
 #
 #   RPO  data written AFTER the last snapshot is lost. The drill writes one

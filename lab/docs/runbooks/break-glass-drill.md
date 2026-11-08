@@ -150,9 +150,11 @@ Record every time in UTC.
    late row is never missed (it used to re-alert every 5 minutes over the
    hour), and an alert that
    joins the open incident runs the notify playbook again (automation rule
-   "notify again when an alert joins an open incident"): a second drill
-   sign-in inside the hour gets its own Teams card and ServiceNow ticket, and
-   so can a late batch of rows from the same sign-in. The Verify phase re-runs the
+   "notify again when an alert joins an open incident"). Since 2026-11-07
+   the incident groups by the account for 24 hours, and the playbook adds a
+   work note to the incident's open ServiceNow ticket instead of opening a
+   new one or posting a second Teams card: one drill sign-in, or a late
+   batch of its rows, gives one incident, one card and one ticket. The Verify phase re-runs the
    preflight; re-run `01-Verify-Baseline.ps1` too. Link the Sentinel
    incident(s) and INC number(s) to the change ticket and close them as
    "drill".

@@ -67,9 +67,9 @@ never a detection.
 ## What was fixed while porting
 
 The linter, canary and risky fixture come from the author's earlier
-Conjur-Kubernetes-KubiScan lab. The Conjur and KubiScan halves of that lab
-were left behind (this lab already has a Conjur stand-in in `lab/pam` and
-Vault on kind here). Running the old linter on the k3s cluster above found
+Kubernetes-KubiScan lab. The secrets-manager and KubiScan halves of that lab
+were left behind (ADR 0036 makes Azure Key Vault the lab's secrets store,
+and Vault on kind stands in for it here). Running the old linter on the k3s cluster above found
 three faults, all fixed here and pinned by tests that fail against the old
 code:
 

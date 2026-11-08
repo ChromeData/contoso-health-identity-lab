@@ -1,0 +1,92 @@
+{
+ "cleanup": [
+  "deleted sc_req_item RITM0010008",
+  "deleted sc_request REQ0010008",
+  "deleted sc_req_item RITM0010009",
+  "deleted sc_request REQ0010009",
+  "adminRemove ICU float for Sofia (7414800c-8d05-4b43-8a16-71f3cfbace48)"
+ ],
+ "instance": "https://dev459905.service-now.com",
+ "run": "20261107T185146Z",
+ "steps": {
+  "report": {
+   "shots": [
+    "01-nurse-request-form.png",
+    "02-nurse-request-submitted.png",
+    "03-manager-my-approvals.png",
+    "04-manager-approved.png",
+    "20-iam-queue.png",
+    "21-access-requests-by-status.png"
+   ]
+  },
+  "uc1": {
+   "after_submit": {
+    "approval": "requested",
+    "approvals": 1,
+    "stage": "waiting_for_approval"
+   },
+   "approved": "2026-11-07T18:52:35Z",
+   "approver": "grace.mwangi@contosohealthlab.com",
+   "closed": "2026-11-07T18:55:41Z",
+   "entra_request": {
+    "completedDateTime": "2026-11-07T18:55:19.607Z",
+    "createdDateTime": "2026-11-07T18:52:35.193Z",
+    "id": "e8b4d79c-b2fa-4d1c-965d-559cb3c43eaf",
+    "justification": "RITM0010008 (ServiceNow): approved by Grace Mwangi. Reason: Covering ICU night shifts from the float pool while two ICU nurses are on leave.",
+    "requestType": "adminAdd",
+    "requestor": "TEST - ServiceNow Access Fulfilment (throwaway 2026-11-07, delete after proof)",
+    "schedule": {
+     "expiration": {
+      "duration": null,
+      "endDateTime": "2026-11-22T07:59:59Z",
+      "type": "afterDateTime"
+     },
+     "recurrence": null,
+     "startDateTime": "2026-11-07T18:52:32Z"
+    },
+    "state": "delivered",
+    "status": "Fulfilled"
+   },
+   "final": {
+    "approval": "approved",
+    "calendar_duration": "1970-01-01 00:03:33",
+    "closed_at": "2026-11-07 18:55:40",
+    "correlation_display": "Entra ID Governance - delivered",
+    "opened_at": "2026-11-07 18:52:07",
+    "state": "3"
+   },
+   "member_of_App-ICU-CriticalCare-Users": true,
+   "request": "REQ0010008",
+   "ritm": "RITM0010008",
+   "submitted": "2026-11-07T18:51:46Z",
+   "work_notes": [
+    "Approved by Grace Mwangi (manager). Sending to Microsoft Entra ID Governance.",
+    "Sent to Microsoft Entra ID Governance: add Sofia Reyes to access package \"ICU - Float Access\" from 2026-11-07T18:52:32Z to 2026-11-22T07:59:59Z.\nEntra request id: e8b4d79c-b2fa-4d1c-965d-559cb3c43eaf (state: submitted). The ticket number is in the Entra justification.",
+    "Microsoft Entra ID Governance reports Delivered (request e8b4d79c-b2fa-4d1c-965d-559cb3c43eaf). Closed automatically."
+   ]
+  },
+  "uc1b": {
+   "after_submit": {
+    "approval": "requested",
+    "approvals": 1,
+    "stage": "waiting_for_approval"
+   },
+   "approved": "2026-11-07T18:56:31Z",
+   "approver": "grace.mwangi@contosohealthlab.com",
+   "final": {
+    "approval": "approved",
+    "assignment_group": "de2dc8eb93d41f5025167bfdfaba1091",
+    "correlation_display": "",
+    "state": "2"
+   },
+   "marcus_pharmacy_assignments": 0,
+   "request": "REQ0010009",
+   "ritm": "RITM0010009",
+   "submitted": "2026-11-07T18:55:47Z",
+   "work_notes": [
+    "Approved by Grace Mwangi (manager). Sending to Microsoft Entra ID Governance.",
+    "Automatic fulfilment stopped: Graph POST /identityGovernance/entitlementManagement/assignmentRequests -> 400 InvalidRequest: {\"groupMemberships\":[\"All-ICU\"],\"accessPackageAssignments\":[\"ICU - Critical Care Apps\"]}\nAssigned to IAM Operations for a person to finish."
+   ]
+  }
+ }
+}

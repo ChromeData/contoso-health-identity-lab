@@ -28,7 +28,10 @@
 # Tier 0: RoleManagement.ReadWrite.Directory lets it assign itself any
 # directory role (Security Administrator is enough to delete the diagnostic
 # setting; Global Administrator is everything), and subscription Contributor
-# lets it delete or cap loga-idlab, which envs/dev owns. What keeps PR code
+# lets it delete or cap loga-idlab, which envs/dev owns (least-privilege.tf
+# can narrow that Contributor to rg-identity-lab and puts delete locks it
+# cannot remove on the two vaults; the evidence store's lock is PR #223's
+# enable_evidence_delete_lock). What keeps PR code
 # away from APPLY is the reviewer-gated `prod` environment and its
 # environment-scoped OIDC subject - not this file.
 #
@@ -171,15 +174,19 @@ resource "azurerm_role_assignment" "plan_reader" {
 # Virtual Machine Administrator Login (Contributor cannot create role
 # assignments at all).
 # -----------------------------------------------------------------------------
+# Scope: local.apply_azure_scope_id (least-privilege.tf). "resource_group"
+# (this lab) = rg-identity-lab only, where every Azure resource envs/dev
+# manages lives; "subscription" only for a first deployment, before
+# envs/dev has created that RG.
 resource "azurerm_role_assignment" "apply_contributor" {
-  scope                = data.azurerm_subscription.current.id
+  scope                = local.apply_azure_scope_id
   role_definition_name = "Contributor"
   principal_id         = local.apply_sp
   principal_type       = "ServicePrincipal"
 }
 
 resource "azurerm_role_assignment" "apply_rbac_admin_constrained" {
-  scope                = data.azurerm_subscription.current.id
+  scope                = local.apply_azure_scope_id
   role_definition_name = "Role Based Access Control Administrator"
   principal_id         = local.apply_sp
   principal_type       = "ServicePrincipal"
