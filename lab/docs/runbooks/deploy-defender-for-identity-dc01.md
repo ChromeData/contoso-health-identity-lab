@@ -39,7 +39,8 @@ start the trial, provision MDI, or install the sensor. Turn the flag on only
 
 - `enable_dc = true` and DC01 built and promoted (`lab/scripts/dc`,
   `lab/terraform/modules/dc-vm`). The DC is reached by `az vm run-command`
-  (build) and by hand over RDP to its allowlisted public IP (ADR 0013); see
+  (build) and by hand through Azure Bastion (no public IP since the ADR 0013
+  amendment of 2026-11-08); see
   `lab/scripts/dc/README.md`.
 - `enable_sentinel = true` and Entra logs flowing (the connector is a Sentinel
   feature).
@@ -70,9 +71,9 @@ start the trial, provision MDI, or install the sensor. Turn the flag on only
    Install it on DC01. Reach DC01 the same way the build does: either run the
    silent installer through `az vm run-command invoke` / `run-on-dc.py` (no
    RDP; pass the access key as a protected parameter, the way
-   `04-Install-CloudSyncAgent.ps1` passes secrets), or by hand over RDP to the
-   DC's allowlisted public IP (`terraform -chdir=lab/terraform/envs/dev output
-   -raw dc_public_ip`, off camera, ADR 0013). Prefer run-command so no secret
+   `04-Install-CloudSyncAgent.ps1` passes secrets), or by hand through an Azure
+   Bastion session (off camera; DC01 has no public IP, ADR 0013 amendment).
+   Prefer run-command so no secret
    reaches a command line. `verify:` the silent-install flags and that the
    sensor service starts (Microsoft Learn, "Install the sensor").
 

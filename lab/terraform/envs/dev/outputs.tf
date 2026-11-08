@@ -245,7 +245,7 @@ output "dc_private_ip" {
 }
 
 output "dc_public_ip" {
-  description = "DC01 public IP (NSG admits operator_ip_ranges only)."
+  description = "DC01 public IP: null except while enable_adfs_https (443 from operator_ip_ranges only). DC01 has no public IP otherwise; RDP and LDAPS are never open to the internet (ADR 0013 amendment 2026-11-08). People reach DC01 through Azure Bastion, scripts through Run Command."
   value       = one(module.dc_vm[*].public_ip)
   sensitive   = true
 }
@@ -507,6 +507,11 @@ output "servicenow_provisioning_job_enabled" {
 output "servicenow_saml_signing_cert_activation_command" {
   description = "S1a: the Update-MgServicePrincipal line that activates the ServiceNow SAML signing certificate (azuread cannot set preferredTokenSigningKeyThumbprint)."
   value       = one(module.apps[*].servicenow_saml_signing_cert_activation_command)
+}
+
+output "leaver_extension_logic_app_name" {
+  description = "ADR 0029 leaver Logic App name (null while enable_lcw_leaver_extension is off): pass it to New-LifecycleWorkflows.ps1 -LeaverExtensionLogicAppName."
+  value       = one(module.leaver_extension[*].logic_app_name)
 }
 
 output "claims_viewer_client_id" {
