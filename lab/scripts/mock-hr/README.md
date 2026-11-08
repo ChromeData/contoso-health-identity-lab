@@ -93,7 +93,9 @@ once the account exists: Lifecycle Workflows, access packages, CA and PIM.
   runs (Greptile, PR #229). Now `hr-feed.yml` passes
   `-IssuedFromGitHistory`: the sender replays every committed version of
   `hr_feed.csv`, oldest first, and a worker keeps the first UPN issued to
-  them. The committed, protected history of the file (no force push, no
+  them. A later UPN for the same worker (an HR `upn` value that replaced the
+  derived name) stays reserved for that worker too. A feed with staged or
+  unstaged edits is refused: commit the HR change first. The committed, protected history of the file (no force push, no
   deletion: the `hr-feed` ruleset) is the lasting register. A shallow
   checkout or an uncommitted file stops the run before anything is sent. A
   version the sender refused issued nothing and is skipped. A version that

@@ -594,6 +594,30 @@ Describe 'Issued UPNs survive between runs: rebuilt from the git history of the 
         { & $script:Inbound -CsvPath $script:Feed -StatePath (Get-StatePath) -IssuedFromGitHistory -WhatIf -WarningAction SilentlyContinue } | Should -Throw '*not committed*'
     }
 
+    It 'a LATER upn column value stays reserved too, after the row is gone (Greptile on PR #261)' {
+        # Committed first with a derived name (never sent), then HR gave an
+        # explicit upn, and that is the name the account got. Then the row went.
+        Save-Version @($script:H, '100400,Kim,Park,Nursing,Registered Nurse,200015,joiner,2026-11-09,')
+        Save-Version @(($script:H + ',upn'), '100400,Kim,Park,Nursing,Registered Nurse,200015,joiner,2026-11-09,,kim.park.rn@contosohealthlab.com')
+        Save-Version @(($script:H + ',upn'), '100800,Kim,Park,Nursing,Registered Nurse,200015,joiner,2026-11-10,,')
+        (Get-RunnerUserNames)['100800'] | Should -Be 'kim.park2@contosohealthlab.com'
+        Save-Version @(($script:H + ',upn'), '100800,Kim,Park,Nursing,Registered Nurse,200015,joiner,2026-11-10,,kim.park.rn@contosohealthlab.com')
+        { Get-RunnerUserNames } | Should -Throw '*issued to worker 100400*'
+    }
+
+    It 'a feed with UNSTAGED edits stops the run: only committed versions are in the record (Greptile on PR #261)' {
+        Save-Version @($script:H, '100400,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        Add-Content -LiteralPath $script:Feed -Value '100600,John,Smith,Nursing,Registered Nurse,200015,joiner,2026-11-09,'
+        { Get-RunnerUserNames } | Should -Throw '*differs from the last commit*'
+    }
+
+    It 'a feed with STAGED edits stops the run too' {
+        Save-Version @($script:H, '100400,John,Smith,Nursing,Registered Nurse,200015,active,2020-01-01,')
+        Add-Content -LiteralPath $script:Feed -Value '100600,John,Smith,Nursing,Registered Nurse,200015,joiner,2026-11-09,'
+        git -C $script:Repo add hr_feed.csv
+        { Get-RunnerUserNames } | Should -Throw '*differs from the last commit*'
+    }
+
     It 'hr-feed.yml sends with -IssuedFromGitHistory and checks out the full history' {
         $wf = Get-Content -Raw -LiteralPath ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' '..' '..' '.github' 'workflows' 'hr-feed.yml')))
         $wf | Should -Match 'IssuedFromGitHistory = \$true'
