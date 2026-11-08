@@ -8,6 +8,7 @@
 #   lab/scripts/operator/op bash lab/bastion/capture.sh down    # ~5-10 min
 #   lab/scripts/operator/op bash lab/bastion/capture.sh playback-on  # just before the reviewer plays it
 #   lab/scripts/operator/op bash lab/bastion/capture.sh status
+#   lab/scripts/operator/op bash lab/bastion/capture.sh owner-steps  # prints the one-time owner step
 #
 # WHY a script and not Terraform: Bastion Premium costs $0.45 an hour (Azure
 # retail price list, eastus2, 2026-11-07), about $324 a month if it is left
@@ -17,48 +18,54 @@
 # makes "up" and "down" one command each, as the operator. It owns ONLY the
 # objects it creates, which carry the tag  purpose=bastion-capture.
 #
-# What "up" creates (in rg-identity-lab, next to DC01):
-#   * subnet AzureBastionSubnet 10.42.250.0/26 in vnet-identity-lab (Bastion
-#     requires that exact name and at least a /26). Terraform's VNet has no
-#     inline subnets, so an extra subnet is not drift.
-#   * public IP pip-bastion-capture (Standard, static): Bastion's front door.
-#   * storage account stbstrec<random> + container "recordings": no public
-#     blobs, no shared keys, no versioning, no immutability policy (Learn:
-#     recording fails with versioning or immutability on). CORS allows GET
-#     from the Bastion's own bst-*.bastion.azure.com name only, so the
-#     portal's player can read the recordings.
-#   * user-assigned identity id-bastion-recording with Storage Blob Data
-#     Contributor on THAT container only: Bastion writes recordings with it,
-#     no SAS token exists.
-#   * bastion-capture: SKU Premium, enableSessionRecording, recordings to the
-#     container through the identity (API 2026-03-01
-#     sessionRecordingConfiguration). Native-client tunnelling stays OFF:
-#     Learn says recording covers browser sessions only, so the native
-#     client would be an unrecorded side door.
-#   * PIM for Azure resources: adm-ava.lin becomes ELIGIBLE (not active) for
-#     Reader on rg-identity-lab for 4 hours. Reader on the VM, its NIC and
-#     the Bastion is all a Bastion connection needs (Learn, "Bastion
-#     connection permissions"). She holds no Azure role before this.
-#   * the reviewer adm-mei.tanaka gets Storage Blob Data Reader on the
-#     container, Reader on the storage account and on the Bastion, ACTIVE for
-#     4 hours (time-bound),
-#     to play the recording back. The admin who was recorded cannot read or
-#     delete her own recording.
+# ACCESS MODEL SINCE ADR 0030 (2026-11-08). The operator is read-only
+# between owner-opened write sessions and can write no role assignment or
+# PIM request outside the sandbox. So:
+#   * the operator runs `up`/`down` during a write session: the session role
+#     (subscription) covers the subnet in the lab VNet and starting DC01; the
+#     sandbox grants (envs/operator sandbox.tf) cover everything else, which
+#     lives in rg-lab-sandbox;
+#   * the ADMIN is adm-presenter through its EXISTING PIM-Demo-Readers
+#     eligibility (PIM for Groups; the group holds Reader on the subscription,
+#     which is all a Bastion connection needs). No new eligibility is made;
+#   * the REVIEWER (adm-mei.tanaka) is made ELIGIBLE once, by the OWNER, for
+#     Reader, Storage Blob Data Reader and Storage Account Key Operator
+#     Service Role on rg-lab-sandbox (`capture.sh owner-steps` prints the
+#     exact commands). She activates them herself, with a reason, per capture.
+#
+# What "up" creates:
+#   * subnet AzureBastionSubnet 10.42.250.0/26 in vnet-identity-lab (rg-
+#     identity-lab: Bastion requires that exact name and at least a /26).
+#     Terraform's VNet has no inline subnets, so an extra subnet is not drift.
+#   * in rg-lab-sandbox, all tagged purpose=bastion-capture:
+#     - public IP pip-bastion-capture (Standard, static): Bastion's front door;
+#     - storage account stbstrec<random> + container "recordings": no public
+#       blobs, no shared keys, no versioning, no immutability policy (Learn:
+#       recording fails with versioning or immutability on). CORS allows GET
+#       from the Bastion's own bst-*.bastion.azure.com name only;
+#     - user-assigned identity id-bastion-recording with Storage Blob Data
+#       Contributor on THAT container only (a data role the sandbox grant may
+#       assign): Bastion writes recordings with it, no SAS token exists;
+#     - bastion-capture: SKU Premium, enableSessionRecording, recordings to
+#       the container through the identity (API 2026-03-01
+#       sessionRecordingConfiguration). Native-client tunnelling stays OFF:
+#       Learn says recording covers browser sessions only.
 #   * DC01 is started if it was deallocated; "down" deallocates it again
 #     only in that case.
 #
 # What "down" removes: the Bastion, its public IP, the subnet, the identity
-# and its role assignment, the PIM eligibility and the reviewer's
-# assignments. The storage account and its recordings stay (pennies a month)
-# until the owner deletes them: `capture.sh purge-recordings`.
+# and its role assignment; shared-key access back off. The storage account
+# and its recordings stay (pennies a month) until `capture.sh
+# purge-recordings`. The reviewer's eligibilities stay (owner-managed).
 #
 # PLAYBACK NEEDS THE ACCOUNT KEY (seen live 2026-11-07, not what Learn says):
 # Learn says viewers need Storage Blob Data Reader. The portal's player
 # instead calls storageAccounts/listKeys (403 without it) and builds an
 # account-key SAS, which also needs shared-key access ON. So `playback-on`
-# turns shared-key access on and gives the reviewer "Storage Account Key
-# Operator Service Role" for 1 hour; `down` turns shared-key access off again.
-# The cost: for that hour the reviewer could also delete recordings. Production
+# turns shared-key access on; the reviewer activates her eligible "Storage
+# Account Key Operator Service Role" for the playback; `down` turns shared-key
+# access off again. The cost: while that role is active the reviewer could
+# also delete recordings. Production
 # answer: keep recordings in a separate account with an immutable copy
 # (blob inventory or object replication to a WORM container), because the
 # recording container itself must have no immutability policy (Learn).
@@ -70,7 +77,8 @@ export PYTHONWARNINGS=ignore   # az 2.91 on Python 3.14 prints a SyntaxWarning; 
 
 SUB="de0b2a93-1c62-47b3-aaaf-1bdd1939a274"
 TENANT="86a2e327-4951-4348-a3c4-6f4b79ffd8f2"
-RG="rg-identity-lab"
+RG="rg-identity-lab"                 # DC01 and the VNet (the subnet goes here)
+SANDBOX="${BASTION_SANDBOX_RG:-rg-lab-sandbox}"   # everything else (envs/operator sandbox.tf)
 LOC="eastus2"
 VNET="vnet-identity-lab"
 SUBNET_PREFIX="10.42.250.0/26"
@@ -79,16 +87,16 @@ PIP="pip-bastion-capture"
 UAMI="id-bastion-recording"
 CONTAINER="recordings"
 VM="vm-dc01"
-ADMIN_UPN="adm-ava.lin@contosohealthlab.onmicrosoft.com"
+# The admin is adm-presenter through its existing PIM-Demo-Readers
+# eligibility; prove.mjs signs in as it. This script grants it nothing.
 REVIEWER_UPN="adm-mei.tanaka@contosohealthlab.onmicrosoft.com"
 STATE="${BASTION_CAPTURE_STATE:-$HOME/.contoso-operator/session/bastion-capture.json}"
 API_BASTION="2026-03-01"
-READER="acdd72a7-3385-48ef-bd42-f606fba81ae7"
-BLOB_READER="2a2b9908-6ea1-4ae2-8e65-a410df84e7d1"
 BLOB_CONTRIB="ba92f5b4-2d11-453d-a403-e96b0029c9fe"
 TAGS=(purpose=bastion-capture owner=lab-operator delete-after=capture)
 ARM="https://management.azure.com"
-SCOPE_RG="/subscriptions/$SUB/resourceGroups/$RG"
+SCOPE_SB="/subscriptions/$SUB/resourceGroups/$SANDBOX"
+
 
 T0=$(date +%s)
 log() { printf '[%s +%4ss] %s\n' "$(date -u +%H:%M:%SZ)" "$(( $(date +%s) - T0 ))" "$*"; }
@@ -111,50 +119,25 @@ read -r sub tenant <<<"$acct"
 oid_of() { az ad user show --id "$1" --query id -o tsv; }
 guid() { python3 -I -c 'import uuid; print(uuid.uuid4())'; }
 
-# PIM for Azure resources, through ARM roleEligibilityScheduleRequests /
-# roleAssignmentScheduleRequests (api 2020-10-01). The operator is Owner on
-# the subscription, which allows these admin requests.
-pim_request() {  # pim_request <kind: Eligibility|Assignment> <scope> <roleGuid> <principalId> <AdminAssign|AdminRemove> <justification>
-  local kind="$1" scope="$2" role="$3" pid="$4" type="$5" why="$6" path
-  [[ "$kind" == Eligibility ]] && path=roleEligibilityScheduleRequests || path=roleAssignmentScheduleRequests
-  local body
-  body="$(python3 -I -c 'import json,sys,datetime
-sub,scope,role,pid,typ,why=sys.argv[1:7]
-p={"principalId":pid,"roleDefinitionId":f"/subscriptions/{sub}/providers/Microsoft.Authorization/roleDefinitions/{role}",
-   "requestType":typ,"justification":why}
-if typ=="AdminAssign":
-  p["scheduleInfo"]={"startDateTime":datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                     "expiration":{"type":"AfterDuration","duration":"PT"+sys.argv[7]+"H"}}
-print(json.dumps({"properties":p}))' "$SUB" "$scope" "$role" "$pid" "$type" "$why" "${KEY_HOURS:-4}")"
-  az rest --method PUT --url "$ARM$scope/providers/Microsoft.Authorization/$path/$(guid)?api-version=2020-10-01" \
-    --body "$body" --query 'properties.status' -o tsv
+# Preflight (ADR 0030): the write session must be open. The session role on
+# the subscription (subnet, DC01 start) and both sandbox grants must be active.
+need_session() {
+  local op_oid sb roles sub_roles
+  op_oid="$(az ad sp show --id "$(az account show --query user.name -o tsv)" --query id -o tsv)" \
+    || die "cannot resolve the operator's object id"
+  sb="$(az group show -n "$SANDBOX" --query id -o tsv 2>/dev/null)" \
+    || die "sandbox resource group $SANDBOX not found: the owner applies envs/operator (sandbox.tf, ADR 0030)"
+  roles="$(az role assignment list --assignee "$op_oid" --scope "$sb" --query '[].roleDefinitionName' -o tsv | sort -u | tr '\n' ',')"
+  sub_roles="$(az role assignment list --assignee "$op_oid" --scope "/subscriptions/$SUB" --query '[].roleDefinitionName' -o tsv | sort -u | tr '\n' ',')"
+  [[ "$roles" == *"Contributor,"* && "$roles" == *"Role Based Access Control Administrator,"* && "$sub_roles" == *"Contoso Lab Operator Session,"* ]] \
+    || die "no operator write session (sandbox roles: ${roles:-none}; subscription roles: ${sub_roles:-none}): the owner opens one (envs/operator operator_write_session, ADR 0030)"
+  log "Write session: session role on the subscription, Contributor + constrained RBAC Administrator on $SANDBOX"
 }
 
-# grant <label> <pim_request args...>: run one PIM request, log it, and stop
-# the run unless Azure accepted it. (A grant inside $(...) in a log line would
-# hide a refusal: log would still succeed.)
-grant() {
-  local label="$1"; shift
-  local st
-  st="$(pim_request "$@" 2>&1 | tail -1)" || die "$label: Azure refused the request (${st:0:200})"
-  case "$st" in
-    Provisioned|Granted|PendingProvisioning|PendingAdminDecision|ScheduleCreated) log "$label: $st" ;;
-    *) die "$label: unexpected status '${st:0:200}'" ;;
-  esac
-}
-# revoke <label> <pim_request args...>: AdminRemove; "already gone" is fine,
-# anything else is reported (the read-back below then decides success).
-revoke() {
-  local label="$1"; shift
-  local out
-  if out="$(pim_request "$@" 2>&1)"; then log "$label: removed ($out)"
-  elif grep -qiE 'RoleAssignmentDoesNotExist|RoleEligibilityScheduleNotFound|does not exist|NotFound' <<<"$out"; then log "$label: already gone"
-  else echo "WARNING: $label: ${out:0:200}" >&2; fi
-}
 # Ownership: the script only adopts or deletes objects tagged purpose=bastion-capture.
 tag_of() { az resource show --ids "$1" --query 'tags.purpose' -o tsv 2>/dev/null || true; }
 
-bastion_state() { az rest --url "$ARM$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION?api-version=$API_BASTION" \
+bastion_state() { az rest --url "$ARM$SCOPE_SB/providers/Microsoft.Network/bastionHosts/$BASTION?api-version=$API_BASTION" \
   --query 'properties.provisioningState' -o tsv 2>/dev/null || echo absent; }
 
 cmd_status() {
@@ -164,6 +147,7 @@ cmd_status() {
 }
 
 cmd_up() {
+  need_session
   local s
   # --- DC01 --------------------------------------------------------------------
   local power; power="$(az vm get-instance-view -g "$RG" -n "$VM" --query "instanceView.statuses[?starts_with(code,'PowerState/')].code | [0]" -o tsv)"
@@ -188,14 +172,14 @@ cmd_up() {
     az network vnet subnet create -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet --address-prefixes "$SUBNET_PREFIX" -o none
     state_set subnet_created_by_capture yes
   fi
-  local pip_id="$SCOPE_RG/providers/Microsoft.Network/publicIPAddresses/$PIP"
-  if az network public-ip show -g "$RG" -n "$PIP" -o none 2>/dev/null; then
+  local pip_id="$SCOPE_SB/providers/Microsoft.Network/publicIPAddresses/$PIP"
+  if az network public-ip show -g "$SANDBOX" -n "$PIP" -o none 2>/dev/null; then
     [[ "$(tag_of "$pip_id")" == bastion-capture ]] || die "$PIP exists without tag purpose=bastion-capture: not adopting it"
   else
-    az network public-ip create -g "$RG" -n "$PIP" -l "$LOC" --sku Standard --allocation-method Static --tags "${TAGS[@]}" -o none
+    az network public-ip create -g "$SANDBOX" -n "$PIP" -l "$LOC" --sku Standard --allocation-method Static --tags "${TAGS[@]}" -o none
   fi
   if [[ "$(bastion_state)" != absent ]]; then
-    [[ "$(tag_of "$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION")" == bastion-capture ]] \
+    [[ "$(tag_of "$SCOPE_SB/providers/Microsoft.Network/bastionHosts/$BASTION")" == bastion-capture ]] \
       || die "$BASTION exists without tag purpose=bastion-capture: not adopting it"
   fi
   log "Subnet $SUBNET_PREFIX and public IP ready ($(( $(date +%s) - s )) s)"
@@ -204,18 +188,18 @@ cmd_up() {
   s=$(date +%s)
   local st; st="$(state_get storage)"
   if [[ -z "$st" ]]; then st="stbstrec$(openssl rand -hex 4)"; state_set storage "$st"; fi
-  az storage account show -g "$RG" -n "$st" -o none 2>/dev/null \
-    || az storage account create -g "$RG" -n "$st" -l "$LOC" --sku Standard_LRS --kind StorageV2 \
+  az storage account show -g "$SANDBOX" -n "$st" -o none 2>/dev/null \
+    || az storage account create -g "$SANDBOX" -n "$st" -l "$LOC" --sku Standard_LRS --kind StorageV2 \
          --min-tls-version TLS1_2 --allow-blob-public-access false --allow-shared-key-access false \
          --https-only true --tags "${TAGS[@]}" -o none
-  local st_id; st_id="$(az storage account show -g "$RG" -n "$st" --query id -o tsv)"
+  local st_id; st_id="$(az storage account show -g "$SANDBOX" -n "$st" --query id -o tsv)"
   az rest --method PUT --url "$ARM$st_id/blobServices/default/containers/$CONTAINER?api-version=2023-05-01" \
     --body '{"properties":{"publicAccess":"None"}}' -o none
-  az identity show -g "$RG" -n "$UAMI" -o none 2>/dev/null \
-    || az identity create -g "$RG" -n "$UAMI" -l "$LOC" --tags "${TAGS[@]}" -o none
+  az identity show -g "$SANDBOX" -n "$UAMI" -o none 2>/dev/null \
+    || az identity create -g "$SANDBOX" -n "$UAMI" -l "$LOC" --tags "${TAGS[@]}" -o none
   local uami_id uami_pid
-  uami_id="$(az identity show -g "$RG" -n "$UAMI" --query id -o tsv)"
-  uami_pid="$(az identity show -g "$RG" -n "$UAMI" --query principalId -o tsv)"
+  uami_id="$(az identity show -g "$SANDBOX" -n "$UAMI" --query id -o tsv)"
+  uami_pid="$(az identity show -g "$SANDBOX" -n "$UAMI" --query principalId -o tsv)"
   local ct_scope="$st_id/blobServices/default/containers/$CONTAINER"
   # Filter on principalId, not --assignee: a brand-new identity is not yet in
   # Graph, and --assignee looks it up there (seen live: "Cannot find user or
@@ -229,7 +213,7 @@ cmd_up() {
   s=$(date +%s)
   local body
   body="$(python3 -I -c 'import json,sys
-sub,rg,vnet,pip,uami,st,ct,loc=sys.argv[1:9]
+sub,rg,vnet,pip,uami,st,ct,loc,sb=sys.argv[1:10]
 print(json.dumps({"location":loc,
  "tags":{"purpose":"bastion-capture","owner":"lab-operator","delete-after":"capture"},
  "sku":{"name":"Premium"},
@@ -241,11 +225,11 @@ print(json.dumps({"location":loc,
    "enableTunneling":False, "enableShareableLink":False, "enableIpConnect":False, "enableFileCopy":False,
    "ipConfigurations":[{"name":"ipconfig1","properties":{
       "subnet":{"id":f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/virtualNetworks/{vnet}/subnets/AzureBastionSubnet"},
-      "publicIPAddress":{"id":f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/publicIPAddresses/{pip}"}}}]}}))' \
-    "$SUB" "$RG" "$VNET" "$PIP" "$uami_id" "$st" "$CONTAINER" "$LOC")"
+      "publicIPAddress":{"id":f"/subscriptions/{sub}/resourceGroups/{sb}/providers/Microsoft.Network/publicIPAddresses/{pip}"}}}]}}))' \
+    "$SUB" "$RG" "$VNET" "$PIP" "$uami_id" "$st" "$CONTAINER" "$LOC" "$SANDBOX")"
   if [[ "$(bastion_state)" != Succeeded ]]; then
     log "Creating $BASTION (Premium, session recording on); Learn says about 10 minutes"
-    az rest --method PUT --url "$ARM$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION?api-version=$API_BASTION" \
+    az rest --method PUT --url "$ARM$SCOPE_SB/providers/Microsoft.Network/bastionHosts/$BASTION?api-version=$API_BASTION" \
       --body "$body" -o none
     local st_b
     for _ in $(seq 1 120); do
@@ -255,11 +239,11 @@ print(json.dumps({"location":loc,
     done
     [[ "$st_b" == Succeeded ]] || die "Bastion provisioningState is $st_b"
   fi
-  local dns; dns="$(az rest --url "$ARM$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION?api-version=$API_BASTION" --query 'properties.dnsName' -o tsv)"
+  local dns; dns="$(az rest --url "$ARM$SCOPE_SB/providers/Microsoft.Network/bastionHosts/$BASTION?api-version=$API_BASTION" --query 'properties.dnsName' -o tsv)"
   state_set bastion_dns "$dns"
   log "Bastion $BASTION Succeeded, $dns ($(( $(date +%s) - s )) s); billing at \$0.45/h starts now"
   # Read back what Learn requires: Premium, recording on, the container.
-  az rest --url "$ARM$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION?api-version=$API_BASTION" \
+  az rest --url "$ARM$SCOPE_SB/providers/Microsoft.Network/bastionHosts/$BASTION?api-version=$API_BASTION" \
     --query '{sku:sku.name, recording:properties.enableSessionRecording, container:properties.sessionRecordingConfiguration.blobContainerUri, tunneling:properties.enableTunneling}' -o json
 
   # CORS: the portal's player reads blobs from the browser, origin = the Bastion.
@@ -268,27 +252,26 @@ print(json.dumps({"properties":{"isVersioningEnabled":False,"cors":{"corsRules":
  "allowedMethods":["GET"],"allowedHeaders":["*"],"exposedHeaders":["*"],"maxAgeInSeconds":86400}]}}}))' "$dns")" -o none
   log "CORS: GET from https://$dns only"
 
-  # --- Access: PIM-eligible admin, time-bound reviewer ---------------------------------
-  local admin_oid reviewer_oid bastion_id
-  admin_oid="$(oid_of "$ADMIN_UPN")"; reviewer_oid="$(oid_of "$REVIEWER_UPN")"
-  bastion_id="$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION"
-  grant "PIM: $ADMIN_UPN eligible for Reader on $RG (4 h)" Eligibility "$SCOPE_RG" "$READER" "$admin_oid" AdminAssign 'Bastion capture: Tier-0 DC01 session through PIM (lab/bastion)'
-  grant "Reviewer: $REVIEWER_UPN active Storage Blob Data Reader on the container (4 h)" Assignment "$ct_scope" "$BLOB_READER" "$reviewer_oid" AdminAssign 'Bastion capture: play back the recording (lab/bastion)'
-  # The portal's Session recordings blade also reads the storage account itself
-  # (management plane): without Reader there it shows "Storage account not
-  # found" and 0 recordings (seen live 2026-11-07).
-  grant "Reviewer: $REVIEWER_UPN active Reader on $st (4 h)" Assignment "$st_id" "$READER" "$reviewer_oid" AdminAssign 'Bastion capture: Session recordings reads the storage account (lab/bastion)'
-  grant "Reviewer: $REVIEWER_UPN active Reader on $BASTION (4 h)" Assignment "$bastion_id" "$READER" "$reviewer_oid" AdminAssign 'Bastion capture: open Session recordings (lab/bastion)'
+  # --- Access -------------------------------------------------------------------------
+  # No grants here (ADR 0030): the admin uses adm-presenter's existing
+  # PIM-Demo-Readers eligibility; the reviewer's eligibilities are an owner
+  # step (capture.sh owner-steps). Check the reviewer is eligible, so the
+  # playback does not fail at the end of a paid capture.
+  local reviewer_oid n
+  reviewer_oid="$(oid_of "$REVIEWER_UPN")"
+  n="$(az rest --url "$ARM$SCOPE_SB/providers/Microsoft.Authorization/roleEligibilitySchedules?api-version=2020-10-01&\$filter=principalId eq '$reviewer_oid'" --query 'length(value)' -o tsv 2>/dev/null || echo 0)"
+  if [[ "${n:-0}" -ge 3 ]]; then log "Reviewer $REVIEWER_UPN: $n eligible roles on $SANDBOX (owner step done)"
+  else echo "WARNING: reviewer $REVIEWER_UPN has ${n:-0} eligible roles on $SANDBOX, 3 expected: run 'capture.sh owner-steps' and have the owner do them before the playback" >&2; fi
   state_set up_at "$(date -u +%FT%TZ)"
   log "UP. Next: node lab/bastion/prove.mjs; then capture.sh down"
 }
 
 cmd_down() {
+  need_session
   local s0; s0=$(date +%s)
-  local admin_oid reviewer_oid st st_id ct_scope bastion_id
-  admin_oid="$(oid_of "$ADMIN_UPN")"; reviewer_oid="$(oid_of "$REVIEWER_UPN")"
+  local st st_id ct_scope bastion_id
   st="$(state_get storage)"
-  bastion_id="$SCOPE_RG/providers/Microsoft.Network/bastionHosts/$BASTION"
+  bastion_id="$SCOPE_SB/providers/Microsoft.Network/bastionHosts/$BASTION"
   # Bastion first: it is the one that costs money.
   if [[ "$(bastion_state)" != absent ]]; then
     [[ "$(tag_of "$bastion_id")" == bastion-capture ]] || die "$BASTION has no tag purpose=bastion-capture: not deleting someone else's Bastion"
@@ -298,9 +281,9 @@ cmd_down() {
     [[ "$(bastion_state)" == absent ]] || die "Bastion still present: delete it by hand NOW (it bills \$0.45/h)"
   fi
   log "Bastion gone ($(( $(date +%s) - s0 )) s since 'down' started)"
-  local pip_id="$SCOPE_RG/providers/Microsoft.Network/publicIPAddresses/$PIP"
-  if az network public-ip show -g "$RG" -n "$PIP" -o none 2>/dev/null; then
-    if [[ "$(tag_of "$pip_id")" == bastion-capture ]]; then az network public-ip delete -g "$RG" -n "$PIP" -o none
+  local pip_id="$SCOPE_SB/providers/Microsoft.Network/publicIPAddresses/$PIP"
+  if az network public-ip show -g "$SANDBOX" -n "$PIP" -o none 2>/dev/null; then
+    if [[ "$(tag_of "$pip_id")" == bastion-capture ]]; then az network public-ip delete -g "$SANDBOX" -n "$PIP" -o none
     else echo "WARNING: $PIP has no capture tag: left alone" >&2; fi
   fi
   if [[ "$(state_get subnet_created_by_capture)" == yes ]]; then
@@ -310,59 +293,73 @@ cmd_down() {
     log "AzureBastionSubnet was not created by this script: left alone"
   fi
   if [[ -n "$st" ]]; then
-    st_id="$(az storage account show -g "$RG" -n "$st" --query id -o tsv 2>/dev/null || true)"
+    st_id="$(az storage account show -g "$SANDBOX" -n "$st" --query id -o tsv 2>/dev/null || true)"
     ct_scope="$st_id/blobServices/default/containers/$CONTAINER"
   fi
-  local uami_pid; uami_pid="$(az identity show -g "$RG" -n "$UAMI" --query principalId -o tsv 2>/dev/null || true)"
+  local uami_pid; uami_pid="$(az identity show -g "$SANDBOX" -n "$UAMI" --query principalId -o tsv 2>/dev/null || true)"
   if [[ -n "$uami_pid" && -n "${ct_scope:-}" ]]; then
     # shellcheck disable=SC2046  # one id per word, on purpose
     az role assignment delete --ids $(az role assignment list --scope "$ct_scope" --query "[?principalId=='$uami_pid'].id" -o tsv) -o none 2>/dev/null || true
   fi
-  az identity delete -g "$RG" -n "$UAMI" -o none 2>/dev/null || true
-  # Access: remove before the 4 h expiry. AdminRemove fails harmlessly if already gone.
-  revoke "Admin eligibility" Eligibility "$SCOPE_RG" "$READER" "$admin_oid" AdminRemove 'Bastion capture over'
-  if [[ -n "${ct_scope:-}" ]]; then
-    revoke "Reviewer blob reader" Assignment "$ct_scope" "$BLOB_READER" "$reviewer_oid" AdminRemove 'Bastion capture over'
-    revoke "Reviewer storage Reader" Assignment "$st_id" "$READER" "$reviewer_oid" AdminRemove 'Bastion capture over'
-    revoke "Reviewer key operator" Assignment "$st_id" 81a9662b-bebf-436f-a333-f67b29880f12 "$reviewer_oid" AdminRemove 'Bastion capture over'
-    [[ -n "$st_id" ]] && az storage account update --ids "$st_id" --allow-shared-key-access false -o none
-  fi
-  log "Public IP, subnet, identity, PIM eligibility and reviewer access removed"
+  az identity delete -g "$SANDBOX" -n "$UAMI" -o none 2>/dev/null || true
+  [[ -n "${st_id:-}" ]] && az storage account update --ids "$st_id" --allow-shared-key-access false -o none
+  log "Public IP, subnet, identity and its grant removed; shared-key access off"
   if [[ "$(state_get dc01_started_by_capture)" == yes ]]; then
     log "DC01 was started by 'up': deallocating it"
     az vm deallocate -g "$RG" -n "$VM" -o none
     state_set dc01_started_by_capture no
   fi
   # Read back.
-  log "Read back: bastion=$(bastion_state) pip=$(az network public-ip show -g "$RG" -n "$PIP" --query name -o tsv 2>/dev/null || echo absent) subnet=$(az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet --query name -o tsv 2>/dev/null || echo absent) admin-eligibility=$(az rest --url "$ARM$SCOPE_RG/providers/Microsoft.Authorization/roleEligibilitySchedules?api-version=2020-10-01&\$filter=principalId eq '$admin_oid'" --query 'length(value)' -o tsv)"
-  # Read back the access the recording account could still give: fail unless
-  # shared-key access is off and the reviewer holds nothing on it.
+  log "Read back: bastion=$(bastion_state) pip=$(az network public-ip show -g "$SANDBOX" -n "$PIP" --query name -o tsv 2>/dev/null || echo absent) subnet=$(az network vnet subnet show -g "$RG" --vnet-name "$VNET" -n AzureBastionSubnet --query name -o tsv 2>/dev/null || echo absent) identity=$(az identity show -g "$SANDBOX" -n "$UAMI" --query name -o tsv 2>/dev/null || echo absent)"
   if [[ -n "${st_id:-}" ]]; then
-    local sk left
+    local sk
     sk="$(az storage account show --ids "$st_id" --query allowSharedKeyAccess -o tsv)"
-    left="$(az role assignment list --scope "$st_id" --query "[?principalId=='$reviewer_oid'] | length(@)" -o tsv)"
-    [[ "$sk" == false && "$left" == 0 ]] \
-      || die "teardown incomplete on $st: allowSharedKeyAccess=$sk, reviewer role assignments left=$left (remove them by hand)"
-    log "Read back: $st allowSharedKeyAccess=false, reviewer role assignments on it: 0"
+    [[ "$sk" == false ]] || die "teardown incomplete on $st: allowSharedKeyAccess=$sk (turn it off by hand)"
+    log "Read back: $st allowSharedKeyAccess=false"
   fi
   log "DOWN ($(( $(date +%s) - s0 )) s). Recordings kept in ${st:-?}/$CONTAINER (capture.sh purge-recordings deletes them)"
 }
 
 cmd_playback_on() {
-  local st st_id reviewer_oid; st="$(state_get storage)"
+  need_session
+  local st st_id; st="$(state_get storage)"
   [[ -n "$st" ]] || die "no storage account in $STATE"
-  st_id="$(az storage account show -g "$RG" -n "$st" --query id -o tsv)"
-  reviewer_oid="$(oid_of "$REVIEWER_UPN")"
+  st_id="$(az storage account show -g "$SANDBOX" -n "$st" --query id -o tsv)"
   az storage account update --ids "$st_id" --allow-shared-key-access true -o none
-  log "Shared-key access ON for $st (the portal player builds an account-key SAS)"
-  KEY_HOURS=1 grant "Reviewer: Storage Account Key Operator Service Role on $st (1 h)" Assignment "$st_id" 81a9662b-bebf-436f-a333-f67b29880f12 "$reviewer_oid" AdminAssign 'Bastion capture: the portal player calls listKeys (lab/bastion)'
+  log "Shared-key access ON for $st (the portal player builds an account-key SAS). The reviewer now activates her eligible Storage Account Key Operator Service Role (prove.mjs does it); 'down' turns shared-key access off."
+}
+
+cmd_owner_steps() {
+  # Printed, never run: the OWNER does these once, as themselves (Cloud Shell
+  # or the PIM blade). The operator cannot: since ADR 0030 it has no
+  # Microsoft.Authorization write outside the sandbox's data-role delegation.
+  local reviewer_oid; reviewer_oid="$(oid_of "$REVIEWER_UPN")"
+  cat <<STEPS
+OWNER STEP (once): make the reviewer $REVIEWER_UPN ELIGIBLE (not active) on $SANDBOX
+for the three roles the playback needs. In the Azure portal: PIM > Azure resources >
+$SANDBOX > Assignments > Add assignments > Eligible, or with az as the owner:
+
+  for role in "Reader" "Storage Blob Data Reader" "Storage Account Key Operator Service Role"; do
+    rid=\$(az role definition list --name "\$role" --query '[0].name' -o tsv)
+    az rest --method PUT \\
+      --url "https://management.azure.com$SCOPE_SB/providers/Microsoft.Authorization/roleEligibilityScheduleRequests/\$(uuidgen)?api-version=2020-10-01" \\
+      --body "{\"properties\":{\"principalId\":\"$reviewer_oid\",\"roleDefinitionId\":\"/subscriptions/$SUB/providers/Microsoft.Authorization/roleDefinitions/\$rid\",\"requestType\":\"AdminAssign\",\"justification\":\"Bastion recording reviewer (lab/bastion, ADR 0036)\",\"scheduleInfo\":{\"expiration\":{\"type\":\"AfterDuration\",\"duration\":\"P90D\"}}}}"
+  done
+
+Why each: Reader (the Bastion's Session recordings blade, and the storage
+account it reads), Storage Blob Data Reader (list the recordings), Storage
+Account Key Operator Service Role (the portal player calls listKeys).
+The ADMIN needs no owner step: adm-presenter's PIM-Demo-Readers eligibility
+already exists (Reader on the subscription).
+STEPS
 }
 
 cmd_purge_recordings() {
   local st; st="$(state_get storage)"
   [[ -n "$st" ]] || die "no storage account in $STATE"
   [[ "$(bastion_state)" == absent ]] || die "run 'down' first"
-  az storage account delete -g "$RG" -n "$st" --yes -o none
+  need_session
+  az storage account delete -g "$SANDBOX" -n "$st" --yes -o none
   state_set storage ""
   log "Deleted $st and its recordings"
 }
@@ -372,6 +369,7 @@ case "${1:-}" in
   down) cmd_down ;;
   status) cmd_status ;;
   playback-on) cmd_playback_on ;;
+  owner-steps) cmd_owner_steps ;;
   purge-recordings) cmd_purge_recordings ;;
-  *) echo "usage: capture.sh up|playback-on|down|status|purge-recordings" >&2; exit 2 ;;
+  *) echo "usage: capture.sh up|playback-on|down|status|owner-steps|purge-recordings" >&2; exit 2 ;;
 esac

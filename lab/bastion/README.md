@@ -9,6 +9,27 @@ straight after. Record:
 
 This replaces the Apache Guacamole recorded sessions (ADR 0036).
 
+## Since ADR 0030 (2026-11-08): who does what
+
+The run below happened under the old model, when the operator held subscription
+Owner and made the admin's PIM eligibility itself. Since ADR 0030 the operator
+is read-only between owner-opened write sessions and can write no PIM request
+or role assignment outside the sandbox. So the capture now works like this.
+It is **BUILT, not yet run**; it needs `envs/operator` (PR #249) applied and a
+write session open.
+
+| Who | What | How |
+|---|---|---|
+| Owner, **once** | Make the reviewer adm-mei.tanaka **eligible** on `rg-lab-sandbox` for Reader, Storage Blob Data Reader and Storage Account Key Operator Service Role | `capture.sh owner-steps` prints the exact commands (or the PIM blade). The operator cannot do this (ADR 0030). |
+| Owner, per capture | Open a write session (`envs/operator` `operator_write_session`) | Gives the operator the session role on the subscription and Contributor plus constrained RBAC Administrator on `rg-lab-sandbox` |
+| Operator | `capture.sh up` / `playback-on` / `down` | The subnet goes in the lab VNet (session role). The Bastion, its public IP, the identity and the storage account go in `rg-lab-sandbox`. The identity's Storage Blob Data Contributor is a data role the sandbox grant may assign. Preflight stops if the session is not open. |
+| Admin | **adm-presenter** activates its **existing** PIM-Demo-Readers eligibility (Reader on the subscription), 1 hour, with a reason, then connects to DC01 | `prove.mjs` (identity.mjs `activatePim`, RAN · tenant for this group). No new eligibility is made. |
+| Reviewer | adm-mei.tanaka activates her three eligible roles on the sandbox, 1 hour each, with a reason, then plays the recording back | `prove.mjs`, the Azure-resources activation path that ran live on 2026-11-07 |
+
+**verify: next run.** Reader now arrives through a group activation, not a
+direct assignment. The portal may need a fresh token before DC01's Bastion
+page opens. `prove.mjs` reloads for up to about 13 minutes.
+
 ## Words used here
 
 - **Azure Bastion:** a Microsoft service that opens RDP or SSH to a VM
@@ -61,7 +82,8 @@ Bastion existed for about **58 minutes** (create sent 01:59:00Z, deleted by
 ## Run it
 
 ```bash
-lab/scripts/operator/op bash lab/bastion/capture.sh up            # ~13 min; billing starts
+lab/scripts/operator/op bash lab/bastion/capture.sh owner-steps   # once: prints the owner's eligibility step
+lab/scripts/operator/op bash lab/bastion/capture.sh up            # ~13 min; billing starts (needs a write session)
 node lab/bastion/prove.mjs --out ~/contoso-demo/captures/bastion/$(date +%F)
 lab/scripts/operator/op bash lab/bastion/capture.sh playback-on   # before step 4 of prove.mjs
 lab/scripts/operator/op bash lab/bastion/capture.sh down          # ~9 min; ALWAYS run it

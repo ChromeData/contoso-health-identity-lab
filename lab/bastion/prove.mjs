@@ -3,21 +3,28 @@
 //
 //   node lab/bastion/prove.mjs [--out DIR] [--step all|before|activate|connect|playback]
 //
+// ACCESS MODEL SINCE ADR 0030 (2026-11-08): the operator can make no PIM
+// eligibility, so the proof uses an EXISTING one for the admin and an
+// owner-made one for the reviewer (capture.sh owner-steps).
+//
 // What it proves, each step with a screenshot and a UTC time (out/proof.json):
-//   1. before   adm-ava.lin opens DC01 in the Azure portal: "You don't have
-//               access" (403). She holds no Azure role.
-//   2. activate She activates her PIM-eligible Reader on rg-identity-lab in the
-//               Entra admin center (My roles > Azure resources), 1 hour, with a
-//               reason. Read back: the row under Active assignments.
+//   1. before   adm-presenter opens DC01 in the Azure portal: "You don't have
+//               access" (403). It holds no standing Azure role.
+//   2. activate It activates its existing PIM-Demo-Readers eligibility (PIM for
+//               Groups; the group holds Reader on the subscription) for 1
+//               hour, with a reason (identity.mjs activatePim, RAN · tenant).
 //   3. connect  DC01's Bastion page now opens. She connects with DC01's
 //               domain admin account (the password comes from the Keychain
 //               straight into the browser's password box; never printed or
 //               logged), tries to run `whoami & hostname` in the session,
 //               and closes it. Bastion records the whole session.
-//   4. playback adm-mei.tanaka (the reviewer, time-bound Storage Blob Data
-//               Reader) opens the Bastion's Session recordings and plays the
+//   4. playback adm-mei.tanaka (the reviewer) activates her owner-made
+//               eligibilities on rg-lab-sandbox (Reader, Storage Blob Data
+//               Reader, Storage Account Key Operator; 1 hour each, with a
+//               reason), opens the Bastion's Session recordings and plays the
 //               recording in the portal's player. The admin who was recorded
-//               has no access to the recordings.
+//               has no access to the recordings (Reader alone cannot list or
+//               read blobs).
 // Every browser context records a video (Playwright recordVideo) for the
 // script writers; screenshots blur inputs (lib.mjs redact).
 //
@@ -29,7 +36,7 @@
 // =============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
-import { signIn } from '../scripts/demo/signin/identity.mjs';
+import { signIn, activatePim } from '../scripts/demo/signin/identity.mjs';
 import { pageText, sleep, playwright, keychainRead, redact } from '../scripts/demo/signin/lib.mjs';
 
 const args = process.argv.slice(2);
@@ -42,7 +49,13 @@ const SUB = 'de0b2a93-1c62-47b3-aaaf-1bdd1939a274';
 const TENANT_DOMAIN = 'contosohealthlab.onmicrosoft.com';
 const RG = 'rg-identity-lab';
 const VM_ID = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/vm-dc01`;
-const BASTION_ID = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/bastionHosts/bastion-capture`;
+// Since ADR 0030 the Bastion lives in the sandbox resource group (capture.sh).
+const SANDBOX = process.env.BASTION_SANDBOX_RG || 'rg-lab-sandbox';
+const BASTION_ID = `/subscriptions/${SUB}/resourceGroups/${SANDBOX}/providers/Microsoft.Network/bastionHosts/bastion-capture`;
+const ADMIN = 'adm-presenter';           // existing PIM-Demo-Readers eligibility
+const ADMIN_GROUP = 'PIM-Demo-Readers';  // holds Reader on the subscription
+const REVIEWER = 'adm-mei.tanaka';
+const REVIEWER_ROLES = ['Reader', 'Storage Blob Data Reader', 'Storage Account Key Operator Service Role'];
 const portal = (id, blade = '') => `https://portal.azure.com/#@${TENANT_DOMAIN}/resource${id}${blade}`;
 const PIM_AZURE = 'https://entra.microsoft.com/#view/Microsoft_Azure_PIMCommon/ActivationMenuBlade/~/azurerbac';
 const DC_USER = 'contosoadmin';
@@ -74,61 +87,69 @@ async function waitFor(page, re, ms = 60000) {
   return false;
 }
 
+// Activate one PIM-eligible Azure role at a scope, from My roles > Azure
+// resources (the path that RAN live on 2026-11-07 for a Reader activation).
+// Duration set to 1 hour and read back; success = the row under Active
+// assignments with Deactivate/Extend.
+async function activateAzureRole(page, role, scopeText, step, shotPrefix) {
+  await page.goto(PIM_AZURE, { waitUntil: 'domcontentloaded' });
+  const rowFor = (f) => f.getByRole('row').filter({ hasText: scopeText }).filter({ has: f.getByText(role, { exact: true }) });
+  let row = null;
+  for (let i = 0; i < 30 && !row; i++) { row = await visible(page, rowFor); if (!row) await sleep(2000); }
+  if (!row) throw new Error(`no eligible ${role} on ${scopeText} on the PIM page (owner step: capture.sh owner-steps)`);
+  await row.getByRole('button', { name: /^Activate$/ }).or(row.getByRole('link', { name: /^Activate$/ })).first().click();
+  await sleep(5000);
+  const dur = await visible(page, (f) => f.locator('input[aria-label*="slider value" i], input[aria-label*="Duration" i], input[type="number"]'));
+  if (dur) { await dur.fill('1'); await dur.press('Tab').catch(() => {}); }
+  const got = dur ? Number(await dur.inputValue().catch(() => NaN)) : NaN;
+  if (got !== 1) throw new Error(`the activation blade took ${got} hours for ${role}, not 1: not activating`);
+  const why = await visible(page, (f) => f.locator('textarea'));
+  if (!why) throw new Error('no justification box');
+  await why.fill(`${REASON} - ${role}`);
+  const go = await visible(page, (f) => f.getByRole('button', { name: /^Activate$/ }).last());
+  await go.click();
+  const t0 = Date.now();
+  for (let i = 0; i < 60; i++) {
+    await sleep(3000);
+    if (/pending approval/i.test(await text(page))) throw new Error(`${role} needs approval (policy changed?)`);
+    if (i % 4 === 3) {
+      const tab = await visible(page, (f) => f.getByRole('tab', { name: /Active assignments/i }));
+      if (tab) {
+        await tab.click().catch(() => {}); await sleep(3000);
+        const a = await visible(page, rowFor);
+        if (a && /Deactivate|Extend/i.test(await a.innerText().catch(() => ''))) {
+          mark(step, `PIM: ${role} on ${scopeText} ACTIVE`, { activation_s: Math.round((Date.now() - t0) / 1000), shot: await snap(page, `${shotPrefix}-${role.replace(/\W+/g, '-').toLowerCase()}`) });
+          return;
+        }
+      }
+    }
+  }
+  throw new Error(`no active ${role} row after activating`);
+}
+
 const browser = await playwright().chromium.launch({ headless: process.env.HEADED ? false : true });
 const ctxFor = async (who) => browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', recordVideo: { dir: path.join(OUT, `video-${who}`), size: { width: 1440, height: 900 } } });
 
 try {
   const ava = await ctxFor('admin');
-  const { page } = await signIn('adm-ava.lin', 'https://portal.azure.com/', { context: ava });
-  mark('signin', 'adm-ava.lin signed in to the Azure portal (passkey)');
+  const { page } = await signIn(ADMIN, 'https://portal.azure.com/', { context: ava });
+  mark('signin', `${ADMIN} signed in to the Azure portal (passkey)`);
 
   // ---- 1. before ------------------------------------------------------------
   if (STEP === 'all' || STEP === 'before') {
     await page.goto(portal(VM_ID, '/bastionHost'), { waitUntil: 'domcontentloaded' });
     const denied = await waitFor(page, /You don't have access|No access/i, 45000);
     mark('before', denied ? 'DC01 Bastion page: "You don\'t have access" (403) before PIM' : 'NOT DENIED before PIM', { ok: denied, shot: await snap(page, '01-before-pim-no-access') });
-    if (!denied) throw new Error('the admin could open DC01 before activating PIM: the proof is void');
+    if (!denied) throw new Error(`the admin could open DC01 before activating PIM (is ${ADMIN_GROUP} already active? deactivate it first): the proof is void`);
   }
 
   // ---- 2. activate ----------------------------------------------------------
   if (STEP === 'all' || STEP === 'activate') {
-    await page.goto(PIM_AZURE, { waitUntil: 'domcontentloaded' });
-    let row = null;
-    for (let i = 0; i < 30 && !row; i++) {
-      row = await visible(page, (f) => f.getByRole('row').filter({ hasText: 'Reader' }).filter({ hasText: RG }));
-      if (!row) await sleep(2000);
-    }
-    if (!row) throw new Error(`no eligible Reader on ${RG} on the PIM page`);
-    mark('activate', 'PIM My roles > Azure resources: eligible Reader on rg-identity-lab', { shot: await snap(page, '02-pim-eligible') });
-    await row.getByRole('button', { name: /^Activate$/ }).or(row.getByRole('link', { name: /^Activate$/ })).first().click();
-    await sleep(5000);
-    const dur = await visible(page, (f) => f.locator('input[aria-label*="slider value" i], input[aria-label*="Duration" i], input[type="number"]'));
-    if (dur) { await dur.fill('1'); await dur.press('Tab').catch(() => {}); }
-    const got = dur ? Number(await dur.inputValue().catch(() => NaN)) : NaN;
-    if (got !== 1) throw new Error(`the activation blade took ${got} hours, not 1: not activating`);
-    const why = await visible(page, (f) => f.locator('textarea'));
-    if (!why) throw new Error('no justification box');
-    await why.fill(REASON);
-    mark('activate', 'activation request: 1 hour, reason given', { shot: await snap(page, '03-pim-request') });
-    const go = await visible(page, (f) => f.getByRole('button', { name: /^Activate$/ }).last());
-    await go.click();
+    // The existing eligibility, through the shared helper (PIM for Groups):
+    // it sets and reads back the duration, and records the end time.
     const tReq = Date.now();
-    let active = false;
-    for (let i = 0; i < 60 && !active; i++) {
-      await sleep(3000);
-      const t = await text(page);
-      if (/pending approval/i.test(t)) throw new Error('activation needs approval (policy changed?)');
-      if (i % 4 === 3) {
-        const tab = await visible(page, (f) => f.getByRole('tab', { name: /Active assignments/i }));
-        if (tab) {
-          await tab.click().catch(() => {}); await sleep(3000);
-          const a = await visible(page, (f) => f.getByRole('row').filter({ hasText: 'Reader' }).filter({ hasText: RG }));
-          active = !!(a && /Deactivate|Extend/i.test(await a.innerText().catch(() => '')));
-        }
-      }
-    }
-    if (!active) throw new Error('no active Reader row after activating');
-    mark('activate', 'PIM: Reader on rg-identity-lab ACTIVE (Active assignments row, Deactivate)', { activation_s: Math.round((Date.now() - tReq) / 1000), shot: await snap(page, '04-pim-active') });
+    await activatePim(ADMIN, ADMIN_GROUP, 1, REASON, { context: ava });
+    mark('activate', `PIM: ${ADMIN_GROUP} ACTIVE for ${ADMIN}, 1 hour (Reader on the subscription)`, { activation_s: Math.round((Date.now() - tReq) / 1000), shot: await snap(page, '04-pim-active') });
   }
 
   // ---- 3. connect -----------------------------------------------------------
@@ -178,8 +199,10 @@ try {
   // ---- 4. playback ----------------------------------------------------------
   if (STEP === 'all' || STEP === 'playback') {
     const mei = await ctxFor('reviewer');
-    const r = await signIn('adm-mei.tanaka', 'https://portal.azure.com/', { context: mei });
+    const r = await signIn(REVIEWER, 'https://portal.azure.com/', { context: mei });
     const p = r.page;
+    // The reviewer's own activations (owner-made eligibilities, ADR 0030).
+    for (const role of REVIEWER_ROLES) await activateAzureRole(p, role, SANDBOX, 'playback', '07r-pim');
     let link = null; const tList = Date.now();
     for (let i = 0; i < 30 && !link; i++) {
       // No deep link: '/sessionRecordings' falls back to Overview (seen live
