@@ -1,0 +1,34 @@
+Key Vault state-leak experiment, sandbox model (ADR 0030), 2026-11-08
+command: lab/scripts/operator/op bash lab/secrets/state-leak/run.sh   (main 5edabda; HashiCorp Terraform 1.16.5)
+identity: the lab operator inside the owner-opened write session 23:40Z-03:45Z (Contributor + constrained RBAC Administrator on rg-lab-sandbox)
+verdict: AS STATED
+cleanup: the script ran it, but its read-back failed (exit 2) because the operator's az token cache was cleared by hand at that moment (az: 'Please run az login'), NOT because anything was left. Manual read-back below.
+
+[23:50:43Z +  7s] Creating kv-stateleak-48b30f3f in the sandbox rg-lab-sandbox (eastus2; RBAC, purge protection off)
+[23:51:19Z + 43s] Vault created (36 s)
+[23:51:24Z + 48s] RBAC took effect and a random 40-character value is stored (5 s; value never printed)
+[23:51:24Z + 48s] [datasource] terraform init / apply / apply again / plan -out
+[23:52:28Z +112s] [datasource] done (64 s)
+[23:52:28Z +112s] [ephemeral] negative control: a plan expecting the wrong length must fail
+[23:52:41Z +125s] [ephemeral] negative control failed on the precondition, as it must
+[23:52:41Z +125s] [ephemeral] terraform init / apply / apply again / plan -out
+[23:53:40Z +184s] [ephemeral] done (59 s)
+[23:53:40Z +184s] Terraform: Terraform v1.16.5; provider hashicorp/azurerm 4.81.0 (lock file)
+
+path         terraform.tfstate  terraform.tfstate.backup   saved plan   terraform output
+datasource   1                  1                          2            0
+ephemeral    0                  0                          0            0
+(times the 40-character value appears in each file)
+
+AS STATED: the data source wrote the secret into state, its backup and the saved plan in
+plaintext; the ephemeral resource read it (precondition passed) and left it in no state,
+backup, plan or output file.
+[23:53:41Z +185s] Cleanup: removing the operator's grant on kv-stateleak-48b30f3f, deleting and purging kv-stateleak-48b30f3f (the sandbox group stays)
+WARNING: read back failed (vault still listed: unknown; show-deleted rc 1: ERROR: Please run 'az login' to setup account.): check kv-stateleak-48b30f3f in rg-lab-sandbox and the deleted vaults by hand
+exit 2
+
+Manual read-back as the operator, 2026-11-08 ~23:55Z:
+  az keyvault list -g rg-lab-sandbox (kv-stateleak-48b30f3f): 0
+  az keyvault show-deleted -n kv-stateleak-48b30f3f: No deleted Vault or HSM was found
+  az resource list -g rg-lab-sandbox: 0 resources
+  operator Key Vault Secrets Officer assignments on rg-lab-sandbox: 0
