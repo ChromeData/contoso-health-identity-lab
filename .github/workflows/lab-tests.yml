@@ -243,6 +243,10 @@ jobs:
           # kusto-harness run-on-workspace.py: result decoding and verdict
           # (no workspace; the live runs are operator runs, capture log E114).
           python3 -I -m unittest discover -s lab/monitoring/kusto-harness/tests -p 'test_*.py' -v
+          # Tier GPO proof device builder (lab/scripts/dc/tier-test): refuses an
+          # existing VM, saves its password only after Azure accepts the VM
+          # (mocked ARM and Keychain; no az).
+          python3 -I -m unittest discover -s lab/scripts/dc/tier-test/tests -p 'test_*.py' -v
 
       # The plain-English plan/apply summaries run with continue-on-error in
       # terraform-plan.yml / terraform-apply.yml (a summary bug must never

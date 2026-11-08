@@ -1,0 +1,19 @@
+run command lab-c161f328: lab/scripts/dc/tier-test/Test-TierNetworkLogon.ps1 on vm-dc01
+[
+    {
+        "account":  "CORP\\t0-adm-01",
+        "tier":  "Tier 0",
+        "expected":  "refused",
+        "result":  "REFUSED",
+        "detail":  "Logon failure: the user has not been granted the requested logon type at this computer"
+    },
+    {
+        "account":  "CORP\\t2-adm-01",
+        "tier":  "Tier 2",
+        "expected":  "works",
+        "result":  "CONNECTED",
+        "detail":  "listed: README.txt"
+    }
+]
+VERDICT: PASS - Tier 0 admin refused over SMB (logon type not granted); Tier 2 admin connected
+state: Succeeded, exit code: 0
