@@ -61,8 +61,21 @@ export function serialiseFeed({ head, workers }) {
 }
 
 // The local part of the userName the sender builds (given.surname, lowercased).
+// The sender's ConvertTo-UpnLocalPart (Invoke-InboundProvisioning.ps1), in
+// JS: decompose accents and drop the marks, map the letters that do not
+// decompose, keep a-z 0-9 and '-'. '' means no usable ASCII: the sender
+// would stop the WHOLE run on that row, so the connector holds it instead.
+const NO_DECOMPOSE = { 'ø': 'o', 'ß': 'ss', 'æ': 'ae', 'ł': 'l', 'ı': 'i', 'đ': 'd', 'ð': 'd', 'þ': 'th', 'œ': 'oe' };
+export function asciiPart(value) {
+  let v = String(value ?? '').normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase();
+  for (const [k, r] of Object.entries(NO_DECOMPOSE)) v = v.split(k).join(r);
+  return v.replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '');
+}
+
+// The account name as the sender builds it (folded, so José García and Jose
+// Garcia are the same account).
 export function accountName(givenName, surname) {
-  return `${givenName}.${surname}`.toLowerCase();
+  return `${asciiPart(givenName)}.${asciiPart(surname)}`;
 }
 
 const str = (v) => (v === null || v === undefined ? '' : String(v).trim().replace(/\s+/g, ' '));
@@ -144,8 +157,9 @@ export function reconcile(feed, hrisRows, today) {
     }
     if (!NAME.test(h.givenName) || !NAME.test(h.surname)) { hold('the first or last name has a character a directory name cannot hold'); continue; }
     if (!TEXT.test(h.dept) || !TEXT.test(h.jobTitle)) { hold('the Sub Unit or Job Title has a character the feed cannot hold'); continue; }
+    if (/\s/.test(h.givenName) || /\s/.test(h.surname)) { hold('a name with a space cannot make a directory account name; HR uses a hyphen (Mary-Ann)'); continue; }
+    if (!asciiPart(h.givenName) || !asciiPart(h.surname)) { hold('the first or last name leaves no plain letters for a directory account name; IT gives the account name by hand'); continue; }
     const account = accountName(h.givenName, h.surname);
-    if (/\s/.test(account)) { hold('a name with a space cannot make a directory account name; HR uses a hyphen (Mary-Ann)'); continue; }
     // The sender builds userName from the name alone, so two workers with the
     // same first.last would share ONE account. Leavers count: their disabled
     // AD account still exists.
