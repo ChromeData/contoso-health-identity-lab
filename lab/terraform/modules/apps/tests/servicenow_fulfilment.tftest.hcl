@@ -136,7 +136,12 @@ run "fulfilment_needs_a_catalog" {
   expect_failures = [azuread_application.servicenow_fulfilment]
 }
 
-# Mocked APPLY: the role assignment gets the SP's object id THROUGH the sleep.
+# Mocked APPLY: the role assignment names the SP and the wait carries the same
+# id. terraform test cannot see WHICH expression feeds principal_object_id
+# (overriding the sleep's triggers does not reach a config-set input), so the
+# "read through the sleep" rule itself is checked statically by
+# lab/servicenow/tests/test_servicenow.py (FulfilmentWait), which fails when
+# the assignment reads the SP directly.
 run "fulfilment_role_waits_for_the_sp" {
   command = apply
 
