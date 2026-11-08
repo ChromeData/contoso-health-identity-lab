@@ -1,10 +1,11 @@
 # =============================================================================
 # envs/operator :: providers.tf
 # -----------------------------------------------------------------------------
-# Applied LOCALLY, never by CI. First apply: a human Global Administrator.
-# Since 2026-11-05, by the owner's standing approval (ADR 0024), later
-# changes may be applied by the operator itself (`op tofu apply`) after the
-# pull request is reviewed and merged - the same review every other change gets.
+# Applied LOCALLY, never by CI, and only by the OWNER signed in as himself
+# (ADR 0030, 2026-11-06). The 2026-11-05 amendment to ADR 0024 that let the
+# operator apply its own grants is retired: an identity must not approve or
+# apply changes to its own permissions. Without Owner the operator also
+# cannot: this root writes Azure role assignments.
 # =============================================================================
 
 provider "azuread" {

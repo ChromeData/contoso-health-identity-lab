@@ -107,6 +107,11 @@ enable_identity_protection_ca = true
 # (ca008_scope = "pilot"); all-users enforcement needs
 # ca008_allow_all_users_enforcement = true as a separate, reviewed line.
 enable_phishing_resistant_all_users = false
+
+# The scheduled leaver's trigger group (All-Workforce) without CA008. Off:
+# turning it on is its own reviewed PR, then the owner runs
+# post-apply/New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver (E122 gap).
+enable_lcw_leaver_trigger = false
 # The rollout above needs the ADMIN key-model allow-list (AAGUIDs of the
 # issued security keys, not tenant identifiers) so admins cannot satisfy
 # CA002 / CA021 / CA022 with a synced passkey - or this explicit risk acceptance.
@@ -305,6 +310,12 @@ blocked_countries = ["KP", "IR", "SY", "CU"]
 # Entra app is then the app's ONLY identity provider, so it stays on.
 enable_adfs_https        = false
 enable_claims_viewer_app = false
+# Connect Health registration window (ADR 0031, lab/adfs/connect-health):
+# OFF. A reviewed PR turns it on with an end time at most 24 h out, register.sh
+# runs, and the next PR turns it off again (deletes adm-connecthealth-reg and
+# its Hybrid Identity Administrator role). No Conditional Access change.
+enable_connect_health_registration    = false
+connect_health_registration_until_utc = ""
 # Same 180-day key-credential limit as the AWS / ServiceNow certificates
 # above: Entra's 3-year default would be refused at the first enabled apply.
 claims_viewer_saml_signing_cert_end_date = "2027-04-20T00:00:00Z"
