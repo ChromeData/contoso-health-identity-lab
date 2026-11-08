@@ -39,6 +39,15 @@
 # workflow file, so removing it takes a merged (reviewed) pull request, while
 # an Environment reviewer cannot be removed by code at all.
 #
+# GATE_MODE=check (used by terraform-apply.yml since the repo is public): do
+# every check above (author / merger / bot separation, PR change-set compare)
+# and write the plan the owner must read to the job summary, then exit
+# 0 (checks passed) or 1 (refused). No issue is opened and nothing waits: the
+# approval itself is GitHub's Environment "prod" on the apply job (required
+# reviewer ChromeData, "Prevent self-review" on), the "Review deployments"
+# button.
+# GATE_MODE unset = the issue gate below (the private-repo fallback).
+#
 # Env: GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_SHA,
 #      GITHUB_SERVER_URL, GITHUB_REPOSITORY_OWNER, GITHUB_EVENT_NAME (Actions)
 #      PLAN_SHA256                sha256 of the saved tfplan (required)
@@ -125,14 +134,17 @@ fi
 # ---- Compare the saved plan's change set with the PR plan comment -----------
 compare_line=""
 mismatch=false
-if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ]; then
-  # The manual recovery path. A dispatch on a merged main commit still finds
-  # that commit's PR, but the owner ran it by hand to apply what is there now,
-  # so the PR comparison is skipped (it would refuse again). The issue says so
-  # and shows the full saved plan, which is what the code approves.
+if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] || [ "${GITHUB_EVENT_NAME:-}" = "repository_dispatch" ]; then
+  # The manual recovery path: a workflow_dispatch (the owner), or a
+  # repository_dispatch "apply-main" (the bot's recovery run; it needs only
+  # Contents: write, lab/pipelines/README.md section 3). A dispatch on a
+  # merged main commit still finds that commit's PR, but it was started by
+  # hand to apply what is there now, so the PR comparison is skipped (it
+  # would refuse again). The summary says so and shows the full saved plan,
+  # which is what the reviewer approves.
   from_pr=""
   [ -z "$pr_number" ] || from_pr=" (the commit came from PR #$pr_number; its plan comment is not compared)"
-  compare_line="**Not compared:** this is a manual workflow_dispatch run$from_pr. Read the saved plan below; it is what will be applied."
+  compare_line="**Not compared:** this is a manual ${GITHUB_EVENT_NAME} run$from_pr. Read the saved plan below; it is what will be applied."
 elif [ -n "$pr_number" ]; then
   comments_json=$(gh api "repos/$REPO/issues/$pr_number/comments" --paginate | jq -s 'add // []') \
     || { echo "Refused: could not read the comments of PR #$pr_number"; exit 1; }
@@ -169,7 +181,14 @@ else
   changes_block=$(printf '```text\n%s\n```' "$(cap 20000 "$PLAN_CHANGESET_FILE")")
 fi
 
-if [ "$mismatch" = "true" ]; then
+if [ "${GATE_MODE:-}" = "check" ] && [ "$mismatch" != "true" ]; then
+  decision_text=$(cat <<EOF
+This is the plan the owner approves. After approval the apply job plans again, and applies only if the full fingerprint of that plan (resources, actions and values) equals this one.
+
+To approve: open the run page, click **Review deployments**, read this summary, tick **prod**, click **Approve and deploy**. Only the required reviewer can approve. "Prevent self-review" is on, so the account that started this run cannot approve it.
+EOF
+)
+elif [ "$mismatch" = "true" ]; then
   decision_text="**The apply is refused** because the saved plan differs from the reviewed PR plan. Nothing was applied."
 else
   decision_text=$(cat <<EOF
@@ -192,7 +211,7 @@ The **terraform apply** of \`$short\` to **prod** is waiting for a human decisio
 - Approver must be: $who
 - $separation_line
 - Run: $run_url
-- Saved plan sha256: \`$PLAN_SHA256\`
+- ${PLAN_LABEL:-Saved plan sha256}: \`$PLAN_SHA256\`
 - Resources changed: $n_changes
 
 $compare_line
@@ -208,6 +227,20 @@ $changes_block
 $decision_text
 EOF
 )
+
+if [ "${GATE_MODE:-}" = "check" ]; then
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    printf '## Plan for owner review\n\n%s\n' "$body" >> "$GITHUB_STEP_SUMMARY"
+  else
+    printf '%s\n' "$body"
+  fi
+  if [ "$mismatch" = "true" ]; then
+    echo "Refused: the saved plan's change set differs from PR #$pr_number's plan comment"
+    exit 1
+  fi
+  echo "::notice title=Review deployments::Read the summary of job 'plan for review', then Review deployments, tick prod, Approve and deploy"
+  exit 0
+fi
 
 issue_url=$(gh issue create -R "$REPO" --title "Approve: apply $short to prod" --body "$body")
 issue="${issue_url##*/}"

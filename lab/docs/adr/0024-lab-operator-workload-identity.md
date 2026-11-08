@@ -5,6 +5,7 @@
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** 2027-02-04, or earlier on any revisit trigger
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
+- **Amended by:** [ADR 0030](0030-lab-operator-residual-risk.md) (2026-11-06, BUILT, not yet applied): standing rights cut to read-only, no Owner, writes only in an owner-opened session of at most 8 hours, only the owner applies `envs/operator`. The "no new reach: already Tier 0" notes below are retired reasoning.
 
 ## Context
 
@@ -122,7 +123,10 @@ switch.
   itself; review moved it to the account-wide IAM-write Deny above.) Still to capture: the Entra service-principal
   sign-in record and the CloudTrail `AssumeRoleWithWebIdentity` record.
 
-## Amendment 2026-11-05: who applies `envs/operator`
+## Amendment 2026-11-05: who applies `envs/operator` (RETIRED by ADR 0030)
+
+> Retired 2026-11-06: an identity must not apply changes to its own
+> permissions. Only the owner applies `envs/operator` (ADR 0030).
 
 The owner asked for the lab's remaining work to run without them. From this
 date, after the first human apply, changes to `envs/operator` are applied by
