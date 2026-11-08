@@ -201,3 +201,12 @@ test('a finished hire with OrangeHRM\'s own number (not 6 digits) is held and na
   assert.deepEqual(reconcile(feed, view, TODAY).held, [], 'the unfinished admin record (0001) is not reported');
 });
 
+test('a name with no usable ASCII is held (the sender would stop every send on it); accents fold like the sender', () => {
+  const { feed, view } = live();
+  const out = reconcile(feed, [...view, { ...SAM, first_name: '李', last_name: '明' }], TODAY);
+  assert.equal(out.changes.length, 0);
+  assert.match(out.held[0].why, /no plain letters/);
+  const accented = reconcile(feed, [...view, { ...SAM, employee_id: '100493', first_name: 'Dána', last_name: 'Ókafor' }], TODAY);
+  assert.match(accented.held[0]?.why ?? '', /dana\.okafor already belongs to employee 100492/);
+});
+
