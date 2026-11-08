@@ -11,7 +11,7 @@
 #            |  MFA + justification + approval (PIM-Approvers-Tier0) + 2 h cap
 #          person
 #
-# WHY: Azure Key Vault replaces HashiCorp Vault in the lab (ADR 0027,
+# WHY: Azure Key Vault replaces HashiCorp Vault in the lab (ADR 0036,
 # "Microsoft-native PAM"). A person who stores or changes a secret must not
 # hold that power all day. "Key Vault Secrets Officer" can read, write and
 # delete every secret in the vault (Microsoft Learn, "Azure built-in roles

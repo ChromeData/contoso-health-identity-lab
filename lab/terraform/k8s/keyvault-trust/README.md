@@ -3,7 +3,7 @@
 **Applied for real, one run at a time.** `lab/k8s/ci/pipeline.sh` applies this
 root in stage 4, as the lab operator, and destroys it at teardown. Until
 2026-11-06 it was `aks-mapping`, a plan-only mapping of the HashiCorp Vault
-role. ADR 0027 replaced Vault with Azure Key Vault, and the kind cluster now
+role. ADR 0036 replaced Vault with Azure Key Vault, and the kind cluster now
 publishes its service-account issuer on a public HTTPS URL. So the same
 federated credential is now used, not just written.
 

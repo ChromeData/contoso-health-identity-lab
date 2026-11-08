@@ -4,7 +4,7 @@
 # APPLIED BY THE PIPELINE, ONE RUN AT A TIME. This root is the Entra and Key
 # Vault side of the nightly-report workload's identity (README.md). It used
 # to be "aks-mapping", plan-only. Since Vault was replaced by Azure Key Vault
-# (ADR 0027), the kind cluster publishes its issuer on a public HTTPS URL, so
+# (ADR 0036), the kind cluster publishes its issuer on a public HTTPS URL, so
 # the same federated credential is now applied and used for real.
 #
 # PROVIDERS: the same constraints and locked builds as the rest of the lab

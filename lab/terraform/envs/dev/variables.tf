@@ -317,6 +317,21 @@ variable "enable_phishing_resistant_all_users" {
   default     = false
 }
 
+variable "enable_lcw_leaver_trigger" {
+  type        = bool
+  description = <<-EOT
+    Create the dynamic All-Workforce group (enabled, HR-synced members) for
+    the SCHEDULED leaver Lifecycle Workflow, without CA008: the workflow runs
+    for a user when HR's leaver disables the account and the user drops out
+    of the group (post-apply/New-LifecycleWorkflows.ps1
+    -IncludeScheduledLeaver). Until this, a leaver kept the access package
+    until IT ran 04-Leaver.ps1 (capture log E122). The same group as
+    enable_phishing_resistant_all_users creates; either flag creates it once.
+    Needs enable_premium (dynamic groups are P1).
+  EOT
+  default     = false
+}
+
 variable "ca008_scope" {
   type        = string
   description = <<-EOT
@@ -642,7 +657,7 @@ variable "enable_pim_azure_resources" {
 
 variable "enable_pim_keyvault_officers" {
   type        = bool
-  description = "Make PIM-KeyVault-Secrets-Officers ELIGIBLE for Key Vault Secrets Officer on the lab vault (Azure PIM, MFA + justification + Tier-0 approval, 2h; ADR 0027). Needs enable_premium and a HUMAN applier with Owner / User Access Administrator on the vault - the CI APPLY identity cannot write PIM role-management policies (modules/pim/README.md)."
+  description = "Make PIM-KeyVault-Secrets-Officers ELIGIBLE for Key Vault Secrets Officer on the lab vault (Azure PIM, MFA + justification + Tier-0 approval, 2h; ADR 0036). Needs enable_premium and a HUMAN applier with Owner / User Access Administrator on the vault - the CI APPLY identity cannot write PIM role-management policies (modules/pim/README.md)."
   default     = false
 }
 

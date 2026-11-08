@@ -31,7 +31,7 @@ driver writes it to a tmpfs file in the pod. Around that one exchange:
 | Kubernetes groups via `kubectl --as-group` (impersonation) | Stand-in for **Entra ID groups** through AKS's Entra integration |
 
 Until 2026-11-06 an in-cluster HashiCorp Vault (dev mode) stood in for the
-secret store. ADR 0027 ("Microsoft-native PAM") retired it: where Microsoft
+secret store. ADR 0036 ("Microsoft-native PAM") retired it: where Microsoft
 offers the product, the lab uses it. The Vault run's record stays as history
 in [`../evidence/k8s/20261020T202112Z/`](../evidence/k8s/20261020T202112Z/README.md).
 

@@ -33,7 +33,7 @@
 #   and the VALUE is not in this Terraform either: the pipeline sets it in Key
 #   Vault (stage 4), so it never enters state.
 #
-# This replaces HashiCorp Vault's Kubernetes auth + Agent Injector (ADR 0027,
+# This replaces HashiCorp Vault's Kubernetes auth + Agent Injector (ADR 0036,
 # "Microsoft-native PAM"). Key Vault, Entra Workload ID and the Azure
 # provider are the real products; kind stands in for AKS (STAND-INS.md).
 #

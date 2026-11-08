@@ -2,7 +2,7 @@
 
 - **Status:** Accepted. Amended 2026-11-06: Azure Key Vault, Microsoft Entra
   Workload ID and the Secrets Store CSI Driver replace the HashiCorp Vault
-  stand-in (ADR 0027, "Microsoft-native PAM"). The scope (one workload, one
+  stand-in (ADR 0036, "Microsoft-native PAM"). The scope (one workload, one
   secret, one exchange) is unchanged.
 - **Date:** 2026-10-20 (amended 2026-11-06)
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
@@ -29,7 +29,7 @@ into a platform-engineering project or needing a paid AKS cluster.
 3. **kind with HashiCorp Vault's Kubernetes auth and the Agent Injector.**
    The original choice (2026-10-20). Retired 2026-11-06: Microsoft offers
    the product (Key Vault + Workload ID), and the lab uses Microsoft where
-   Microsoft has one (ADR 0027).
+   Microsoft has one (ADR 0036).
 4. **A full workload-identity platform:** SPIFFE/SPIRE or service-mesh mTLS,
    multi-cluster, External Secrets, and policy engines (Kyverno,
    Gatekeeper). Broader, but each piece adds operational surface and moves

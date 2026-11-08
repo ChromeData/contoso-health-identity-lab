@@ -7,7 +7,7 @@ the pod. The cluster is **kind** (Kubernetes in Docker), standing in for
 **AKS**, and the human groups are **impersonated** Kubernetes groups
 standing in for Entra groups. See
 [`lab/docs/STAND-INS.md`](../../docs/STAND-INS.md). Until 2026-11-06 an
-in-cluster HashiCorp Vault stood in for the secret store; ADR 0027 retired it.
+in-cluster HashiCorp Vault stood in for the secret store; ADR 0036 retired it.
 
 The segment as a whole (cluster config, workload manifests, the one pipeline
 script, the e2e test, the CI workflow) is described in

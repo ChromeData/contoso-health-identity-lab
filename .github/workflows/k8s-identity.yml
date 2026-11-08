@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 # STATIC STAGES ONLY (1-3): preflight, Terraform fmt / validate / mocked
 # `terraform test` for the three k8s roots (platform, identity,
-# keyvault-trust), and Checkov. Since ADR 0027 replaced the in-cluster
+# keyvault-trust), and Checkov. Since ADR 0036 replaced the in-cluster
 # HashiCorp Vault stand-in with Azure Key Vault and Microsoft Entra Workload
 # ID, stages 4-12 create real Azure objects (a throwaway resource group, Key
 # Vault, storage issuer and app registration) and therefore run only as the

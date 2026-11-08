@@ -215,6 +215,8 @@ jobs:
           # Splunk live feed: watermark, de-dup, HEC failures, LaunchAgent template,
           # preflight verdict (fake Log Analytics, an HEC stub on 127.0.0.1; stdlib only).
           python3 -I -m unittest discover -s lab/scripts/monitoring/tests -p 'test_feed_splunk_live.py' -v
+          # configure-sync.py hrapp --mail-domain: the AD mail mapping (E121 follow-up; fake az).
+          python3 -I -m unittest discover -s lab/scripts/dc/tests -p 'test_configure_sync.py' -v
           # Pure parts of the lab passkey tool (no browser, Graph or Keychain);
           # node is preinstalled on ubuntu-latest, node:test needs no package.
           node --test lab/scripts/demo/tests/passkey.test.mjs
@@ -243,6 +245,10 @@ jobs:
           # kusto-harness run-on-workspace.py: result decoding and verdict
           # (no workspace; the live runs are operator runs, capture log E114).
           python3 -I -m unittest discover -s lab/monitoring/kusto-harness/tests -p 'test_*.py' -v
+          # Tier GPO proof device builder (lab/scripts/dc/tier-test): refuses an
+          # existing VM, saves its password only after Azure accepts the VM
+          # (mocked ARM and Keychain; no az).
+          python3 -I -m unittest discover -s lab/scripts/dc/tier-test/tests -p 'test_*.py' -v
 
       # The plain-English plan/apply summaries run with continue-on-error in
       # terraform-plan.yml / terraform-apply.yml (a summary bug must never

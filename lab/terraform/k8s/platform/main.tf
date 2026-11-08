@@ -24,7 +24,7 @@
 # The app reads a file. It holds no token and no client library.
 #
 # This replaces the earlier HashiCorp Vault (dev mode) + Agent Injector
-# stand-in. ADR 0027 ("Microsoft-native PAM"): where Microsoft offers the
+# stand-in. ADR 0036 ("Microsoft-native PAM"): where Microsoft offers the
 # product, the lab uses it. kind still stands in for AKS (STAND-INS.md).
 #
 # WHY THE DRIVER NAMESPACE IS PRIVILEGED (said out loud): the CSI node plugin

@@ -68,7 +68,7 @@
 #                                          RG (premium; HUMAN Owner applies).
 #   enable_pim_keyvault_officers        -> Azure PIM: eligible Key Vault Secrets
 #                                          Officer on kv-idlab (premium; HUMAN
-#                                          Owner applies; ADR 0027).
+#                                          Owner applies; ADR 0036).
 #   enable_pim_demo_readers             -> PIM-Demo-Readers: read-only presenter
 #                                          access (Global Reader + Security
 #                                          Reader), eligible-only, no approval;
@@ -266,6 +266,13 @@ check "nhi_governance_requires_premium" {
   }
 }
 
+check "lcw_leaver_trigger_requires_premium" {
+  assert {
+    condition     = !var.enable_lcw_leaver_trigger || var.enable_premium
+    error_message = "enable_lcw_leaver_trigger = true has no effect unless enable_premium = true (the All-Workforce trigger group lives in the premium-tier modules/groups; dynamic groups are P1). New-LifecycleWorkflows.ps1 -IncludeScheduledLeaver will then refuse to run because the group does not exist."
+  }
+}
+
 # Containment is a Sentinel automation rule: on the Log Analytics path it can
 # never fire. modules/monitoring refuses the plan; this states why up front.
 check "itdr_containment_requires_sentinel" {
@@ -349,8 +356,8 @@ module "groups" {
   break_glass_domain = var.onmicrosoft_domain
 
   # Optional groups, each behind the flag of the feature that consumes it.
-  enable_nhi_governance  = var.enable_nhi_governance               # App-Consent-Reviewers
-  enable_workforce_group = var.enable_phishing_resistant_all_users # All-Workforce (passkey rollout)
+  enable_nhi_governance  = var.enable_nhi_governance                                                # App-Consent-Reviewers
+  enable_workforce_group = var.enable_phishing_resistant_all_users || var.enable_lcw_leaver_trigger # All-Workforce (passkey rollout; scheduled leaver trigger)
 }
 
 # -----------------------------------------------------------------------------
@@ -483,7 +490,7 @@ module "pim" {
   enable_pim_azure_resources = var.enable_pim_azure_resources
   azure_pim_scope_id         = azurerm_resource_group.idlab.id
 
-  # Just-in-time Key Vault Secrets Officer on the lab vault (ADR 0027,
+  # Just-in-time Key Vault Secrets Officer on the lab vault (ADR 0036,
   # modules/pim keyvault.tf). Like PIM-Azure-RG-Contributors, its members
   # are STANDING (the group is eligible), so they join CA002 / CA020 scope
   # through privileged_review_targets: each must be an adm- account with a

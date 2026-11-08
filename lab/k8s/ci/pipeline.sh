@@ -10,7 +10,7 @@
 # Workload ID trusts the cluster's service-account tokens, and the Secrets
 # Store CSI Driver with the Azure provider mounts the value into the pod.
 # Stand-ins (lab/docs/STAND-INS.md): the kind cluster replaces AKS; the
-# impersonated k8s-clinical-* groups replace Entra groups. ADR 0027 replaced
+# impersonated k8s-clinical-* groups replace Entra groups. ADR 0036 replaced
 # the earlier HashiCorp Vault stand-in.
 #
 #   [1/12]  preflight          tool versions; kind + kubectl on PATH must match

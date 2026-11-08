@@ -637,7 +637,7 @@ a user, `mallory`). `terraform plan -detailed-exitcode` must then exit 2
   reviewer-gated no-op apply.
 - **`keyvault-trust` is applied only by the operator's local pipeline run.**
   The third root under `lab/terraform/k8s` holds the Entra Workload ID
-  federated credential and the one-secret Key Vault grant (ADR 0027). No
+  federated credential and the one-secret Key Vault grant (ADR 0036). No
   workflow applies it: `k8s-identity.yml` runs the static stages only, and
   `terraform-apply.yml`'s `!lab/terraform/k8s/**` keeps it out of the Entra
   apply. CI holds no identity that could create an app registration.
