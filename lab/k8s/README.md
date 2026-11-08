@@ -70,7 +70,7 @@ can run it as any service account there. Section 3 shows how that is closed.
 
 ```
  host: macOS + Colima (one script: lab/scripts/operator/op lab/k8s/ci/pipeline.sh)
- ├─ az (as the lab operator)  rg-k8skv-test-<run>: storage static website (the issuer) + Key Vault
+ ├─ az (as the lab operator)  rg-lab-sandbox, tagged run-id: storage static website (the issuer) + Key Vault
  │                                                 (clinical-db + a decoy)
  ├─ terraform  lab/terraform/k8s/keyvault-trust ─► Entra: app (no credential) + federated credential
  │                                                 Azure RBAC: Key Vault Secrets User on clinical-db only
@@ -300,6 +300,14 @@ operator (`lab/scripts/operator/op`; ADR 0024). `kind` v0.33.0 and `kubectl`
 v1.37.1 are hashed against the pins on every run. Use a terminal at least
 100 columns wide.
 
+**Needs an operator write session (since ADR 0030).** The operator is
+read-only between sessions. Stage 4 creates a storage account, a vault and
+role assignments, so it runs only while the owner has a write session open:
+`envs/operator` then gives the operator Contributor and RBAC Administrator on
+the sandbox resource group `rg-lab-sandbox` only (`sandbox.tf`, PR #249).
+Without one, preflight stops with the reason. `STOP_AFTER=3` needs no
+session.
+
 ```bash
 lab/scripts/operator/op lab/k8s/ci/pipeline.sh                  # all 12 stages, then deletes everything
 KEEP_CLUSTER=1 lab/scripts/operator/op lab/k8s/ci/pipeline.sh   # keep cluster + Azure objects to explore
@@ -323,7 +331,7 @@ ssh -F <(colima ssh-config -p default) -o ControlMaster=no -o ControlPath=none \
 | `[1/12]` preflight | tool versions; kind + kubectl hashed; az must be the operator service principal |
 | `[2/12]` terraform fmt / validate / test | `platform`, `identity`, `keyvault-trust` (mocked providers, 17 test runs) |
 | `[3/12]` checkov | terraform + kubernetes frameworks; any inline skip must give a reason |
-| `[4/12]` azure | throwaway resource group: storage static website, Key Vault, `clinical-db` + decoy; `keyvault-trust` apply |
+| `[4/12]` azure | in the sandbox resource group (tagged per run): storage static website, Key Vault, `clinical-db` + decoy; `keyvault-trust` apply |
 | `[5/12]` kind cluster + public issuer | `contoso-k8s` with that issuer; discovery doc + JWKS published, read back |
 | `[6/12]` terraform apply platform | namespaces + PSA, CSI driver + Azure provider (read back: one token audience) |
 | `[7/12]` terraform apply identity | SAs, SecretProviderClass, human RBAC, the admission policy (read back live: `[Deny]`) |

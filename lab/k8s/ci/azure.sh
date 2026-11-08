@@ -6,7 +6,11 @@
 #
 # Per run, in the lab subscription, as the lab operator (the pipeline must be
 # started through lab/scripts/operator/op; preflight refuses anything else):
-#   rg-k8skv-test-<run id>   one resource group, tagged, deleted at teardown
+#   rg-lab-sandbox           the SANDBOX resource group (envs/operator
+#                            sandbox.tf): the operator may write there only
+#                            during an owner-opened session (ADR 0030). Each
+#                            run's objects carry run-id=<run id> and are
+#                            deleted at teardown; the group itself stays.
 #     stk8skv<run id>        storage account; its STATIC WEBSITE is the
 #                            cluster's public service-account issuer (the
 #                            discovery document + JWKS, nothing else)
@@ -37,6 +41,9 @@ az_q() { az "$@" --only-show-errors; }   # az, minus its upgrade/preview chatter
 
 # --- preflight ------------------------------------------------------------------
 AZ_OPERATOR_OID=""
+# Every run's throwaway objects live in the sandbox resource group, never in
+# a resource group of their own (the operator cannot create one: ADR 0030).
+AZ_RG="${K8S_SANDBOX_RG:-rg-lab-sandbox}"
 az_preflight() {
   need az "Azure CLI"
   # The operator wrapper exports both. Without them az would run as whoever
@@ -54,6 +61,18 @@ az_preflight() {
   AZ_OPERATOR_OID=$(az_q ad sp show --id "$(jq -r '.user.name' <<<"$acct")" --query id -o tsv) \
     || die "could not read the operator's own service principal"
   log "az       $(az version --query '"azure-cli"' -o tsv 2>/dev/null) as the operator (service principal ${AZ_OPERATOR_OID:0:8}...), subscription ${ARM_SUBSCRIPTION_ID:0:8}..."
+  # Since ADR 0030 the operator writes only in an owner-opened session, and
+  # only inside the sandbox resource group for objects like these (a storage
+  # account, a vault, role assignments on them): envs/operator sandbox.tf.
+  # Check that the session's two sandbox grants are ACTIVE before creating
+  # anything, so stage 4 fails here with the reason, not half-way through.
+  local sb_id roles
+  sb_id=$(az_q group show -n "$AZ_RG" --query id -o tsv 2>/dev/null) \
+    || die "sandbox resource group $AZ_RG not found: the owner applies envs/operator (sandbox.tf, ADR 0030)"
+  roles=$(az_q role assignment list --assignee "$AZ_OPERATOR_OID" --scope "$sb_id" --query '[].roleDefinitionName' -o tsv 2>/dev/null | sort -u | tr '\n' ',')
+  [[ "$roles" == *"Contributor,"* && "$roles" == *"Role Based Access Control Administrator,"* ]] \
+    || die "the operator has no write on $AZ_RG (roles: ${roles:-none}): the owner opens a write session (envs/operator operator_write_session, ADR 0030)"
+  log "sandbox  $AZ_RG: operator holds Contributor + RBAC Administrator (session, time-bound)"
 }
 
 # --- run state --------------------------------------------------------------------
@@ -100,7 +119,6 @@ kv_put_retry() { # kv_put_retry NAME VALUE_VAR : retry while the operator's new 
 # --- stage 4: throwaway Azure objects + the trust ---------------------------------
 azure_up() {
   RUN_ID=$(openssl rand -hex 4)
-  AZ_RG="rg-k8skv-test-$RUN_ID"
   AZ_STORAGE="stk8skv$RUN_ID"
   KV_NAME="kv-k8s-$RUN_ID"
   KV_ID="" SA_ISSUER="" WORKLOAD_CLIENT_ID=""
@@ -109,16 +127,16 @@ azure_up() {
 
   local expires
   expires=$(date -u -v+1d +%Y-%m-%dT%H:%MZ 2>/dev/null || date -u -d '+1 day' +%Y-%m-%dT%H:%MZ)
-  log "resource group $AZ_RG ($AZ_LOCATION), tagged delete-after=$expires"
-  az_q group create -n "$AZ_RG" -l "$AZ_LOCATION" -o none --tags \
-    purpose=k8s-keyvault-e2e created-by=lab/k8s/ci/pipeline.sh run-id="$RUN_ID" delete-after="$expires"
+  local tags=(purpose=k8s-keyvault-e2e created-by=lab/k8s/ci/pipeline.sh run-id="$RUN_ID" delete-after="$expires")
+  log "throwaway objects for run $RUN_ID go into the sandbox $AZ_RG, tagged run-id=$RUN_ID delete-after=$expires"
 
   log "storage account $AZ_STORAGE: static website = the cluster's public issuer"
   az_q storage account create -n "$AZ_STORAGE" -g "$AZ_RG" -l "$AZ_LOCATION" -o none \
     --sku Standard_LRS --kind StorageV2 --https-only true --min-tls-version TLS1_2 \
-    --allow-blob-public-access false
+    --allow-blob-public-access false --tags "${tags[@]}"
   # Static website is a blob SERVICE property. az fetches the account key
-  # itself over ARM (the operator is Owner); the key is never on a command line.
+  # itself over ARM (Contributor on the sandbox allows listKeys); the key is
+  # never on a command line.
   az_q storage blob service-properties update --account-name "$AZ_STORAGE" --auth-mode key \
     --static-website --index-document index.html -o none
   SA_ISSUER=$(az_q storage account show -n "$AZ_STORAGE" -g "$AZ_RG" --query primaryEndpoints.web -o tsv)
@@ -129,7 +147,7 @@ azure_up() {
   log "Key Vault $KV_NAME (Azure RBAC, Standard, no purge protection: purged at teardown)"
   KV_ID=$(az_q keyvault create -n "$KV_NAME" -g "$AZ_RG" -l "$AZ_LOCATION" --sku standard \
     --enable-rbac-authorization true --retention-days 7 --public-network-access Enabled \
-    --query id -o tsv)
+    --tags "${tags[@]}" --query id -o tsv)
   write_run_env
   # The operator stores the two values. Its own grant, on this vault only.
   az_q role assignment create --assignee-object-id "$AZ_OPERATOR_OID" --assignee-principal-type ServicePrincipal \
@@ -219,9 +237,21 @@ azure_down() { # -> 0 when everything this run created is gone (read back)
     log "deleting leftover app registration k8s-nightly-report-$RUN_ID ($n)"
     az_q ad app delete --id "$n" || ok=1
   done
-  if [[ "$(az_q group exists -n "$AZ_RG" 2>/dev/null)" == true ]]; then
-    log "az group delete $AZ_RG (storage account + Key Vault)"
-    az_q group delete -n "$AZ_RG" --yes || ok=1
+  # The sandbox resource group stays (envs/operator owns it). Delete exactly
+  # this run's objects: the operator's grant on the vault, the vault, the
+  # storage account.
+  local kv_id ra
+  kv_id=$(az_q keyvault show -n "$KV_NAME" -g "$AZ_RG" --query id -o tsv 2>/dev/null || true)
+  if [[ -n "$kv_id" ]]; then
+    for ra in $(az_q role assignment list --scope "$kv_id" --query "[?principalId=='$AZ_OPERATOR_OID'].id" -o tsv 2>/dev/null); do
+      az_q role assignment delete --ids "$ra" -o none || ok=1
+    done
+    log "az keyvault delete $KV_NAME"
+    az_q keyvault delete -n "$KV_NAME" -g "$AZ_RG" -o none || ok=1
+  fi
+  if az_q storage account show -n "$AZ_STORAGE" -g "$AZ_RG" -o none 2>/dev/null; then
+    log "az storage account delete $AZ_STORAGE"
+    az_q storage account delete -n "$AZ_STORAGE" -g "$AZ_RG" --yes -o none || ok=1
   fi
   case "$(kv_deleted_state)" in
     present)
@@ -231,12 +261,13 @@ azure_down() { # -> 0 when everything this run created is gone (read back)
     *) log "could not tell whether $KV_NAME is soft-deleted (lookup failed): keeping the run record"; ok=1 ;;
   esac
   # Read back: nothing of this run is left.
-  local rg app kv
-  rg=$(az_q group exists -n "$AZ_RG" 2>/dev/null || echo unknown)
+  local left app kv
+  # Anything in the sandbox still tagged with this run id (none expected).
+  left=$(az_q resource list -g "$AZ_RG" --tag run-id="$RUN_ID" --query 'length(@)' -o tsv 2>/dev/null || echo unknown)
   app=$(az_q ad app list --display-name "k8s-nightly-report-$RUN_ID" --query 'length(@)' -o tsv 2>/dev/null || echo unknown)
   kv=$(kv_deleted_state)   # present | gone | unknown; only "gone" passes
-  log "read back: resource group exists=$rg; app registrations=$app; vault $KV_NAME: $kv"
-  [[ "$rg" == false && "$app" == 0 && "$kv" == gone ]] || ok=1   # unknown keeps RUN_ENV for a retry
+  log "read back: sandbox objects tagged run-id=$RUN_ID: $left; app registrations=$app; vault $KV_NAME: $kv"
+  [[ "$left" == 0 && "$app" == 0 && "$kv" == gone ]] || ok=1   # unknown keeps RUN_ENV for a retry
   if [[ $ok -eq 0 ]]; then
     rm -f "$TF_KEYVAULT_TRUST/terraform.tfstate" "$TF_KEYVAULT_TRUST/terraform.tfstate.backup"
     rm -f "$RUN_ENV"

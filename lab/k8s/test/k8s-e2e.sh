@@ -536,6 +536,7 @@ token_dies_with_sa() {
 # admission admits it (only nightly-report is bound to the launcher), which
 # is the point - naming the class is not enough.
 THIEF_POD=e2e-spc-borrow
+THIEF_UID=""
 thief_pod_up() {
   k -n "$APP_NS" delete pod "$THIEF_POD" --ignore-not-found --wait=true >/dev/null 2>&1 || true
   jq -n --arg n "$THIEF_POD" --arg img "$APP_IMAGE" --arg spc "$SPC_NAME" --arg ns "$APP_NS" '{
@@ -548,11 +549,16 @@ thief_pod_up() {
         securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}},
         volumeMounts: [{name: "secrets-store", mountPath: "/mnt/secrets-store", readOnly: true}]}],
       volumes: [{name: "secrets-store", csi: {driver: "secrets-store.csi.k8s.io", readOnly: true,
-        volumeAttributes: {secretProviderClass: $spc}}}]}}' | k create -f - >/dev/null
+        volumeAttributes: {secretProviderClass: $spc}}}]}}' | k create -f - >/dev/null || return 1
+  # The pod name is reused on every run, so events are matched by THIS pod's
+  # UID: an older pod's refusal on a kept cluster must not count.
+  THIEF_UID=$(k -n "$APP_NS" get pod "$THIEF_POD" -o jsonpath='{.metadata.uid}' 2>/dev/null) || THIEF_UID=""
+  [[ -n "$THIEF_UID" ]]
 }
 
 thief_mount_failed() {
-  THIEF_EVENT=$(k -n "$APP_NS" get events --field-selector "involvedObject.name=$THIEF_POD,reason=FailedMount" -o json 2>/dev/null \
+  [[ -n "${THIEF_UID:-}" ]] || return 1
+  THIEF_EVENT=$(k -n "$APP_NS" get events --field-selector "involvedObject.uid=$THIEF_UID,reason=FailedMount" -o json 2>/dev/null \
     | jq -r '[.items[].message | select(test("AADSTS"))] | last // empty | capture("(?<c>AADSTS[0-9]+)[^.]*\\.?").c // empty') || THIEF_EVENT=""
   # Only the subject-mismatch refusal proves "this SA may not borrow the
   # credential"; any other Entra error keeps waiting (and fails at 120 s).

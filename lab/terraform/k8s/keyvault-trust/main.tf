@@ -26,8 +26,8 @@
 #
 # WHO APPLIES IT: lab/k8s/ci/pipeline.sh, stage 4, run as the lab operator
 # (lab/scripts/operator/op). It is a throwaway: the pipeline destroys it with
-# the cluster. The vault and storage it points at are throwaway too (one
-# resource group per run, created and deleted by the pipeline).
+# the cluster. The vault and storage it points at are throwaway too (created
+# and deleted by the pipeline in the sandbox resource group, rg-lab-sandbox).
 #
 # WHY SECRET SCOPE, AND THE TRADE-OFF (said out loud): Microsoft Learn
 # ("Grant permission to applications to access an Azure key vault using

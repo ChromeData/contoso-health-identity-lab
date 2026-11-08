@@ -44,8 +44,9 @@ MOUNTED_FILE=/mnt/secrets-store/db
 EXCHANGE_AUDIENCE=api://AzureADTokenExchange
 KV_SCOPE=https://vault.azure.net/.default
 KV_API_VERSION=7.5
-# Throwaway Azure objects live here (one resource group per run, deleted at
-# teardown). Same region as the lab (rg-identity-lab).
+# Throwaway Azure objects live in the sandbox resource group (azure.sh AZ_RG,
+# envs/operator sandbox.tf), tagged per run, deleted at teardown. Same region
+# as the lab (rg-identity-lab).
 AZ_LOCATION=eastus2
 # The ValidatingAdmissionPolicy (and its binding) the identity root installs:
 # digest-pinned images, an image allowlist for the nightly-report identity,
