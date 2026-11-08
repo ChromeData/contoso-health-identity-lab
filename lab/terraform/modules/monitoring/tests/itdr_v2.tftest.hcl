@@ -156,6 +156,23 @@ run "sentinel_v2_rules" {
     )
     error_message = "v2 schedules must match the look-back each .kql documents."
   }
+  # Sentinel refuses a period of 2 days or more with a frequency under 1 hour
+  # (BadRequest, proven 2026-10-27). Review of #233: pim_activation had
+  # PT5M / P2D.
+  assert {
+    condition = alltrue([
+      for k, r in azurerm_sentinel_alert_rule_scheduled.this :
+      !can(regex("^P([2-9]|1[0-4])D$", r.query_period)) || can(regex("^PT[1-9][0-9]*H$|^P[0-9]+D$", r.query_frequency))
+    ])
+    error_message = "A Sentinel rule with a period of 2 days or more must run at most hourly."
+  }
+  assert {
+    condition = (
+      azurerm_sentinel_alert_rule_scheduled.this["pim_activation"].query_frequency == "PT5M" &&
+      azurerm_sentinel_alert_rule_scheduled.this["pim_activation"].query_period == "P1D"
+    )
+    error_message = "pim_activation runs every 5 minutes over P1D (22 h history + 2 x 1 h window in the .kql)."
+  }
   assert {
     condition = (
       contains(azurerm_sentinel_alert_rule_scheduled.this["device_code_signin"].techniques, "T1528") &&
@@ -219,6 +236,9 @@ run "v2_rules_render_id_lists" {
     break_glass_group_ids     = ["44444444-4444-4444-4444-444444444444"]
     privileged_user_ids       = ["55555555-5555-5555-5555-555555555555"]
     azure_pim_group_ids       = ["66666666-6666-6666-6666-666666666666"]
+    # Core-rule lists (2026-11-07): set too, so "no empty placeholder" holds.
+    tier0_group_ids       = ["77777777-7777-7777-7777-777777777777"]
+    trusted_egress_ranges = ["198.51.100.0/24"]
   }
 
   assert {
