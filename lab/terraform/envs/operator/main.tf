@@ -173,7 +173,7 @@ resource "azuread_directory_role_assignment" "operator" {
 # plan after the trial's end warns until a PR removes it from the session list.
 check "intune_write_time_box" {
   assert {
-    condition     = !contains(var.operator_session_graph_roles, "DeviceManagementConfiguration.ReadWrite.All") || timecmp(plantimestamp(), "2026-11-27T00:00:00Z") < 0
+    condition     = !contains(var.operator_session_graph_roles, "DeviceManagementConfiguration.ReadWrite.All") || timecmp(plantimestamp(), var.intune_write_expires_utc) < 0
     error_message = "The E5 trial ended on 2026-11-26: remove DeviceManagementConfiguration.ReadWrite.All from operator_session_graph_roles and apply envs/operator (ADR 0024 / 0030)."
   }
 }

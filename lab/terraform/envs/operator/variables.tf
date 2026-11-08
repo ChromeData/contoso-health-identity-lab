@@ -289,3 +289,14 @@ variable "operator_directory_roles" {
   type        = list(string)
   default     = ["Security Reader"]
 }
+
+variable "intune_write_expires_utc" {
+  description = "End of the Intune write time box: the E5 trial (which licenses EPM) ends 2026-11-26. check \"intune_write_time_box\" warns on every plan after this while DeviceManagementConfiguration.ReadWrite.All is still a session role. A variable so the offline tests do not depend on today's date."
+  type        = string
+  default     = "2026-11-27T00:00:00Z"
+
+  validation {
+    condition     = can(timecmp(var.intune_write_expires_utc, "2026-01-01T00:00:00Z"))
+    error_message = "intune_write_expires_utc must be an RFC 3339 time."
+  }
+}
