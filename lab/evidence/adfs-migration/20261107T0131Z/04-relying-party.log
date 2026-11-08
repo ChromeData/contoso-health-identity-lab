@@ -1,0 +1,17 @@
+run command lab-dd5f517b: lab/adfs/scripts/11-Add-ClaimsViewerRp.ps1 on vm-dc01
+[adfs-rp] group GRP-ClaimsViewer-Clinicians
+[adfs-rp] group GRP-ClaimsViewer-Admins
+[adfs-rp] user adfs-pilot@contosohealthlab.com
+[adfs-rp] relying party urn:contoso:claims-viewer
+{
+    "relyingParty":  "Contoso Claims Viewer",
+    "identifier":  "urn:contoso:claims-viewer",
+    "acs":  "https://localhost:8443/simplesaml/module.php/saml/sp/saml2-acs.php/default-sp",
+    "accessPolicy":  "Permit specific group",
+    "ruleCount":  5,
+    "pilotUser":  "adfs-pilot@contosohealthlab.com",
+    "clinicianSid":  "S-1-5-21-1067174854-3188284702-1788255269-4102",
+    "adminSid":  "S-1-5-21-1067174854-3188284702-1788255269-4103",
+    "idpInitiated":  true
+}
+state: Succeeded, exit code: 0
