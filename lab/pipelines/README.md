@@ -217,6 +217,10 @@ The repo is **public on purpose**, and the pipeline depends on it:
        `APPLY_BOT_LOGIN` is set, the owner never merges.
     Set `APPLY_BOT_LOGIN` at a merge that the bot itself makes, so the first
     gated run already passes the check.
+    **Status (2026-11-08): stage 2.** `APPLY_BOT_LOGIN` is
+    `contoso-health-lab-bot[bot]`, set at the #241 merge. Each catch-up run
+    is a dispatch on a commit whose PR the bot authored and merged (for
+    example #259, #271).
     Why not `gh workflow run`: that needs the App permission Actions: write,
     and the bot has Actions: read. A repository dispatch needs only Contents:
     write, which the bot already has (GitHub docs, "Permissions required for

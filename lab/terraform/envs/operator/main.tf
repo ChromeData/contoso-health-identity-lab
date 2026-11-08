@@ -145,6 +145,71 @@ resource "azuread_app_role_assignment" "operator_session" {
   depends_on = [azurerm_pim_active_role_assignment.operator_session]
 }
 
+# -----------------------------------------------------------------------------
+# Tier-0 reach of the STANDING data roles (karen-review round 2, R4).
+# Both standing data roles sit at subscription scope, so without a condition:
+#   * Key Vault Secrets User reads EVERY secret, including the built-in
+#     Domain Admin (dc01-admin-password) and the DSRM password. Standing read
+#     of a Domain Admin password IS standing Tier 0.
+#   * Storage Blob Data Contributor writes EVERY container, including the
+#     Terraform state of envs/dev (APPLY's Tier-0 pipeline) and of
+#     envs/bootstrap and this root. Writing state can make the next apply
+#     destroy or re-own resources.
+# An Azure ABAC condition on each assignment removes exactly that reach,
+# without a narrower scope (the state account's ReadOnly lock blocks new
+# account- and container-scoped assignments). Same condition grammar as the
+# DC's live Key Vault condition (modules/dc-vm). Docs (checked 2026-11-08):
+#   learn.microsoft.com/azure/key-vault/general/rbac-guide ("Azure role
+#     assignment conditions" for Key Vault data actions),
+#   learn.microsoft.com/azure/storage/blobs/storage-auth-abac-attributes
+#     (containers:name, blobs/write, add/action, delete, move/action).
+# Inside an owner-opened write session, Key Vault Secrets Officer (no
+# condition, time-bound PIM, write-session.tf) still reads them: that is the
+# intended Tier-0 window. State write is never in a session by default; the
+# owner adds "Storage Blob Data Contributor" to operator_session_azure_roles
+# for one session if a state repair is ever needed.
+# Not covered: container-level CONTROL-plane actions (containers/delete,
+# containers/write) are not data actions, so ABAC cannot gate them; the state
+# account's ReadOnly lock refuses them, and the operator cannot remove a lock
+# (no Microsoft.Authorization/locks/delete, ADR 0030).
+# -----------------------------------------------------------------------------
+locals {
+  operator_kv_tier0_condition = <<-EOT
+    (
+     (
+      !(ActionMatches{'Microsoft.KeyVault/vaults/secrets/getSecret/action'})
+     )
+     OR
+     (
+      ${join("\n      AND\n      ", [for n in var.tier0_secret_names : "@Resource[Microsoft.KeyVault/vaults/secrets:name] StringNotEquals '${n}'"])}
+     )
+    )
+  EOT
+
+  operator_state_write_condition = <<-EOT
+    (
+     (
+      !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write'})
+      AND
+      !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action'})
+      AND
+      !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete'})
+      AND
+      !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/move/action'})
+     )
+     OR
+     (
+      ${join("\n      AND\n      ", [for c in var.terraform_state_containers : "@Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringNotEquals '${c}'"])}
+     )
+    )
+  EOT
+
+  operator_role_conditions = {
+    "Key Vault Secrets User"        = local.operator_kv_tier0_condition
+    "Storage Blob Data Contributor" = local.operator_state_write_condition
+  }
+}
+
 resource "azurerm_role_assignment" "operator" {
   for_each = toset(var.operator_azure_roles)
 
@@ -153,6 +218,12 @@ resource "azurerm_role_assignment" "operator" {
   principal_id         = azuread_service_principal.operator.object_id
   principal_type       = "ServicePrincipal"
   description          = "Lab operator STANDING role (lab/terraform/envs/operator, owner-applied, ADR 0030)."
+
+  # R4: no standing Tier-0 secret read, no standing state write. azurerm
+  # marks condition ForceNew, so adding it REPLACES these two assignments
+  # (destroy + create, a few seconds without the role).
+  condition         = lookup(local.operator_role_conditions, each.value, null)
+  condition_version = contains(keys(local.operator_role_conditions), each.value) ? "2.0" : null
 }
 
 resource "azuread_directory_role" "operator" {
