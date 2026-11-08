@@ -118,9 +118,23 @@ function checkManager(workers, manager, self) {
   }
 }
 
-// The local part of the userName the sender builds (given.surname, lowercased).
+// The sender's ASCII normaliser, ported from ConvertTo-UpnLocalPart in
+// Invoke-InboundProvisioning.ps1 (keep the two in step): decompose accents,
+// drop the combining marks, map the letters that do not decompose, keep
+// a-z, 0-9 and '-' only. '' means nothing usable is left.
+const NO_DECOMPOSE = { '\u00f8': 'o', '\u00df': 'ss', '\u00e6': 'ae', '\u0142': 'l', '\u0131': 'i', '\u0111': 'd', '\u00f0': 'd', '\u00fe': 'th', '\u0153': 'oe' };
+export function upnLocalPart(value) {
+  if (!value || !value.trim()) return '';
+  let s = value.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase();
+  for (const [k, v] of Object.entries(NO_DECOMPOSE)) s = s.split(k).join(v);
+  return s.replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '');
+}
+
+// The account name the sender derives on first send: given.surname, ASCII.
+// (A clash gets a suffix digit from the sender, the lower employee number
+// keeping the plain name; see Resolve-UserName.)
 export function accountName(givenName, surname) {
-  return `${givenName}.${surname}`.toLowerCase();
+  return `${upnLocalPart(givenName)}.${upnLocalPart(surname)}`;
 }
 
 // HIRE. HR gives name, job, department, manager, start date. The HR app
@@ -139,17 +153,14 @@ export function hire(roster, input, catalogue) {
   checkManager(roster.workers, manager, null);
   const dupe = roster.workers.find((w) => w.status !== 'leaver' && w.givenName.toLowerCase() === givenName.toLowerCase() && w.surname.toLowerCase() === surname.toLowerCase());
   if (dupe) throw new HrError(`${givenName} ${surname} already works here. Change their record instead.`, 409);
-  // The directory account name. Invoke-InboundProvisioning.ps1 builds the
-  // userName as given.surname, lowercased: no employee number in it. So two
-  // different splits ("Alex.J Kim" / "Alex J.Kim") or a leaver whose disabled
-  // account still sits in AD would give two workers ONE account name, and the
-  // second hire could never get its own account. Check every worker on the
-  // roster, leavers included; refuse a space (an invalid UPN).
-  const account = accountName(givenName, surname);
-  if (/\s/.test(account)) throw new HrError('Names with a space cannot make a directory account name. Use a hyphen (for example Mary-Ann).');
-  const clash = roster.workers.find((w) => accountName(w.givenName, w.surname) === account);
-  if (clash) {
-    throw new HrError(`The account name ${account} already belongs to ${clash.givenName} ${clash.surname} (${clash.status === 'leaver' ? 'a leaver whose account still exists' : 'a current worker'}). Ask IT for a different account name before hiring.`, 409);
+  // The sender derives the directory account name from the name, ASCII
+  // only. A name with no usable ASCII left (for example written only in
+  // Chinese characters) makes Resolve-UserName throw for the WHOLE roster,
+  // which would block every later hire, mover and leaver. So refuse it here,
+  // before it is saved. (Name clashes are not refused: the sender issues the
+  // second worker a suffixed name, given.surname2, and keeps it for good.)
+  if (!upnLocalPart(givenName) || !upnLocalPart(surname)) {
+    throw new HrError('This name cannot make a directory account name (it needs some letters A-Z after accents are removed). Ask IT to issue the account name first; the form cannot hire this name yet.');
   }
   const employeeId = nextEmployeeId(roster.workers, dept, jobTitle);
   const worker = { employeeId, givenName, surname, dept, jobTitle, manager, status: 'joiner', startDate, endDate: '' };

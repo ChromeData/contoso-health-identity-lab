@@ -1051,3 +1051,90 @@ variable "servicenow_saml_signing_cert_end_date" {
   description = "Expiry of the ServiceNow SAML signing certificate (RFC 3339); null = Entra's 3-year default, which the lab's 180-day credential policy rejects."
   default     = null
 }
+
+# ---- Okta -> Entra app migration, wave 1 (Clinic Lab Results) -----------------
+
+variable "enable_clinic_results_app" {
+  type        = bool
+  description = <<-EOT
+    Okta -> Entra migration wave 1 (lab/okta-migration, runbook Phase 2):
+    the Clinic Lab Results app in Entra (modules/apps clinic_results.tf:
+    public client, PKCE, no secret, assignment required, ONE assignment
+    App-ClinicResults-Users) AND its Conditional Access policy CA061 (MFA,
+    sign-in every 8 h, the app group only), which needs a CA061 entry in
+    ca_policy_states. Needs enable_premium and enable_sso_apps. The Okta app
+    it replaces stays in lab/terraform/okta until the retire step.
+  EOT
+  default     = false
+}
+
+# ---- AD FS -> Entra migration exercise (lab/adfs, ADR 0009) -------------------
+
+variable "enable_adfs_https" {
+  type        = bool
+  description = <<-EOT
+    Admit HTTPS (443) to DC01 from operator_ip_ranges (the same /32), for the
+    TEMPORARY lab AD FS (lab/adfs/README.md): the operator's test browser
+    signs in to it through the Claims Viewer. Off by default. Turn it off
+    again after lab/adfs/scripts/19-Remove-Adfs.ps1.
+  EOT
+  default     = false
+}
+
+variable "enable_connect_health_registration" {
+  type        = bool
+  description = <<-EOT
+    TIME-BOXED (ADR 0031): create adm-connecthealth-reg with an ACTIVE Hybrid
+    Identity Administrator role, so lab/adfs/connect-health/register.sh can
+    register the Connect Health agent on DC01 with a passkey sign-in and no
+    person at the server. Changes no Conditional Access policy. Needs
+    connect_health_registration_until_utc. Off by default; the PR that turns
+    it on is followed by one that turns it off (that deletes the account and
+    the role).
+  EOT
+  default     = false
+}
+
+variable "connect_health_registration_until_utc" {
+  type        = string
+  description = <<-EOT
+    End of the Connect Health registration window, RFC 3339 UTC (e.g.
+    "2026-11-08T18:00:00Z"). While enable_connect_health_registration is on,
+    every envs/dev plan after this time FAILS, so nothing else can be applied
+    until the flag is turned off. Keep it within 24 hours of the PR.
+  EOT
+  default     = ""
+  validation {
+    condition     = var.connect_health_registration_until_utc == "" || can(timecmp(var.connect_health_registration_until_utc, "2000-01-01T00:00:00Z"))
+    error_message = "connect_health_registration_until_utc must be an RFC 3339 timestamp such as 2026-11-08T18:00:00Z."
+  }
+}
+
+variable "enable_claims_viewer_app" {
+  type        = bool
+  description = <<-EOT
+    Create the Contoso Claims Viewer SAML app in Entra (modules/apps
+    claims_viewer.tf): the app moved off AD FS, its AD FS claim rules
+    converted to a claims-mapping policy and app roles. Needs enable_sso_apps
+    and the two group ids below. Off by default.
+  EOT
+  default     = false
+}
+
+variable "claims_viewer_clinicians_group_object_id" {
+  type        = string
+  description = "Entra object id of GRP-ClaimsViewer-Clinicians (synced from AD; exists after lab/adfs/scripts/11-Add-ClaimsViewerRp.ps1 and one Cloud Sync cycle). Not secret."
+  default     = ""
+}
+
+variable "claims_viewer_admins_group_object_id" {
+  type        = string
+  description = "Entra object id of GRP-ClaimsViewer-Admins (synced from AD). Not secret."
+  default     = ""
+}
+
+variable "claims_viewer_saml_signing_cert_end_date" {
+  type        = string
+  description = "Expiry of the Claims Viewer SAML signing certificate (RFC 3339); null = Entra's default."
+  default     = null
+}

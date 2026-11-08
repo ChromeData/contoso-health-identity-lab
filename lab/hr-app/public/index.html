@@ -158,8 +158,14 @@ function showStatus(res) {
       line.textContent = 'Sending to IT systems... (status check failed, retrying)';
       setTimeout(poll, 10000); return;
     }
-    if (d.state === 'accepted') { line.className = 'ok'; line.textContent = `Accepted by IT systems at ${fmtTime(d.finishedAt)}. IT confirms the account and access from here.`; return; }
-    if (d.state === 'failed') { line.className = 'bad'; line.textContent = 'Not delivered. IT has the details and will contact HR.'; return; }
+    if (d.state === 'accepted') { line.className = 'ok'; line.textContent = `Accepted by IT systems at ${fmtTime(d.finishedAt)}${d.via === 'later' ? ' (sent with a later change)' : ''}. IT confirms the account and access from here.`; return; }
+    // Not final: IT re-runs the send, or a later save sends it. Keep checking.
+    if (d.state === 'failed') {
+      line.className = 'bad';
+      if (Date.now() - t0 > 60 * 60 * 1000) { line.textContent = 'Not delivered. IT has the details and will contact HR.'; return; }
+      line.textContent = 'Not delivered yet. IT has the details; this page keeps checking for the re-send.';
+      setTimeout(poll, 30000); return;
+    }
     if (d.state === 'local') { line.textContent = d.note; return; }
     if (Date.now() - t0 > 15 * 60 * 1000) { line.textContent = 'Still sending. IT is told if it does not arrive.'; return; }
     setTimeout(poll, 5000);

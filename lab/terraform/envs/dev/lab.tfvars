@@ -155,6 +155,9 @@ enable_shared_clinical_ca     = false
 # clinic's Okta org (runbook Phase 1, ADR 0022; the org host goes in
 # terraform.tfvars / TF_VAR_, never here). The Okta side is the separate,
 # human-applied root lab/terraform/okta.
+# enable_clinic_results_app adds Clinic Lab Results, the first app moved OFF the
+# clinic's Okta (lab/okta-migration wave 1): public client, PKCE, no secret,
+# ONE assignment App-ClinicResults-Users, and CA061 (MFA + sign-in every 8 h).
 enable_sso_apps = true
 # Signing certificates must fit the tenant's 180-day key-credential policy
 # (Set-AppGovernancePolicy.ps1). Rotation = a new date here, then the IdP
@@ -169,6 +172,7 @@ enable_servicenow_sso                  = true
 enable_servicenow_provisioning         = true
 servicenow_provisioning_job_enabled    = true
 enable_okta_federation                 = true
+enable_clinic_results_app              = true
 
 # Non-human identity governance: App-Consent-Reviewers group (premium) for the
 # admin consent workflow; uami-agent-runtime for Entra Agent ID. The tenant
@@ -287,6 +291,7 @@ ca_policy_states = {
   CA022 = "enabledForReportingButNotEnforced" # PAM session broker + admin portals, admin strength (enable_pam_oidc_app; was CA009)
   CA023 = "enabledForReportingButNotEnforced" # protected actions (CA / named-location changes), auth context c2 - Graph-managed (enable_protected_actions_ca)
   CA060 = "enabledForReportingButNotEnforced" # shared clinical workstations (enable_shared_clinical_ca)
+  CA061 = "enabled"                           # Clinic Lab Results: MFA + sign-in every 8 h (enable_clinic_results_app). Enforced from the start: it replaces an Okta rule that was already enforced; report-only would weaken the app during the move
 }
 
 # CA008 scope: "all_users" while report-only (measure), "pilot" to enforce.
@@ -294,3 +299,25 @@ ca008_scope                       = "all_users"
 ca008_allow_all_users_enforcement = false
 
 blocked_countries = ["KP", "IR", "SY", "CU"]
+
+# AD FS -> Entra migration exercise (lab/adfs/README.md, ADR 0009). Both OFF
+# in this PR, so its plan is "No changes". The run order turns them on one at
+# a time, each through its own reviewed PR:
+#   enable_adfs_https = true   after the owner OKs AD FS on DC01 (README step 1)
+#   enable_claims_viewer_app   after 11-Add-ClaimsViewerRp.ps1 and one Cloud
+#                              Sync cycle, with the two group ids set below
+# After 19-Remove-Adfs.ps1 only enable_adfs_https goes back to false: the
+# Entra app is then the app's ONLY identity provider, so it stays on.
+enable_adfs_https        = false
+enable_claims_viewer_app = false
+# Connect Health registration window (ADR 0031, lab/adfs/connect-health):
+# OFF. A reviewed PR turns it on with an end time at most 24 h out, register.sh
+# runs, and the next PR turns it off again (deletes adm-connecthealth-reg and
+# its Hybrid Identity Administrator role). No Conditional Access change.
+enable_connect_health_registration    = false
+connect_health_registration_until_utc = ""
+# Same 180-day key-credential limit as the AWS / ServiceNow certificates
+# above: Entra's 3-year default would be refused at the first enabled apply.
+claims_viewer_saml_signing_cert_end_date = "2027-04-20T00:00:00Z"
+# claims_viewer_clinicians_group_object_id = "<GRP-ClaimsViewer-Clinicians object id>"
+# claims_viewer_admins_group_object_id     = "<GRP-ClaimsViewer-Admins object id>"

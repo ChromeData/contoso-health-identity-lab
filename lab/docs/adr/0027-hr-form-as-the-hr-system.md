@@ -51,13 +51,15 @@ in the worker's range. The roster already uses these ranges: 100xxx staff,
 owner's question about where 400104 came from. Before this change, a person
 typed it in the README's example row. Now the HR system issues it.
 
-**The account name must be free.** The sender builds the directory account
-name from the name alone (`first.last`, lowercased), not from the number.
-So the form refuses a hire whose account name is already taken by anyone on
-the roster. That includes a leaver, whose disabled AD account still exists,
-and a different split of the same letters ("Alex.J Kim" and "Alex J.Kim").
-It also refuses a space in a name (an invalid account name): HR uses a
-hyphen. In production, IT would issue a unique account name instead.
+**The account name.** Since #229 the sender issues each worker's account
+name once: `first.last` in plain ASCII (accents removed, spaces and
+apostrophes dropped), with a suffix digit for a clash (the lower employee
+number keeps the plain name). The form uses the same rule (`upnLocalPart`,
+a port of `ConvertTo-UpnLocalPart`). A name with no usable ASCII left, for
+example one written only in Chinese characters, would make the sender
+refuse the whole roster, so the form refuses that hire before saving it and
+asks IT to issue the account name first. The form does not refuse a name
+clash: the sender suffixes it.
 
 A real HRIS never reuses a number. In the lab a number can come back only
 when the retake reset (`reset-demo-hire.sh`) deletes a demo row on purpose.
@@ -112,7 +114,11 @@ means Microsoft answered 202 and logged no failure while the run waited
 (up to its wait limit). It is not Microsoft's confirmation; the
 provisioning log is, and IT reads it. The measured run below still showed
 the earlier word, "Delivered". If Microsoft logs a failure, the run turns red,
-and the form says "Not delivered. IT has the details and will contact HR."
+and the form says "Not delivered yet. IT has the details". The page keeps
+checking: `hr-feed.yml` sends everything since the last successful send, so
+when IT re-runs the run, or a later save's run succeeds with this save in
+its history, the line turns to "Accepted". After an hour with neither, it
+says "Not delivered. IT has the details and will contact HR."
 
 **The roster file is the HR app's database table.** The file stays
 `hr_feed.csv` on `hr-feed`. Only the HR app writes it, and each save is one

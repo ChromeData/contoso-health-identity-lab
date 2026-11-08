@@ -508,3 +508,13 @@ output "servicenow_saml_signing_cert_activation_command" {
   description = "S1a: the Update-MgServicePrincipal line that activates the ServiceNow SAML signing certificate (azuread cannot set preferredTokenSigningKeyThumbprint)."
   value       = one(module.apps[*].servicenow_saml_signing_cert_activation_command)
 }
+
+output "claims_viewer_client_id" {
+  description = "Claims Viewer client id: CLIENT_ID for lab/adfs/claims-viewer/fetch-metadata.sh entra (null while enable_claims_viewer_app is off)."
+  value       = one(module.apps[*].claims_viewer_client_id)
+}
+
+output "claims_viewer_saml_signing_cert_activation_command" {
+  description = "POST-APPLY: activate the Claims Viewer signing certificate (before fetching the Entra metadata)."
+  value       = one(module.apps[*].claims_viewer_saml_signing_cert_activation_command)
+}

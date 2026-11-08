@@ -228,7 +228,12 @@
 
 .PARAMETER TapLifetimeMinutes
     Temporary Access Pass lifetime, 10..43200. Default 480 (8 h, inside the
-    default TAP policy maximum).
+    default TAP policy maximum). WHY not shorter: the joiner runs on
+    employeeHireDate (midnight UTC) on a 3-hour schedule, so the manager's
+    email can arrive hours before the morning shift; a 1-2 hour pass expires
+    unread. The emailed TAP is an accepted exception, with its reason, in
+    ADR 0016 ("Exception: the joiner's day-one TAP is emailed to the
+    manager"). Shorten it only when HR sends a real start time.
 
 .PARAMETER TapIsUsableOnce
     One-time-use TAP. Default $true, which every TAP policy accepts.

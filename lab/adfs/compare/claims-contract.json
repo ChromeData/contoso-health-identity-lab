@@ -1,0 +1,24 @@
+{
+  "_why": "The claims the Contoso Claims Viewer relies on: what AD FS issued (claims-viewer.rules.txt) and what the Entra app must issue the same (modules/apps/claims_viewer.tf). compare_claims.py passes only when every one of them is equal. 'platform' lists claim types one IdP adds on its own (Entra's tenant id, AD FS's authentication instant...): reported, never compared.",
+  "nameId": { "compare": "casefold", "format": "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" },
+  "claims": {
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn": "casefold",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress": "casefold",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname": "exact",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname": "exact",
+    "urn:contoso:claims:department": "exact",
+    "urn:contoso:claims:employeeid": "exact",
+    "http://schemas.microsoft.com/ws/2008/06/identity/claims/role": "exact",
+    "urn:contoso:claims:shortname": "casefold"
+  },
+  "platform": [
+    "http://schemas.microsoft.com/identity/claims/tenantid",
+    "http://schemas.microsoft.com/identity/claims/objectidentifier",
+    "http://schemas.microsoft.com/identity/claims/identityprovider",
+    "http://schemas.microsoft.com/identity/claims/displayname",
+    "http://schemas.microsoft.com/claims/authnmethodsreferences",
+    "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationinstant",
+    "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationmethod",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
+  ]
+}
