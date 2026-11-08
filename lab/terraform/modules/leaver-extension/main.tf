@@ -57,9 +57,25 @@ locals {
   principal_id = jsondecode(azurerm_resource_group_template_deployment.logic_app.output_content).principalId.value
 }
 
+# WAIT FOR THE NEW MANAGED IDENTITY TO REPLICATE. Entitlement management
+# refuses a role assignment for a principal it has not seen yet with
+# "SubjectNotFound" (400), and the azuread provider does not retry it. Seen
+# in this repo for the ServiceNow fulfilment SP (modules/apps
+# servicenow_fulfilment.tf: by hand 2026-11-07, run 42512070374). Same fix:
+# 90 s, keyed to the identity's object id, so it waits only when the
+# identity is new or replaced, never on routine applies. If replication is
+# slower, the apply fails before the grant and a re-run succeeds.
+resource "time_sleep" "identity_replication" {
+  create_duration = "90s"
+  triggers = {
+    principal_object_id = local.principal_id
+  }
+}
+
 resource "azuread_access_package_catalog_role_assignment" "assignment_manager" {
-  for_each            = var.catalog_ids
-  role_id             = local.access_package_assignment_manager_role_id
-  catalog_id          = each.value
-  principal_object_id = local.principal_id
+  for_each   = var.catalog_ids
+  role_id    = local.access_package_assignment_manager_role_id
+  catalog_id = each.value
+  # Read through the sleep, so the grant cannot start before it ends.
+  principal_object_id = time_sleep.identity_replication.triggers["principal_object_id"]
 }

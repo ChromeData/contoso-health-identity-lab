@@ -14,6 +14,8 @@ mock_provider "azurerm" {
   }
 }
 mock_provider "azuread" {}
+# time_sleep is mocked too: a mocked apply never waits 90 s.
+mock_provider "time" {}
 
 variables {
   resource_group_name = "RG-IDENTITY-LAB"
@@ -38,6 +40,10 @@ run "narrowest_grant_on_the_given_catalogs_only" {
   assert {
     condition     = azuread_access_package_catalog_role_assignment.assignment_manager["clinical"].principal_object_id == "99999999-9999-9999-9999-999999999999"
     error_message = "the grant must go to the Logic App's managed identity"
+  }
+  assert {
+    condition     = time_sleep.identity_replication.create_duration == "90s" && time_sleep.identity_replication.triggers["principal_object_id"] == "99999999-9999-9999-9999-999999999999"
+    error_message = "the catalog role must wait for the new managed identity to replicate (SubjectNotFound, as for the ServiceNow fulfilment SP)"
   }
   assert {
     condition     = output.principal_id == "99999999-9999-9999-9999-999999999999"

@@ -14,5 +14,11 @@ terraform {
       source  = "hashicorp/azuread"
       version = "~> 3.10"
     }
+    # time_sleep only: the managed identity must replicate to entitlement
+    # management before its catalog role is assigned (main.tf).
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.13"
+    }
   }
 }
