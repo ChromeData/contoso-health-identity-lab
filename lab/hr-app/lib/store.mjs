@@ -71,15 +71,34 @@ export class GitHubStore {
   async delivery(commit) {
     const out = await this.run(['api', `repos/${this.repo}/actions/workflows/hr-feed.yml/runs?head_sha=${commit}&event=push&per_page=1`]);
     const r = JSON.parse(out).workflow_runs?.[0];
-    if (!r) return { state: 'queued' };
-    if (r.status !== 'completed') return { state: 'sending', run: r.html_url };
+    if (r && r.status !== 'completed') return { state: 'sending', run: r.html_url };
     // A green run means Microsoft accepted the change (202) and logged no
     // failure while the run waited. It does NOT mean Microsoft confirmed it:
     // Write-HrFeedSummary.ps1 stays green when the provisioning log is not
     // readable or has no entry yet. So the state is 'accepted', never
     // 'delivered'; the confirmation is IT's to read in the provisioning log.
-    return { state: r.conclusion === 'success' ? 'accepted' : 'failed', run: r.html_url, finishedAt: r.updated_at };
+    if (r?.conclusion === 'success') return { state: 'accepted', run: r.html_url, finishedAt: r.updated_at };
+    // This save's own run failed, was cancelled (superseded in the queue),
+    // or has not appeared. hr-feed.yml sends everything since the last
+    // successful send, so a LATER successful push run whose commit contains
+    // this save has sent it. Then the save is accepted, not failed.
+    const later = await this.laterSend(commit);
+    if (later) return { state: 'accepted', via: 'later', run: later.html_url, finishedAt: later.updated_at };
+    if (!r) return { state: 'queued' };
+    return { state: 'failed', run: r.html_url, finishedAt: r.updated_at };
   }
+
+  // The newest successful hr-feed push run, if its commit contains `commit`
+  // (compare: identical or ahead). Null when there is none or it does not.
+  async laterSend(commit) {
+    const out = await this.run(['api', `repos/${this.repo}/actions/workflows/hr-feed.yml/runs?branch=${encodeURIComponent(this.branch)}&event=push&status=success&per_page=1`]);
+    const ok = JSON.parse(out).workflow_runs?.[0];
+    if (!ok || !ok.head_sha) return null;
+    if (ok.head_sha === commit) return ok;
+    const cmp = JSON.parse(await this.run(['api', `repos/${this.repo}/compare/${commit}...${ok.head_sha}`, '--jq', '{status: .status}']));
+    return cmp.status === 'ahead' || cmp.status === 'identical' ? ok : null;
+  }
+
 }
 
 export class FileStore {

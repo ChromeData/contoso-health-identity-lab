@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
-import { parseRoster, serialiseRoster, hire, change, describe, nextEmployeeId, jobCatalogue, HEADER } from '../lib/roster.mjs';
+import { parseRoster, serialiseRoster, hire, change, describe, nextEmployeeId, jobCatalogue, accountName, HEADER } from '../lib/roster.mjs';
 import { FileStore, GitHubStore } from '../lib/store.mjs';
 import { makeApp } from '../server.mjs';
 
@@ -188,15 +188,17 @@ test('API: two hires at once both land, with different numbers (saves are queued
   assert.match(text, /Alex,Kim/); assert.match(text, /Blair,Kim/);
 });
 
-test('hire refuses an account name that is already taken (other split, or a leaver) and names with a space', () => {
+test('account names follow the sender: ASCII-normalised; a name with no ASCII is refused; clashes are left to the sender', () => {
+  assert.equal(accountName('José', "O'Brien"), 'jose.obrien');
+  assert.equal(accountName('Mary Ann', 'Søren-Ødegård'), 'maryann.soren-odegard');
+  assert.equal(accountName('Łukasz', 'Strauß'), 'lukasz.strauss');
   const { r, cat } = fresh();
   const ok = { dept: 'Nursing', jobTitle: 'Registered Nurse', manager: '200015', startDate: '2026-11-09' };
-  const a = hire(r, { ...ok, givenName: 'Alex.J', surname: 'Kim' }, cat);
-  assert.throws(() => hire(a.roster, { ...ok, givenName: 'Alex', surname: 'J.Kim' }, cat), (e) => e.status === 409 && /alex\.j\.kim already belongs to Alex\.J Kim/.test(e.message));
-  // Dana Okafor is a leaver: her disabled account still exists in AD.
-  assert.throws(() => hire(r, { ...ok, givenName: 'Dana', surname: 'Okafor' }, cat), (e) => e.status === 409 && /a leaver whose account still exists/.test(e.message));
-  assert.throws(() => hire(r, { ...ok, givenName: 'Mary Ann', surname: 'Kim' }, cat), /hyphen/);
-  assert.equal(hire(r, { ...ok, givenName: 'Mary-Ann', surname: 'Kim' }, cat).worker.employeeId, '100493');
+  assert.throws(() => hire(r, { ...ok, givenName: '李', surname: '明' }, cat), /cannot make a directory account name/);
+  assert.throws(() => hire(r, { ...ok, givenName: 'Ana', surname: '明' }, cat), /cannot make a directory account name/);
+  // Dana Okafor is a leaver; a new Dana Okafor is a different worker. The sender suffixes the account name.
+  assert.equal(hire(r, { ...ok, givenName: 'Dana', surname: 'Okafor' }, cat).worker.employeeId, '100493');
+  assert.equal(hire(r, { ...ok, givenName: 'Mary Ann', surname: 'Kim' }, cat).worker.givenName, 'Mary Ann');
 });
 
 test('change: a future last day is refused (Leaver switches the account off now); today or earlier is fine', () => {
@@ -212,4 +214,19 @@ test('change: a manager who reports to the worker (a loop) is refused', () => {
   assert.throws(() => change(r, '200015', { manager: '100310' }, cat), /reports to this worker/);
   assert.throws(() => change(r, '300001', { manager: '100310' }, cat), /reports to this worker/);
   assert.equal(change(r, '100310', { manager: '200021' }, cat).worker.manager, '200021');
+});
+
+test('GitHubStore.delivery: a failed run recovered by a later successful send reads accepted; otherwise failed', async () => {
+  const mk = (later, cmpStatus) => new GitHubStore({ repo: 'o/r', branch: 'hr-feed', run: async (args) => {
+    const u = args[1];
+    if (u.includes('head_sha=save1')) return JSON.stringify({ workflow_runs: [{ status: 'completed', conclusion: 'failure', html_url: 'run1', updated_at: 't1' }] });
+    if (u.includes('status=success')) return JSON.stringify({ workflow_runs: later ? [{ head_sha: later, html_url: 'run2', updated_at: 't2' }] : [] });
+    if (u.startsWith('repos/o/r/compare/save1...')) return JSON.stringify({ status: cmpStatus });
+    throw new Error('unexpected ' + u);
+  } });
+  assert.deepEqual(await mk('save2', 'ahead').delivery('save1'), { state: 'accepted', via: 'later', run: 'run2', finishedAt: 't2' });
+  assert.equal((await mk('save1', 'identical').delivery('save1')).state, 'accepted', 'a re-run of the same commit');
+  assert.equal((await mk('other', 'diverged').delivery('save1')).state, 'failed', 'a later send without this save');
+  assert.equal((await mk('old', 'behind').delivery('save1')).state, 'failed', 'an older send');
+  assert.equal((await mk(null).delivery('save1')).state, 'failed');
 });
