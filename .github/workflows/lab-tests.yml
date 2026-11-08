@@ -85,17 +85,6 @@ jobs:
           done
           exit "$fail"
 
-      - name: Conjur secret in Terraform state, measured (lab/pam/conjur/state-leak)
-        # A throwaway Conjur OSS in Docker and a random value; no credential
-        # from this repo or GitHub is used. Exit 0 only if the data source path
-        # puts the value in state and the ephemeral path reads it (precondition,
-        # with a negative control) and keeps it out of state, backup and plan.
-        # Same Terraform as the step above (HashiCorp, the pinned version).
-        run: |
-          set -euo pipefail
-          terraform fmt -check -recursive lab/pam/conjur/state-leak
-          bash lab/pam/conjur/state-leak/run.sh
-
   # ---------------------------------------------------------------------------
   # PowerShell: PSScriptAnalyzer (errors fail) + every Pester suite, the ITDR
   # suite, and the shell tests that need no containers.
@@ -244,8 +233,6 @@ jobs:
           # AD FS -> Entra claims diff (lab/adfs/compare): the before/after
           # verdict the cutover proof depends on (stdlib only).
           python3 -I -m unittest discover -s lab/adfs/compare/tests -v
-          # The counter behind the Conjur state-leak result (stdlib only).
-          python3 -I -m unittest discover -s lab/pam/conjur/state-leak/tests -v
           # kusto-harness run-on-workspace.py: result decoding and verdict
           # (no workspace; the live runs are operator runs, capture log E114).
           python3 -I -m unittest discover -s lab/monitoring/kusto-harness/tests -p 'test_*.py' -v

@@ -1,8 +1,8 @@
 # k8s/platform — namespaces, Pod Security, Vault Helm release (stage 1 of 2)
 
 **Stand-ins:** kind stands in for AKS. In-cluster Vault (dev mode) stands in
-for CyberArk Secrets Manager / Conjur; on AKS the Azure-native path is Entra
-Workload ID + the Key Vault CSI driver. See
+for the Azure-native target on AKS: Entra Workload ID + the Key Vault CSI
+driver (ADR 0036). See
 [`lab/docs/STAND-INS.md`](../../../docs/STAND-INS.md).
 
 Stage 2 is [`../identity`](../identity/README.md). Why there are two stages:

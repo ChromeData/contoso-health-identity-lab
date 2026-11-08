@@ -1,6 +1,6 @@
 # =============================================================================
 # lab/pam/ssh-target/Dockerfile - a small Linux server for the Vault SSH CA
-# segment (stands in for a Tier-1 Linux host; CyberArk equivalent: a target
+# segment (stands in for a Tier-1 Linux host; PAM equivalent: a target
 # reached through PSM for SSH / PSMP with an ephemeral credential).
 #
 # The ONLY way in is an OpenSSH user certificate signed by Vault's SSH CA:

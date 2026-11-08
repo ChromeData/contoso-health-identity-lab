@@ -241,6 +241,7 @@ itdr_exclude_rules = [
   "dc_logon_outside_operator_allowlist",
   "vault_privileged_access_anomaly",
   "pim_activation_without_auth_context",
+  "tier0_logon_without_checkout", # ADR 0036: built on Vault check-out events; no source once Vault is retired. Replacement (Bastion subnet + PIM activation) is DESIGNED
 ]
 
 # Defender for Identity (ADR 0023): the native AD-attack detector. Off because

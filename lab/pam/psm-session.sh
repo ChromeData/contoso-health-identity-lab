@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-# psm-session.sh - the CyberArk PSM pattern with Vault + Guacamole,
+# psm-session.sh - the brokered, recorded session pattern with Vault + Guacamole,
 # ticket-gated and attributed to ONE named person per session.
 #
 #   checkout --operator NAME --ticket CHG####### [--target dc01|rdp-target]
 #     1. NAME must be in operators.json with tier0-admins among its libraries
-#        (CyberArk: Safe membership).
+#        (who may check out what).
 #     2. The ticket must be an APPROVED change, in Implement, inside its window
 #        and ASSIGNED TO NAME (ServiceNow Table API v2; the itsm-mock service
 #        locally, a ServiceNow PDI at tenant time: README, "Ticket validation"),
