@@ -1,0 +1,10 @@
+// R6 log review (read-only, as the lab operator, 2026-11-08): every DC01
+// logon / ticket from the Tier 2 subnet, or for the two exposed accounts,
+// from the start of the Tier 2 proof until the contosoadmin rotation.
+SecurityEvent
+| where TimeGenerated between (datetime(2026-11-07T01:00:00Z) .. datetime(2026-11-08T18:15:00Z))
+| where EventID in (4624, 4625, 4768, 4769, 4771, 4776)
+| extend Acct = tolower(coalesce(TargetUserName, SubjectUserName)), Ip = replace_string(IpAddress, "::ffff:", "")
+| where Ip startswith "10.43." or Acct in ("contosoadmin", "t0-adm-01")
+| summarize n = count(), t0 = min(TimeGenerated), t1 = max(TimeGenerated), lt = make_set(LogonType, 5), proc = make_set(LogonProcessName, 3) by Acct, Ip, EventID
+| order by t0 asc

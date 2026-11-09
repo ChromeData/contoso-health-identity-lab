@@ -1,0 +1,7 @@
+// DCSync check: who used the replication rights (4662 with the
+// DS-Replication-Get-Changes / -All GUIDs) in the same window.
+SecurityEvent
+| where TimeGenerated between (datetime(2026-11-07T01:00:00Z) .. datetime(2026-11-08T18:15:00Z))
+| where EventID == 4662
+| where Properties has "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2" or Properties has "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
+| summarize n = count() by SubjectUserName, SubjectDomainName

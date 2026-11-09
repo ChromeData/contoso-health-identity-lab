@@ -1,0 +1,6 @@
+// Group membership and account changes after the exposure began.
+SecurityEvent
+| where TimeGenerated between (datetime(2026-11-07T01:50:00Z) .. datetime(2026-11-08T18:15:00Z))
+| where EventID in (4728, 4732, 4756, 4729, 4733, 4757, 5136, 4738, 4724, 4723)
+| summarize n = count(), t0 = min(TimeGenerated), t1 = max(TimeGenerated), targets = make_set(TargetUserName, 6) by EventID, SubjectUserName
+| order by t0 asc
