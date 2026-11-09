@@ -139,6 +139,8 @@ resource "azurerm_subnet_network_security_group_association" "endpoints" {
 # delete this block; the plan is then a lone destroy of pip-vm-win11-01,
 # which frees the subscription's third eastus2 public IP for Bastion.
 # Exposure meanwhile: none inbound (no NSG allow rule, NIC detached).
+# Status 2026-11-09: step 1 (#286) is merged; the NIC detach is applied by
+# the round-5 run. Step 2 is not written yet.
 resource "azurerm_public_ip" "vm" {
   name                = "pip-${var.vm_name}"
   location            = var.location
