@@ -153,29 +153,10 @@ resource "azurerm_subnet_nat_gateway_association" "dc" {
   nat_gateway_id = azurerm_nat_gateway.dc[0].id
 }
 
-# STEP 1 OF 2 (round-3 apply 42527718010 failed on this): the DC's old
-# public IP, pip-vm-dc01, stays in config for ONE apply, referenced by
-# nothing. Why: the NIC's STATE still lists this IP as a dependency, so
-# Terraform orders the IP's destroy BEFORE the NIC update that detaches it,
-# and Azure refuses (400 PublicIPAddressCannotBeDeleted: still allocated to
-# nic-vm-dc01/ipconfig1). With the resource kept, the next plan is only
-# "NIC updated in place" (public_ip_address_id -> null) and nothing is
-# destroyed. After that apply the NIC's state no longer depends on the IP.
-# STEP 2 (follow-up PR, after step 1 is applied): delete this block; the
-# plan is then a lone destroy of pip-vm-dc01. Same arguments as before so
-# the plan shows no change to it. Exposure meanwhile: NONE inbound. The NSG
-# has no allow rule from the internet (read 2026-11-08 after the round-3
-# apply: 0 custom rules; 3389 and 636 do not answer from the old operator IP).
-# Status 2026-11-09: step 1 (#280) is merged; the NIC detach is applied by
-# the round-4 run. Step 2 is not written yet.
-resource "azurerm_public_ip" "dc" {
-  name                = "pip-${var.vm_name}"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  allocation_method   = "Static"
-  sku                 = "Standard"
-  tags                = var.tags
-}
+# The DC's old public IP, pip-vm-dc01, is gone (step 2 of 2). Step 1 (#280)
+# detached it from the NIC in the round-4 apply; this removes the resource,
+# so the plan is a lone destroy of pip-vm-dc01 (frees an eastus2 public-IP
+# slot for Bastion). The NIC has no public IP outside the AD FS window.
 
 # The AD FS window only (see local.adfs_window). Count 0 by default, so the
 # NIC has no public address at all.
