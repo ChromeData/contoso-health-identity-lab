@@ -606,11 +606,14 @@ module "intune_vm" {
   source = "../../modules/intune-vm"
   count  = var.enable_intune_vm ? 1 : 0
 
-  resource_group_name         = azurerm_resource_group.idlab.name
-  location                    = var.location
-  vnet_name                   = module.keyvault.vnet_name
-  allowed_ip_ranges           = var.operator_ip_ranges
-  vm_size                     = var.intune_vm_size
+  resource_group_name = azurerm_resource_group.idlab.name
+  location            = var.location
+  vnet_name           = module.keyvault.vnet_name
+  vm_size             = var.intune_vm_size
+  # No public IP and no operator allow-list since 2026-11-08 (Bastion only).
+  # Outbound through DC01's NAT gateway when DC01 is deployed.
+  attach_nat_gateway          = var.enable_dc
+  nat_gateway_id              = var.enable_dc ? one(module.dc_vm[*].nat_gateway_id) : null
   admin_login_user_object_ids = var.intune_vm_admin_login_object_ids
 
   # Static map key so for_each is plannable while the group id is unknown.
