@@ -41,6 +41,11 @@ async function session(id) {
       // AADSTS90202 is Entra's own "transient error, try again" (seen in this
       // lab before, more often right after a pass is issued): wait, then a
       // fresh browser and a fresh pass.
+      // A saved session Entra will not reuse silently (seen 2026-11-08:
+      // "Because you're accessing sensitive info, you need to verify your
+      // password", which a pass-only account cannot answer) is not a
+      // failure of the person: drop it and sign in fresh with a new pass.
+      if (i === 0 && !/AADSTS90202/.test(e.message)) { console.error(`[portal] ${id}: saved session refused (${e.message.slice(0, 80)}); fresh sign-in`); continue; }
       if (!/AADSTS90202/.test(e.message)) throw e;
       console.error(`[portal] ${id}: AADSTS90202, retry ${i + 1} in 30 s`);
       await new Promise((r) => setTimeout(r, 30000));
