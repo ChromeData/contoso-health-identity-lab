@@ -166,6 +166,8 @@ resource "azurerm_subnet_nat_gateway_association" "dc" {
 # the plan shows no change to it. Exposure meanwhile: NONE inbound. The NSG
 # has no allow rule from the internet (read 2026-11-08 after the round-3
 # apply: 0 custom rules; 3389 and 636 do not answer from the old operator IP).
+# Status 2026-11-09: step 1 (#280) is merged; the NIC detach is applied by
+# the round-4 run. Step 2 is not written yet.
 resource "azurerm_public_ip" "dc" {
   name                = "pip-${var.vm_name}"
   location            = var.location
