@@ -130,23 +130,9 @@ resource "azurerm_subnet_network_security_group_association" "endpoints" {
   network_security_group_id = azurerm_network_security_group.endpoints.id
 }
 
-# STEP 1 OF 2 (same pattern as dc-vm, #280): pip-vm-win11-01 stays in config
-# for ONE apply, referenced by nothing. The NIC's state still lists it, so
-# deleting it in the same apply would be ordered before the NIC update that
-# detaches it, and Azure refuses (PublicIPAddressCannotBeDeleted). With the
-# resource kept, the plan is "NIC updated in place" (public_ip_address_id ->
-# null) and nothing is destroyed. STEP 2 (follow-up PR, after this apply):
-# delete this block; the plan is then a lone destroy of pip-vm-win11-01,
-# which frees the subscription's third eastus2 public IP for Bastion.
-# Exposure meanwhile: none inbound (no NSG allow rule, NIC detached).
-resource "azurerm_public_ip" "vm" {
-  name                = "pip-${var.vm_name}"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  allocation_method   = "Static"
-  sku                 = "Standard"
-  tags                = var.tags
-}
+# pip-vm-win11-01 is gone (step 2 of 2, 2026-11-09): step 1 (#286) detached
+# it from the NIC; this change deletes it, which frees the subscription's
+# third eastus2 public IP for Azure Bastion. The PC has no public IP.
 
 resource "azurerm_network_interface" "vm" {
   name                = "nic-${var.vm_name}"
