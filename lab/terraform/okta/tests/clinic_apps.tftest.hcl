@@ -73,6 +73,12 @@ run "policy_denies_by_default_and_asks_two_factors_every_8h" {
 run "clinic_results_is_a_visible_public_client_until_cutover" {
   command = plan
 
+  # Pinned to the BEFORE state: the live plan (waves.json) moves on as the
+  # migration does, and this run tests the shape before the cut-over.
+  variables {
+    waves_override = { "Clinic Lab Results" = { cutover = false, retired = false } }
+  }
+
   assert {
     condition = (
       okta_app_oauth.clinic_results.type == "browser"
