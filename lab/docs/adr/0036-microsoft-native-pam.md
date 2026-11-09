@@ -1,6 +1,6 @@
 # ADR 0036: Microsoft-native PAM
 
-- **Status:** Accepted (2026-11-06). **Supersedes [ADR 0007](0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md) and [ADR 0019](0019-pam-vault-high-availability-and-dr.md).** This PR removes CyberArk and Conjur from the lab. Each Microsoft piece has its own status in the table below. On 2026-11-07 two pieces ran in the tenant: the Key Vault leak proof (PR #235, merged; E132 is on `main`) and Bastion session recording (PR #247, **open**; its capture-log row E133 is only in that PR until it merges). EPM and LAPS on the Intune PC are BUILT and wait for a person (they need an Intune write permission the operator does not hold).
+- **Status:** Accepted (2026-11-06). **Supersedes [ADR 0007](0007-pam-stand-ins-vault-guacamole-conjur-vs-cyberark.md) and [ADR 0019](0019-pam-vault-high-availability-and-dr.md).** This PR removes CyberArk and Conjur from the lab. Each Microsoft piece has its own status in the table below. On 2026-11-07 two pieces ran in the tenant: the Key Vault leak proof (PR #235, merged; E132 is on `main`) and Bastion session recording (PR #247, merged 2026-11-08 after the run; capture log E133). EPM and LAPS on the Intune PC are BUILT and wait for a person (they need an Intune write permission the operator does not hold).
 - **Date:** 2026-11-06
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** 2027-02-06, or earlier on any revisit trigger
@@ -190,7 +190,7 @@ session was 1.3 MB) and the outbound data after the first 5 GB.
   `.ReadWrite.All`.
 - PR #213: closed unmerged with a decision comment, 2026-11-06.
 - Key Vault leak proof: PR #235, capture log E132.
-- Bastion recording: PR #247 (open), capture log E133 (in that PR only, not on `main` yet).
+- Bastion recording: PR #247 (merged after the run), capture log E133.
 
 ## Sources (checked 2026-11-07)
 
