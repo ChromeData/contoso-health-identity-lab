@@ -295,3 +295,51 @@ re-join **fails** if a device with the same hostname still exists.
 - Exact AADSTS error code on the enforced Mac block.
 - Every Graph call in the script ran only against an offline fake of the
   documented v1.0 endpoints, never a real tenant.
+
+---
+
+## EPM and LAPS proof (Intune PC) - `New-IntuneEpmAndLaps.ps1`
+
+**Status: BUILT, not run.** The script creates three Intune policies. It has
+not run, because the lab operator holds `DeviceManagementConfiguration.Read.All`
+only, and creating a policy needs `DeviceManagementConfiguration.ReadWrite.All`.
+A human Intune admin runs it once (delegated Graph). Nothing is bought.
+
+**Licence (checked 2026-11-07, `subscribedSkus` as the operator).** The tenant's
+Microsoft 365 E5 trial (`SPE_E5`, 25 seats, ends 2026-11-26) carries the
+`Intune-EPM` service plan, provisioning status *Success*. Microsoft Learn
+(*Intune advanced capabilities*): EPM comes with "Microsoft Intune Plan 2, the
+Microsoft Intune Suite, and select Microsoft 365 bundles". This tenant's E5
+SKU lists it, so no add-on and no trial is needed.
+
+**The PC.** `CH-WIN11-01` (Azure VM `vm-win11-01`) is Entra joined and
+Intune enrolled (`azureAdJoinUsingAzureVmExtension`, 2026-10-29). It is
+deallocated when not in use.
+
+| Policy | What it does |
+|---|---|
+| EPM - Settings (lab) | EPM on. Default response **Deny all requests**: only a file named by a rule can be elevated. Reports all elevations. |
+| EPM - Rules (lab) | One rule: `procexp64.exe` by SHA-256 hash, **Support approved**, child processes denied. |
+| LAPS - Intune PC (lab) | Windows LAPS on the built-in Administrator. Backup to **Microsoft Entra ID**, 7 days, 20 characters, all character types. One hour after someone uses the password, it is reset and the account is logged off. |
+
+**The proof, when it runs (in this order):**
+
+1. An Intune admin runs the script (`-WhatIf` first), then syncs CH-WIN11-01.
+2. A **standard** user who holds the E5 licence signs in to the PC. She
+   right-clicks `procexp64.exe`, chooses *Run with elevated access*, and types
+   a business reason. The request appears in the Intune admin center:
+   *Endpoint security > Endpoint Privilege Management > Elevation requests*.
+3. An admin activates PIM-Tier1-Intune-Admins and approves, with a reason.
+   The admin needs the Intune permission *Endpoint Privilege Management
+   Elevation Requests* (view + modify).
+4. The user gets a toast notification and runs the file elevated. Learn: the
+   approval lasts **24 hours** from approval, and "there's no current support
+   for a custom time period or cancellation". Say "for 24 hours", never "for
+   a few minutes".
+5. LAPS read-back: the device's *Local admin password* page shows a backup
+   time. Reading the password itself needs `DeviceLocalCredential.Read.All` and
+   an Entra role such as Cloud Device Administrator. The operator has neither.
+
+To let the operator do steps 1 and 5 unattended, grant its app
+`DeviceManagementConfiguration.ReadWrite.All` (and `DeviceLocalCredential.Read.All`
+for the read-back). That is an owner decision: both are Tier-1 device rights.

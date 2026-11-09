@@ -1,0 +1,11 @@
+02:49:03Z
+81a9662b-bebf-436f-a333-f67b29880f12: Revoked
+2a2b9908-6ea1-4ae2-8e65-a410df84e7d1: Revoked
+acdd72a7-3385-48ef-bd42-f606fba81ae7: Revoked
+[02:49:22Z +   3s] Deleting bastion-capture
+[02:57:10Z + 471s] Bastion gone (471 s since 'down' started)
+[02:58:10Z + 531s] Public IP, subnet, identity, PIM eligibility and reviewer access removed
+[02:58:25Z + 546s] Read back: bastion=absent pip=absent subnet=absent admin-eligibility=0
+[02:58:25Z + 546s] DOWN (546 s). Recordings kept in stbstreca9b511bc/recordings (capture.sh purge-recordings deletes them)
+
+[exited with code 0]

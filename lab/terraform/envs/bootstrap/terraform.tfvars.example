@@ -98,3 +98,8 @@ apply_azure_scope                   = "subscription" # "resource_group" once rg-
 enable_lab_vm_operator              = false
 lab_vm_operator_eligible_object_ids = [] # ["33333333-3333-3333-3333-333333333333"] (adm-labops)
 cannot_delete_lock_resource_ids     = {} # { "kv-idlab" = "/subscriptions/<id>/resourceGroups/rg-identity-lab/providers/Microsoft.KeyVault/vaults/<kv>" }
+
+# PLAN identity may export ARM deployment templates on rg-identity-lab only
+# (main.tf). Leave false for a first bootstrap (the resource group does not
+# exist yet); set true after envs/dev has created rg-identity-lab.
+plan_can_export_deployment_templates = false

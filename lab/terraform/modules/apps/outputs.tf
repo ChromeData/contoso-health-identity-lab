@@ -314,7 +314,8 @@ output "clinic_results_client_id" {
 
 output "clinic_results_api_client_id" {
   description = "Client id of Clinic Lab Results API, the resource CA061 targets (Conditional Access cannot target the public client). Null while off."
-  value       = one(azuread_application.clinic_results_api[*].client_id)
+  # Through the replication wait (clinic_results.tf): CA061 consumes this.
+  value = one(time_sleep.clinic_results_api_sp_replication[*].triggers["api_client_id"])
 }
 
 output "clinic_results_users_group_object_id" {

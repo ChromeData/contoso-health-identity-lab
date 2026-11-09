@@ -242,3 +242,25 @@ resource "azuread_application_pre_authorized" "clinic_results_client" {
   authorized_client_id = azuread_application.clinic_results[0].client_id
   permission_ids       = [local.clinic_results_read_scope_id]
 }
+
+# WAIT FOR THE API'S SERVICE PRINCIPAL TO REPLICATE before CA061 names it.
+# Conditional Access resolves the target app from its own replica of the
+# directory. The round-2 apply (run 42519889983) created the API's SP and,
+# seconds later, CA061 - which Graph refused: 1034 "Policy contains invalid
+# applications: AppPrincipalObjectNotFound". The azuread provider does not
+# retry that error. Same cure as the ServiceNow fulfilment SP
+# (servicenow_fulfilment.tf, run 42512070374): wait 90 s, keyed to the SP's
+# object id, so the wait runs once on create (or replacement), never on
+# routine applies. CA061 reads the API's client id THROUGH this resource
+# (output clinic_results_api_client_id), so it cannot start before the wait
+# ends. If replication is ever slower, the apply fails as before and a re-run
+# succeeds (nothing is created half-way).
+resource "time_sleep" "clinic_results_api_sp_replication" {
+  count = local.clinic_results_enabled ? 1 : 0
+
+  create_duration = "90s"
+  triggers = {
+    service_principal_object_id = azuread_service_principal.clinic_results_api[0].object_id
+    api_client_id               = azuread_service_principal.clinic_results_api[0].client_id
+  }
+}
