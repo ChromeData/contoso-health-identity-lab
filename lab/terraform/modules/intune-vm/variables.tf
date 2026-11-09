@@ -114,14 +114,20 @@ variable "admin_username" {
   }
 }
 
-variable "allowed_ip_ranges" {
-  type        = list(string)
-  description = "Operator IPv4 CIDRs allowed to RDP (3389). Empty = no inbound at all (use the serial console)."
-  default     = []
+variable "attach_nat_gateway" {
+  type        = bool
+  description = "Attach the endpoint subnet to nat_gateway_id for explicit outbound (the PC has no public IP since 2026-11-08). A bool, so count is known at plan."
+  default     = false
+}
+
+variable "nat_gateway_id" {
+  type        = string
+  description = "NAT gateway for the endpoint subnet (DC01's, from modules/dc-vm). Used only when attach_nat_gateway is true."
+  default     = null
 
   validation {
-    condition     = alltrue([for c in var.allowed_ip_ranges : can(cidrnetmask(c)) && try(tonumber(split("/", c)[1]) >= 24, false)])
-    error_message = "Each entry must be an IPv4 CIDR no wider than /24, e.g. 203.0.113.7/32."
+    condition     = var.nat_gateway_id == null || can(regex("/providers/Microsoft.Network/natGateways/[^/]+$", var.nat_gateway_id))
+    error_message = "nat_gateway_id must be a NAT gateway resource id."
   }
 }
 

@@ -23,8 +23,8 @@ output "private_ip" {
 }
 
 output "public_ip" {
-  description = "Static public IP (RDP from the operator's allowed IPs only). Map it to computer_name in /etc/hosts for Entra RDP."
-  value       = azurerm_public_ip.vm.ip_address
+  description = "Always null since 2026-11-08: the PC has no public IP; admins use Azure Bastion."
+  value       = null
 }
 
 output "admin_username" {
@@ -51,8 +51,9 @@ output "intune_enrollment_enabled" {
 output "rdp_file_content" {
   description = <<-EOT
     Minimal .rdp for Entra sign-in (enablerdsaadauth). full address is the
-    HOSTNAME on purpose - Entra RDP rejects IP addresses - so map the public
-    IP to it in /etc/hosts first. Save with:
+    HOSTNAME on purpose - Entra RDP rejects IP addresses. Since 2026-11-08 the
+    PC has no public IP: this file is for a client with a private path to it
+    (people use Azure Bastion). Save with:
     terraform output -raw intune_vm_rdp_file > ch-win11-01.rdp
   EOT
   value       = <<-EOT

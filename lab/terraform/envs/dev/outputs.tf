@@ -446,12 +446,12 @@ output "intune_vm_name" {
 }
 
 output "intune_vm_computer_name" {
-  description = "Hostname = Entra device name of the Intune VM (find it in Entra Devices / Intune; map it in /etc/hosts for Entra RDP)."
+  description = "Hostname = Entra device name of the Intune VM (find it in Entra Devices / Intune). Admins reach the PC through Azure Bastion; it has no public IP."
   value       = one(module.intune_vm[*].computer_name)
 }
 
 output "intune_vm_public_ip" {
-  description = "Intune VM public IP (NSG admits operator_ip_ranges only)."
+  description = "Always null since 2026-11-08: the Intune VM has no public IP (Azure Bastion only)."
   value       = one(module.intune_vm[*].public_ip)
   sensitive   = true
 }
