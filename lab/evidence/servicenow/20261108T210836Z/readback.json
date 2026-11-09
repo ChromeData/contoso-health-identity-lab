@@ -1,0 +1,57 @@
+{
+ "cleanup": [
+  "deleted sc_req_item RITM0010010",
+  "deleted sc_request REQ0010010",
+  "adminRemove f5d6747d-0732-44d3-ac28-e3480024a033 (undoes 36fe54a1-a71f-4b90-9619-d70986e107d2)"
+ ],
+ "instance": "https://dev459905.service-now.com",
+ "run": "20261108T210836Z",
+ "steps": {
+  "uc1": {
+   "after_submit": {
+    "approval": "requested",
+    "approvals": 1,
+    "stage": "waiting_for_approval"
+   },
+   "approved": "2026-11-08T21:11:52Z",
+   "approver": "grace.mwangi@contosohealthlab.com",
+   "closed": "2026-11-08T21:15:41Z",
+   "entra_request": {
+    "completedDateTime": "2026-11-08T21:15:17.32Z",
+    "createdDateTime": "2026-11-08T21:11:55.673Z",
+    "id": "36fe54a1-a71f-4b90-9619-d70986e107d2",
+    "justification": "RITM0010010 (ServiceNow): approved by Grace Mwangi. Reason: Covering ICU night shifts from the float pool while two ICU nurses are on leave.",
+    "requestType": "adminAdd",
+    "requestor": "ServiceNow - Access Fulfilment",
+    "schedule": {
+     "expiration": {
+      "duration": null,
+      "endDateTime": "2026-11-23T07:59:59Z",
+      "type": "afterDateTime"
+     },
+     "recurrence": null,
+     "startDateTime": "2026-11-08T21:11:51Z"
+    },
+    "state": "delivered",
+    "status": "Fulfilled"
+   },
+   "final": {
+    "approval": "approved",
+    "calendar_duration": "1970-01-01 00:06:08",
+    "closed_at": "2026-11-08 21:15:40",
+    "correlation_display": "Entra ID Governance - delivered",
+    "opened_at": "2026-11-08 21:09:32",
+    "state": "3"
+   },
+   "member_of_App-ICU-CriticalCare-Users": true,
+   "request": "REQ0010010",
+   "ritm": "RITM0010010",
+   "submitted": "2026-11-08T21:08:36Z",
+   "work_notes": [
+    "Approved by Grace Mwangi (manager). Sending to Microsoft Entra ID Governance.",
+    "Sent to Microsoft Entra ID Governance: add Sofia Reyes to access package \"ICU - Float Access\" from 2026-11-08T21:11:51Z to 2026-11-23T07:59:59Z.\nEntra request id: 36fe54a1-a71f-4b90-9619-d70986e107d2 (state: submitted). The ticket number is in the Entra justification.",
+    "Microsoft Entra ID Governance reports Delivered (request 36fe54a1-a71f-4b90-9619-d70986e107d2). Closed automatically."
+   ]
+  }
+ }
+}
