@@ -1,10 +1,10 @@
 # Okta -> Entra app migration tracker
 
-Generated 2026-11-08T19:23:24Z by `node lab/okta-migration/inventory.mjs` from the Okta API and Microsoft Graph. Do not edit by hand: re-run the script.
+Generated 2026-11-08T23:36:08Z by `node lab/okta-migration/inventory.mjs` from the Okta API and Microsoft Graph. Do not edit by hand: re-run the script.
 
 | app | owner | protocol | users | wave | status | test_result |
 |---|---|---|---|---|---|---|
-| Clinic Lab Results | Clinic lab manager (business) / Clinic IT lead (technical) | OIDC | 1 | 1 | pre-staged | PASS okta 2026-11-08T19:22:58Z |
+| Clinic Lab Results | Clinic lab manager (business) / Clinic IT lead (technical) | OIDC | 1 | 1 | cut over | PASS entra 2026-11-08T23:01:11Z |
 | Clinic Billing | Clinic revenue-cycle manager | SAML 2.0 | 0 | 2 | inventoried | not tested |
 | Clinic Scheduling (legacy) | Clinic operations manager | Bookmark | 1 | 2 | inventoried | not tested |
 
@@ -12,9 +12,9 @@ Generated 2026-11-08T19:23:24Z by `node lab/okta-migration/inventory.mjs` from t
 
 ### Clinic Lab Results
 
-- Okta: app `0oa19mje0oyLEHh1U698`, groups Clinic-Staff, authentication policy *Clinic clinical apps*, SSO events in the last 7 days: 7
-- Entra: enterprise app *Clinic Lab Results*, assigned to App-ClinicResults-Users, Conditional Access baseline only, sign-ins in the last 7 days: 0
-- Next: add pilot users (cutover.mjs prestage), test through Entra
+- Okta: app `0oa19mje0oyLEHh1U698`, groups Clinic-Staff, authentication policy *Clinic clinical apps*, SSO events in the last 7 days: 9
+- Entra: enterprise app *Clinic Lab Results*, assigned to App-ClinicResults-Users, Conditional Access CA061 (on), sign-ins in the last 7 days: 5
+- Next: watch the Okta System Log for 7 days of zero sign-ins, then retire
 
 ### Clinic Billing
 

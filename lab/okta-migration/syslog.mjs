@@ -56,10 +56,10 @@ let entraRows = [], entraNote = '';
 const entraId = conf?.entra?.client_id;
 if (entraId) {
   try {
-    const r = graphAll(graph, `https://graph.microsoft.com/v1.0/auditLogs/signIns?$filter=appId eq '${entraId}' and createdDateTime ge ${since.replace(/\.\d+Z$/, 'Z')}&$top=100&$select=createdDateTime,userPrincipalName,status,conditionalAccessStatus,appliedConditionalAccessPolicies,authenticationRequirement`);
+    const r = graphAll(graph, `https://graph.microsoft.com/v1.0/auditLogs/signIns?$filter=appId eq '${entraId}' and createdDateTime ge ${since.replace(/\.\d+Z$/, 'Z')}&$top=100&$select=createdDateTime,userPrincipalName,status,conditionalAccessStatus,appliedConditionalAccessPolicies`);
     entraRows = r.map((s) => ({
       time: s.createdDateTime, user: s.userPrincipalName, result: s.status?.errorCode === 0 ? 'SUCCESS' : `error ${s.status?.errorCode}`,
-      ca: s.conditionalAccessStatus, mfa: s.authenticationRequirement,
+      ca: s.conditionalAccessStatus,
       policies: (s.appliedConditionalAccessPolicies || []).filter((p) => p.result === 'success' || p.result === 'failure').map((p) => `${p.displayName.split(' - ')[0]}:${p.result}`).join(' '),
       phase: phase(s.createdDateTime),
     })).sort((x, y) => x.time.localeCompare(y.time));

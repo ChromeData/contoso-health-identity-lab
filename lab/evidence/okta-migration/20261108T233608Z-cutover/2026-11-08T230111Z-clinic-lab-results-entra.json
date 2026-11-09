@@ -1,0 +1,16 @@
+{
+  "result": "PASS",
+  "idp": "entra",
+  "staging": false,
+  "app": "Clinic Lab Results",
+  "user": "test-user-b@contosohealthlab.com",
+  "issuer": "https://login.microsoftonline.com/86a2e327-4951-4348-a3c4-6f4b79ffd8f2/v2.0",
+  "amr": null,
+  "api_token": {
+    "audience": "08baff4f-f206-4f49-9e87-355241826201",
+    "scp": "Results.Read"
+  },
+  "at": "2026-11-08T23:01:11Z",
+  "seconds": 12,
+  "banner": "Signed in as test-user-b@contosohealthlab.com through Microsoft Entra ID"
+}

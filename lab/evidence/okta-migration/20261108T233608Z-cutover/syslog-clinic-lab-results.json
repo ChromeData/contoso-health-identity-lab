@@ -1,0 +1,249 @@
+{
+  "generated": "2026-11-08T23:36:18Z",
+  "app": "Clinic Lab Results",
+  "okta_app_id": "0oa19mje0oyLEHh1U698",
+  "window_days": 7,
+  "okta_filter": "(eventType eq \"user.authentication.sso\" or eventType eq \"app.oauth2.authorize.code\") and target.id eq \"0oa19mje0oyLEHh1U698\"",
+  "entra_kql": "SigninLogs\n| where TimeGenerated > ago(7d)\n| where AppDisplayName == \"Clinic Lab Results\"\n| project TimeGenerated, UserPrincipalName, ResultType, ConditionalAccessStatus, AuthenticationRequirement\n| order by TimeGenerated desc",
+  "cutover_at": "2026-11-08T22:11:38Z",
+  "rollbacks": [
+    "2026-11-08T22:11:04Z"
+  ],
+  "okta_sso": {
+    "before": 9,
+    "after": 0,
+    "events": [
+      {
+        "time": "2026-11-07T00:59:07Z",
+        "event": "user.authentication.sso",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-07T01:16:08Z",
+        "event": "user.authentication.sso",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-07T02:40:02Z",
+        "event": "user.authentication.sso",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-07T03:11:14Z",
+        "event": "user.authentication.sso",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-07T04:10:10Z",
+        "event": "user.authentication.sso",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-07T04:20:27Z",
+        "event": "user.authentication.sso",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-08T19:11:14Z",
+        "event": "user.authentication.sso",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-08T19:22:57Z",
+        "event": "user.authentication.sso",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-08T22:11:37Z",
+        "event": "user.authentication.sso",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "phase": "BEFORE cut-over"
+      }
+    ]
+  },
+  "okta_admin_events": [
+    {
+      "time": "2026-11-07T00:54:09Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-07T00:54:09Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-07T00:54:09Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-07T00:54:09Z",
+      "event": "application.lifecycle.create",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Create application"
+    },
+    {
+      "time": "2026-11-07T00:54:11Z",
+      "event": "application.user_membership.add",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Add user to application membership"
+    },
+    {
+      "time": "2026-11-08T22:10:39Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:10:39Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:10:39Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:10:39Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:10:39Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:11:09Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:11:09Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:11:09Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:11:09Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:11:09Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:11:43Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:11:43Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:11:43Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:11:43Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    },
+    {
+      "time": "2026-11-08T22:11:43Z",
+      "event": "application.lifecycle.update",
+      "by": "okta@ContosoHealthLab.onmicrosoft.com",
+      "change": "Update application"
+    }
+  ],
+  "entra_signins": {
+    "before": 3,
+    "after": 2,
+    "events": [
+      {
+        "time": "2026-11-08T20:41:51Z",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "ca": "success",
+        "policies": "CA001:success",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-08T22:10:31Z",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "ca": "success",
+        "policies": "CA001:success CA061:success",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-08T22:11:01Z",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "ca": "success",
+        "policies": "CA001:success",
+        "phase": "BEFORE cut-over"
+      },
+      {
+        "time": "2026-11-08T22:12:01Z",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "ca": "success",
+        "policies": "CA001:success CA061:success",
+        "phase": "AFTER cut-over"
+      },
+      {
+        "time": "2026-11-08T23:01:08Z",
+        "user": "test-user-b@contosohealthlab.com",
+        "result": "SUCCESS",
+        "ca": "success",
+        "policies": "CA001:success CA061:success",
+        "phase": "AFTER cut-over"
+      }
+    ]
+  }
+}
