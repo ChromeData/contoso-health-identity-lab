@@ -48,10 +48,15 @@ bounds are in what can start the Logic App and what it does:
 - **Who can change it:** changing the Logic App definition needs Azure write on
   RG-IDENTITY-LAB, which goes through the apply gate. The lab operator is
   read-only outside an owner-opened session (ADR 0030).
-- **Residual risk:** anyone who can edit the Logic App, or who controls
-  Lifecycle Workflows (Lifecycle Workflows Administrator), can make it remove
-  any access package assignment. Removal is the worst it can do: it cannot
-  create assignments, change policies or grant roles through its code path.
+- **Residual risk:** someone who controls Lifecycle Workflows (Lifecycle
+  Workflows Administrator) can use the current Logic App to remove a user's
+  delivered automatic-policy assignments. Someone who can edit the Logic App
+  can also use its identity's `EntitlementManagement.ReadWrite.All` permission
+  to create assignments or change policies. The current code only removes
+  assignments; that is not a limit on what an editor can make the identity do.
+  Editing the Logic App needs Azure write on RG-IDENTITY-LAB (the apply
+  identity, or an owner-opened operator session), so that access is Tier 0
+  for this purpose.
 
 ## Monitoring
 

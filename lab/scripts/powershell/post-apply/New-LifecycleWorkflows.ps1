@@ -904,9 +904,13 @@ function Get-ExtensionDrift {
     # desired body: the Logic App it calls and the token type. Pure.
     param([System.Collections.IDictionary]$Existing, [System.Collections.IDictionary]$Desired)
     $e = $Existing['endpointConfiguration']; $d = $Desired['endpointConfiguration']
-    foreach ($k in 'subscriptionId', 'resourceGroupName', 'logicAppWorkflowName', 'url') {
+    foreach ($k in 'subscriptionId', 'resourceGroupName', 'logicAppWorkflowName') {
         if (-not $e -or [string]$e[$k] -ne [string]$d[$k]) { "$k '$(if ($e) { $e[$k] })' -> '$($d[$k])'" }
     }
+    # The url is compared but NEVER echoed: an extension created earlier (for
+    # example in the portal) may hold a SIGNED trigger URL, and this text goes
+    # to warnings, ShouldProcess and the result table, even under -WhatIf.
+    if (-not $e -or [string]$e['url'] -ne [string]$d['url']) { 'url differs (values not shown: an existing URL may carry a SAS key)' }
     $ea = if ($Existing['authenticationConfiguration']) { [string]$Existing['authenticationConfiguration']['@odata.type'] } else { '' }
     if ($ea -ne [string]$Desired['authenticationConfiguration']['@odata.type']) { "authentication '$ea' -> '$($Desired['authenticationConfiguration']['@odata.type'])'" }
 }

@@ -236,4 +236,16 @@ Describe 'New-LifecycleWorkflows.ps1 against a mocked tenant (guards for the E12
         $u | Should -Not -Match 'sig='
         { ConvertTo-UnsignedTriggerUrl -CallbackUrl 'http://x.test/a?sig=1' } | Should -Throw '*not https*'
     }
+
+    It 'Get-ExtensionDrift never echoes a URL (an existing one may be signed)' {
+        . (Get-ScriptFunctionBlock -Path $script:Lcw -Name 'Get-ExtensionDrift')
+        $want = @{ endpointConfiguration = @{ subscriptionId = 's1'; resourceGroupName = 'RG'; logicAppWorkflowName = 'la'; url = 'https://x.test/workflows/1/triggers/manual/paths/invoke?api-version=2016-10-01' }
+            authenticationConfiguration = @{ '@odata.type' = '#microsoft.graph.azureAdPopTokenAuthentication' } }
+        $old = @{ endpointConfiguration = @{ subscriptionId = 's1'; resourceGroupName = 'RG'; logicAppWorkflowName = 'la'; url = 'https://x.test/workflows/1/triggers/manual/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers&sv=1.0&sig=SECRETVALUE' }
+            authenticationConfiguration = @{ '@odata.type' = '#microsoft.graph.azureAdPopTokenAuthentication' } }
+        $d = @(Get-ExtensionDrift -Existing $old -Desired $want)
+        $d.Count | Should -Be 1
+        ($d -join ' ') | Should -Match 'url differs'
+        ($d -join ' ') | Should -Not -Match 'SECRETVALUE|sig=|https://'
+    }
 }

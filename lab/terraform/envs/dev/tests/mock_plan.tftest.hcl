@@ -33,7 +33,7 @@
 # lab.tfvars) every run needs them. A run's own variables block overrides.
 variables {
   # imports.tf: a mock provider cannot import; the real plan/apply (lab.tfvars) does.
-  leaver_role_assignment_import_id = ""
+  leaver_role_assignment_import_id       = ""
   aws_scim_credentials                   = { tenant_url = "https://scim.us-east-1.amazonaws.com/abcd-1234/scim/v2", secret_token = "not-a-real-token-0123456789abcdef" } # the stage test turns SCIM on; the creating run reads the real values from Key Vault
   aws_scim_template_id                   = "aWSSingleSignon"                                                                                                             # synthetic: enable_scim_provisioning precondition (lab.tfvars stage)
   okta_org_domain                        = "integrator-0000000.okta.com"                                                                                                 # synthetic org host: enable_okta_federation precondition (lab.tfvars stage)
