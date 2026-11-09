@@ -340,8 +340,8 @@ run "outputs" {
     error_message = "name outputs must come from the VM"
   }
   assert {
-    condition     = output.private_ip == "10.42.3.4" && output.public_ip == "192.0.2.10"
-    error_message = "IP outputs must come from the NIC and the public IP"
+    condition     = output.private_ip == "10.42.3.4" && output.public_ip == null
+    error_message = "private_ip comes from the NIC; public_ip is null (no public address since 2026-11-08)"
   }
   assert {
     condition     = output.identity_principal_id == "33333333-3333-3333-3333-333333333333"
@@ -360,7 +360,7 @@ run "outputs" {
     error_message = "the .rdp must name the HOSTNAME (Entra RDP rejects IPs) with enablerdsaadauth:i:1"
   }
   assert {
-    condition     = !strcontains(output.rdp_file_content, output.public_ip) && !strcontains(output.rdp_file_content, output.private_ip)
+    condition     = !strcontains(output.rdp_file_content, "192.0.2.10") && !strcontains(output.rdp_file_content, output.private_ip)
     error_message = "the .rdp must never carry an IP address"
   }
 }

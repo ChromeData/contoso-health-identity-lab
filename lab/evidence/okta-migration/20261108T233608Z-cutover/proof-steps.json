@@ -1,0 +1,90 @@
+{
+  "2-staging-entra": {
+    "result": "PASS",
+    "idp": "entra",
+    "staging": true,
+    "app": "Clinic Lab Results",
+    "user": "test-user-b@contosohealthlab.com",
+    "issuer": "https://login.microsoftonline.com/86a2e327-4951-4348-a3c4-6f4b79ffd8f2/v2.0",
+    "amr": null,
+    "api_token": {
+      "audience": "08baff4f-f206-4f49-9e87-355241826201",
+      "scp": "Results.Read"
+    },
+    "at": "2026-11-08T22:10:34Z",
+    "seconds": 16,
+    "banner": "Signed in as test-user-b@contosohealthlab.com through Microsoft Entra ID"
+  },
+  "3-cutover": {
+    "result": "PASS",
+    "idp": "entra",
+    "staging": false,
+    "app": "Clinic Lab Results",
+    "user": "test-user-b@contosohealthlab.com",
+    "issuer": "https://login.microsoftonline.com/86a2e327-4951-4348-a3c4-6f4b79ffd8f2/v2.0",
+    "amr": null,
+    "api_token": {
+      "audience": "08baff4f-f206-4f49-9e87-355241826201",
+      "scp": "Results.Read"
+    },
+    "at": "2026-11-08T22:11:04Z",
+    "seconds": 23,
+    "banner": "Signed in as test-user-b@contosohealthlab.com through Microsoft Entra ID",
+    "total_seconds_end_to_end": 30
+  },
+  "4-rollback": {
+    "result": "PASS",
+    "idp": "okta",
+    "staging": false,
+    "app": "Clinic Lab Results",
+    "user": "test-user-b@contosohealthlab.com",
+    "issuer": "https://integrator-8288815.okta.com",
+    "amr": [
+      "mfa",
+      "pwd"
+    ],
+    "api_token": null,
+    "at": "2026-11-08T22:11:38Z",
+    "seconds": 27,
+    "banner": "Signed in as test-user-b@contosohealthlab.com through Okta",
+    "total_seconds_end_to_end": 34
+  },
+  "5-cutover-back": {
+    "result": "PASS",
+    "idp": "entra",
+    "staging": false,
+    "app": "Clinic Lab Results",
+    "user": "test-user-b@contosohealthlab.com",
+    "issuer": "https://login.microsoftonline.com/86a2e327-4951-4348-a3c4-6f4b79ffd8f2/v2.0",
+    "amr": null,
+    "api_token": {
+      "audience": "08baff4f-f206-4f49-9e87-355241826201",
+      "scp": "Results.Read"
+    },
+    "at": "2026-11-08T22:12:04Z",
+    "seconds": 19,
+    "banner": "Signed in as test-user-b@contosohealthlab.com through Microsoft Entra ID",
+    "total_seconds_end_to_end": 26
+  },
+  "app_config_history": [
+    {
+      "at": "2026-11-08T22:10:34Z",
+      "from": "okta",
+      "to": "entra",
+      "by": "cutover"
+    },
+    {
+      "at": "2026-11-08T22:11:04Z",
+      "from": "entra",
+      "to": "okta",
+      "by": "rollback"
+    },
+    {
+      "at": "2026-11-08T22:11:38Z",
+      "from": "okta",
+      "to": "entra",
+      "by": "cutover"
+    }
+  ],
+  "app_trusts_now": "entra"
+}

@@ -5,8 +5,10 @@
       "owner": "Clinic lab manager (business) / Clinic IT lead (technical)",
       "wave": 1,
       "entra_app": "Clinic Lab Results",
-      "pilot": ["test-user-b@contosohealthlab.com"],
-      "cutover": false,
+      "pilot": [
+        "test-user-b@contosohealthlab.com"
+      ],
+      "cutover": true,
       "retired": false
     },
     "Clinic Billing": {

@@ -130,7 +130,7 @@ function ensureConsent(spId) {
   return `consent granted and read back (${back.scope})`;
 }
 
-function ensurePilots(spId, pilots) {
+async function ensurePilots(spId, pilots) {
   const assigned = graph('GET', `servicePrincipals/${spId}/appRoleAssignedTo?$select=principalId,principalType,principalDisplayName`).value.filter((a) => a.principalType === 'Group');
   if (assigned.length !== 1) throw new Error(`expected exactly one group assigned to the Entra app, found ${assigned.length}`);
   const gid = assigned[0].principalId;
@@ -140,8 +140,14 @@ function ensurePilots(spId, pilots) {
     const members = graphAll(graph, `groups/${gid}/members?$select=id&$top=999`).map((m) => m.id);
     if (members.includes(u.id)) { out.push(`${upn} already in ${assigned[0].principalDisplayName}`); continue; }
     graph('POST', `groups/${gid}/members/$ref`, { '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${u.id}` });
-    const again = graphAll(graph, `groups/${gid}/members?$select=id&$top=999`).map((m) => m.id);
-    if (!again.includes(u.id)) throw new Error(`${upn} not in the group after the add`);
+    // Graph membership reads are eventually consistent: the add can take a
+    // few seconds to show (seen live 2026-11-08). Read back for up to 60 s.
+    let seen = false;
+    for (let i = 0; i < 12 && !seen; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 5000));
+      seen = graphAll(graph, `groups/${gid}/members?$select=id&$top=999`).some((m) => m.id === u.id);
+    }
+    if (!seen) throw new Error(`${upn} not in the group 60 s after the add`);
     out.push(`${upn} added to ${assigned[0].principalDisplayName} (read back)`);
   }
   return out;
@@ -167,7 +173,7 @@ async function prestage() {
   if (!entraReady) { log(`Entra side not complete yet (client${e && e.sp ? ' yes' : ' no'}, API${e && e.api ? ' yes' : ' no'}): Okta side only.`); return; }
   if (!e.sp.appRoleAssignmentRequired) throw new Error('the Entra enterprise app does not require assignment');
   log(ensureConsent(e.sp.id));
-  for (const l of ensurePilots(e.sp.id, p.pilot)) log(l);
+  for (const l of await ensurePilots(e.sp.id, p.pilot)) log(l);
 }
 
 async function test({ idp, as }) {

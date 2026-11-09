@@ -22,6 +22,11 @@ output "public_ip" {
   value       = one(azurerm_public_ip.adfs_https[*].ip_address)
 }
 
+output "nat_gateway_id" {
+  description = "The DC subnet's NAT gateway id (null when nat_gateway_enabled is false). envs/dev also attaches the Intune PC's subnet to it."
+  value       = one(azurerm_nat_gateway.dc[*].id)
+}
+
 output "nat_gateway_public_ip" {
   description = "Outbound-only address the DC's traffic leaves from (NAT gateway). Nothing can connect in through it."
   value       = one(azurerm_public_ip.nat[*].ip_address)
