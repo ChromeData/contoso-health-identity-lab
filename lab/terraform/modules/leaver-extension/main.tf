@@ -79,3 +79,26 @@ resource "azuread_access_package_catalog_role_assignment" "assignment_manager" {
   # Read through the sleep, so the grant cannot start before it ends.
   principal_object_id = time_sleep.identity_replication.triggers["principal_object_id"]
 }
+
+# APP-ONLY PERMISSION (ADR 0029, decision 2026-11-08 at the owner's
+# discretion). The catalog role above is NOT honoured for an app-only token:
+# in E183 Graph answered 403 to this identity on
+# GET .../entitlementManagement/assignments in both runs. So the identity
+# also gets the Graph application permission EntitlementManagement.ReadWrite.All.
+# That permission is tenant-wide. The bounds are in the Logic App, not in
+# Graph: only Lifecycle Workflows can start it (AADPOP trigger policy), it
+# reads only the subject the workflow passes in, and its only write is
+# adminRemove of that subject's delivered automatic-policy assignments
+# (logic-app.json, pinned by tests/leaver_extension.tftest.hcl).
+# The catalog role stays: it is what a delegated caller would use, and its
+# removal would orphan the assignment run 42527718010 created.
+data "azuread_service_principal" "msgraph" {
+  client_id = "00000003-0000-0000-c000-000000000000" # Microsoft Graph
+}
+
+resource "azuread_app_role_assignment" "entitlement_management_readwrite" {
+  app_role_id         = data.azuread_service_principal.msgraph.app_role_ids["EntitlementManagement.ReadWrite.All"]
+  principal_object_id = time_sleep.identity_replication.triggers["principal_object_id"]
+  resource_object_id  = data.azuread_service_principal.msgraph.object_id
+}
+
