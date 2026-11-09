@@ -63,8 +63,8 @@ run "no_inbound_rule_and_no_public_ip" {
   command = apply
 
   assert {
-    condition     = length(azurerm_network_security_group.endpoints.security_rule) == 0
-    error_message = "no inbound NSG rule: the PC is reached through Azure Bastion only"
+    condition     = azurerm_network_security_group.endpoints.security_rule != null && length(azurerm_network_security_group.endpoints.security_rule) == 0
+    error_message = "security_rule is an explicit empty list (an omitted block would keep the old allow-rdp-operator rule): the PC is reached through Azure Bastion only"
   }
   assert {
     condition     = azurerm_network_interface.vm.ip_configuration[0].public_ip_address_id == null

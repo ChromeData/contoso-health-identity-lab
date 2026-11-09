@@ -118,6 +118,11 @@ resource "azurerm_network_security_group" "endpoints" {
   # this no longer depends on the operator's changing home IP. Outbound stays
   # at the NSG default (allow Internet): Entra join, Intune check-in and
   # device health attestation all need it.
+  #
+  # An EXPLICIT empty list, not an omitted block: azurerm treats an omitted
+  # security_rule as "keep the rules that exist", so the old
+  # allow-rdp-operator rule would survive the apply. [] removes it (as dc-vm).
+  security_rule = []
 }
 
 resource "azurerm_subnet_network_security_group_association" "endpoints" {
