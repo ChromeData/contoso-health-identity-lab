@@ -3,13 +3,13 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "name": {
-      "type": "string"
+      "type": "String"
     },
     "location": {
-      "type": "string"
+      "type": "String"
     },
     "tags": {
-      "type": "object",
+      "type": "Object",
       "defaultValue": {}
     }
   },
@@ -254,11 +254,11 @@
   ],
   "outputs": {
     "principalId": {
-      "type": "string",
+      "type": "String",
       "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('name')), '2019-05-01', 'full').identity.principalId]"
     },
     "workflowName": {
-      "type": "string",
+      "type": "String",
       "value": "[parameters('name')]"
     }
   }
