@@ -1,0 +1,8 @@
+run command lab-248e3f01: /private/tmp/claude-501/-Users-michaelwilliams-GotchaBitch/7a6912bb-5f53-40c9-b93a-2f1b37472e5b/scratchpad/epm-proof.ps1 on vm-win11-01
+TIME: 2026-11-10T03:56:27.4491757Z
+PROC procexp64.exe pid=9180 owner=MEM\CH-WIN11-01_epm-standard_$ started=2026-11-10T03:55:16.4414930Z path=C:\Program Files\EPM-Proof\procexp64.exe
+EXPLORER pid=7612 owner=CH-WIN11-01\epm-standard
+epm-standard in Administrators: False
+SVC Log Information: 1 : 2026-11-10 03:55:16 AM | thread[1] | Attempting to launch target file: C:\Program Files\EPM-Proof\procexp64.exe
+SVC Log Information: 1 : 2026-11-10 03:55:16 AM | thread[1] | Successfully launched [C:\Program Files\EPM-Proof\procexp64.exe] using ShellExecuteEx.
+state: Succeeded, exit code: 0
