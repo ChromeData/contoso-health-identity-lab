@@ -50,13 +50,14 @@ free Okta Integrator org makes that possible at lab scale.
 - A third provider (`okta/okta`) enters the repository with its own lock
   file and its own API token, kept in the operator Mac's Keychain and used
   only for applies outside CI. The token is never in CI. "Human-applied"
-  means applied outside CI from the operator workstation. Up to 2026-11-07
-  03:05:14Z, AI helpers running as the operator also ran some of these
-  applies (the `okta/` apply at 00:54Z; `envs/bootstrap` from unmerged
-  branches at 02:27Z and 02:42Z, E150 and E153, and two follow-ups of E153
-  ending at 03:05:14Z). The record and how each was
-  reconciled: `lab/docs/change-record-outside-the-gate.md`. From then on the
-  owner starts or approves each one.
+  means applied outside CI from the operator workstation. From 2026-11-05 to
+  2026-11-08, AI helpers running as the operator also ran thirteen of these
+  applies from unmerged branches, six of them of `okta/` (the last: three
+  targeted applies by `lab/okta-migration/cutover.mjs` in the wave-1
+  cut-over, E184, 2026-11-08 22:10Z-22:11Z), and the operator ran one more
+  `envs/bootstrap` apply at the owner's direction (#282, 23:38Z). The record
+  and how each was reconciled: `lab/docs/change-record-outside-the-gate.md`.
+  From then on the owner starts or approves each one.
 - `Clinic-Staff` membership in Okta is a stand-in for an HR-driven group;
   the decision that clinic users come from HR → AD → Cloud Sync, not from an
   Okta export, is unchanged.
