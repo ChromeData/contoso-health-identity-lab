@@ -58,7 +58,9 @@ STUB_GH = textwrap.dedent(r"""
         [ -f "$STUB_DIR/range.fail" ] && exit 1
         case "$*" in
           *total_commits*)
-            if [ -f "$STUB_DIR/range_total.txt" ]; then cat "$STUB_DIR/range_total.txt"; else grep -c . "$STUB_DIR/range.txt"; fi ;;
+            st=ahead; [ -f "$STUB_DIR/range_status.txt" ] && st=$(cat "$STUB_DIR/range_status.txt")
+            if [ -f "$STUB_DIR/range_total.txt" ]; then n=$(cat "$STUB_DIR/range_total.txt"); else n=$(grep -c . "$STUB_DIR/range.txt"); fi
+            echo "$st $n" ;;
           *) cat "$STUB_DIR/range.txt" ;;
         esac
         exit 0 ;;
@@ -371,6 +373,28 @@ class SeparationTest(GateTest):
                           GATE_MODE="check", APPLY_RANGE_BASE="1234567")
         self.assertEqual(r.returncode, 1)
         self.assertIn("read 2 of 300 commits", r.stdout)
+
+    def test_dispatch_behind_last_apply_is_refused(self):
+        # Greptile on #274: re-running an older dispatch after a newer apply
+        # gives an empty compare; it must refuse, not show an empty PR list.
+        for status in ("behind", "diverged"):
+            self.range_fixture()
+            self.write("range.txt", "")
+            self.write("range_total.txt", "0\n")
+            self.write("range_status.txt", status + "\n")
+            r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="workflow_dispatch",
+                              GATE_MODE="check", APPLY_RANGE_BASE="1234567")
+            self.assertEqual(r.returncode, 1, status)
+            self.assertIn("does not contain the last successful apply", r.stdout)
+
+    def test_dispatch_identical_to_last_apply_passes(self):
+        self.range_fixture()
+        self.write("range.txt", "")
+        self.write("range_total.txt", "0\n")
+        self.write("range_status.txt", "identical\n")
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="workflow_dispatch",
+                          GATE_MODE="check", APPLY_RANGE_BASE="1234567")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_dispatch_reads_every_compare_page(self):
         self.range_fixture()

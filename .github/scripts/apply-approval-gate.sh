@@ -165,8 +165,18 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] || [ "${GITHUB_EVENT_NAME:
     # every page, then refuse unless the count equals total_commits.
     range_shas=$(gh api "repos/$REPO/compare/$range_base...$GITHUB_SHA?per_page=100" --paginate --jq '.commits[].sha') \
       || { echo "Refused: could not read the commits between $range_base and $GITHUB_SHA"; exit 1; }
-    range_total=$(gh api "repos/$REPO/compare/$range_base...$GITHUB_SHA?per_page=1" --jq '.total_commits') \
+    range_meta=$(gh api "repos/$REPO/compare/$range_base...$GITHUB_SHA?per_page=1" --jq '"\(.status) \(.total_commits)"') \
       || { echo "Refused: could not read the commit count between $range_base and $GITHUB_SHA"; exit 1; }
+    range_status="${range_meta%% *}"; range_total="${range_meta##* }"
+    # Greptile on #274: a re-run of an older dispatch after a newer apply has
+    # GITHUB_SHA behind the base; compare then lists no commits and the run
+    # would roll back newer changes behind an empty PR list. The dispatch
+    # commit must contain the last successful apply (ahead, or identical).
+    case "$range_status" in
+      ahead|identical) ;;
+      *) echo "Refused: $short does not contain the last successful apply ${range_base:0:7} (compare status: ${range_status:-unknown}); applying it would undo newer changes"
+         exit 1 ;;
+    esac
     range_read=$(printf '%s\n' "$range_shas" | grep -c . || true)
     if [ "$range_read" != "$range_total" ]; then
       echo "Refused: read $range_read of $range_total commits between ${range_base:0:7} and $short; the PR list would be incomplete"

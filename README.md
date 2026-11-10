@@ -306,7 +306,9 @@ Written down on purpose. A reviewer will find these in ten minutes; better they 
   agents' Mac uses only the bot for GitHub; before that, most PRs were authored with the owner's
   own login (ChromeData), and the bot only merged them. The gate (`APPLY_BOT_LOGIN`) refuses a push
   run whose pull request the bot did not both author and merge; a manual (dispatch) run lists every
-  PR it carries, with author and merger. The `prod` environment has "Prevent self-review" on.
+  PR it carries, with author and merger, and refuses a commit that does not contain the last
+  successful apply (an older re-run would undo newer changes). The `prod` environment has
+  "Prevent self-review" on.
 - Code review: until 2026-11-08 the ruleset required **0** approvals, so scripts that run on DC01,
   the HR connector and the cockpit merged on automated checks and an AI review only. The fix is a
   required code-owner approval by the owner on every PR (`.github/CODEOWNERS`,
