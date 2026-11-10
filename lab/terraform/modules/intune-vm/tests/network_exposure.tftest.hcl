@@ -7,8 +7,8 @@
 #   * NO inbound NSG rule at all: the only admin path is Azure Bastion from
 #     inside the VNet (the NSG default AllowVnetInBound admits it). Nothing
 #     depends on the operator's home IP any more.
-#   * The NIC has no public IP. pip-vm-win11-01 stays in config, unreferenced,
-#     for one apply (step 1 of 2: detach before delete).
+#   * The NIC has no public IP, and no public IP resource exists (step 2 of 2
+#     deleted pip-vm-win11-01 after step 1 detached it).
 #   * Outbound: the endpoint subnet can be attached to a NAT gateway
 #     (attach_nat_gateway + nat_gateway_id), with a clear error if the id is
 #     missing.
@@ -18,12 +18,6 @@ mock_provider "azurerm" {
   }
   mock_resource "azurerm_network_security_group" {
     defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Network/networkSecurityGroups/nsg-vm-win11-01" }
-  }
-  mock_resource "azurerm_public_ip" {
-    defaults = {
-      id         = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Network/publicIPAddresses/pip-vm-win11-01"
-      ip_address = "192.0.2.10"
-    }
   }
   mock_resource "azurerm_network_interface" {
     defaults = {
@@ -69,10 +63,6 @@ run "no_inbound_rule_and_no_public_ip" {
   assert {
     condition     = azurerm_network_interface.vm.ip_configuration[0].public_ip_address_id == null
     error_message = "the NIC must not reference a public IP"
-  }
-  assert {
-    condition     = azurerm_public_ip.vm.name == "pip-vm-win11-01" && azurerm_public_ip.vm.sku == "Standard" && azurerm_public_ip.vm.allocation_method == "Static"
-    error_message = "step 1 of 2: pip-vm-win11-01 stays in config, unchanged and unreferenced, for one apply"
   }
   assert {
     condition     = output.public_ip == null
