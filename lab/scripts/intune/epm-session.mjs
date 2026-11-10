@@ -19,12 +19,17 @@
 //   GET /click?x=&y=[&button=right][&double=1]
 //   GET /type?text=...          GET /key?k=Enter     GET /mark?what=...
 //   GET /close                  ends the session (Bastion uploads the recording)
+// Loopback is not private on a shared Mac (any local OS user can connect), so
+// every request must carry a random per-run token, written only to
+// DIR/.control-header (mode 0600, never printed or put on a command line):
+//   curl -H @DIR/.control-header 'http://127.0.0.1:8765/shot?name=x'
 // Every step is written to DIR/session.json with a UTC time; the browser
 // records a video (Playwright recordVideo).
 // =============================================================================
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { signIn, activatePim } from '../demo/signin/identity.mjs';
 import { pageText, sleep, playwright, keychainRead, redact, passwordFor, seedFor, freshTotp } from '../demo/signin/lib.mjs';
 // /typesecret types an Entra test user's password or a fresh authenticator
@@ -86,8 +91,22 @@ try {
   await browser.close(); process.exit(1);
 }
 
+// Per-run control token: only the operator (who can read DIR) can drive the
+// desktop or make it type a Keychain secret. The file is created 0600 before
+// the token is written, and removed when the session closes.
+const TOKEN = crypto.randomBytes(32).toString('hex');
+const TOKEN_FILE = path.join(OUT, '.control-header');
+fs.rmSync(TOKEN_FILE, { force: true });
+fs.writeFileSync(TOKEN_FILE, `X-Session-Token: ${TOKEN}\n`, { mode: 0o600, flag: 'wx' });
+const authorized = (req) => {
+  const got = Buffer.from(String(req.headers['x-session-token'] || ''));
+  const want = Buffer.from(TOKEN);
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
+};
+
 let n = 2;
 const server = http.createServer(async (req, res) => {
+  if (!authorized(req)) { res.statusCode = 401; res.end('missing or wrong X-Session-Token\n'); return; }
   const u = new URL(req.url, 'http://x'); const q = (k) => u.searchParams.get(k);
   try {
     if (u.pathname === '/click') {
@@ -104,7 +123,8 @@ const server = http.createServer(async (req, res) => {
     }
     else if (u.pathname === '/mark') { mark(q('what') || ''); }
     else if (u.pathname === '/close') {
-      mark('session tab closed'); await sess.close(); await ctx.close(); await browser.close();
+      mark('session tab closed'); fs.rmSync(TOKEN_FILE, { force: true });
+      await sess.close(); await ctx.close(); await browser.close();
       res.end('closed\n'); server.close(); return;
     }
     await sleep(Number(q('wait') || 2500));
@@ -115,4 +135,4 @@ const server = http.createServer(async (req, res) => {
     res.end(path.join(OUT, name) + '\n');
   } catch (e) { res.statusCode = 500; res.end(String(e.message || e) + '\n'); }
 });
-server.listen(PORT, '127.0.0.1', () => console.log(`READY on 127.0.0.1:${PORT}`));
+server.listen(PORT, '127.0.0.1', () => console.log(`READY on 127.0.0.1:${PORT} (send -H @${TOKEN_FILE})`));
