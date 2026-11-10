@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-08T19:23:24Z",
+  "generatedAt": "2026-11-08T23:36:08Z",
   "org": "integrator-8288815.okta.com",
   "apps": [
     {
@@ -134,7 +134,7 @@
         "signOnMode": "OPENID_CONNECT",
         "protocol": "OIDC",
         "status": "ACTIVE",
-        "hidden": false,
+        "hidden": true,
         "groups": [
           "Clinic-Staff"
         ],
@@ -190,7 +190,7 @@
             ]
           }
         ],
-        "sso7d": 7,
+        "sso7d": 9,
         "entraPattern": "App registration (same client type and redirect URIs) + enterprise app"
       },
       "entra": {
@@ -202,11 +202,13 @@
         "assignedGroups": [
           "App-ClinicResults-Users"
         ],
-        "groupMembers": 0,
-        "ca": [],
-        "signins7d": 0
+        "groupMembers": 1,
+        "ca": [
+          "CA061 (on)"
+        ],
+        "signins7d": 5
       },
-      "appTrusts": "okta"
+      "appTrusts": "entra"
     }
   ],
   "admins": [

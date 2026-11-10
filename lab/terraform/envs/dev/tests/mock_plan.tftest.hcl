@@ -32,6 +32,8 @@
 # lab.tfvars never holds. Synthetic here; from Day 1 (enable_premium in
 # lab.tfvars) every run needs them. A run's own variables block overrides.
 variables {
+  # imports.tf: a mock provider cannot import; the real plan/apply (lab.tfvars) does.
+  leaver_role_assignment_import_id       = ""
   aws_scim_credentials                   = { tenant_url = "https://scim.us-east-1.amazonaws.com/abcd-1234/scim/v2", secret_token = "not-a-real-token-0123456789abcdef" } # the stage test turns SCIM on; the creating run reads the real values from Key Vault
   aws_scim_template_id                   = "aWSSingleSignon"                                                                                                             # synthetic: enable_scim_provisioning precondition (lab.tfvars stage)
   okta_org_domain                        = "integrator-0000000.okta.com"                                                                                                 # synthetic org host: enable_okta_federation precondition (lab.tfvars stage)
@@ -88,6 +90,16 @@ mock_provider "azuread" {
   }
 }
 mock_provider "random" {}
+
+# modules/leaver-extension looks up Microsoft Graph's app role ids (E183:
+# EntitlementManagement.ReadWrite.All for the leaver Logic App's identity).
+override_data {
+  target = module.leaver_extension[0].data.azuread_service_principal.msgraph
+  values = {
+    object_id    = "12121212-1212-1212-1212-121212121212"
+    app_role_ids = { "EntitlementManagement.ReadWrite.All" = "9acd699f-1e81-4958-b001-93b1d2506e19" }
+  }
+}
 
 run "plan_lab_tfvars" {
   command = plan
