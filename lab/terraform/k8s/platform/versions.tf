@@ -13,10 +13,9 @@
 #
 # PROVIDERS (checked on the GitHub releases pages, 2026-10-19):
 #   hashicorp/helm       ~> 3.3.0  (3.3.0 released 2026-09-02)
-#   hashicorp/kubernetes ~> 3.3.0  (3.3.0 released 2026-10-01; 3.4.0 came out
-#                                   on 2026-10-19 and is deliberately NOT
-#                                   allowed until it has aged two weeks)
-# The pessimistic "~> 3.3.0" admits 3.3.x patches only. The committed
+#   hashicorp/kubernetes ~> 3.5.0  (raised from ~> 3.3.0 on 2026-11-09, from
+#                                   Dependabot #268/#270)
+# Each pessimistic "~> 3.x.0" admits patches of that minor only. The committed
 # .terraform.lock.hcl pins the exact build and its hashes for linux_amd64 (CI)
 # and darwin_arm64 (the dev Mac).
 #
@@ -38,7 +37,7 @@ terraform {
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 3.3.0"
+      version = "~> 3.5.0"
     }
   }
 }
