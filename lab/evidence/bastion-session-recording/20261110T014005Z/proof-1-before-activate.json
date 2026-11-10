@@ -1,0 +1,29 @@
+{
+ "started": "2026-11-10T01:23:36.804Z",
+ "steps": [
+  {
+   "step": "signin",
+   "what": "adm-presenter signed in to the Azure portal (passkey)",
+   "utc": "2026-11-10T01:23:47.537Z",
+   "t_s": 11
+  },
+  {
+   "step": "before",
+   "what": "DC01 Bastion page: \"You don't have access\" (403) before PIM",
+   "utc": "2026-11-10T01:23:49.696Z",
+   "t_s": 13,
+   "ok": true,
+   "shot": "01-before-pim-no-access.png"
+  },
+  {
+   "step": "activate",
+   "what": "PIM: PIM-Demo-Readers ACTIVE for adm-presenter, 1 hour (Reader on the subscription)",
+   "utc": "2026-11-10T01:24:18.173Z",
+   "t_s": 41,
+   "activation_s": 28,
+   "shot": "04-pim-active.png"
+  }
+ ],
+ "ok": false,
+ "error": "the Bastion connect form never appeared after activation"
+}

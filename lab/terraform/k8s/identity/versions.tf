@@ -17,7 +17,8 @@
 # lab/docs/STAND-INS.md has the on-camera lines.
 #
 # PROVIDER (checked on the GitHub releases page, 2026-10-19):
-#   hashicorp/kubernetes ~> 3.3.0  (3.3.0 released 2026-10-01)
+#   hashicorp/kubernetes ~> 3.5.0  (raised from ~> 3.3.0 on 2026-11-09,
+#                                   from Dependabot #268/#270)
 # The committed .terraform.lock.hcl pins the exact build and hashes for
 # linux_amd64 (CI) and darwin_arm64 (the dev Mac).
 #
@@ -34,7 +35,7 @@ terraform {
   required_providers {
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 3.3.0"
+      version = "~> 3.5.0"
     }
   }
 }

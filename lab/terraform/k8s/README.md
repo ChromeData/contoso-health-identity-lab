@@ -17,8 +17,8 @@ Terraform.
 | Root | Applied in | Owns | Providers |
 |---|---|---|---|
 | [`keyvault-trust/`](keyvault-trust/README.md) | stage 4, as the operator | app registration (no credential), one federated identity credential for `system:serviceaccount:clinical-apps:nightly-report` (audience `api://AzureADTokenExchange`), Key Vault Secrets User on ONE secret | `hashicorp/azuread ~> 3.10`, `hashicorp/azurerm ~> 4.0` |
-| [`platform/`](platform/README.md) | stage 6 | namespaces `secrets-store` + `clinical-apps` with Pod Security Admission labels; the Secrets Store CSI Driver + Azure Key Vault provider Helm release | `hashicorp/helm ~> 3.3.0`, `hashicorp/kubernetes ~> 3.3.0` |
-| [`identity/`](identity/README.md) | stage 7 | the two workload service accounts; the SecretProviderClass for the one secret; human RBAC (Roles + RoleBindings for two groups; pods and ReplicaSets read-only for the deployer); ValidatingAdmissionPolicy `clinical-apps-workload-identity` | `hashicorp/kubernetes ~> 3.3.0` |
+| [`platform/`](platform/README.md) | stage 6 | namespaces `secrets-store` + `clinical-apps` with Pod Security Admission labels; the Secrets Store CSI Driver + Azure Key Vault provider Helm release | `hashicorp/helm ~> 3.3.0`, `hashicorp/kubernetes ~> 3.5.0` |
+| [`identity/`](identity/README.md) | stage 7 | the two workload service accounts; the SecretProviderClass for the one secret; human RBAC (Roles + RoleBindings for two groups; pods and ReplicaSets read-only for the deployer); ValidatingAdmissionPolicy `clinical-apps-workload-identity` | `hashicorp/kubernetes ~> 3.5.0` |
 
 ## Why separate roots
 

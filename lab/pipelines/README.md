@@ -249,7 +249,7 @@ Every third-party action is pinned to a **full 40-char commit SHA**, with the
 human-readable version in a trailing comment:
 
 ```yaml
-uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
 ```
 
 A tag like `@v2` or `@v2.3.0` is a *mutable pointer* the action's owner (or
@@ -268,7 +268,7 @@ TruffleHog's action runs `ghcr.io/trufflesecurity/trufflehog:<version>`
 "3.97.9@sha256:52e67fef4d054ecff5c2ce4b4ae376626d1ef54aa0898b53cac19c25e92e14db"`
 and bumps it by hand with the SHA, because Dependabot does not touch that
 input. `checkov-action`'s pinned `action.yml` hard-codes
-`ghcr.io/bridgecrewio/checkov:3.3.3`, a tag the workflow cannot override
+`ghcr.io/bridgecrewio/checkov:3.4.3`, a tag the workflow cannot override
 (verify: accepted residual risk, re-check on each bump).
 
 Pinned set in this pipeline, exactly as in the workflow files (bump
@@ -276,14 +276,14 @@ deliberately via Dependabot, never blind-retag):
 
 | Action | Version | Commit SHA |
 |---|---|---|
-| `actions/checkout` | v5.0.0 | `08c6903cd8c0fde910a37f88322edcfb5dd907a8` |
-| `azure/login` | v3.0.2 | `7ddb5af1ef8758cf1353cf3b42f940aee27ba21c` |
+| `actions/checkout` | v7.0.1 | `3d3c42e5aac5ba805825da76410c181273ba90b1` |
+| `azure/login` | v3.1.0 | `a641126d1b8aa4d1fa005f4f92df94a3a4c4c906` |
 | `hashicorp/setup-terraform` | v4.0.1 | `dfe3c3f87815947d99a8997f908cb6525fc44e9e` |
-| `actions/setup-python` | v7.0.0 | `5fda3b95a4ea91299a34e894583c3862153e4b97` (`k8s-identity.yml` only: Python 3.12 for Checkov) |
-| `actions/github-script` | v8.0.0 | `ed597411d8f924073f98dfc5c65a23a2325f34cd` |
-| `bridgecrewio/checkov-action` | v12.3109.0 | `a59d390da81ed70dbf0bced4d76d0c2b3a5dbf6e` |
-| `trufflesecurity/trufflehog` | v3.97.9 | `4dd8831c5f12599465d4d45c3c447b4018a34c85` (scanner image pinned by digest: `version:` input, bumped by hand) |
-| `github/codeql-action/upload-sarif` | v4.38.2 | `2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2` |
+| `actions/setup-python` | v7.1.0 | `6d4fd22b20465ccc0f7354476588e8df7c9ca0e0` (`k8s-identity.yml` only: Python 3.12 for Checkov) |
+| `actions/github-script` | v9.0.0 | `3a2844b7e9c422d3c10d287c895573f7108da1b3` (`ai-review.yml`, `terraform-plan.yml`); v8.0.0 `ed597411d8f924073f98dfc5c65a23a2325f34cd` (`config-drift.yml`, kept on v8 until its two issue-writing scripts are tested on v9) |
+| `bridgecrewio/checkov-action` | v12.3139.0 | `45edc9d8856b664db2ec251f5f8632361f0a67aa` |
+| `trufflesecurity/trufflehog` | v3.99.8 | `ea68ca03c865c5f324e86e849ced20ed3cf9dbbb` (scanner image pinned by digest: `version:` input, bumped by hand) |
+| `github/codeql-action/upload-sarif` | v4.39.3 | `33d7b85da1a04171e211befe2c739303b9a4c066` |
 
 `setup-terraform` installs **Terraform 1.16.5** in all four Terraform
 workflows (`terraform-plan.yml`, `terraform-apply.yml`, `k8s-identity.yml`,

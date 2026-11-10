@@ -1,6 +1,6 @@
 # ADR 0037: The leaver Logic App gets EntitlementManagement.ReadWrite.All, because app-only callers cannot use catalog-scoped roles
 
-- **Status:** BUILT (PR #281: `modules/leaver-extension`, tests pass). Waits for the owner's round-4 apply. The finding that led to it is RAN · tenant (2026-11-08, capture log E183).
+- **Status:** RAN · tenant (2026-11-10, capture log E187): applied in round 5 (run 42549595286); the Logic App's identity sent adminRemove for the leaver's birthright package, which was gone at 02:05:13Z. The finding that led to it is RAN · tenant (2026-11-08, capture log E183).
 - **Date:** 2026-11-08
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer). Granted at the owner's discretion (decision 2026-11-08).
 - **Next review:** after the first successful leaver run with this permission, or 2027-02-08

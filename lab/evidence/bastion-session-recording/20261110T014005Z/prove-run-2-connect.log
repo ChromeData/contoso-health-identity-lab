@@ -1,0 +1,8 @@
+[signin] adm-presenter: username
+[signin] adm-presenter: stay signed in: yes
+[signin] adm-presenter: signed in (passkey) at portal.azure.com
+{"step":"signin","what":"adm-presenter signed in to the Azure portal (passkey)","utc":"2026-11-10T01:39:52.057Z","t_s":11}
+{"step":"connect","what":"DC01 Bastion page opens after activation","utc":"2026-11-10T01:40:04.256Z","t_s":23,"rbac_wait_s":12,"shot":"05-bastion-form.png"}
+{"step":"connect","what":"session open on DC01 through Bastion (browser, recorded)","utc":"2026-11-10T01:40:51.115Z","t_s":70,"host":"bst-fa86cd88-684f-413e-96da-ae814f482a18.bastion.azure.com","connect_s":46,"shot":"06-session-desktop.png"}
+{"step":"connect","what":"keystrokes sent: whoami & hostname (check the recording: the 2026-11-07 run did not reach a prompt)","utc":"2026-11-10T01:41:07.856Z","t_s":87,"shot":"07-session-whoami.png"}
+{"step":"connect","what":"session tab closed: the session ends and Bastion uploads the recording","utc":"2026-11-10T01:41:23.988Z","t_s":103,"session_s":79}
