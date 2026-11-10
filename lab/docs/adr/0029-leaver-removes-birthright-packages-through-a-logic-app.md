@@ -1,6 +1,6 @@
 # ADR 0029: The HR leaver removes birthright access packages through a Logic App, because the built-in Lifecycle Workflows task skips them
 
-- **Status:** The leave-date leaver workflow is RAN · tenant (2026-11-07/08, capture log E179-E181; worker 100496 in E180): it ran by itself, but it did not remove the birthright package. The Logic App step is RAN · tenant (2026-11-08, capture log E183): applied in round 3 (run 42527718010), called by Lifecycle Workflows on demand and on schedule, **but Graph answered 403** to its managed identity, so the gap is **not closed yet**. Decision 3's fallback (a tenant-wide permission) waits for the owner.
+- **Status:** **Gap closed with no hand step: RAN · tenant 2026-11-10, capture log E187** (the Logic App removed the birthright package 12 min 43 s after the HR resend, with the permission from ADR 0037). History: The leave-date leaver workflow is RAN · tenant (2026-11-07/08, capture log E179-E181; worker 100496 in E180): it ran by itself, but it did not remove the birthright package. The Logic App step is RAN · tenant (2026-11-08, capture log E183): applied in round 3 (run 42527718010), called by Lifecycle Workflows on demand and on schedule, **but Graph answered 403** to its managed identity, so the gap is **not closed yet**. Decision 3's fallback (a tenant-wide permission) waits for the owner.
 - **Date:** 2026-11-08
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** after the first tenant run of the Logic App, or 2027-02-08
