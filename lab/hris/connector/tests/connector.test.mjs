@@ -9,7 +9,8 @@ import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseFeed, serialiseFeed, reconcile, describe, hospitalToday, MAX_ACCESS_CHANGES, FeedError } from '../lib/feed.mjs';
-import { GitHubStore } from '../lib/store.mjs';
+import { GitHubStore, BOT_GH } from '../lib/store.mjs';
+import { existsSync, readFileSync } from 'node:fs';
 import { runSerially } from '../lib/schedule.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -228,4 +229,11 @@ test('the schedule never overlaps two syncs: a slow cycle delays the next, it do
   s.stop();
   assert.equal(most, 1, 'never two cycles at once');
   assert.equal(runs, 2);
+});
+
+test('R10: the outbox is written as the lab bot (bot-gh), never a plain gh login', () => {
+  assert.ok(BOT_GH.endsWith('/lab/scripts/operator/github-bot/bot-gh'), BOT_GH);
+  assert.ok(existsSync(BOT_GH), 'bot-gh must exist at the path the store calls');
+  const src = readFileSync(new URL('../lib/store.mjs', import.meta.url), 'utf8');
+  assert.ok(!/execFile\('gh'/.test(src), 'no direct gh call: it would use the owner login');
 });

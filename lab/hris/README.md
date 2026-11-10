@@ -101,6 +101,6 @@ node orangehrm/hr-clicks.mjs purge --name "Test Hris"
 | `orangehrm/hr-clicks.mjs` | Rehearsal driver: HR's clicks, screenshots, click times |
 | `connector/sync.mjs` | The connector (once, `--dry-run`, `--watch 60`) |
 | `connector/lib/feed.mjs` | Pure rules: hired, moved, left, came back, held |
-| `connector/lib/store.mjs` | The outbox on `hr-feed` through `gh` (sha-checked writes), and each send's result |
+| `connector/lib/store.mjs` | The outbox on `hr-feed` through `gh`, run as the lab bot via `lab/scripts/operator/github-bot/bot-gh` (1-hour App token for this repo, no personal login, no fallback; needs `bot.env` and the App key in the Keychain, `new-bot-app.sh`), sha-checked writes, and each send's result |
 | `connector/lib/hris.mjs` | Reads the view as `hr_connector` (password from the Keychain) |
 | `connector/tests/connector.test.mjs` | `node --test`: rules, store (fake `gh`), seed, view columns |

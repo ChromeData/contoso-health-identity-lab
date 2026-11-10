@@ -13,8 +13,15 @@
 // made on an old read cannot overwrite a newer file (GitHub answers 409; the
 // connector re-reads on its next cycle).
 //
-// No token passes through this process's argv or environment: `gh` uses
-// its own stored sign-in. The request body goes over stdin.
+// WHO WRITES (karen-review round 2, R10; owner decision 2026-11-08): `gh`
+// on this Mac signs in ONLY as the lab bot (a GitHub App). So `gh` runs
+// through lab/scripts/operator/github-bot/bot-gh, which mints a 1-hour
+// installation token for THIS repo only from the App key in the Keychain.
+// The commit author is the bot, not the owner, and there is no long-lived
+// personal token. There is no fallback to a plain `gh` login: if the bot
+// cannot sign in, the save fails and says so (fail closed).
+// No token passes through this process's argv: bot-gh hands it to gh in the
+// child's environment. The request body goes over stdin.
 //
 // FileStore: a local file, for tests and an offline rehearsal. It sends
 // nothing anywhere.
@@ -22,14 +29,17 @@
 import { execFile } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 const digest = (t) => createHash('sha256').update(t).digest('hex');
 
 export const ROSTER_PATH = 'lab/scripts/mock-hr/hr_feed.csv';
 
+export const BOT_GH = fileURLToPath(new URL('../../../scripts/operator/github-bot/bot-gh', import.meta.url));
+
 function gh(args, input) {
   return new Promise((resolve, reject) => {
-    const child = execFile('gh', args, { maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const child = execFile(BOT_GH, ['gh', ...args], { maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) { err.stderr = String(stderr); return reject(err); }
       resolve(String(stdout));
     });

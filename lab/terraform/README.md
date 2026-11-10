@@ -21,10 +21,12 @@ AWS IAM Identity Center permission set in an equally separate, human-applied
 `aws/` root, and the Okta side of the acquired clinic's coexistence (ADR 0022) in
 a third human-applied root, `okta/`. ("Human-applied" means applied
 outside CI, from the operator workstation. The owner starts or approves
-each such apply. Up to 2026-11-07 03:05:14Z AI helpers running as the lab operator
-also ran some of them, four from unmerged branches (E150, E153 and two
-follow-ups of E153); the record
-is `lab/docs/change-record-outside-the-gate.md`.) Workforce users (Dana Okafor and colleagues) are **not**
+each such apply. From 2026-11-05 to 2026-11-08 AI helpers running as the lab
+operator also applied roots from unmerged branches: 14 applies from 9
+branches, 13 by helpers (the last the three targeted `okta/` applies of the
+wave-1 cut-over, E184, 2026-11-08) and one at the owner's direction
+(`envs/bootstrap` from the #282 branch). Each one, and how it was
+reconciled, is in `lab/docs/change-record-outside-the-gate.md`.) Workforce users (Dana Okafor and colleagues) are **not**
 Terraform's: HR provisioning owns them.
 
 > **Status: BUILT.** Every directory validates and every mocked test passes

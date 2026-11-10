@@ -1,0 +1,9 @@
+# Code owners (karen-review round 2, R1).
+# Every path has one code owner: the human owner. With the main-protection
+# ruleset set to "1 approval" + "Require review from Code Owners" +
+# "Require approval of the most recent reviewable push", a pull request can
+# merge only after ChromeData approves its latest commit in the browser.
+# The bot (contoso-health-lab-bot[bot]) authors and merges, and can never
+# satisfy this: it is not a code owner, and nobody approves their own PR.
+# Setup and the exact clicks: lab/pipelines/README.md, section F.
+*       @ChromeData

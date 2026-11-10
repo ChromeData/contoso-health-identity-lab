@@ -50,6 +50,26 @@ STUB_GH = textwrap.dedent(r"""
       "api -X")
         echo "$*" >> "$STUB_DIR/closed.log"; exit 0 ;;
     esac
+    # R3 range fixtures: compare -> range.txt (one sha per line, as --jq
+    # prints), other commits' PRs -> pulls_<sha>.json, other PRs' merger ->
+    # merged_by_<n>.txt.
+    case "$2" in
+      repos/o/r/compare/*)
+        [ -f "$STUB_DIR/range.fail" ] && exit 1
+        case "$*" in
+          *total_commits*)
+            st=ahead; [ -f "$STUB_DIR/range_status.txt" ] && st=$(cat "$STUB_DIR/range_status.txt")
+            if [ -f "$STUB_DIR/range_total.txt" ]; then n=$(cat "$STUB_DIR/range_total.txt"); else n=$(grep -c . "$STUB_DIR/range.txt"); fi
+            echo "$st $n" ;;
+          *) cat "$STUB_DIR/range.txt" ;;
+        esac
+        exit 0 ;;
+      repos/o/r/commits/*/pulls)
+        c="${2#repos/o/r/commits/}"; c="${c%/pulls}"
+        cat "$STUB_DIR/pulls_$c.json"; exit 0 ;;
+      repos/o/r/pulls/*)
+        cat "$STUB_DIR/merged_by_${2##*/}.txt"; exit 0 ;;
+    esac
     echo "stub gh: unexpected call: $*" >&2
     exit 2
 """).lstrip()
@@ -303,6 +323,97 @@ class SeparationTest(GateTest):
             r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME=event, GATE_MODE="check")
             self.assertEqual(r.returncode, 1, event)
             self.assertIn("merged by @owner1", r.stdout)
+
+    # ---- R3: a dispatch lists every PR it applies ----------------------------
+    def range_fixture(self, other_author="owner1", other_merger="agent-bot[bot]"):
+        self.bot_pr()
+        self.write("range.txt", "c0ffee1\nabc1234567\n")
+        self.write("pulls_c0ffee1.json", json.dumps([{"number": 8, "title": "Other", "user": {"login": other_author}}]))
+        self.write("merged_by_8.txt", other_merger + "\n")
+
+    def test_dispatch_lists_every_pr_in_range_and_flags_non_bot(self):
+        self.range_fixture()
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="repository_dispatch",
+                          GATE_MODE="check", APPLY_RANGE_BASE="1234567")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = self.read("summary_out.md")
+        self.assertIn("Every PR this run applies", out)
+        self.assertIn("| c0ffee1 | #8 | @owner1 | @agent-bot[bot] | **not bot** |", out)
+        self.assertIn("| abc1234 | #7 | @agent-bot[bot] | @agent-bot[bot] | ok |", out)
+        self.assertIn("1 change(s) in this range were not authored and merged by the bot", out)
+
+    def test_dispatch_strict_refuses_non_bot_pr_in_range(self):
+        self.range_fixture()
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="workflow_dispatch",
+                          GATE_MODE="check", APPLY_RANGE_BASE="1234567", APPLY_RANGE_STRICT="true")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("APPLY_RANGE_STRICT=true", r.stdout)
+
+    def test_dispatch_strict_passes_all_bot_range(self):
+        self.range_fixture(other_author="agent-bot[bot]")
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="repository_dispatch",
+                          GATE_MODE="check", APPLY_RANGE_BASE="1234567", APPLY_RANGE_STRICT="true")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("not bot", self.read("summary_out.md"))
+
+    def test_dispatch_unreadable_range_fails_closed(self):
+        self.range_fixture()
+        self.write("range.fail", "")
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="repository_dispatch",
+                          GATE_MODE="check", APPLY_RANGE_BASE="1234567")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("could not read the commits", r.stdout)
+
+    def test_dispatch_incomplete_range_is_refused(self):
+        # Greptile on #274: compare returns at most 250 commits per page; a
+        # list shorter than total_commits must refuse, not pass silently.
+        self.range_fixture()
+        self.write("range_total.txt", "300\n")
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="repository_dispatch",
+                          GATE_MODE="check", APPLY_RANGE_BASE="1234567")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("read 2 of 300 commits", r.stdout)
+
+    def test_dispatch_behind_last_apply_is_refused(self):
+        # Greptile on #274: re-running an older dispatch after a newer apply
+        # gives an empty compare; it must refuse, not show an empty PR list.
+        for status in ("behind", "diverged"):
+            self.range_fixture()
+            self.write("range.txt", "")
+            self.write("range_total.txt", "0\n")
+            self.write("range_status.txt", status + "\n")
+            r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="workflow_dispatch",
+                              GATE_MODE="check", APPLY_RANGE_BASE="1234567")
+            self.assertEqual(r.returncode, 1, status)
+            self.assertIn("does not contain the last successful apply", r.stdout)
+
+    def test_dispatch_identical_to_last_apply_passes(self):
+        self.range_fixture()
+        self.write("range.txt", "")
+        self.write("range_total.txt", "0\n")
+        self.write("range_status.txt", "identical\n")
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="workflow_dispatch",
+                          GATE_MODE="check", APPLY_RANGE_BASE="1234567")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_dispatch_reads_every_compare_page(self):
+        self.range_fixture()
+        self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="repository_dispatch",
+                      GATE_MODE="check", APPLY_RANGE_BASE="1234567")
+        self.assertIn("--paginate", self.read("calls.log"))
+
+    def test_dispatch_unknown_range_strict_refuses(self):
+        self.bot_pr()
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="repository_dispatch",
+                          GATE_MODE="check", APPLY_RANGE_STRICT="true")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("range of this dispatch is unknown", r.stdout)
+
+    def test_dispatch_bad_range_base_refused(self):
+        self.bot_pr()
+        r = self.run_gate(APPLY_BOT_LOGIN="agent-bot[bot]", GITHUB_EVENT_NAME="repository_dispatch",
+                          GATE_MODE="check", APPLY_RANGE_BASE="main; rm -rf /")
+        self.assertEqual(r.returncode, 1)
 
     def test_set_refuses_approver_who_is_merger(self):
         self.bot_pr()

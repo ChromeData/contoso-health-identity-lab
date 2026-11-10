@@ -11,6 +11,12 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    # karen-review round 2, R31 (round 1 J1): no major-version PRs. A major
+    # bump (e.g. azurerm 4 -> 5) changes resource schemas and is done once,
+    # by hand, in one deliberate PR with its own plan.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "ci"
 
@@ -32,5 +38,8 @@ updates:
       - "/lab/terraform/k8s/keyvault-trust"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "deps(terraform)"
