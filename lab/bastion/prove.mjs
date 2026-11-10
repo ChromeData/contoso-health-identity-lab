@@ -181,7 +181,9 @@ try {
   if (STEP === 'all' || STEP === 'connect') {
     const tWait = Date.now();
     let form = null;
-    for (let i = 0; i < 40 && !form; i++) {
+    // 2026-11-10 (E186): after a GROUP activation the form took about 16 min
+    // to appear; 40 tries (~13 min) ran out. 75 tries is about 25 min.
+    for (let i = 0; i < 75 && !form; i++) {
       await page.goto(portal(VM_ID, '/bastionHost'), { waitUntil: 'domcontentloaded' });
       await sleep(12000);
       form = await visible(page, (f) => f.getByRole('textbox', { name: /^Username/i }));
