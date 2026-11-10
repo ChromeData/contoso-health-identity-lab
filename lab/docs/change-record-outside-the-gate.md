@@ -25,6 +25,9 @@ and how it was reconciled after the merge.
    that ended at **03:05:14Z** (`lab/evidence/azure-least-privilege/20261107T0230Z/lock-and-scope-notes.txt`).
    ADR 0022 and `lab/terraform/README.md` said "before 2026-11-07"; that
    was wrong by those four applies, and is corrected.
+   One later exception, at the owner's explicit direction: the operator
+   applied `envs/bootstrap` from the #282 branch on 2026-11-08 at 23:38Z
+   (2 added; row in the table below).
 2. Host changes on DC01 and one-time tenant steps are **outside the gate**,
    and we say so. Each runs as the operator, from a commit on `main`, inside a
    write session the owner opened (ADR 0030, once applied), and gets a
@@ -40,6 +43,7 @@ and how it was reconciled after the merge.
 | E125 | 2026-11-07 01:13 | `aws/`, branch `feat/aws-session-manager` (targeted apply of `session-manager.tf`) | Operator helper, in a LabAdministrator session | 19 resources (EC2, endpoints, VPC, logs, permission set) | #234, 2026-11-07 02:27 (`0627a16`) | **Torn down before the merge:** 19 destroyed at 01:46 (E127). The local `aws/` state holds none of them (read 2026-11-08). Nothing from the branch is live |
 | E150 | 2026-11-07 02:27 | `envs/bootstrap`, branch `feat/pipeline-secrets-keyvault` | Operator helper | 5: `rg-identity-lab-cicd`, Key Vault `kv-idlab-cicd-20f1`, audit setting, 2 reader grants | #240, 2026-11-08 17:46 (`e8e8213`) | **Code matches live, tfvars do not.** Read-only plan from `main`, 2026-11-08: with the owner's current `terraform.tfvars` it plans **10 to destroy** (these 5 and E153's 5). With the 5 values below added: **No changes** |
 | E153 | 2026-11-07 02:42 | `envs/bootstrap`, branch `feat/azure-least-privilege` | Operator helper | 5: custom role Contoso Lab VM Operator, its PIM policy and eligibility, 2 CanNotDelete locks on the vaults. Then two follow-ups from the same branch: 02:51-02:55 in place (+ `workspaces/query/read` on the role); 03:04-03:05:14 1 add / 1 change / 1 destroy (the eligibility replaced so it expires after 180 days) | #246, 2026-11-08 18:02 (`cd4b5f1`) | Same plan as E150: main matches live, follow-ups included |
+| - | 2026-11-08 23:38 | `envs/bootstrap`, branch `fix/plan-export-template` | Lab operator, **at the owner's explicit direction** ("you do it as if you're me"); not the owner personally | 2 added, 0 changed, 0 destroyed: custom role Contoso Lab Plan Deployment Template Reader (PLAN identity: `deployments/exportTemplate/action`, assignable on `rg-identity-lab` only) and its assignment on `rg-identity-lab`. Unblocked PR plans after #257's leaver template deployment (403) | #282, 2026-11-08 23:50 (`425b11a`) | Code on `main` now. Not re-planned in this record. Owner-directed, but still an apply from an unmerged branch, so it is listed here |
 | - | 2026-11-07 00:54 | `okta/` (PR #222) | Operator helper | Okta side of the clinic coexistence (ADR 0022) | #222 | Not re-planned in this record |
 
 **Owner action before any `envs/bootstrap` apply** (else the apply destroys
@@ -76,5 +80,6 @@ Then `terraform plan` must say **No changes**. If it does not, stop.
 
 - "Nothing goes live until I approve it" was false. The lines now say: no
   **Terraform** change goes live without the owner's approval of its plan;
-  DC01 scripts and five early applies from three branches ran outside that gate, and
-  this file lists each one.
+  DC01 scripts and six applies from four branches before their merge ran
+  outside that gate (five by helpers on 2026-11-07, one on 2026-11-08 at the
+  owner's direction), and this file lists each one.
