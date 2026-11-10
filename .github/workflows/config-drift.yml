@@ -173,7 +173,7 @@ jobs:
       # the public-safe Markdown the compare wrote.
       - name: Open, update or close the identity-drift issue
         if: ${{ !cancelled() && steps.compare.outputs.baseline_status == 'ok' && steps.compare.outputs.compare_exit != '3' }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v9.0.0
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           COMPARE_EXIT: ${{ steps.compare.outputs.compare_exit }}
           EXPORT_EXIT: ${{ steps.export.outputs.export_exit }}
@@ -224,7 +224,7 @@ jobs:
       # compared. Same label as the drift issue, so one filter shows both.
       - name: Open or close the "check could not run" issue
         if: ${{ !cancelled() }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v9.0.0
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           COMPARE_EXIT: ${{ steps.compare.outputs.compare_exit }}
         with:
