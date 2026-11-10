@@ -464,7 +464,9 @@ privacy-only exceptions follow the list):
 
 **No repository secrets.** The workflows hold no stored value of any kind.
 The five privacy values below are not credentials; they used to be repo
-secrets (and Dependabot copies) only so GitHub masked them. They now live in
+secrets (and Dependabot copies) only so GitHub masked them. The owner deleted
+the five old `TF_*` repository secrets on 2026-11-10; the pipeline reads
+these values only from Key Vault, after the OIDC sign-in. They now live in
 the **pipeline config vault** (`envs/bootstrap` `pipeline-config.tf`,
 repo Variable `TF_PIPELINE_CONFIG_VAULT`, default `kv-idlab-cicd-20f1`).
 Step *Pipeline config from Key Vault* (`.github/scripts/pipeline-config.sh`)
@@ -551,6 +553,14 @@ with no PR and no review, lock the WORM store irreversibly.
       the owner reads the diff and clicks **Approve** in the browser -> the
       merge captain merges as the bot -> for Terraform, the apply waits on
       **Review deployments** for the owner again.
+      **Status 2026-11-10 (done):** ruleset `main-protection` (id 25516348)
+      requires 1 approving review and code owner review (read through the
+      API: `required_approving_review_count` 1,
+      `require_code_owner_review` true). `.github/CODEOWNERS` (#274) names
+      the owner for every path, so no pull request merges without his
+      review. The owner reports that "Allow GitHub Actions to create and
+      approve pull requests" is off; the bot cannot read that setting, so
+      this is the owner's statement, not a read.
 - [ ] Require status checks to pass: `terraform plan`, `checkov (IaC scan)`,
       `trufflehog (secret scan)`, `terraform validate + test (mocked)` and
       `Pester + PSScriptAnalyzer + shell tests` (`lab-tests.yml`, no path
