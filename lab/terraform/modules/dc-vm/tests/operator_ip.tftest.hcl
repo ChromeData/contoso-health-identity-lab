@@ -208,9 +208,8 @@ run "transition_window_closed_removes_rules" {
   }
 }
 
-# Step 1 of 2 (apply 42527718010): the old IP is kept but referenced by
-# nothing, so the NIC detaches it before any destroy is planned.
-run "old_dc_ip_kept_unreferenced_for_one_apply" {
+# Step 2 of 2: the old IP is no longer in config; the NIC has no public IP.
+run "old_dc_ip_removed" {
   command = plan
 
   variables {
@@ -218,12 +217,8 @@ run "old_dc_ip_kept_unreferenced_for_one_apply" {
   }
 
   assert {
-    condition     = azurerm_public_ip.dc.name == "pip-vm-dc01" && azurerm_public_ip.dc.sku == "Standard" && azurerm_public_ip.dc.allocation_method == "Static"
-    error_message = "step 1: pip-vm-dc01 stays in config, unchanged, for one apply"
-  }
-  assert {
     condition     = azurerm_network_interface.dc.ip_configuration[0].public_ip_address_id == null
-    error_message = "step 1: the NIC must not reference any public IP outside the AD FS window"
+    error_message = "step 2: the NIC must not reference any public IP outside the AD FS window"
   }
 }
 

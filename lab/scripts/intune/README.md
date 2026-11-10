@@ -104,22 +104,23 @@ PR flipping `enable_intune_vm = true` in `envs/dev/lab.tfvars` (with
 extension Entra-joins it and (with `mdmId`) enrolls it into Intune, and the
 pilot group gets *Virtual Machine Administrator Login* on the VM.
 
-### 3 · Sign in to the VM from the Mac with Entra credentials
+### 3 · Sign in to the VM (Azure Bastion only, since 2026-11-08)
 
-Entra RDP (the "web account" sign-in, RDP property `enablerdsaadauth:i:1`)
-requires the **name you connect to to match the Entra device hostname** - an IP
-address is rejected. So:
+The PC has **no public IP and no inbound NSG rule**: the only admin path is
+Azure Bastion from inside the VNet, which `lab/bastion/capture.sh` brings up
+for a session and deletes afterwards (cost). In the Azure portal: **vm-win11-01
+> Connect > Bastion**.
 
-```bash
-cd lab/terraform/envs/dev
-IP=$(terraform output -raw intune_vm_public_ip)
-sudo sh -c "echo '$IP CH-WIN11-01' >> /etc/hosts"
-terraform output -raw intune_vm_rdp_file > ~/Desktop/ch-win11-01.rdp
-open ~/Desktop/ch-win11-01.rdp        # opens in Windows App for Mac
-```
+- With session recording on (the capture's Premium Bastion), Learn says Entra
+  ID RDP in the portal "can't be used concurrently with graphical session
+  recording", so sign in with a local account's password.
+- For an Entra sign-in, use a Bastion without recording: Authentication type
+  **Microsoft Entra ID**; the user needs *Virtual Machine User Login* (or
+  Administrator Login) on the VM.
 
-Sign in as the pilot user (`<pilot-user>@<domain>`), complete MFA in the web
-prompt, accept the "allow remote connection" prompt.
+The older path (RDP straight to the PC's public IP from the Mac, with an
+`/etc/hosts` entry and the `.rdp` output) no longer works: there is no public
+IP. The `.rdp` output stays for a client with a private path to the PC.
 
 - *verify:* Microsoft documents `enablerdsaadauth` for *Remote PC connections*
   (and says the client needs no domain/Entra join for the web-account option)

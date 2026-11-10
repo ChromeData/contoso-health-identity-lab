@@ -10,9 +10,11 @@
 # products - only the "corporate laptop" is a VM.
 #
 #   * Subnet snet-endpoints (10.42.3.0/24) in the lab VNet var.vnet_name
-#   * NSG: RDP from the operator's IP(s) ONLY; nothing else inbound
-#   * Standard static public IP (operator RDP + outbound to Entra/Intune;
-#     Azure no longer gives new VMs default outbound access)
+#   * NSG: NO inbound rule (since 2026-11-08); admins use Azure Bastion from
+#     inside the VNet
+#   * No public IP on the NIC (since 2026-11-08); outbound to Entra/Intune
+#     through DC01's NAT gateway (attach_nat_gateway), because Azure no
+#     longer gives new VMs default outbound access
 #   * Windows 11 Enterprise (win11-25h2-ent), Standard HDD, Trusted Launch
 #     (Secure Boot + vTPM - which is also what the compliance policy's
 #     Secure Boot / code integrity health-attestation checks read; the
@@ -61,16 +63,10 @@
 #      and Microsoft documents that a re-join fails if a device with the same
 #      hostname still exists.
 #
-# RDP FROM A MAC WITH ENTRA CREDENTIALS (operator's workstation):
-#   Microsoft's documented web-account sign-in ("Use a web account to sign in
-#   to the remote computer" = RDP property enablerdsaadauth:i:1) needs the
-#   name you connect to to MATCH the Entra device hostname - an IP address is
-#   rejected. So:
-#     a. sudo sh -c 'echo "<public ip> CH-WIN11-01" >> /etc/hosts'
-#        (terraform output -raw intune_vm_public_ip)
-#     b. terraform output -raw intune_vm_rdp_file > ~/Desktop/ch-win11-01.rdp
-#        (full address = hostname, enablerdsaadauth:i:1)
-#     c. Open it with Windows App for Mac, sign in as the pilot UPN.
+# ADMIN ACCESS (since 2026-11-08): Azure Bastion only. The PC has no public
+#   IP and no inbound NSG rule; lab/bastion/capture.sh brings Bastion up for a
+#   session and deletes it after. The .rdp output below remains for a client
+#   that reaches the PC privately (it names the hostname, as Entra RDP needs).
 #   verify: Microsoft documents enablerdsaadauth for "Remote PC connections"
 #   and says the CLIENT needs no domain or Entra join for the web-account
 #   option, but does not list Windows App for macOS for this path by name;
@@ -116,24 +112,17 @@ resource "azurerm_network_security_group" "endpoints" {
   resource_group_name = var.resource_group_name
   tags                = var.tags
 
-  # RDP from the operator's IP(s) only. Empty list = no inbound rule at all;
-  # everything else is denied by the NSG defaults. Outbound stays at the NSG
-  # default (allow Internet) - Entra join, Intune check-in and device health
-  # attestation all need it.
-  dynamic "security_rule" {
-    for_each = length(var.allowed_ip_ranges) > 0 ? { rdp = { priority = 100, port = "3389" } } : {}
-    content {
-      name                         = "allow-${security_rule.key}-operator"
-      priority                     = security_rule.value.priority
-      direction                    = "Inbound"
-      access                       = "Allow"
-      protocol                     = "Tcp"
-      source_port_range            = "*"
-      destination_port_range       = security_rule.value.port
-      source_address_prefixes      = var.allowed_ip_ranges
-      destination_address_prefixes = var.subnet_prefix
-    }
-  }
+  # NO inbound rule from the internet (2026-11-08). The only admin path is
+  # Azure Bastion from inside the VNet (AzureBastionSubnet), which the NSG's
+  # default AllowVnetInBound rule admits; there is nothing to allow-list, so
+  # this no longer depends on the operator's changing home IP. Outbound stays
+  # at the NSG default (allow Internet): Entra join, Intune check-in and
+  # device health attestation all need it.
+  #
+  # An EXPLICIT empty list, not an omitted block: azurerm treats an omitted
+  # security_rule as "keep the rules that exist", so the old
+  # allow-rdp-operator rule would survive the apply. [] removes it (as dc-vm).
+  security_rule = []
 }
 
 resource "azurerm_subnet_network_security_group_association" "endpoints" {
@@ -141,6 +130,17 @@ resource "azurerm_subnet_network_security_group_association" "endpoints" {
   network_security_group_id = azurerm_network_security_group.endpoints.id
 }
 
+# STEP 1 OF 2 (same pattern as dc-vm, #280): pip-vm-win11-01 stays in config
+# for ONE apply, referenced by nothing. The NIC's state still lists it, so
+# deleting it in the same apply would be ordered before the NIC update that
+# detaches it, and Azure refuses (PublicIPAddressCannotBeDeleted). With the
+# resource kept, the plan is "NIC updated in place" (public_ip_address_id ->
+# null) and nothing is destroyed. STEP 2 (follow-up PR, after this apply):
+# delete this block; the plan is then a lone destroy of pip-vm-win11-01,
+# which frees the subscription's third eastus2 public IP for Bastion.
+# Exposure meanwhile: none inbound (no NSG allow rule, NIC detached).
+# Status 2026-11-09: step 1 (#286) is merged; the NIC detach is applied by
+# the round-5 run. Step 2 is not written yet.
 resource "azurerm_public_ip" "vm" {
   name                = "pip-${var.vm_name}"
   location            = var.location
@@ -151,7 +151,6 @@ resource "azurerm_public_ip" "vm" {
 }
 
 resource "azurerm_network_interface" "vm" {
-  #checkov:skip=CKV_AZURE_119:The Intune endpoint is reached over RDP from the operator IP only (NSG); no Bastion or VPN in a one-person lab. Public IP is the documented stand-in (lab/docs/STAND-INS.md).
   name                = "nic-${var.vm_name}"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -161,7 +160,25 @@ resource "azurerm_network_interface" "vm" {
     name                          = "ipconfig1"
     subnet_id                     = azurerm_subnet.endpoints.id
     private_ip_address_allocation = "Dynamic" # an endpoint, not a server
-    public_ip_address_id          = azurerm_public_ip.vm.id
+    # No public IP: people reach the PC through Azure Bastion only.
+  }
+}
+
+# Explicit outbound for the endpoint subnet through DC01's existing NAT
+# gateway (one NAT gateway serves several subnets in a VNet; no extra public
+# IP). Without it the PC would rely on Azure's implicit default outbound
+# access, which Microsoft is retiring. A plain bool switches it, so count is
+# always known at plan.
+resource "azurerm_subnet_nat_gateway_association" "endpoints" {
+  count          = var.attach_nat_gateway ? 1 : 0
+  subnet_id      = azurerm_subnet.endpoints.id
+  nat_gateway_id = var.nat_gateway_id
+
+  lifecycle {
+    precondition {
+      condition     = var.nat_gateway_id != null
+      error_message = "attach_nat_gateway = true needs nat_gateway_id (modules/dc-vm output nat_gateway_id; is DC01's NAT gateway enabled?)."
+    }
   }
 }
 

@@ -1,0 +1,577 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#auditLogs/signIns(createdDateTime,resourceDisplayName,status,conditionalAccessStatus,appliedConditionalAccessPolicies)",
+  "value": [
+    {
+      "appliedConditionalAccessPolicies": [
+        {
+          "displayName": "CA001 - Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "id": "7817077c-7e46-4a45-a599-7ddf685e9a9c",
+          "result": "success"
+        },
+        {
+          "displayName": "CA061 - Require MFA and sign-in every 8h for Clinic Lab Results",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "aa05e11c-b3a9-447b-9d97-ed034217fe2c",
+          "result": "success"
+        },
+        {
+          "displayName": "CA003 - Block legacy authentication",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "fc00b1fb-a258-4c94-b206-168de973ceb1",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA006 - User risk high - require MFA + secure password change",
+          "enforcedGrantControls": [
+            "MfaAndChangePassword"
+          ],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "c4b00a0f-ed0a-43f7-9fdf-7986ddd0dfc5",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA009 - Require TAP or phishing-resistant strength to register security info",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "id": "bc10b689-96e6-490a-91c9-459ba71f971d",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA004 - Block sign-in from blocked countries",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "85b4ca6b-450b-49ab-a07a-1ee3903d6f6c",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA007 - Sign-in risk high - block",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "a31880d9-ce15-49d4-86b4-08876ff25cb7",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA010 - Block device code flow for all users",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "08f87600-b86e-4d7a-9021-bcb368dac701",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA020 - Require sign-in every 4h on admin portals for Tier-0/1 admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "f83506c9-d1f6-43ba-bc40-af3c8c7b358a",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA005 - Require compliant device for admin portals (pilot)",
+          "enforcedGrantControls": [
+            "RequireCompliantDevice"
+          ],
+          "enforcedSessionControls": [],
+          "id": "7b6e0d29-8a81-4584-87d8-e4e7b24b0bc9",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA002 - Require phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "id": "f7c3a770-cc64-4cc6-bee4-8e8d47c6485a",
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "displayName": "CA021 - Require phishing-resistant strength for privileged role activation (auth context c1)",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "99de2fb6-1101-4fe5-b726-48d88bf2f3b4",
+          "result": "reportOnlyNotApplied"
+        }
+      ],
+      "conditionalAccessStatus": "success",
+      "createdDateTime": "2026-11-08T23:01:08Z",
+      "resourceDisplayName": "Clinic Lab Results API",
+      "status": {
+        "additionalDetails": null,
+        "errorCode": 0,
+        "failureReason": "Other."
+      }
+    },
+    {
+      "appliedConditionalAccessPolicies": [
+        {
+          "displayName": "CA001 - Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "id": "7817077c-7e46-4a45-a599-7ddf685e9a9c",
+          "result": "success"
+        },
+        {
+          "displayName": "CA061 - Require MFA and sign-in every 8h for Clinic Lab Results",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "aa05e11c-b3a9-447b-9d97-ed034217fe2c",
+          "result": "success"
+        },
+        {
+          "displayName": "CA003 - Block legacy authentication",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "fc00b1fb-a258-4c94-b206-168de973ceb1",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA006 - User risk high - require MFA + secure password change",
+          "enforcedGrantControls": [
+            "MfaAndChangePassword"
+          ],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "c4b00a0f-ed0a-43f7-9fdf-7986ddd0dfc5",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA009 - Require TAP or phishing-resistant strength to register security info",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "id": "bc10b689-96e6-490a-91c9-459ba71f971d",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA004 - Block sign-in from blocked countries",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "85b4ca6b-450b-49ab-a07a-1ee3903d6f6c",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA007 - Sign-in risk high - block",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "a31880d9-ce15-49d4-86b4-08876ff25cb7",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA010 - Block device code flow for all users",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "08f87600-b86e-4d7a-9021-bcb368dac701",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA020 - Require sign-in every 4h on admin portals for Tier-0/1 admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "f83506c9-d1f6-43ba-bc40-af3c8c7b358a",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA005 - Require compliant device for admin portals (pilot)",
+          "enforcedGrantControls": [
+            "RequireCompliantDevice"
+          ],
+          "enforcedSessionControls": [],
+          "id": "7b6e0d29-8a81-4584-87d8-e4e7b24b0bc9",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA002 - Require phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "id": "f7c3a770-cc64-4cc6-bee4-8e8d47c6485a",
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "displayName": "CA021 - Require phishing-resistant strength for privileged role activation (auth context c1)",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "99de2fb6-1101-4fe5-b726-48d88bf2f3b4",
+          "result": "reportOnlyNotApplied"
+        }
+      ],
+      "conditionalAccessStatus": "success",
+      "createdDateTime": "2026-11-08T22:12:01Z",
+      "resourceDisplayName": "Clinic Lab Results API",
+      "status": {
+        "additionalDetails": null,
+        "errorCode": 0,
+        "failureReason": "Other."
+      }
+    },
+    {
+      "appliedConditionalAccessPolicies": [
+        {
+          "displayName": "CA001 - Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "id": "7817077c-7e46-4a45-a599-7ddf685e9a9c",
+          "result": "success"
+        },
+        {
+          "displayName": "CA003 - Block legacy authentication",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "fc00b1fb-a258-4c94-b206-168de973ceb1",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA006 - User risk high - require MFA + secure password change",
+          "enforcedGrantControls": [
+            "MfaAndChangePassword"
+          ],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "c4b00a0f-ed0a-43f7-9fdf-7986ddd0dfc5",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA009 - Require TAP or phishing-resistant strength to register security info",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "id": "bc10b689-96e6-490a-91c9-459ba71f971d",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA004 - Block sign-in from blocked countries",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "85b4ca6b-450b-49ab-a07a-1ee3903d6f6c",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA007 - Sign-in risk high - block",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "a31880d9-ce15-49d4-86b4-08876ff25cb7",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA010 - Block device code flow for all users",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "08f87600-b86e-4d7a-9021-bcb368dac701",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA020 - Require sign-in every 4h on admin portals for Tier-0/1 admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "f83506c9-d1f6-43ba-bc40-af3c8c7b358a",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA005 - Require compliant device for admin portals (pilot)",
+          "enforcedGrantControls": [
+            "RequireCompliantDevice"
+          ],
+          "enforcedSessionControls": [],
+          "id": "7b6e0d29-8a81-4584-87d8-e4e7b24b0bc9",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA002 - Require phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "id": "f7c3a770-cc64-4cc6-bee4-8e8d47c6485a",
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "displayName": "CA021 - Require phishing-resistant strength for privileged role activation (auth context c1)",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "99de2fb6-1101-4fe5-b726-48d88bf2f3b4",
+          "result": "reportOnlyNotApplied"
+        }
+      ],
+      "conditionalAccessStatus": "success",
+      "createdDateTime": "2026-11-08T22:11:01Z",
+      "resourceDisplayName": "Clinic Lab Results API",
+      "status": {
+        "additionalDetails": null,
+        "errorCode": 0,
+        "failureReason": "Other."
+      }
+    },
+    {
+      "appliedConditionalAccessPolicies": [
+        {
+          "displayName": "CA001 - Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "id": "7817077c-7e46-4a45-a599-7ddf685e9a9c",
+          "result": "success"
+        },
+        {
+          "displayName": "CA061 - Require MFA and sign-in every 8h for Clinic Lab Results",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "aa05e11c-b3a9-447b-9d97-ed034217fe2c",
+          "result": "success"
+        },
+        {
+          "displayName": "CA003 - Block legacy authentication",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "fc00b1fb-a258-4c94-b206-168de973ceb1",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA006 - User risk high - require MFA + secure password change",
+          "enforcedGrantControls": [
+            "MfaAndChangePassword"
+          ],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "c4b00a0f-ed0a-43f7-9fdf-7986ddd0dfc5",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA009 - Require TAP or phishing-resistant strength to register security info",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "id": "bc10b689-96e6-490a-91c9-459ba71f971d",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA004 - Block sign-in from blocked countries",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "85b4ca6b-450b-49ab-a07a-1ee3903d6f6c",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA007 - Sign-in risk high - block",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "a31880d9-ce15-49d4-86b4-08876ff25cb7",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA010 - Block device code flow for all users",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "08f87600-b86e-4d7a-9021-bcb368dac701",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA020 - Require sign-in every 4h on admin portals for Tier-0/1 admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "f83506c9-d1f6-43ba-bc40-af3c8c7b358a",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA005 - Require compliant device for admin portals (pilot)",
+          "enforcedGrantControls": [
+            "RequireCompliantDevice"
+          ],
+          "enforcedSessionControls": [],
+          "id": "7b6e0d29-8a81-4584-87d8-e4e7b24b0bc9",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA002 - Require phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "id": "f7c3a770-cc64-4cc6-bee4-8e8d47c6485a",
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "displayName": "CA021 - Require phishing-resistant strength for privileged role activation (auth context c1)",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "99de2fb6-1101-4fe5-b726-48d88bf2f3b4",
+          "result": "reportOnlyNotApplied"
+        }
+      ],
+      "conditionalAccessStatus": "success",
+      "createdDateTime": "2026-11-08T22:10:31Z",
+      "resourceDisplayName": "Clinic Lab Results API",
+      "status": {
+        "additionalDetails": null,
+        "errorCode": 0,
+        "failureReason": "Other."
+      }
+    },
+    {
+      "appliedConditionalAccessPolicies": [
+        {
+          "displayName": "CA001 - Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "id": "7817077c-7e46-4a45-a599-7ddf685e9a9c",
+          "result": "success"
+        },
+        {
+          "displayName": "CA003 - Block legacy authentication",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "fc00b1fb-a258-4c94-b206-168de973ceb1",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA006 - User risk high - require MFA + secure password change",
+          "enforcedGrantControls": [
+            "MfaAndChangePassword"
+          ],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "c4b00a0f-ed0a-43f7-9fdf-7986ddd0dfc5",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA009 - Require TAP or phishing-resistant strength to register security info",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "id": "bc10b689-96e6-490a-91c9-459ba71f971d",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA004 - Block sign-in from blocked countries",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "85b4ca6b-450b-49ab-a07a-1ee3903d6f6c",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA007 - Sign-in risk high - block",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "a31880d9-ce15-49d4-86b4-08876ff25cb7",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA010 - Block device code flow for all users",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "id": "08f87600-b86e-4d7a-9021-bcb368dac701",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA020 - Require sign-in every 4h on admin portals for Tier-0/1 admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "f83506c9-d1f6-43ba-bc40-af3c8c7b358a",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA005 - Require compliant device for admin portals (pilot)",
+          "enforcedGrantControls": [
+            "RequireCompliantDevice"
+          ],
+          "enforcedSessionControls": [],
+          "id": "7b6e0d29-8a81-4584-87d8-e4e7b24b0bc9",
+          "result": "notApplied"
+        },
+        {
+          "displayName": "CA002 - Require phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "id": "f7c3a770-cc64-4cc6-bee4-8e8d47c6485a",
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "displayName": "CA021 - Require phishing-resistant strength for privileged role activation (auth context c1)",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "id": "99de2fb6-1101-4fe5-b726-48d88bf2f3b4",
+          "result": "reportOnlyNotApplied"
+        }
+      ],
+      "conditionalAccessStatus": "success",
+      "createdDateTime": "2026-11-08T20:41:51Z",
+      "resourceDisplayName": "Clinic Lab Results API",
+      "status": {
+        "additionalDetails": null,
+        "errorCode": 0,
+        "failureReason": "Other."
+      }
+    }
+  ]
+}

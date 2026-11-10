@@ -1,10 +1,11 @@
 # ADR 0029: The HR leaver removes birthright access packages through a Logic App, because the built-in Lifecycle Workflows task skips them
 
-- **Status:** The leave-date leaver workflow is RAN · tenant (2026-11-07/08, capture log E179-E181; worker 100496 in E180): it ran by itself, but it did not remove the birthright package. The Logic App step is BUILT (Terraform `modules/leaver-extension`, tests pass) and waits for the owner's apply approval. It has not run yet.
+- **Status:** The leave-date leaver workflow is RAN · tenant (2026-11-07/08, capture log E179-E181; worker 100496 in E180): it ran by itself, but it did not remove the birthright package. The Logic App step is RAN · tenant (2026-11-08, capture log E183): applied in round 3 (run 42527718010), called by Lifecycle Workflows on demand and on schedule, **but Graph answered 403** to its managed identity, so the gap is **not closed yet**. Decision 3's fallback (a tenant-wide permission) waits for the owner.
 - **Date:** 2026-11-08
 - **Risk owner:** Identity platform owner (in the lab, the repository maintainer)
 - **Next review:** after the first tenant run of the Logic App, or 2027-02-08
 - **Scope:** Contoso Health lab scenario (fictional 5,000-user hospital). Not a real employer.
+- **Partly superseded by:** [ADR 0037](0037-leaver-logic-app-needs-an-app-only-graph-permission.md) (decision 3: the catalog role alone does not work for an app-only caller)
 - **Related:** [ADR 0012](0012-access-review-no-response-and-clinical-lockout.md) (T3 birthright, 72 h mover grace), [ADR 0028](0028-orangehrm-as-the-hris.md) (OrangeHRM leavers)
 
 ## Context
@@ -71,6 +72,13 @@ remove and does no harm.
      app-only token. If it answers 403, the fallback is the tenant-wide
      application permission. That is a wider grant, so it needs a new owner
      decision.
+   - **Result (2026-11-08, E183): 403.** The catalog role assignment exists
+     (Graph read), but `GET /identityGovernance/entitlementManagement/assignments`
+     with the identity's app-only token returned 403 "User is not authorized
+     to perform the operation" in both runs. So a catalog role is not enough
+     for an app-only caller here. The fallback, `EntitlementManagement.ReadWrite.All`
+     as an application permission on the Logic App's identity, is an owner
+     decision (readiness/owner-approvals.md).
 4. **Only Lifecycle Workflows can start it.** The trigger has an AADPOP
    policy. It accepts only the Lifecycle Workflows app
    (`ce79fdc4-cd1d-4ea5-8139-e74d7dbe0bb7`, read from the tenant), and only
@@ -92,11 +100,16 @@ remove and does no harm.
 - **A person runs `04-Leaver.ps1`.** It works, but it is the hand step the
   owner ruled out.
 
-## Expected timing (to be measured on the first run)
+## Timing (measured 2026-11-08, E183, up to the 403)
 
-HR click -> Entra disabled: about 7 min (measured). Then up to 1 h (the
-tenant schedule, measured run at +1:24:38). Then `adminRemove`: 3 min 20 s
-(measured as a hand step). Worst case is about 1.5 h, against 72 h today.
+With on-demand triggers (worker 100497): HR terminate click 22:20:09 ->
+connector sent 22:26:46 (+6:37; about 6 min of it was a GitHub sign-out on
+the connector's host, a normal sync is under 1 min) -> AD disabled 22:27:21
+(+7:12) -> Entra disabled by Cloud Sync on demand 22:33:23 (+13:14) -> leaver
+run on demand 22:33:33 -> Logic App called 22:34:09 (+14:00) -> **403, package
+not removed** (it stays in its 72 h grace). The scheduled run at 23:10:37 also
+called the Logic App and got the same 403. Once the permission is granted, the
+remaining step, `adminRemove`, took 3 min 20 s as a hand step (E180).
 
 ## Cost
 

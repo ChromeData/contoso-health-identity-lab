@@ -57,6 +57,7 @@ incidents.
 | [0034](0034-contractors-and-agency-staff.md) | Contractors and agency staff: worker type and sponsor from HR, end date at most 90 days, sponsor re-attestation every 30 days, no admin roles | Lifecycle (JML) |
 | [0035](0035-log-retention.md) | Log retention: 30 days in the lab as a cost choice; production 90 days interactive, 2 years long-term, 6-year immutable export of audit logs | Detection / audit |
 | [0036](0036-microsoft-native-pam.md) | Microsoft-native PAM: Azure Key Vault for secrets (RBAC, PIM-eligible), Azure Bastion session recording (Premium, only while capturing), Windows LAPS for rotation, Intune EPM for one-app elevation, PIM as the just-in-time core. CyberArk, Conjur and psPAS removed. Supersedes 0007 and 0019 | PAM |
+| [0037](0037-leaver-logic-app-needs-an-app-only-graph-permission.md) | The leaver Logic App's identity gets Graph EntitlementManagement.ReadWrite.All (app-only), because a catalog-scoped role is not honoured for app-only tokens (403, E183); bounded by the AADPOP trigger (Lifecycle Workflows only) and a workflow that only adminRemoves the given leaver's automatic assignments; Sentinel rule DESIGNED | Lifecycle (JML) |
 
 ## Format
 
