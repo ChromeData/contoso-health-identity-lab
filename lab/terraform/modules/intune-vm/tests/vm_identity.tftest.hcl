@@ -33,12 +33,6 @@ mock_provider "azurerm" {
   mock_resource "azurerm_network_security_group" {
     defaults = { id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Network/networkSecurityGroups/nsg-vm-win11-01" }
   }
-  mock_resource "azurerm_public_ip" {
-    defaults = {
-      id         = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Network/publicIPAddresses/pip-vm-win11-01"
-      ip_address = "192.0.2.10"
-    }
-  }
   mock_resource "azurerm_network_interface" {
     defaults = {
       id                 = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-identity-lab/providers/Microsoft.Network/networkInterfaces/nic-vm-win11-01"
@@ -315,7 +309,6 @@ run "shutdown_time_override_and_tags_everywhere" {
     condition = alltrue([
       for t in [
         azurerm_network_security_group.endpoints.tags,
-        azurerm_public_ip.vm.tags,
         azurerm_network_interface.vm.tags,
         azurerm_windows_virtual_machine.vm.tags,
         azurerm_virtual_machine_extension.aad_login.tags,
