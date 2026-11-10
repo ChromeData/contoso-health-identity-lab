@@ -1,0 +1,14 @@
+run command lab-da96f832: /private/tmp/claude-501/-Users-michaelwilliams-GotchaBitch/7a6912bb-5f53-40c9-b93a-2f1b37472e5b/scratchpad/epm-sync2.ps1 on vm-win11-01
+ENROLLMENT: 253ABD76-C84A-4539-87C0-D6A9DE268F18
+EVT 02:14:41 2750 L3: DeviceStatus CSP: WscGetSecurityProviderHealth(WSC_SECURITY_PROVIDER_ANTIVIRUS) returned status 0x2 and HRESULT The operation completed successfully.
+EVT 02:09:02 2550 L3: MDM Declared Configuration: Warning Function (CSPProviderConfiguration::SkipPfnNodeWhenNoExpired) operation (URI1) result: (The operation completed successfully.)
+TIME: 2026-11-10T02:20:20.0653094Z RULES: 0
+RES 672B4D5D-14A4-4B4C-B2CC-0BDB50CC01EC state=60 ts=2026-11-10T02:09:02Z
+RES 7657FCD1-340F-4026-86DC-77C4AE356D02 state=60 ts=2026-11-10T02:09:02Z
+RES 80a9d4e7-b184-3b92-489e-763f1e8b6c93 state=80 ts=2026-11-10T02:09:02Z
+RES 95147234-07ce-9af8-57b1-85942b7a26f9 state=60 ts=2026-11-10T02:09:02Z
+RES c6092fd2-cd69-3fe2-0354-e8e6ec6f1899 state=60 ts=2026-11-10T02:09:02Z
+RES C9589FC3-AB85-4007-820E-7813F81771C2 state=60 ts=2026-11-10T02:09:02Z
+RES DEDB184C-C8BD-4A55-A0A5-3198B4CAD42D state=60 ts=2026-11-10T02:09:02Z
+RES e32efb68-2d2d-f0da-7e77-8a773b7bfebf state=80 ts=2026-11-10T02:09:02Z
+state: Succeeded, exit code: 0
