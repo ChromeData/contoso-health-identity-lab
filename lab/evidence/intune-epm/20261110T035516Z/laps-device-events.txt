@@ -1,0 +1,16 @@
+run command lab-4b6e19fb: /private/tmp/claude-501/-Users-michaelwilliams-GotchaBitch/7a6912bb-5f53-40c9-b93a-2f1b37472e5b/scratchpad/laps.ps1 on vm-win11-01
+Invoke-LapsPolicyProcessing ok
+TIME: 2026-11-10T03:51:45.5247491Z
+LAPS 03:51:25 10004: LAPS policy processing succeeded. See https://go.microsoft.com/fwlink/?linkid=2220550 for more information.
+LAPS 03:51:25 10020: LAPS successfully updated the local admin account with the new password. Account name: contosolocal Account RID: 0x1F4 See https://go.microsoft.com/fwlink/?linkid=2220550 for more information.
+LAPS 03:51:25 10029: LAPS successfully updated Azure Active Directory with the new password. See https://go.microsoft.com/fwlink/?linkid=2220550 for more information.
+LAPS 03:51:24 10030: LAPS is sending a message to the following endpoint. https://enterpriseregistration.windows.net/manage/86a2e327-4951-4348-a3c4-6f4b79ffd8f2/lapsdevicepasswordupdate/5ce82aae-6333-415e-9bca-d4fdc1a3fdd
+LAPS 03:51:24 10015: The managed account password needs to be updated due to one or more reasons (0x33): The current password has expired The policy authority has changed Local state is missing and/or inconsistent with di
+LAPS 03:51:24 10053: LAPS is processing the current policy in response to an Administrator request. See https://go.microsoft.com/fwlink/?linkid=2220550 for more information.
+LAPS 03:51:24 10010: LAPS is configured to backup passwords to Azure Active Directory. See https://go.microsoft.com/fwlink/?linkid=2220550 for more information.
+LAPS 03:51:24 10022: The current LAPS policy is configured as follows: Policy source: CSP Backup directory: Azure Active Directory Local administrator account name: Password age in days: 7 Password complexity: 4 Password 
+LAPS 03:51:24 10003: LAPS policy processing is now starting. See https://go.microsoft.com/fwlink/?linkid=2220550 for more information.
+LAPS 03:24:10 10005: LAPS policy processing failed with the error code below. Error code: 0x80070190 See https://go.microsoft.com/fwlink/?linkid=2220550 for more information.
+LAPS 03:24:10 10028: LAPS failed to update Azure Active Directory with the new password. Error code: 0x80070190 See https://go.microsoft.com/fwlink/?linkid=2220550 for more information.
+LAPS 03:24:10 10059: Azure returned a failure code. HTTP status code: 400 Response text: {"code":"invalid_request","subcode":"error_fail","operation":"POST","message":"Local admin password solution is not enabled for this
+state: Succeeded, exit code: 0

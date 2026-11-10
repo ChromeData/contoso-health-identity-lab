@@ -1,0 +1,4 @@
+run command lab-584c565e: /private/tmp/claude-501/-Users-michaelwilliams-GotchaBitch/7a6912bb-5f53-40c9-b93a-2f1b37472e5b/scratchpad/epm-cs2.ps1 on vm-win11-01
+TIME: 2026-11-10T02:26:35.4256911Z RULES: 0
+CS [{"EnableEpm":true},{"TelemetryLevel":3},{"DefaultBehavior":2,"ElevationValidation":0}] lastwrite=11/08/2026 23:59:57 11/08/2026 23:59:57 11/08/2026 23:59:57
+state: Succeeded, exit code: 0

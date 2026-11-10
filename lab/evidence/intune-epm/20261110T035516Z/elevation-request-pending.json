@@ -1,0 +1,32 @@
+{
+  "@odata.context": "https://graph.microsoft.com/beta/$metadata#deviceManagement/elevationRequests",
+  "value": [
+    {
+      "applicationDetail": {
+        "fileDescription": "Sysinternals Process Explorer",
+        "fileHash": "425C773CF1AE99F79616493CBD60C2B7FA9941FF5854EA0D71B2549D59703429",
+        "fileName": "procexp64.exe",
+        "filePath": "C:\\Program Files\\EPM-Proof",
+        "productInternalName": "Process Explorer",
+        "productName": "Process Explorer",
+        "productVersion": "17.21.0.0",
+        "publisherCert": "[\"MIIGBDCCA+ygAwIBAgITMwAAAhz6zcWb6C9+xAAAAAACHDANBgkqhkiG9w0BAQsFADBXMQswCQYDVQQGEwJVUzEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMSgwJgYDVQQDEx9NaWNyb3NvZnQgQ29kZSBTaWduaW5nIFBDQSAyMDI0MB4XDTI2MDQxNjE4NTk0MVoXDTI3MDQxNTE4NTk0MVowdDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hpbmd0b24xEDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jwb3JhdGlvbjEeMBwGA1UEAxMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1bGX4DipjN9Rz36FjqDRIsNEpQoiMVDAtCPTTFm7nCjsP3vZT6AKHoUFbukhuuVeBD862LJwZxTzaIuPx6DnY4c9apKxLeCOrRHMV1OqDnmPcxr3gv94gXroS2MTNzPz5HFKHmxfjXnZ5vDpHUj6A7vIplYhz0Kv\\/AkFLtFkUeKxPnTEX66Van5jYtqlgl\\/eE+DLHqYoxlZMBP\\/7SYNK8gImHR09+C0p5Rv0UgWZkERlmeYPI6pyo0T2q0qjH7dYL47lE1YLVjWX4HCxUiuVmtJsq6vDj3IExhrEYLp\\/rZ0kviMQ08VbADx9Ts7z48KJoLgcoVHvznL1DdA+Vpqe8QIDAQABo4IBqjCCAaYwDgYDVR0PAQH\\/BAQDAgeAMB8GA1UdJQQYMBYGCisGAQQBgjdMCAEGCCsGAQUFBwMDMB0GA1UdDgQWBBTaB+2tmA4zksKZKegx3JlEuyftMjBUBgNVHREETTBLpEkwRzEtMCsGA1UECxMkTWljcm9zb2Z0IElyZWxhbmQgT3BlcmF0aW9ucyBMaW1pdGVkMRYwFAYDVQQFEw0yMzAwMTIrNTA3NTY5MB8GA1UdIwQYMBaAFH9ZP1Qh2q1P7wXl5qPXLQaUEggxMGAGA1UdHwRZMFcwVaBToFGGT2h0dHA6Ly93d3cubWljcm9zb2Z0LmNvbS9wa2lvcHMvY3JsL01pY3Jvc29mdCUyMENvZGUlMjBTaWduaW5nJTIwUENBJTIwMjAyNC5jcmwwbQYIKwYBBQUHAQEEYTBfMF0GCCsGAQUFBzAChlFodHRwOi8vd3d3Lm1pY3Jvc29mdC5jb20vcGtpb3BzL2NlcnRzL01pY3Jvc29mdCUyMENvZGUlMjBTaWduaW5nJTIwUENBJTIwMjAyNC5jcnQwDAYDVR0TAQH\\/BAIwADANBgkqhkiG9w0BAQsFAAOCAgEAFJxKoWkV3tE94SCY73UBKxJKwP+2wco5+reSAKzg5JEY85GMLSjHNsmI9qrmjay7rVsNmGXJ4Cj8tW+9WMgyUE8uDQ0cGkofU8ObYa5NzZnD6wB4mub7XASdQoLSiu5kGyHENtnfzd\\/Nd2sggwxXsLtfo7GZl\\/q\\/2kxKmjjOE1cVbUUpLgsvJwFyrgoTii4v8wOF7h\\/IhGKiLI9mKDWnksVZnhohEV6SnaN3Q5mItJDucNg\\/FUuHN\\/vYeoBJWAWgAIP3WBKwYNu6k9779M0QyYSbn7wjcpQPEu\\/\\/vB+RPz1eXJ4Op2vVVf8PTld6rrjQ+s3RmthF9\\/BpaedBfQCEJN6dsV5nL6Kw3jOFye1JVmAYuoPNCdUkjkJyJwmBRJrH1DZ9\\/tQGkySkiS\\/N6rigK02nNqSobtGM88686Oh67EYkCs6Z0QW9f3TGuj94c++V2zEQXLTbBYWQtO1gpoxMXS4Nnh1ubldE2PA+fusKMyX+7xd\\/lh5GDzvOWfgQulOBZDW2DcnGfXBOI9bV0Xcgwn5penNB1jx4zVQzm67\\/ZSrd6lKhaV9\\/FQqlQsjTjtVHF30IlYycN9lNllCmY7f53iShxAbJvZBbC7ls5EOd\\/qnGkmsrZrAp5NoDoJa5Q+Xd5Csr7wMPq85tJU\\/Ct\\/D+jy8X2UB4buFvHVewL\\/DdmZg=\"]",
+        "publisherName": "Microsoft Corporation"
+      },
+      "deviceName": null,
+      "id": "1d3eb337-89b8-4464-86b7-5a20bb218642",
+      "requestCreatedDateTime": "2026-11-10T02:55:10.3087726Z",
+      "requestExpiryDateTime": "2026-11-17T02:55:10.3087726Z",
+      "requestJustification": "INC-EPM-01 need Process Explorer as admin to inspect a stuck service",
+      "requestLastModifiedDateTime": "2026-11-10T02:55:15Z",
+      "requestedByUserId": "f0fae691-4751-416b-9535-4756ee7c3fa6",
+      "requestedByUserPrincipalName": "test-user-a@contosohealthlab.com",
+      "requestedOnDeviceId": "9644ce54-ca62-41e7-8033-2ca19fcec5b1",
+      "reviewCompletedByUserId": "",
+      "reviewCompletedByUserPrincipalName": null,
+      "reviewCompletedDateTime": null,
+      "reviewerJustification": null,
+      "status": "pending"
+    }
+  ]
+}

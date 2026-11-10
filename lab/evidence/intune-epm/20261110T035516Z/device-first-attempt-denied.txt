@@ -1,0 +1,15 @@
+run command lab-69b39151: /private/tmp/claude-501/-Users-michaelwilliams-GotchaBitch/7a6912bb-5f53-40c9-b93a-2f1b37472e5b/scratchpad/epm-req.ps1 on vm-win11-01
+FILE EPM.log 02:42:52
+  <![LOG[Building path to EpmSecureCred.exe...]LOG]!><time="02:42:52.592+00" date="11-10-2026" component="EpmInterop" context="" type="0" thread="3396" file="ElevateInterop.cpp:961">
+  <![LOG[EpmSecureCred.exe path is: C:\Program Files\Microsoft EPM Agent\EpmConsentUI\EpmSecureCred.exe]LOG]!><time="02:42:52.592+00" date="11-10-2026" component="EpmInterop" context="" type="0" thread="3396" file="ElevateInterop.cpp:967">
+  <![LOG[CreateProcessAsUserEx: Creating suspended process - app name: [C:\Program Files\Microsoft EPM Agent\EpmConsentUI\EpmConsentUI.exe], working dir: [C:\Program Files\Microsoft EPM Agent\EpmConsentUI]...]LOG]!><time="02:42:52.592+00" date="11-10-2026" compo
+  <![LOG[CreateProcessAsUserEx: Querying file name from the suspended process...]LOG]!><time="02:42:52.995+00" date="11-10-2026" component="EpmInterop" context="" type="0" thread="3396" file="ElevateInterop.cpp:1701">
+  <![LOG[VerifyRunningImageFileIdentity: Verifying file identity of running image against verified handle...]LOG]!><time="02:42:52.995+00" date="11-10-2026" component="EpmInterop" context="" type="0" thread="3396" file="ElevateInterop.cpp:296">
+  <![LOG[VerifyRunningImageFileIdentity: Succeeded.]LOG]!><time="02:42:52.995+00" date="11-10-2026" component="EpmInterop" context="" type="0" thread="3396" file="ElevateInterop.cpp:422">
+  <![LOG[CreateProcessAsUserEx: Resuming suspended process thread...]LOG]!><time="02:42:52.995+00" date="11-10-2026" component="EpmInterop" context="" type="0" thread="3396" file="ElevateInterop.cpp:1727">
+  <![LOG[CreateProcessAsUserEx: Wait for process exit timeout is undefined. Return immediately.]LOG]!><time="02:42:52.995+00" date="11-10-2026" component="EpmInterop" context="" type="0" thread="3396" file="ElevateInterop.cpp:1734">
+  <![LOG[CreateProcessAsUserEx: Reverting to self...]LOG]!><time="02:42:52.995+00" date="11-10-2026" component="EpmInterop" context="" type="0" thread="3396" file="ElevateInterop.cpp:1769">
+  <![LOG[CreateProcessAsUserEx: Succeeded.]LOG]!><time="02:42:52.995+00" date="11-10-2026" component="EpmInterop" context="" type="0" thread="3396" file="ElevateInterop.cpp:1804">
+FILE EpmConsentUI-20261110.log 02:43:23
+  Log Information: 1 : 2026-11-10 02:43:35 AM | thread[1] | ConsentUI loaded successfully to display error message with ErrorCategory: [CONSENTUI_ERRORMODE_DENIED] and ErrorCode: [0x80070005 (-2147024891)].
+state: Succeeded, exit code: 0
