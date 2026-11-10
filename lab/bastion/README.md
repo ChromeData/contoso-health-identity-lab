@@ -26,9 +26,13 @@ write session open.
 | Admin | **adm-presenter** activates its **existing** PIM-Demo-Readers eligibility (Reader on the subscription), 1 hour, with a reason, then connects to DC01 | `prove.mjs` (identity.mjs `activatePim`, RAN · tenant for this group). No new eligibility is made. |
 | Reviewer | adm-mei.tanaka activates her three eligible roles on the sandbox, 1 hour each, with a reason, then plays the recording back | `prove.mjs`, the Azure-resources activation path that ran live on 2026-11-07 |
 
-**verify: next run.** Reader now arrives through a group activation, not a
-direct assignment. The portal may need a fresh token before DC01's Bastion
-page opens. `prove.mjs` reloads for up to about 13 minutes.
+**RAN · tenant under this model on 2026-11-10 (capture log E186,
+[`lab/evidence/bastion-session-recording/20261110T014005Z/`](../evidence/bastion-session-recording/20261110T014005Z/)).**
+Reader arrives through a group activation, and DC01's Bastion form appeared
+only about 16 minutes after it (the first run's 13 minutes of reloads ran
+out). `prove.mjs` now reloads for up to about 25 minutes. `whoami & hostname`
+ran in the session this time (taskbar search path) and is visible in the
+playback.
 
 ## Words used here
 

@@ -1,0 +1,69 @@
+{
+ "started": "2026-11-10T01:41:58.760Z",
+ "steps": [
+  {
+   "step": "signin",
+   "what": "adm-presenter signed in to the Azure portal (passkey)",
+   "utc": "2026-11-10T01:42:10.402Z",
+   "t_s": 12
+  },
+  {
+   "step": "playback",
+   "what": "PIM: Reader on rg-lab-sandbox ACTIVE",
+   "utc": "2026-11-10T01:44:10.284Z",
+   "t_s": 132,
+   "activation_s": 91,
+   "shot": "07r-pim-reader.png"
+  },
+  {
+   "step": "playback",
+   "what": "PIM: Storage Blob Data Reader on rg-lab-sandbox ACTIVE",
+   "utc": "2026-11-10T01:45:57.296Z",
+   "t_s": 239,
+   "activation_s": 93,
+   "shot": "07r-pim-storage-blob-data-reader.png"
+  },
+  {
+   "step": "playback",
+   "what": "PIM: Storage Account Key Operator Service Role on rg-lab-sandbox ACTIVE",
+   "utc": "2026-11-10T01:47:42.626Z",
+   "t_s": 344,
+   "activation_s": 92,
+   "shot": "07r-pim-storage-account-key-operator-service-role.png"
+  },
+  {
+   "step": "playback",
+   "what": "Session recordings lists THIS run's DC01 session (created 2026-11-10T01:40:07.000Z, session began 2026-11-10T01:40:05.323Z)",
+   "utc": "2026-11-10T01:48:07.351Z",
+   "t_s": 369,
+   "ok": true,
+   "list_wait_s": 25,
+   "shot": "08-recordings-list.png"
+  },
+  {
+   "step": "playback",
+   "what": "recording playing in the portal player (clock 0s -> 15s)",
+   "utc": "2026-11-10T01:48:44.286Z",
+   "t_s": 406,
+   "host": "bst-fa86cd88-684f-413e-96da-ae814f482a18.bastion.azure.com",
+   "new_tab": true,
+   "shot": "09-playback-start.png"
+  },
+  {
+   "step": "playback",
+   "what": "playback at about 75% (the whoami step)",
+   "utc": "2026-11-10T01:48:50.381Z",
+   "t_s": 412,
+   "shot": "10-playback-whoami.png"
+  },
+  {
+   "step": "playback",
+   "what": "playback near the end",
+   "utc": "2026-11-10T01:49:05.430Z",
+   "t_s": 427,
+   "shot": "11-playback-end.png"
+  }
+ ],
+ "session_started_utc": "2026-11-10T01:40:05.323Z",
+ "ok": true
+}

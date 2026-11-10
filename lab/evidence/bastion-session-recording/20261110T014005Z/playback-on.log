@@ -1,0 +1,2 @@
+[01:23:28Z +   8s] Write session: session role on the subscription, Contributor + constrained RBAC Administrator on rg-lab-sandbox
+[01:23:32Z +  12s] Shared-key access ON for stbstrec184a7387 (the portal player builds an account-key SAS). The reviewer now activates her eligible Storage Account Key Operator Service Role (prove.mjs does it); 'down' turns shared-key access off.

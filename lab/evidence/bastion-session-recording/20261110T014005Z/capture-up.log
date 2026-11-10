@@ -1,0 +1,15 @@
+[01:10:06Z +   9s] Write session: session role on the subscription, Contributor + constrained RBAC Administrator on rg-lab-sandbox
+[01:10:09Z +  12s] DC01 already running
+[01:10:54Z +  57s] Subnet 10.42.250.0/26 and public IP ready (45 s)
+[01:11:29Z +  92s] Storage stbstrec184a7387/recordings and identity id-bastion-recording ready (35 s)
+[01:11:30Z +  93s] Creating bastion-capture (Premium, session recording on); Learn says about 10 minutes
+[01:22:06Z + 729s] Bastion bastion-capture Succeeded, bst-fa86cd88-684f-413e-96da-ae814f482a18.bastion.azure.com (637 s); billing at $0.45/h starts now
+{
+  "container": "https://stbstrec184a7387.blob.core.windows.net/recordings",
+  "recording": true,
+  "sku": "Premium",
+  "tunneling": false
+}
+[01:22:08Z + 731s] CORS: GET from https://bst-fa86cd88-684f-413e-96da-ae814f482a18.bastion.azure.com only
+[01:22:11Z + 734s] Reviewer adm-mei.tanaka@contosohealthlab.onmicrosoft.com: 3 eligible roles on rg-lab-sandbox (owner step done)
+[01:22:11Z + 734s] UP. Next: node lab/bastion/prove.mjs; then capture.sh down
