@@ -15,22 +15,22 @@ The silent captioned clips, in order:
 
 | Part | Title | What it shows | Length | Video |
 |---|---|---|---|---|
-| N01 | The blueprints | A Terraform change to the nurse and cloud-engineer access packages, from commit to pull request and plan. | TBD | [`N01-the-blueprints.mp4`](videos/N01-the-blueprints.mp4) |
-| N02 | Hired | HR hires Sam Rivera in OrangeHRM. There is no password field, and the hire goes out once it is complete. | TBD | [`N02-hired.mp4`](videos/N02-hired.mp4) |
-| N04 | First-day doors and the guard | Access by job on day one: the access package, AWS sign-in through Entra, and read-only access to the patient portal stand-in. | TBD | [`N04-first-day-doors.mp4`](videos/N04-first-day-doors.mp4) |
-| N04b | The service desk: what staff ask IT for | A nurse asks for ICU apps in ServiceNow, her manager approves, and Entra grants the access. | TBD | [`N04b-the-service-desk.mp4`](videos/N04b-the-service-desk.mp4) |
-| N06 | The cameras (Sentinel) | An alarm rule written as code catches an admin power-up and opens an incident in Microsoft Sentinel. | TBD | [`N06-the-cameras.mp4`](videos/N06-the-cameras.mp4) |
-| N07 | The second camera (Splunk) | The same rules in Splunk's language, running on the same tenant logs. | TBD | [`N07-the-second-camera.mp4`](videos/N07-the-second-camera.mp4) |
-| N08 | Leaving | HR ends Sam's job, and Active Directory, Entra, ServiceNow and AWS each turn the account off with no ticket. | TBD | [`N08-leaving.mp4`](videos/N08-leaving.mp4) |
-| N09 | The logbook | One click files seven evidence records, each with a fingerprint, into a write-once store. | TBD | [`N09-the-logbook.mp4`](videos/N09-the-logbook.mp4) |
-| N10 | The Microsoft features showcase | Access reviews, requested extras that expire, blocked combinations and other Entra features, each set up as code. | TBD | [`N10-microsoft-features.mp4`](videos/N10-microsoft-features.mp4) |
-| N11 | Admin passwords and recorded sessions, the Microsoft way | Key Vault secrets, a Terraform read that leaves no password behind, and a recorded admin session. | TBD | [`N11-admin-passwords-and-sessions.mp4`](videos/N11-admin-passwords-and-sessions.mp4) |
-| N12 | Hardening Active Directory | Admin tiers on the domain controller, the policy that keeps top admins off lower-tier computers, and a before and after scan. | TBD | [`N12-hardening-ad.mp4`](videos/N12-hardening-ad.mp4) |
-| N13 | Moving an app off AD FS | One app moved from AD FS, an older sign-in server, to Entra: built and tested, cut-over not run yet. | TBD | [`N13-adfs-to-entra.mp4`](videos/N13-adfs-to-entra.mp4) |
-| N14 | Okta: the clinic the hospital bought | The clinic's three Okta apps, a tracker built from live reads, and the move to Entra. | TBD | [`N14-okta.mp4`](videos/N14-okta.mp4) |
-| N15 | Server access in AWS, and least privilege in Azure | Server shells through AWS Session Manager only during a borrowed admin window, and a narrow operator role in Azure. The gaps are named. | TBD | [`N15-aws-server-access-and-azure-least-privilege.mp4`](videos/N15-aws-server-access-and-azure-least-privilege.mp4) |
-| N16 | Checks that prove the code is safe | A Kubernetes permission checker, and scanners that must fail on a deliberately unsafe file. | TBD | [`N16-code-checks.mp4`](videos/N16-code-checks.mp4) |
-| N17 | Close: the whole lab from VS Code and GitHub | The code in VS Code, a read-only live check, GitHub Actions runs and the apply approval gate. | TBD | [`N17-close-vscode-github.mp4`](videos/N17-close-vscode-github.mp4) |
+| N01 | The blueprints | A Terraform change to the nurse and cloud-engineer access packages, from commit to pull request and plan. | 3:27 | [`N01-the-blueprints.mp4`](videos/N01-the-blueprints.mp4) |
+| N02 | Hired | HR hires Sam Rivera in OrangeHRM. There is no password field, and the hire goes out once it is complete. | 2:03 | [`N02-hired.mp4`](videos/N02-hired.mp4) |
+| N04 | First-day doors and the guard | Access by job on day one: the access package, AWS sign-in through Entra, and read-only access to the patient portal stand-in. | 1:40 | [`N04-first-day-doors.mp4`](videos/N04-first-day-doors.mp4) |
+| N04b | The service desk: what staff ask IT for | A nurse asks for ICU apps in ServiceNow, her manager approves, and Entra grants the access. | 3:12 | [`N04b-the-service-desk.mp4`](videos/N04b-the-service-desk.mp4) |
+| N06 | The cameras (Sentinel) | An alarm rule written as code catches an admin power-up and opens an incident in Microsoft Sentinel. | 3:15 | [`N06-the-cameras.mp4`](videos/N06-the-cameras.mp4) |
+| N07 | The second camera (Splunk) | The same rules in Splunk's language, running on the same tenant logs. | 1:12 | [`N07-the-second-camera.mp4`](videos/N07-the-second-camera.mp4) |
+| N08 | Leaving | HR ends Sam's job, and Active Directory, Entra, ServiceNow and AWS each turn the account off with no ticket. | 0:56 | [`N08-leaving.mp4`](videos/N08-leaving.mp4) |
+| N09 | The logbook | One click files seven evidence records, each with a fingerprint, into a write-once store. | 1:59 | [`N09-the-logbook.mp4`](videos/N09-the-logbook.mp4) |
+| N10 | The Microsoft features showcase | Access reviews, requested extras that expire, blocked combinations and other Entra features, each set up as code. | 2:57 | [`N10-microsoft-features.mp4`](videos/N10-microsoft-features.mp4) |
+| N11 | Admin passwords and recorded sessions, the Microsoft way | Key Vault secrets, a Terraform read that leaves no password behind, and a recorded admin session. | 3:14 | [`N11-admin-passwords-and-sessions.mp4`](videos/N11-admin-passwords-and-sessions.mp4) |
+| N12 | Hardening Active Directory | Admin tiers on the domain controller, the policy that keeps top admins off lower-tier computers, and a before and after scan. | 1:55 | [`N12-hardening-ad.mp4`](videos/N12-hardening-ad.mp4) |
+| N13 | Moving an app off AD FS | One app moved from AD FS, an older sign-in server, to Entra: built and tested, cut-over not run yet. | 1:33 | [`N13-adfs-to-entra.mp4`](videos/N13-adfs-to-entra.mp4) |
+| N14 | Okta: the clinic the hospital bought | The clinic's three Okta apps, a tracker built from live reads, and the move to Entra. | 1:48 | [`N14-okta.mp4`](videos/N14-okta.mp4) |
+| N15 | Server access in AWS, and least privilege in Azure | Server shells through AWS Session Manager only during a borrowed admin window, and a narrow operator role in Azure. The gaps are named. | 1:35 | [`N15-aws-server-access-and-azure-least-privilege.mp4`](videos/N15-aws-server-access-and-azure-least-privilege.mp4) |
+| N16 | Checks that prove the code is safe | A Kubernetes permission checker, and scanners that must fail on a deliberately unsafe file. | 1:29 | [`N16-code-checks.mp4`](videos/N16-code-checks.mp4) |
+| N17 | Close: the whole lab from VS Code and GitHub | The code in VS Code, GitHub Actions runs, pull requests and the apply approval gate. | 1:18 | [`N17-close-vscode-github.mp4`](videos/N17-close-vscode-github.mp4) |
 
 Two parts are not in the clip set: N03 (one account, two directories) and N05
 (the master key). Both need a real person to sign in live: Sam's account
