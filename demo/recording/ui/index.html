@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0e0f12">
+<title>Recording cockpit</title>
+<style>
+  :root { --bg:#0e0f12; --panel:#17191e; --line:#262a31; --text:#f4f2ee; --mute:#8d929b; --orange:#f06a35; --green:#2fbf71; --yellow:#f2c230; --red:#ef4b4b; --blue:#4b8bef; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif; -webkit-tap-highlight-color:transparent; }
+  body { display:flex; flex-direction:column; min-height:100%; padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+  header { display:flex; align-items:center; gap:12px; padding:12px 0 8px; flex-wrap:wrap; }
+  .badge { font:700 12px/1 -apple-system,sans-serif; letter-spacing:.12em; padding:6px 9px; border-radius:6px; background:var(--line); color:var(--mute); }
+  .badge.live { background:#3a1414; color:#ff8f8f; } .badge.dry { background:#14263a; color:#8fc2ff; } .badge.rehearse { background:#3a2f14; color:#ffd58f; }
+  .piece { font-weight:700; font-size:18px; }
+  .count { color:var(--mute); font-variant-numeric:tabular-nums; }
+  .rec { margin-left:auto; display:flex; align-items:center; gap:7px; font:600 14px/1 ui-monospace,Menlo,monospace; color:var(--mute); }
+  .rec i { width:11px; height:11px; border-radius:50%; background:var(--line); display:inline-block; }
+  .rec.on i { background:var(--red); animation:blink 1.2s infinite; } .rec.on { color:#ff8f8f; }
+  .rec.paused i { background:var(--yellow); animation:none; } .rec.paused { color:var(--yellow); }
+  @keyframes blink { 50% { opacity:.25; } }
+  .light { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:12px; background:var(--panel); font-size:17px; line-height:1.3; }
+  .dot { width:22px; height:22px; border-radius:50%; flex:none; background:var(--line); box-shadow:0 0 0 4px rgba(255,255,255,.04); }
+  .dot.green { background:var(--green); box-shadow:0 0 18px rgba(47,191,113,.6); } .dot.yellow { background:var(--yellow); box-shadow:0 0 18px rgba(242,194,48,.5); animation:blink 1.6s infinite; }
+  .dot.red { background:var(--red); box-shadow:0 0 18px rgba(239,75,75,.6); } .dot.blue { background:var(--blue); animation:blink .9s infinite; }
+  main { flex:1; display:flex; flex-direction:column; justify-content:safe center; padding:18px 0; min-height:0; overflow-y:auto; }
+  .say { font-size:clamp(30px, 6.2vw, 72px); line-height:1.22; font-weight:650; letter-spacing:-.01em; }
+  .say p { margin:0 0 .35em; position:relative; transition:opacity .5s; }
+  /* Speech tracking: a faint marker per point, a small check once its meaning was said,
+     a faint amber underline on a point passed over (say it, or re-record). */
+  .say.tracked { padding-left:30px; }
+  .say .pm { position:absolute; left:-26px; top:.62em; width:11px; height:11px; margin-top:-6px; border-radius:50%; border:1.5px solid rgba(255,255,255,.17); transition:all .4s; }
+  .say .pm.done { border-color:transparent; width:16px; height:16px; margin-top:-8px; left:-28px; color:var(--green); opacity:.8; }
+  .say .pm.done::before { content:'✓'; display:block; font-size:17px; line-height:16px; font-weight:700; text-align:center; }
+  .say .pm.missed { border-color:rgba(242,194,48,.6); }
+  .say p.done { opacity:.7; }
+  .say p.missed .tx { text-decoration:underline dotted rgba(242,194,48,.45); text-decoration-thickness:2px; text-underline-offset:.2em; }
+  .speech { display:flex; align-items:center; gap:8px; margin-top:8px; color:var(--mute); font-size:13px; line-height:1.3; min-height:1.3em; }
+  .speech:empty { display:none; }
+  .speech i { width:8px; height:8px; border-radius:50%; flex:none; background:var(--line); }
+  .speech i.on { background:rgba(47,191,113,.55); } .speech i.talk { background:var(--green); box-shadow:0 0 8px rgba(47,191,113,.7); } .speech i.bad { background:var(--red); }
+  .speech .heard { font-style:italic; opacity:.75; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
+  .missednote { margin-top:6px; color:rgba(242,194,48,.7); font-size:13px; }
+  .missednote:empty { display:none; }
+  .hand { margin-top:18px; padding:12px 16px; border-left:5px solid var(--orange); background:#24170f; color:#ffc6ad; font-size:clamp(17px,2.6vw,26px); border-radius:8px; }
+  .hand:empty, .fallback:empty, .err:empty { display:none; }
+  .fallback { margin-top:12px; color:var(--mute); font-size:16px; }
+  .err { margin-top:12px; color:#ffb0b0; font-size:17px; background:#2a1515; padding:10px 14px; border-radius:8px; }
+  .nextline { border-top:1px solid var(--line); padding:12px 0 6px; color:var(--mute); font-size:clamp(16px,2.4vw,24px); }
+  .nextline b { color:#c9c7c1; font-weight:600; letter-spacing:.08em; font-size:12px; display:block; margin-bottom:4px; }
+  .controls { display:grid; grid-template-columns:1fr 2.4fr; gap:12px; padding:10px 0 14px; }
+  button { font:inherit; border:0; border-radius:16px; color:var(--text); background:var(--panel); cursor:pointer; touch-action:manipulation; }
+  button:active { transform:scale(.98); }
+  .big { height:clamp(72px, 13vh, 120px); font-size:28px; font-weight:700; }
+  .next { background:var(--orange); color:#fff; }
+  .next.armed { background:var(--yellow); color:#111; }
+  .small { display:flex; gap:10px; flex-wrap:wrap; padding-bottom:12px; }
+  .small button { padding:12px 16px; font-size:15px; }
+  .small button.quiet { color:var(--mute); background:transparent; border:1px solid var(--line); }
+  .small button.warn { background:#3a1b14; color:#ffb29a; }
+  .armedmsg { color:var(--yellow); font-weight:600; min-height:1.2em; }
+  .start { display:none; }
+  body.waiting-start .start { display:block; } body.waiting-start .teleprompter { display:none; }
+  .card { background:var(--panel); border-radius:14px; padding:16px; margin:10px 0; }
+  .card h2 { margin:0 0 10px; font-size:20px; display:flex; align-items:center; gap:10px; }
+  .verdict { font-size:34px; font-weight:800; letter-spacing:.02em; }
+  .verdict.ok { color:var(--green); } .verdict.bad { color:var(--red); }
+  ul.checks { list-style:none; margin:0; padding:0; font-size:16px; line-height:1.45; }
+  ul.checks li { display:flex; gap:10px; } ul.checks .m { width:1.2em; flex:none; text-align:center; font-weight:700; }
+  .ok { color:var(--green); } .no { color:var(--red); } .wn { color:var(--yellow); }
+  details.log { color:var(--mute); font:12px/1.45 ui-monospace,Menlo,monospace; margin-bottom:10px; }
+  details.log pre { white-space:pre-wrap; max-height:40vh; overflow:auto; margin:6px 0 0; }
+  .pieces { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .pieces button { padding:8px 11px; font-size:14px; border-radius:10px; }
+  .sw { font:700 22px ui-monospace,Menlo,monospace; color:#ffd2c0; }
+  @media (max-width:560px) { .controls { grid-template-columns:1fr 2fr; } .say { font-size:30px; } }
+</style>
+</head>
+<body class="waiting-start">
+<header>
+  <span id="mode" class="badge">…</span>
+  <span id="piece" class="piece">Recording cockpit</span>
+  <span id="count" class="count"></span>
+  <span id="rec" class="rec"><i></i><span id="rectext">not recording</span></span>
+</header>
+<div class="light"><span id="dot" class="dot"></span><span id="lighttext">Connecting…</span></div>
+<div id="speech" class="speech teleprompter"></div>
+
+<section class="start">
+  <div class="card">
+    <h2>Before you hit record</h2>
+    <div id="verdict" class="verdict">Checking…</div>
+    <ul id="pre" class="checks"></ul>
+    <div class="small" style="margin-top:12px"><button onclick="post('preflight')">Check again</button><button onclick="post('signins')">Sign in / check sign-ins</button></div>
+    <ul id="signins" class="checks"></ul>
+  </div>
+  <div class="card">
+    <h2>Start</h2>
+    <div id="firstline" style="font-size:22px;margin-bottom:12px"></div>
+    <div class="pieces" id="pieces"></div>
+  </div>
+</section>
+
+<main class="teleprompter">
+  <div id="say" class="say"></div>
+  <div id="hand" class="hand"></div>
+  <div id="err" class="err"></div>
+  <div id="fallback" class="fallback"></div>
+  <div id="sw" class="sw"></div>
+  <div id="missednote" class="missednote"></div>
+</main>
+
+<div class="nextline teleprompter"><b id="nextlabel">NEXT</b><span id="next"></span></div>
+<div id="armedmsg" class="armedmsg"></div>
+<div class="controls">
+  <button class="big" onclick="post('back')">◀ BACK</button>
+  <button id="nextbtn" class="big next" onclick="post('next')">NEXT ▶</button>
+</div>
+<div class="small">
+  <button onclick="post('redo')">↻ Redo step (R)</button>
+  <button class="warn" onclick="post('retake')">⟲ Retake this piece (T)</button>
+  <button id="listenbtn" onclick="post('listen')">Listening (L)</button>
+  <button id="autobtn" onclick="post('autoadvance')">Auto-advance (A)</button>
+  <button id="mousebtn" class="quiet" onclick="cycleMouse()">Pointer (M)</button>
+</div>
+<details class="log"><summary>Log</summary><pre id="log"></pre></details>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const post = (what, q = '') => fetch('/api/' + what + q, { method: 'POST' }).catch(() => {});
+let S = null, swTimer = null;
+const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const mm = (s) => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+
+function render(s) {
+  S = s;
+  const started = s.i >= 0;
+  document.body.classList.toggle('waiting-start', !started);
+  $('mode').textContent = { live: 'LIVE', dry: 'DRY RUN', rehearse: 'REHEARSAL' }[s.mode];
+  $('mode').className = 'badge ' + s.mode;
+  $('piece').textContent = s.step ? s.step.piece + ' · ' + s.step.pieceTitle + (s.step.optional ? ' · optional step (NEXT skips it)' : '') : 'Recording cockpit';
+  $('count').textContent = s.step ? 'step ' + (s.i + 1) + ' of ' + s.total : s.total + ' steps';
+  $('dot').className = 'dot ' + (s.light.color || '');
+  $('lighttext').textContent = s.light.text || (started ? '' : 'Press NEXT to begin');
+  // Speech tracking: each point's lines carry its state; the marker sits on its first line.
+  const sp = s.speech || {}, pts = sp.points || [], st = {}, first = {};
+  pts.forEach((p) => p.lines.forEach((l, j) => { st[l] = p.state; if (!j) first[l] = p.state; }));
+  const tracked = pts.length > 0 && (sp.status === 'listening' || pts.some((p) => p.state !== 'todo'));
+  $('say').className = 'say' + (tracked ? ' tracked' : '');
+  $('say').innerHTML = s.step ? s.step.say.map((l, i) => '<p class="' + (tracked ? (st[i] || '') : '') + '"' + (tracked && st[i] === 'missed' ? ' title="Not said yet: say it, or re-record"' : '') + '>' + (tracked && first[i] ? '<i class="pm ' + first[i] + '"></i>' : '') + '<span class="tx">' + esc(l) + '</span></p>').join('') : '';
+  renderSpeech(sp);
+  // Long steps scroll: keep the first point not yet said in view.
+  const m = document.querySelector('main.teleprompter'), open = $('say').querySelector('p.missed, p:not(.done)');
+  if (tracked && open && m.scrollHeight > m.clientHeight + 4) open.scrollIntoView({ block: 'nearest' });
+  // The pointer (lib/human.mjs): human = the real pointer moved like a person, guide = you click and it shows where, dom = the old drawn one.
+  const mo = s.mouse;
+  $('mousebtn').style.display = mo ? '' : 'none';
+  if (mo) $('mousebtn').textContent = 'Pointer: ' + mo.mode + (mo.want && mo.want !== mo.mode ? ' (wanted ' + mo.want + ')' : '') + ' (M)';
+  $('hand').textContent = s.step && s.step.hand ? 'You: ' + s.step.hand : '';
+  $('fallback').textContent = s.step && s.step.fallback ? 'Fallback: ' + s.step.fallback : '';
+  $('err').textContent = s.error || '';
+  $('next').textContent = s.done ? 'That was the last step.' : (s.next ? s.next.say : '');
+  $('nextlabel').textContent = s.next && s.next.newPiece ? 'NEXT PIECE · ' + s.next.piece + ' · ' + s.next.pieceTitle : 'NEXT';
+  $('nextbtn').classList.toggle('armed', !!s.armed);
+  $('armedmsg').textContent = s.armed === 'next' ? 'Not ready yet: press NEXT again to go anyway.' : s.armed === 'redo' ? 'This step changes something: press R again to redo it.' : s.armed === 'retake' ? 'Press T again to throw away this take, reset and start the piece over.' : '';
+  // recording
+  const r = s.rec || {};
+  $('rec').className = 'rec' + (r.recording ? (r.paused ? ' paused' : ' on') : '');
+  $('rectext').textContent = r.kind === 'none' ? 'not recording' : r.recording ? (r.paused ? 'PAUSED (waiting)' : 'REC piece ' + r.piece.n) : (r.kind === 'screencapture' ? 'ready (screencapture, no pause)' : 'ready');
+  // stopwatch
+  clearInterval(swTimer);
+  if (s.stopwatch) { const tick = () => { const t = Math.floor((Date.now() - s.stopwatch.t0) / 1000); $('sw').textContent = '⏱ ' + mm(t) + s.stopwatch.laps.map((l) => '   ' + l.label + ' ' + mm(l.s)).join(''); }; tick(); swTimer = setInterval(tick, 500); }
+  else $('sw').textContent = '';
+  // start screen
+  const p = s.preflight;
+  $('verdict').textContent = !p ? 'Checking…' : p.running ? 'Checking the lab… (about 20 seconds)' : p.verdict;
+  $('verdict').className = 'verdict ' + (p && !p.running ? (p.ready ? 'ok' : 'bad') : '');
+  $('pre').innerHTML = (p && p.lines || []).map((l) => '<li><span class="m ' + (l.mark === '✓' ? 'ok' : l.mark === '✗' ? 'no' : 'wn') + '">' + esc(l.mark) + '</span><span>' + esc(l.text) + '</span></li>').join('');
+  const si = s.signins;
+  $('signins').innerHTML = (si && si.auto ? '<li><span class="m">·</span><span>The cockpit signs every lab account in by itself. The only sign-in that is yours: GitHub.</span></li>' : '') + (si ? si.sites.map((x) => '<li><span class="m ' + (x.ok ? 'ok' : 'no') + '">' + (x.ok ? '✓' : '✗') + '</span><span>' + esc(x.name) + ': ' + esc(x.note) + '</span></li>').join('') + (si.running ? '<li><span class="m">…</span><span>signing in</span></li>' : '') : '');
+  $('firstline').textContent = s.next ? 'First line: “' + s.next.say + '”' : '';
+  $('pieces').innerHTML = s.pieces.filter((x) => x.first >= 0).map((x) => '<button onclick="post(\'jump\',\'?to=' + x.first + '\')">' + x.n + ' · ' + esc(x.title) + '</button>').join('');
+  $('log').textContent = s.log.join('\n');
+}
+
+const MOUSE = ['human', 'guide', 'dom'];
+function cycleMouse() { const m = (S && S.mouse && S.mouse.mode) || 'human'; post('mouse', '?mode=' + MOUSE[(MOUSE.indexOf(m) + 1) % MOUSE.length]); }
+function renderSpeech(sp) {
+  if (!sp.allowed) { $('speech').innerHTML = ''; $('missednote').textContent = ''; $('listenbtn').style.display = $('autobtn').style.display = 'none'; return; }
+  const on = sp.status === 'listening', all = sp.total && sp.said === sp.total;
+  const dot = sp.status === 'error' ? 'bad' : on ? (sp.speaking ? 'talk' : 'on') : '';
+  const what = sp.status === 'paused' ? 'Listening off (L)' : sp.status === 'error' ? sp.note : sp.status !== 'listening' ? 'Starting the listener…'
+    : (sp.total ? (all ? 'all ' + sp.total + ' said' + (sp.auto && !sp.advanced ? ' · NEXT when you pause' : '') : sp.said + ' of ' + sp.total + ' said') : 'listening') + (sp.auto ? '' : ' · auto-advance off');
+  $('speech').innerHTML = '<i class="' + dot + '"></i><span>' + esc(what) + '</span>' + (on && sp.heard ? '<span class="heard">“' + esc(sp.heard) + '”</span>' : '');
+  const m = sp.lastMissed;
+  $('missednote').textContent = m ? 'Not said in ' + m.id + ' (' + m.n + '): ' + m.texts.map((t) => '“' + t + '”').join(' ') : '';
+  $('listenbtn').textContent = sp.listen ? 'Listening: on (L)' : 'Listening: off (L)';
+  $('autobtn').textContent = sp.auto ? 'Auto-advance: on (A)' : 'Auto-advance: off (A)';
+}
+
+function connect() {
+  const es = new EventSource('/events');
+  es.onmessage = (e) => render(JSON.parse(e.data));
+  es.onerror = () => { $('lighttext').textContent = 'Lost the cockpit: reconnecting…'; $('dot').className = 'dot red'; };
+}
+connect();
+
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key;
+  if (k === ' ' || k === 'ArrowRight' || k === 'PageDown' || k === 'Enter') { e.preventDefault(); post('next'); }
+  else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace') { e.preventDefault(); post('back'); }
+  else if (k === 'r' || k === 'R') post('redo');
+  else if (k === 't' || k === 'T') post('retake');
+  else if (k === 'c' || k === 'C') post('ring');
+  else if (k === 'l' || k === 'L') post('listen');
+  else if (k === 'a' || k === 'A') post('autoadvance');
+  else if (k === 'm' || k === 'M') cycleMouse();
+  else if (k === 'p' || k === 'P') post('pause');
+});
+// Keep a phone awake while it is the teleprompter.
+if ('wakeLock' in navigator) { const lock = () => navigator.wakeLock.request('screen').catch(() => {}); lock(); document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && lock()); }
+</script>
+</body>
+</html>

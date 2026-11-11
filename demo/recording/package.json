@@ -1,0 +1,24 @@
+{
+  "name": "contoso-recording-cockpit",
+  "private": true,
+  "type": "module",
+  "description": "Teleprompter + driver for the live Contoso Health demo recording: the presenter reads and presses NEXT.",
+  "scripts": {
+    "start": "node cockpit.mjs",
+    "dry": "node cockpit.mjs --dry",
+    "rehearse": "node cockpit.mjs --rehearse",
+    "bridge": "vscode-ext/build-vsix.sh",
+    "obs-setup": "tools/obs-setup.sh",
+    "test": "node --test tests/teardown.test.mjs tests/speech.test.mjs tests/presenter.test.mjs tests/localurl.test.mjs && node tools/check-steps.mjs",
+    "points": "node tools/build-points.mjs",
+    "test:speech": "node tools/points-eval.mjs --spoken --misses",
+    "record": "node cockpit.mjs --v2 --start --quiet --clicker",
+    "watch": "node cockpit.mjs --v2 --watch --quiet",
+    "overlay": "swiftc -O tools/script-overlay.swift -o tools/script-overlay",
+    "clips": "node cockpit.mjs --v2 --watch --silent --quiet",
+    "captions": "python3 tools/caption.py"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1"
+  }
+}

@@ -12,7 +12,7 @@ here is designed around that constraint. This repository is the identity
 platform for that scenario, and it follows one employee, Dana Okafor, from hire
 to departure.
 
-A walkthrough recorded in the live tenant will be linked here.
+The walkthrough clips, recorded in the live tenant, are in [`demo/`](demo/README.md); the presenter intro is coming.
 
 ## Results (measured in the tenant)
 

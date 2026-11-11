@@ -1,0 +1,869 @@
+{
+ "about": "Offline test set for the speech-aware teleprompter (tools/points-eval.mjs). pos: what the presenter might say in his own words for one point of a real step (step id + point index in steps.points.json). Each pos is also a NEGATIVE for every other point of its step (saying point 1 must not check point 2). off: talk that is not the script at all (it must check nothing, in any step). split: A tunes, B is held out.",
+ "extraSteps": {
+  "example-azure": [
+   "Microsoft Azure is the server hub.",
+   "Intune manages the PCs."
+  ]
+ },
+ "pos": [
+  {
+   "step": "example-azure",
+   "p": 0,
+   "split": "A",
+   "say": "Microsoft Azure is where we hold local cloud servers."
+  },
+  {
+   "step": "example-azure",
+   "p": 0,
+   "split": "B",
+   "say": "So Azure is basically where all our servers live."
+  },
+  {
+   "step": "example-azure",
+   "p": 1,
+   "split": "B",
+   "say": "and the laptops are managed by Intune"
+  },
+  {
+   "step": "n00-azure",
+   "p": 1,
+   "split": "A",
+   "say": "Azure is where DC01 lives, along with the evidence storage and all the logs."
+  },
+  {
+   "step": "n00-azure",
+   "p": 1,
+   "split": "B",
+   "say": "In Azure we host the domain controller, the evidence store and the logging."
+  },
+  {
+   "step": "n00-azure",
+   "p": 2,
+   "split": "A",
+   "say": "And Intune takes care of managing the computers."
+  },
+  {
+   "step": "n00-azure",
+   "p": 0,
+   "split": "B",
+   "say": "The third main piece is Azure plus Intune."
+  },
+  {
+   "step": "n00-hello",
+   "p": 0,
+   "split": "A",
+   "say": "Hey everyone, my name is Michael."
+  },
+  {
+   "step": "n00-hello",
+   "p": 1,
+   "split": "B",
+   "say": "I work as an engineer in identity and privileged access."
+  },
+  {
+   "step": "n00-hello",
+   "p": 2,
+   "split": "A",
+   "say": "I put together labs for IAM, PAM and cloud security, and this one is the biggest I've done."
+  },
+  {
+   "step": "n00-lab",
+   "p": 1,
+   "split": "A",
+   "say": "It handles sign-ins and access for Contoso Health, which is a fictional hospital with roughly five thousand employees."
+  },
+  {
+   "step": "n00-lab",
+   "p": 2,
+   "split": "B",
+   "say": "When I say identity I mean who you are."
+  },
+  {
+   "step": "n00-lab",
+   "p": 3,
+   "split": "A",
+   "say": "And access is what you're allowed to open."
+  },
+  {
+   "step": "n00-four",
+   "p": 1,
+   "split": "A",
+   "say": "First, access is driven by HR."
+  },
+  {
+   "step": "n00-four",
+   "p": 2,
+   "split": "B",
+   "say": "Second, admin rights are borrowed for a while, nobody keeps them."
+  },
+  {
+   "step": "n00-four",
+   "p": 3,
+   "split": "A",
+   "say": "Third, if someone misuses access, we catch it."
+  },
+  {
+   "step": "n00-four",
+   "p": 4,
+   "split": "B",
+   "say": "And finally an auditor can verify every bit of it."
+  },
+  {
+   "step": "n00-entra",
+   "p": 1,
+   "split": "A",
+   "say": "It's the master directory of people and their logins, and every other app trusts it, kind of like a work badge."
+  },
+  {
+   "step": "n00-entra",
+   "p": 2,
+   "split": "B",
+   "say": "So a nurse logs in one time and that badge gets her into everything she needs."
+  },
+  {
+   "step": "n00-sync",
+   "p": 0,
+   "split": "A",
+   "say": "Cloud Sync takes each account from Active Directory on DC01 and copies it up, so the same password works on both sides."
+  },
+  {
+   "step": "n00-pim",
+   "p": 0,
+   "split": "A",
+   "say": "PIM loans out admin rights for a couple of hours, and you have to give a reason."
+  },
+  {
+   "step": "n00-pim",
+   "p": 1,
+   "split": "B",
+   "say": "No one holds it permanently, so if an admin login gets stolen it's not worth much."
+  },
+  {
+   "step": "n00-kv",
+   "p": 0,
+   "split": "B",
+   "say": "All the lab's secrets live in Key Vault, so there are no passwords sitting in the code."
+  },
+  {
+   "step": "n00-sentinel",
+   "p": 1,
+   "split": "A",
+   "say": "A SIEM gathers up the logs and runs alerting rules against them."
+  },
+  {
+   "step": "n00-sentinel",
+   "p": 2,
+   "split": "B",
+   "say": "Sentinel is the SIEM that Microsoft makes."
+  },
+  {
+   "step": "n00-splunk",
+   "p": 1,
+   "split": "A",
+   "say": "Every five minutes it receives the same data and runs twenty-two of those rules, to prove they carry over."
+  },
+  {
+   "step": "n00-aws",
+   "p": 2,
+   "split": "A",
+   "say": "It hosts a fake patient portal, and there's no real patient data in it."
+  },
+  {
+   "step": "n00-sso",
+   "p": 0,
+   "split": "B",
+   "say": "AWS relies on the Entra sign-in, and Entra provisions every AWS user."
+  },
+  {
+   "step": "n00-sso",
+   "p": 1,
+   "split": "A",
+   "say": "And once HR marks someone as gone, their AWS access is removed as well."
+  },
+  {
+   "step": "n00-okta",
+   "p": 0,
+   "split": "A",
+   "say": "Okta is what a clinic the hospital acquired uses to log in to its own apps."
+  },
+  {
+   "step": "n00-okta",
+   "p": 2,
+   "split": "B",
+   "say": "We haven't actually done the cutover yet."
+  },
+  {
+   "step": "n00-github",
+   "p": 1,
+   "split": "A",
+   "say": "Everything in the lab is code, and Terraform makes each real system match what the file says."
+  },
+  {
+   "step": "n00-github-why",
+   "p": 0,
+   "split": "B",
+   "say": "Because an auditor can see what was changed and who signed off on it, over a hundred plus changes."
+  },
+  {
+   "step": "n00-dc01",
+   "p": 1,
+   "split": "A",
+   "say": "The hospital's computers still sign in to Active Directory on site."
+  },
+  {
+   "step": "n00-dc01",
+   "p": 2,
+   "split": "B",
+   "say": "In the lab that's DC01, which is a server running in Azure."
+  },
+  {
+   "step": "n01-file",
+   "p": 1,
+   "split": "A",
+   "say": "Terraform reads this and makes Entra look like it."
+  },
+  {
+   "step": "n01-block",
+   "p": 1,
+   "split": "B",
+   "say": "An access package is just a bundle of apps that a particular job gets."
+  },
+  {
+   "step": "n01-nurse",
+   "p": 1,
+   "split": "A",
+   "say": "The nurses had AWS access that they never actually used."
+  },
+  {
+   "step": "n01-nurse",
+   "p": 2,
+   "split": "B",
+   "say": "So I'm removing AWS from the nurse package."
+  },
+  {
+   "step": "n01-cloud",
+   "p": 0,
+   "split": "A",
+   "say": "The cloud engineers are the ones running the patient portal on AWS."
+  },
+  {
+   "step": "n01-cloud",
+   "p": 1,
+   "split": "B",
+   "say": "so I'm giving them their own package that includes it"
+  },
+  {
+   "step": "n01-rules",
+   "p": 1,
+   "split": "A",
+   "say": "This one's a JSON file, it's not Terraform."
+  },
+  {
+   "step": "n01-commit",
+   "p": 1,
+   "split": "B",
+   "say": "Committing saves the change in my copy along with a message."
+  },
+  {
+   "step": "n01-push",
+   "p": 1,
+   "split": "A",
+   "say": "Pushing sends my commits up to GitHub."
+  },
+  {
+   "step": "n01-pr",
+   "p": 2,
+   "split": "B",
+   "say": "It's basically asking, can you please merge my change into the main copy."
+  },
+  {
+   "step": "n01-checks",
+   "p": 1,
+   "split": "A",
+   "say": "First it does a plan, which is a dry run against the real tenant using a read-only identity."
+  },
+  {
+   "step": "n01-checks",
+   "p": 2,
+   "split": "B",
+   "say": "It shows what would change without changing anything."
+  },
+  {
+   "step": "n01-scanners",
+   "p": 1,
+   "split": "A",
+   "say": "Checkov checks for insecure settings."
+  },
+  {
+   "step": "n01-scanners",
+   "p": 2,
+   "split": "B",
+   "say": "And TruffleHog hunts for any passwords that were left in the code."
+  },
+  {
+   "step": "n01-gate",
+   "p": 0,
+   "split": "A",
+   "say": "Now the build pauses and waits for my approval."
+  },
+  {
+   "step": "n01-gate",
+   "p": 2,
+   "split": "B",
+   "say": "Terraform only changes the tenant after that."
+  },
+  {
+   "step": "n02-job",
+   "p": 1,
+   "split": "A",
+   "say": "You'll notice there's no field for a password."
+  },
+  {
+   "step": "n02-job",
+   "p": 2,
+   "split": "B",
+   "say": "HR never gets to see the password."
+  },
+  {
+   "step": "n02-manager",
+   "p": 1,
+   "split": "A",
+   "say": "Nothing is sent to IT until both the job and the manager are saved, so the hire goes out one time, complete."
+  },
+  {
+   "step": "n02-saved",
+   "p": 1,
+   "split": "B",
+   "say": "And that's the last time a human has to click anything."
+  },
+  {
+   "step": "n02-least",
+   "p": 1,
+   "split": "A",
+   "say": "If you ask it for someone's birthday or salary, it gets refused."
+  },
+  {
+   "step": "n02-least",
+   "p": 2,
+   "split": "B",
+   "say": "So private HR data never leaves HR."
+  },
+  {
+   "step": "n02-follow",
+   "p": 1,
+   "split": "A",
+   "say": "No one ever makes an account manually."
+  },
+  {
+   "step": "n03-sync",
+   "p": 1,
+   "split": "B",
+   "say": "If you disable him in AD, he's disabled in the cloud as well."
+  },
+  {
+   "step": "n03-agent",
+   "p": 0,
+   "split": "A",
+   "say": "I went with Cloud Sync instead of the older Connect Sync since it's a lightweight agent."
+  },
+  {
+   "step": "n04-package",
+   "p": 0,
+   "split": "B",
+   "say": "Sam's job is what determines his access on his first day."
+  },
+  {
+   "step": "n04-signin",
+   "p": 2,
+   "split": "A",
+   "say": "It's a one-time code that IT hands out for your very first login."
+  },
+  {
+   "step": "n04-guard",
+   "p": 1,
+   "split": "B",
+   "say": "Conditional Access looks at every login: who it is, where they're coming from, and how they proved it."
+  },
+  {
+   "step": "n04-ca",
+   "p": 0,
+   "split": "A",
+   "say": "CA001 makes everybody do a second factor."
+  },
+  {
+   "step": "n04-ca",
+   "p": 1,
+   "split": "B",
+   "say": "And CA003 blocks the legacy sign-in methods that can't do MFA."
+  },
+  {
+   "step": "n04b-sent",
+   "p": 1,
+   "split": "A",
+   "say": "ServiceNow itself doesn't grant anything."
+  },
+  {
+   "step": "n04b-why",
+   "p": 1,
+   "split": "B",
+   "say": "And the access expires on its own on the end date."
+  },
+  {
+   "step": "n04b-inc",
+   "p": 1,
+   "split": "A",
+   "say": "Marcus lost his phone, so he doesn't have his second factor anymore."
+  },
+  {
+   "step": "n05-signin",
+   "p": 2,
+   "split": "B",
+   "say": "It isn't shared with anyone, so the logs always show exactly who did what."
+  },
+  {
+   "step": "n05-eligible",
+   "p": 0,
+   "split": "A",
+   "say": "It has no admin rights at all until he turns them on."
+  },
+  {
+   "step": "n05-activate",
+   "p": 1,
+   "split": "B",
+   "say": "He enters a reason and does an MFA check."
+  },
+  {
+   "step": "n05-active",
+   "p": 1,
+   "split": "A",
+   "say": "When the time runs out, it turns itself off."
+  },
+  {
+   "step": "n05-why",
+   "p": 1,
+   "split": "B",
+   "say": "If someone steals an admin account that holds nothing, they get nothing."
+  },
+  {
+   "step": "n06-header",
+   "p": 1,
+   "split": "A",
+   "say": "It's a file in the repo, written in KQL, which is Microsoft's query language for logs."
+  },
+  {
+   "step": "n06-strip",
+   "p": 1,
+   "split": "B",
+   "say": "Terraform goes through every rule file and makes a Sentinel rule out of each one."
+  },
+  {
+   "step": "n06-incident",
+   "p": 1,
+   "split": "A",
+   "say": "This rule runs every five minutes."
+  },
+  {
+   "step": "n06-contain",
+   "p": 1,
+   "split": "B",
+   "say": "The playbook never does anything by itself."
+  },
+  {
+   "step": "n06-contain",
+   "p": 2,
+   "split": "A",
+   "say": "Someone has to hit Contain, because locking out a clinician by mistake hurts patient care."
+  },
+  {
+   "step": "n07-strip",
+   "p": 1,
+   "split": "B",
+   "say": "This Splunk instance is running right here on my laptop."
+  },
+  {
+   "step": "n07-both",
+   "p": 0,
+   "split": "A",
+   "say": "Most hospitals only run one SIEM."
+  },
+  {
+   "step": "n08-terminate",
+   "p": 1,
+   "split": "B",
+   "say": "HR doesn't commit anything."
+  },
+  {
+   "step": "n08-two",
+   "p": 1,
+   "split": "A",
+   "say": "The HR change is what turns the account off."
+  },
+  {
+   "step": "n08-two",
+   "p": 2,
+   "split": "B",
+   "say": "Then IT's leaver workflow strips his access packages and kills any open sessions."
+  },
+  {
+   "step": "n09-hashes",
+   "p": 0,
+   "split": "A",
+   "say": "Every file gets a hash, a fingerprint that changes if even one byte is different."
+  },
+  {
+   "step": "n09-lock",
+   "p": 2,
+   "split": "B",
+   "say": "A real hospital would lock it permanently."
+  },
+  {
+   "step": "n10-sod",
+   "p": 2,
+   "split": "A",
+   "say": "Nobody is allowed to have both."
+  },
+  {
+   "step": "n10-passkey",
+   "p": 2,
+   "split": "B",
+   "say": "It only works on the genuine website, so a phishing site can't use it."
+  },
+  {
+   "step": "n10-breakglass",
+   "p": 2,
+   "split": "A",
+   "say": "They're excluded from every sign-in policy, so if a bad rule locks everybody out, someone can still get in."
+  },
+  {
+   "step": "n11-k8s",
+   "p": 2,
+   "split": "B",
+   "say": "And it gets denied when it tries to read the secret right next to it."
+  },
+  {
+   "step": "n11-premium",
+   "p": 1,
+   "split": "A",
+   "say": "It runs about forty-five cents per hour."
+  },
+  {
+   "step": "n11-lost",
+   "p": 2,
+   "split": "B",
+   "say": "There's nothing in Microsoft that matches that directly."
+  },
+  {
+   "step": "n12-why",
+   "p": 2,
+   "split": "A",
+   "say": "If a domain admin logs in to an infected nurse's PC, the attacker can take over the entire domain."
+  },
+  {
+   "step": "n12-gpo",
+   "p": 1,
+   "split": "B",
+   "say": "There aren't any computers in those tiers yet, so right now it doesn't block anything."
+  },
+  {
+   "step": "n00-entra",
+   "p": 0,
+   "split": "B",
+   "say": "The second big piece is Microsoft Entra ID, which sits in the middle of everything."
+  },
+  {
+   "step": "n00-four",
+   "p": 0,
+   "split": "B",
+   "say": "There are four things this lab proves."
+  },
+  {
+   "step": "n00-sentinel",
+   "p": 0,
+   "split": "A",
+   "say": "The fourth main piece is the alarm system."
+  },
+  {
+   "step": "n00-aws",
+   "p": 1,
+   "split": "B",
+   "say": "AWS is Amazon's cloud platform."
+  },
+  {
+   "step": "n00-okta",
+   "p": 1,
+   "split": "A",
+   "say": "The migration to Entra is already built."
+  },
+  {
+   "step": "n01-file",
+   "p": 0,
+   "split": "B",
+   "say": "What you're looking at is a Terraform file."
+  },
+  {
+   "step": "n01-commit",
+   "p": 0,
+   "split": "A",
+   "say": "Okay, now I'm going to commit."
+  },
+  {
+   "step": "n01-push",
+   "p": 0,
+   "split": "B",
+   "say": "And then I push it."
+  },
+  {
+   "step": "n01-pr",
+   "p": 1,
+   "split": "A",
+   "say": "This page here is the pull request."
+  },
+  {
+   "step": "n01-merge",
+   "p": 1,
+   "split": "B",
+   "say": "I merge it, and that kicks off the build."
+  },
+  {
+   "step": "n02-hr",
+   "p": 0,
+   "split": "A",
+   "say": "Hiring starts right here."
+  },
+  {
+   "step": "n02-saved",
+   "p": 0,
+   "split": "B",
+   "say": "HR hits save."
+  },
+  {
+   "step": "n03-sam",
+   "p": 0,
+   "split": "A",
+   "say": "Sam now exists in two different directories."
+  },
+  {
+   "step": "n04-guard",
+   "p": 0,
+   "split": "B",
+   "say": "Next up, the guard."
+  },
+  {
+   "step": "n04-ca",
+   "p": 2,
+   "split": "A",
+   "say": "Both of them are enforced."
+  },
+  {
+   "step": "n05-signin",
+   "p": 0,
+   "split": "B",
+   "say": "Raj is on the help desk."
+  },
+  {
+   "step": "n05-active",
+   "p": 0,
+   "split": "A",
+   "say": "It's active now, and it has an end time."
+  },
+  {
+   "step": "n06-drill",
+   "p": 2,
+   "split": "B",
+   "say": "Nothing actually got stolen."
+  },
+  {
+   "step": "n07-rule",
+   "p": 0,
+   "split": "A",
+   "say": "This is the same rule written in SPL, the language Splunk searches with."
+  },
+  {
+   "step": "n08-record",
+   "p": 0,
+   "split": "B",
+   "say": "Now Sam is leaving."
+  },
+  {
+   "step": "n09-run",
+   "p": 0,
+   "split": "A",
+   "say": "Each step leaves behind a record."
+  },
+  {
+   "step": "n09-lock",
+   "p": 0,
+   "split": "B",
+   "say": "The store is configured as write once."
+  },
+  {
+   "step": "n10-review",
+   "p": 1,
+   "split": "A",
+   "say": "A review asks whether this person still needs this access."
+  },
+  {
+   "step": "n11-laps",
+   "p": 0,
+   "split": "B",
+   "say": "Windows LAPS sets a long random admin password on each computer, rotates it on a schedule, and keeps it encrypted."
+  },
+  {
+   "step": "n12-tiers",
+   "p": 1,
+   "split": "A",
+   "say": "A tier is basically a trust zone for admin work."
+  },
+  {
+   "step": "n01-nurse",
+   "p": 2,
+   "split": "A",
+   "say": "So I am removing AWS from the nurse package."
+  },
+  {
+   "step": "n01-cloud",
+   "p": 0,
+   "split": "B",
+   "say": "Our cloud engineers run the patient portal, and that's in AWS."
+  }
+ ],
+ "off": [
+  {
+   "split": "A",
+   "say": "Okay, let me just wait for this page to load."
+  },
+  {
+   "split": "B",
+   "say": "Um, sorry, let me start that one again."
+  },
+  {
+   "split": "A",
+   "say": "Can you hear me okay? Is the mic working?"
+  },
+  {
+   "split": "B",
+   "say": "I'm going to grab a coffee after this take."
+  },
+  {
+   "split": "A",
+   "say": "The weather is really nice out today."
+  },
+  {
+   "split": "B",
+   "say": "This one is taking a while, hang on."
+  },
+  {
+   "split": "A",
+   "say": "Let me scroll down a little bit."
+  },
+  {
+   "split": "B",
+   "say": "Alright, moving on."
+  },
+  {
+   "split": "A",
+   "say": "Hmm, where did that window go?"
+  },
+  {
+   "split": "B",
+   "say": "I need to remember to call my mom tonight."
+  },
+  {
+   "split": "A",
+   "say": "Oh, that's the wrong tab, give me a second."
+  },
+  {
+   "split": "B",
+   "say": "Let's see, what time is it, we have about an hour left."
+  },
+  {
+   "split": "A",
+   "say": "My dog keeps barking in the other room."
+  },
+  {
+   "split": "B",
+   "say": "Uh, yeah, so, okay."
+  },
+  {
+   "split": "A",
+   "say": "I think the lighting is a bit too bright on this side."
+  },
+  {
+   "split": "B",
+   "say": "We should order pizza for lunch tomorrow."
+  },
+  {
+   "split": "A",
+   "say": "The battery on my phone is almost dead."
+  },
+  {
+   "split": "B",
+   "say": "Wait, did it record that last part or not?"
+  },
+  {
+   "split": "A",
+   "say": "I'll fix the typo in the slide later."
+  },
+  {
+   "split": "B",
+   "say": "Let me take a sip of water first."
+  },
+  {
+   "split": "A",
+   "say": "That football game last night was crazy."
+  },
+  {
+   "split": "B",
+   "say": "Okay so where was I, I lost my place."
+  },
+  {
+   "split": "A",
+   "say": "I'm going to pause here for a second and breathe."
+  },
+  {
+   "split": "B",
+   "say": "Traffic was terrible on the way in this morning."
+  },
+  {
+   "split": "A",
+   "say": "Can somebody close the door please?"
+  },
+  {
+   "split": "B",
+   "say": "The browser is being really slow today."
+  },
+  {
+   "split": "A",
+   "say": "Let me zoom in so you can see that better."
+  },
+  {
+   "split": "B",
+   "say": "I really need a haircut this week."
+  },
+  {
+   "split": "A",
+   "say": "I'll come back to this part after lunch."
+  },
+  {
+   "split": "B",
+   "say": "Hmm, the screen went black for a second."
+  },
+  {
+   "split": "A",
+   "say": "Hold on, I need to check my notes for a second."
+  },
+  {
+   "split": "B",
+   "say": "Did I leave the oven on? No, I didn't."
+  },
+  {
+   "split": "A",
+   "say": "I'm not sure the microphone picked that up."
+  },
+  {
+   "split": "B",
+   "say": "Let me restart this section from the top."
+  }
+ ]
+}

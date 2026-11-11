@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contoso Health identity lab</title>
+<!--
+  The v2 scripts' drawn screens (title cards, maps, strips, count and
+  framework cards), opened by the cockpit's `card` action in the recording
+  browser as file://.../ui/card.html#<base64url JSON>. Nothing is fetched:
+  the whole card is in the hash (steps.mjs builds it, the map tiles come
+  from readiness/lab-guide/stops.json). Spec fields, all optional:
+    kicker, title, sub          heading lines
+    chips: [..]                 key words
+    tiles: [{t, s, k}], lit     tiles; lit = index, [indexes] or 'all'; dim = the rest
+    groups: [{title, tiles}]    tiles in titled rows (the setup and lab maps)
+    flow: [..], flowLit, cross  a strip of boxes joined by arrows; flowLit = how many are lit;
+                                cross = [from, to] draws that arrow crossed out
+    lines: [..], shown          lines that appear one by one (shown = how many)
+    table: {head, rows}         a small table
+    img, video                  a picture or a recording on this Mac (file:// path); video may carry #t=<s>
+    foot                        a line at the bottom
+-->
+<style>
+  :root { --bg:#0b1220; --panel:#131c2e; --line:#26324a; --ink:#f3f6fb; --muted:#93a1b8; --hot:#F06A35; --hot2:#ffb08a; --ok:#3fb27f; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:-apple-system, "Segoe UI", system-ui, sans-serif; }
+  body { display:flex; align-items:center; justify-content:center; }
+  main { width:min(1500px, 92vw); display:grid; gap:28px; padding:4vh 0; }
+  .kicker { color:var(--hot); font-weight:700; letter-spacing:.08em; text-transform:uppercase; font-size:clamp(14px,1.4vw,22px); }
+  h1 { margin:0; font-size:clamp(30px,4vw,64px); line-height:1.08; font-weight:750; }
+  .sub { color:var(--muted); font-size:clamp(18px,1.9vw,30px); line-height:1.3; }
+  .chips { display:flex; flex-wrap:wrap; gap:12px; }
+  .chip { background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:10px 20px; font-size:clamp(16px,1.6vw,26px); }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; }
+  .tile { background:var(--panel); border:2px solid var(--line); border-radius:16px; padding:18px 20px; min-height:96px; transition:all .4s; }
+  .tile .k { color:var(--muted); font-size:clamp(13px,1.1vw,18px); font-weight:700; }
+  .tile .t { font-size:clamp(18px,1.7vw,28px); font-weight:700; margin-top:4px; }
+  .tile .s { color:var(--muted); font-size:clamp(14px,1.2vw,20px); margin-top:6px; line-height:1.3; }
+  .tile.dim { opacity:.32; }
+  .tile.lit { border-color:var(--hot); box-shadow:0 0 0 4px rgba(240,106,53,.18), 0 10px 40px rgba(240,106,53,.18); opacity:1; }
+  .tile.lit .k { color:var(--hot2); }
+  .group h2 { margin:0 0 10px; font-size:clamp(16px,1.4vw,22px); color:var(--muted); font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+  .flow { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+  .box { background:var(--panel); border:2px solid var(--line); border-radius:14px; padding:16px 20px; font-size:clamp(16px,1.6vw,26px); font-weight:700; opacity:.35; transition:all .4s; }
+  .box.lit { opacity:1; border-color:var(--hot); }
+  .arrow { color:var(--muted); font-size:clamp(18px,2vw,32px); opacity:.35; position:relative; }
+  .arrow.lit { opacity:1; color:var(--hot); }
+  .arrow.cross::after { content:''; position:absolute; left:-6px; right:-6px; top:50%; height:4px; background:#e5484d; transform:rotate(-20deg); }
+  ol.lines { margin:0; padding-left:1.4em; display:grid; gap:12px; font-size:clamp(20px,2.1vw,34px); line-height:1.25; }
+  ol.lines li.hidden { visibility:hidden; }
+  ol.lines li::marker { color:var(--hot); font-weight:700; }
+  table { border-collapse:collapse; width:100%; font-size:clamp(12px,1.05vw,17px); }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-size:.85em; }
+  td:first-child { font-weight:650; white-space:nowrap; }
+  .media { max-width:100%; max-height:62vh; border-radius:12px; border:1px solid var(--line); background:#000; display:block; }
+  .foot { color:var(--muted); font-size:clamp(14px,1.3vw,22px); border-top:1px solid var(--line); padding-top:14px; }
+</style>
+</head>
+<body>
+<main id="m"></main>
+<script>
+  const m = document.getElementById('m');
+  // One card per URL hash; a new hash (the next card) draws again.
+  function render() {
+  m.replaceChildren();
+  let spec = {};
+  try {
+    const h = location.hash.slice(1).replace(/-/g, '+').replace(/_/g, '/');
+    spec = JSON.parse(decodeURIComponent(escape(atob(h))));
+  } catch (e) { spec = { title: 'Card did not load' }; }
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const isLit = (lit, i) => lit === 'all' || (Array.isArray(lit) ? lit.includes(i) : lit === i);
+  const tileRow = (tiles, lit, offset = 0) => {
+    const g = el('div', 'tiles');
+    tiles.forEach((t, i) => {
+      const on = isLit(lit, i + offset);
+      const d = el('div', 'tile ' + (lit == null ? '' : on ? 'lit' : 'dim'));
+      if (t.k) d.append(el('div', 'k', t.k));
+      d.append(el('div', 't', t.t));
+      if (t.s) d.append(el('div', 's', t.s));
+      g.append(d);
+    });
+    return g;
+  };
+  if (spec.kicker) m.append(el('div', 'kicker', spec.kicker));
+  if (spec.title) m.append(el('h1', '', spec.title));
+  if (spec.sub) m.append(el('div', 'sub', spec.sub));
+  if (spec.chips) { const c = el('div', 'chips'); spec.chips.forEach((x) => c.append(el('span', 'chip', x))); m.append(c); }
+  if (spec.tiles) m.append(tileRow(spec.tiles, spec.lit));
+  if (spec.groups) {
+    let off = 0;
+    for (const g of spec.groups) { const s = el('section', 'group'); s.append(el('h2', '', g.title)); s.append(tileRow(g.tiles, spec.lit, off)); off += g.tiles.length; m.append(s); }
+  }
+  if (spec.flow) {
+    const f = el('div', 'flow'), n = spec.flowLit ?? spec.flow.length;
+    spec.flow.forEach((t, i) => {
+      if (i) { const a = el('span', 'arrow' + (i < n ? ' lit' : '') + (spec.cross && spec.cross[0] === i - 1 && spec.cross[1] === i ? ' cross' : ''), '→'); f.append(a); }
+      f.append(el('div', 'box' + (i < n ? ' lit' : ''), t));
+    });
+    m.append(f);
+  }
+  if (spec.lines) {
+    const o = el('ol', 'lines'), n = spec.shown ?? spec.lines.length;
+    spec.lines.forEach((t, i) => o.append(el('li', i < n ? '' : 'hidden', t)));
+    m.append(o);
+  }
+  if (spec.table) {
+    const t = el('table'), tr = el('tr');
+    spec.table.head.forEach((h) => tr.append(el('th', '', h))); t.append(tr);
+    spec.table.rows.forEach((r) => { const x = el('tr'); r.forEach((c) => x.append(el('td', '', c))); t.append(x); });
+    m.append(t);
+  }
+  if (spec.img) { const i = el('img', 'media'); i.src = spec.img; m.append(i); }
+  if (spec.video) { const v = el('video', 'media'); v.src = spec.video; v.muted = true; v.autoplay = true; v.playsInline = true; m.append(v); }
+  if (spec.foot) m.append(el('div', 'foot', spec.foot));
+  document.title = spec.title || 'Contoso Health identity lab';
+  }
+  render();
+  addEventListener('hashchange', render);
+</script>
+</body>
+</html>
