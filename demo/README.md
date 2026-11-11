@@ -100,8 +100,6 @@ Commands, run inside `recording/` after `npm install`:
 
 `recording/` is a copy of the tool's tracked files, with these left out:
 
-- `map/lab-map.html` (1.3 MB) and `map/v24.html` (1.3 MB): the lab map
-  pages, each over 1 MB.
 - `vscode-ext/*.vsix`: built copies of the VS Code extension. `npm run bridge`
   builds one from `vscode-ext/extension.js`.
 - `.state/`: run logs, local settings and the teleprompter's access key.
