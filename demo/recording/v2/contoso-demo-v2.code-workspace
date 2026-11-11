@@ -1,0 +1,68 @@
+// v2 parts N12 and N14 (2026-11-07): read-only checkouts of the open PRs
+// their screens come from (cockpit/.v2, made by lib/teardown.mjs
+// v2Worktrees). Same view as the demo window.
+{
+  "folders": [
+    { "name": "AD hardening run (PR #225, read only)", "path": "../.v2/ad" },
+    { "name": "Okta clinic estate (PR #222, read only)", "path": "../.v2/okta" },
+    { "name": "Microsoft PAM decision (PR #220, read only)", "path": "../.v2/pam" },
+    { "name": "Key Vault for Kubernetes (PR #232, read only)", "path": "../.v2/k8skv" },
+    { "name": "Key Vault leak measured (PR #235, read only)", "path": "../.v2/kvleak" },
+    { "name": "Bastion and Intune (PR #247, read only)", "path": "../.v2/bastion" },
+    { "name": "AD FS run on DC01 (PR #237, read only)", "path": "../.v2/adfs" },
+    { "name": "Azure least privilege (PR #246, read only)", "path": "../.v2/azlp" },
+    { "name": "ServiceNow depth (PR #254, read only)", "path": "../.v2/snow" },
+    { "name": "Captures (evidence, read only)", "path": "../../captures" },
+    { "name": "Segments (scripts)", "path": "../../segments" },
+    { "name": "The lab at main (read only)", "path": "../.v2/ssm" }
+  ],
+  "settings": {
+    "window.zoomLevel": 0,
+    "editor.fontSize": 15,
+    "editor.lineHeight": 1.6,
+    "terminal.integrated.fontSize": 15,
+    "editor.minimap.enabled": false,
+    "editor.stickyScroll.enabled": false,
+    "editor.wordWrap": "on",
+    "editor.renderWhitespace": "none",
+    "editor.guides.indentation": false,
+    "editor.inlayHints.enabled": "off",
+    "editor.codeLens": false,
+    "editor.hover.delay": 1500,
+    "editor.cursorBlinking": "smooth",
+    "workbench.colorTheme": "GitHub Dark Default",
+    "workbench.iconTheme": "material-icon-theme",
+    "workbench.startupEditor": "none",
+    "workbench.tips.enabled": false,
+    "extensions.ignoreRecommendations": true,
+    "editor.renderLineHighlight": "none",
+    "editor.occurrencesHighlight": "off",
+    "editor.selectionHighlight": false,
+    "editor.wordHighlight": false,
+    "workbench.layoutControl.enabled": false,
+    "workbench.editor.enablePreview": false,
+    "workbench.secondarySideBar.defaultVisibility": "hidden",
+    "chat.commandCenter.enabled": false,
+    "explorer.compactFolders": false,
+    "explorer.confirmDragAndDrop": true,
+    "breadcrumbs.enabled": true,
+    "git.autofetch": false,
+    "git.confirmSync": false,
+    "git.openRepositoryInParentFolders": "never",
+    "scm.diffDecorations": "all",
+    "diffEditor.renderSideBySide": true,
+    "diffEditor.hideUnchangedRegions.enabled": true,
+    "errorLens.enabled": true,
+    "cSpell.enabled": false,
+    "todo-tree.general.statusBar": "none",
+    "gitlens.codeLens.enabled": false,
+    "gitlens.currentLine.enabled": false,
+    "gitlens.statusBar.enabled": false,
+    "githubPullRequests.createOnPublishBranch": "never",
+    "files.exclude": {
+      "**/.terraform": true,
+      "**/node_modules": true,
+      "**/.DS_Store": true
+    }
+  }
+}

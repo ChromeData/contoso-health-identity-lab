@@ -1,0 +1,64 @@
+{
+  "name": "cockpit-bridge",
+  "displayName": "Contoso cockpit bridge",
+  "description": "Lets the local recording cockpit drive the Contoso demo window: open files, show diffs, type, commit and push. Only active in the Contoso demo workspaces; listens on 127.0.0.1 only, with a per-window token. Also opens a Lab Guide stop (vscode://contoso-lab.cockpit-bridge/open?stop=<id>): its files as tabs, key lines softly tinted.",
+  "version": "0.1.16",
+  "publisher": "contoso-lab",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onUri"
+  ],
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cockpitBridge.status",
+        "title": "Contoso cockpit bridge: status"
+      },
+      {
+        "command": "cockpitBridge.openStop",
+        "title": "Contoso Lab Guide: open a stop"
+      },
+      {
+        "command": "cockpitBridge.nextStopFile",
+        "title": "Contoso Lab Guide: next file of this stop"
+      },
+      {
+        "command": "cockpitBridge.prevStopFile",
+        "title": "Contoso Lab Guide: previous file of this stop"
+      },
+      {
+        "command": "cockpitBridge.clearStop",
+        "title": "Contoso Lab Guide: clear the stop highlight"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "cockpitBridge.nextStopFile",
+        "key": "ctrl+alt+]",
+        "mac": "ctrl+alt+cmd+]",
+        "when": "cockpitBridge.stopOpen"
+      },
+      {
+        "command": "cockpitBridge.prevStopFile",
+        "key": "ctrl+alt+[",
+        "mac": "ctrl+alt+cmd+[",
+        "when": "cockpitBridge.stopOpen"
+      }
+    ]
+  }
+}

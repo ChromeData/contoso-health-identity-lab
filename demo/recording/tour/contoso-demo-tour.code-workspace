@@ -1,0 +1,64 @@
+// Piece 11, the extra tour stops (2026-11-06): the lab at origin/main (a
+// detached worktree, read only) and the live read-only checks
+// (tools/tour-extra-checks.sh). Same view as the demo window.
+{
+  "folders": [
+    {
+      "name": "The lab at main (read only)",
+      "path": "../.tour-main"
+    },
+    {
+      "name": "Live checks",
+      "path": "out"
+    }
+  ],
+  "settings": {
+    "window.zoomLevel": 0,
+    "editor.fontSize": 15,
+    "editor.lineHeight": 1.6,
+    "terminal.integrated.fontSize": 15,
+    "editor.minimap.enabled": false,
+    "editor.stickyScroll.enabled": false,
+    "editor.wordWrap": "on",
+    "editor.renderWhitespace": "none",
+    "editor.guides.indentation": false,
+    "editor.inlayHints.enabled": "off",
+    "editor.codeLens": false,
+    "editor.hover.delay": 1500,
+    "editor.cursorBlinking": "smooth",
+    "workbench.colorTheme": "GitHub Dark Default",
+    "workbench.iconTheme": "material-icon-theme",
+    "workbench.startupEditor": "none",
+    "workbench.tips.enabled": false,
+    "extensions.ignoreRecommendations": true,
+    "editor.renderLineHighlight": "none",
+    "editor.occurrencesHighlight": "off",
+    "editor.selectionHighlight": false,
+    "editor.wordHighlight": false,
+    "workbench.layoutControl.enabled": false,
+    "workbench.editor.enablePreview": false,
+    "workbench.secondarySideBar.defaultVisibility": "hidden",
+    "chat.commandCenter.enabled": false,
+    "explorer.compactFolders": false,
+    "explorer.confirmDragAndDrop": true,
+    "breadcrumbs.enabled": true,
+    "git.autofetch": false,
+    "git.confirmSync": false,
+    "git.openRepositoryInParentFolders": "never",
+    "scm.diffDecorations": "all",
+    "diffEditor.renderSideBySide": true,
+    "diffEditor.hideUnchangedRegions.enabled": true,
+    "errorLens.enabled": true,
+    "cSpell.enabled": false,
+    "todo-tree.general.statusBar": "none",
+    "gitlens.codeLens.enabled": false,
+    "gitlens.currentLine.enabled": false,
+    "gitlens.statusBar.enabled": false,
+    "githubPullRequests.createOnPublishBranch": "never",
+    "files.exclude": {
+      "**/.terraform": true,
+      "**/node_modules": true,
+      "**/.DS_Store": true
+    }
+  }
+}
